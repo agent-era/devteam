@@ -398,9 +398,7 @@ export default function App() {
           onSubmit: (project: string, feature: string) => {
             createFeature(project, feature);
             const list = collectWorktrees();
-            let wtInfos = attachRuntimeData(list);
-        const prMap = gm.batchGetPRStatusForWorktrees(wtInfos.map(w => ({project: w.project, path: w.path})), true);
-            wtInfos = wtInfos.map(w => new WorktreeInfo({...w, pr: prMap[w.path] || w.pr}));
+            const wtInfos = sortWorktrees(attachRuntimeData(list));
             setState((s) => ({...s, worktrees: wtInfos}));
             setUiMode('list');
           }
@@ -419,9 +417,7 @@ export default function App() {
           onConfirm: () => {
             archiveFeature(pendingArchive.project, pendingArchive.path, pendingArchive.feature);
             const list = collectWorktrees();
-            let wtInfos = attachRuntimeData(list);
-        const prMap = gm.batchGetPRStatusForWorktrees(wtInfos.map(w => ({project: w.project, path: w.path})), true);
-            wtInfos = wtInfos.map(w => new WorktreeInfo({...w, pr: prMap[w.path] || w.pr}));
+            const wtInfos = sortWorktrees(attachRuntimeData(list));
             setState((s) => ({...s, worktrees: wtInfos}));
             setPendingArchive(null);
             setUiMode('list');
@@ -513,13 +509,19 @@ export default function App() {
               createTmuxSession(proj, localName, worktreePath);
             }
             const list = collectWorktrees();
-            let wtInfos = sortWorktrees(attachRuntimeData(list));
-            const prMap = await gm.batchGetPRStatusForWorktreesAsync(wtInfos.map(w => ({project: w.project, path: w.path})), true);
-            wtInfos = sortWorktrees(wtInfos.map(w => new WorktreeInfo({...w, pr: prMap[w.path] || w.pr})));
+            const wtInfos = sortWorktrees(attachRuntimeData(list));
             setState((s) => ({...s, worktrees: wtInfos}));
             setUiMode('list');
             setBranchProject(null);
             setBranchList([]);
+            // Fetch PR status asynchronously without blocking UI
+            Promise.resolve().then(async () => {
+              try {
+                const prMap = await gm.batchGetPRStatusForWorktreesAsync(wtInfos.map(w => ({project: w.project, path: w.path})), true);
+                const withPr = sortWorktrees(wtInfos.map(w => new WorktreeInfo({...w, pr: prMap[w.path] || w.pr})));
+                setState((s) => ({...s, worktrees: withPr}));
+              } catch {}
+            });
           },
           onRefresh: () => {
             if (!branchProject) return;
