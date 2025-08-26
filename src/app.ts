@@ -15,7 +15,7 @@ import {attachOrCreateSession, createFeature, archiveFeature, getPRStatus, delet
 import {runCommandQuick} from './utils.js';
 import ProjectPickerDialog from './ui/ProjectPickerDialog.js';
 import BranchPickerDialog from './ui/BranchPickerDialog.js';
-import CleanDiffView from './ui/CleanDiffView.js';
+import DiffView from './ui/DiffView.js';
 
 const gm = new GitManager();
 const tm = new TmuxManager();
@@ -457,7 +457,7 @@ export default function App() {
   if (uiMode === 'diff' && diffWorktree) {
     return h(FullScreen, null,
       h(Box as any, {flexGrow: 1, paddingX: 1},
-        h(CleanDiffView, {
+        h(DiffView, {
           worktreePath: diffWorktree, 
           title: diffType === 'uncommitted' ? 'Diff Viewer (Uncommitted Changes)' : 'Diff Viewer',
           diffType,
