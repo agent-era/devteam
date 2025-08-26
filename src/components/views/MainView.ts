@@ -1,7 +1,7 @@
 import React, {useMemo} from 'react';
 import {Box, Text, useInput, useStdin} from 'ink';
 const h = React.createElement;
-import type {WorktreeInfo} from '../models.js';
+import type {WorktreeInfo} from '../../models.js';
 import {
     COL_NUMBER_WIDTH,
     COL_AI_WIDTH,
@@ -18,7 +18,7 @@ import {
     GIT_BEHIND,
     USE_EMOJI_SYMBOLS,
     ASCII_SYMBOLS,
-  } from '../constants.js';
+  } from '../../constants.js';
 
 // props: {worktrees, selectedIndex, onMove, onSelect, onQuit}
 type Prompt = {title?: string; text?: string; hint?: string};

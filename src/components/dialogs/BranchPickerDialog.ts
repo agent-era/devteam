@@ -1,6 +1,6 @@
 import React, {useEffect, useMemo, useState} from 'react';
 import {Box, Text, useInput, useStdin} from 'ink';
-import {fitDisplay, padStartDisplay} from '../utils.js';
+import {fitDisplay, padStartDisplay} from '../../utils.js';
 const h = React.createElement;
 
 type BranchInfo = {

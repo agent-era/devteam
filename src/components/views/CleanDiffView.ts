@@ -1,9 +1,9 @@
 import React, {useEffect, useMemo, useState} from 'react';
 import {Box, Text, useInput, useStdin, Static} from 'ink';
 const h = React.createElement;
-import {runCommandAsync} from '../utils.js';
-import {findBaseBranch} from '../utils.js';
-import {BASE_BRANCH_CANDIDATES} from '../constants.js';
+import {runCommandAsync} from '../../utils.js';
+import {findBaseBranch} from '../../utils.js';
+import {BASE_BRANCH_CANDIDATES} from '../../constants.js';
 
 type DiffLine = {type: 'added'|'removed'|'context'|'header'; text: string};
 
