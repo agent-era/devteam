@@ -396,7 +396,11 @@ export default function App() {
           defaultProject,
           onCancel: () => setUiMode('list'),
           onSubmit: (project: string, feature: string) => {
-            createFeature(project, feature);
+            const result = createFeature(project, feature);
+            if (result) {
+              // Auto-attach to the newly created session
+              attachOrCreateSession(result.project, result.feature, result.path);
+            }
             const list = collectWorktrees();
             const wtInfos = sortWorktrees(attachRuntimeData(list));
             setState((s) => ({...s, worktrees: wtInfos}));
@@ -507,6 +511,8 @@ export default function App() {
               const worktreePath = [BASE_PATH, `${proj}${DIR_BRANCHES_SUFFIX}`, localName].join('/');
               setupWorktreeEnvironment(proj, worktreePath);
               createTmuxSession(proj, localName, worktreePath);
+              // Auto-attach to the newly created session
+              attachOrCreateSession(proj, localName, worktreePath);
             }
             const list = collectWorktrees();
             const wtInfos = sortWorktrees(attachRuntimeData(list));
