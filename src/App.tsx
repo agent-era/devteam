@@ -255,15 +255,17 @@ function AppContent() {
   }
 
   // Default: Main worktree list screen
-  return h(WorktreeListScreen, {
-    onCreateFeature: handleCreateFeature,
-    onArchiveFeature: handleArchiveFeature,
-    onViewArchived: () => setUiMode('archived'),
-    onHelp: () => setUiMode('help'),
-    onBranch: handleBranch,
-    onDiff: handleDiff,
-    onQuit: handleQuit
-  });
+  return h(FullScreen, null,
+    h(WorktreeListScreen, {
+      onCreateFeature: handleCreateFeature,
+      onArchiveFeature: handleArchiveFeature,
+      onViewArchived: () => setUiMode('archived'),
+      onHelp: () => setUiMode('help'),
+      onBranch: handleBranch,
+      onDiff: handleDiff,
+      onQuit: handleQuit
+    })
+  );
 }
 
 export default function App() {

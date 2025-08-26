@@ -1,5 +1,5 @@
 import React, {useMemo} from 'react';
-import {Box, Text, useInput, useStdin} from 'ink';
+import {Box, Text} from 'ink';
 const h = React.createElement;
 import type {WorktreeInfo} from '../../models.js';
 import {
@@ -37,22 +37,6 @@ type Props = {
 
 export default function MainView(props: Props) {
   const {worktrees, selectedIndex, mode, prompt, message, page = 0, pageSize = 20} = props;
-  const {isRawModeSupported} = useStdin();
-  if (isRawModeSupported) {
-    useInput((input, key) => {
-      if (key.escape || input === 'q') props.onQuit?.();
-      if (input === 'j' || key.downArrow) props.onMove?.(1);
-      if (input === 'k' || key.upArrow) props.onMove?.(-1);
-      if (key.return) props.onSelect?.(selectedIndex);
-      if (/^[1-9]$/.test(input)) {
-        const n = Number(input) - 1;
-        const absoluteIndex = (page * pageSize) + n;
-        if (absoluteIndex < worktrees.length) props.onMove?.(absoluteIndex - selectedIndex);
-      }
-      if (key.pageDown) props.onMove?.(pageSize);
-      if (key.pageUp) props.onMove?.(-pageSize);
-    });
-  }
 
   // Auto-grid: Calculate optimal column widths based on content with min/max constraints
   const columnWidths = useMemo(() => {
