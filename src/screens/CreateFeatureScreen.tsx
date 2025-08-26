@@ -21,13 +21,19 @@ export default function CreateFeatureScreen({
 }: CreateFeatureScreenProps) {
   const {worktreeService} = useServices();
 
-  const handleSubmit = (project: string, feature: string) => {
+  const handleSubmit = async (project: string, feature: string) => {
     try {
       const result = worktreeService.createFeature(project, feature);
       if (result) {
+        // Auto-attach functionality from main
         onSuccess();
+        
+        // Small delay to ensure UI is updated and tmux session is ready
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // Auto-attach to the newly created session
+        worktreeService.attachOrCreateSession(result.project, result.feature, result.path);
       } else {
-        // Handle creation failure - maybe show error state
         onCancel();
       }
     } catch (error) {

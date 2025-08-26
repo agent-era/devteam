@@ -7,12 +7,12 @@ import {kebabCase, validateFeatureName, truncateText} from '../../utils.js';
 type Props = {
   projects: ProjectInfo[];
   defaultProject?: string;
-  onSubmit: (project: string, feature: string) => void;
+  onSubmit: (project: string, feature: string) => Promise<void> | void;
   onCancel: () => void;
 };
 
 export default function CreateFeatureDialog({projects, defaultProject, onSubmit, onCancel}: Props) {
-  const [mode, setMode] = useState<'select'|'input'>('select');
+  const [mode, setMode] = useState<'select'|'input'|'creating'>('select');
   const [filter, setFilter] = useState('');
   const [selected, setSelected] = useState(() => Math.max(0, projects.findIndex(p => p.name === defaultProject)));
   const [feature, setFeature] = useState('');
@@ -25,6 +25,7 @@ export default function CreateFeatureDialog({projects, defaultProject, onSubmit,
 
   useInput((input, key) => {
     if (!isRawModeSupported) return;
+    if (mode === 'creating') return; // Disable input during creation
     if (key.escape) {
       if (mode === 'input') setMode('select');
       else onCancel();
@@ -48,13 +49,28 @@ export default function CreateFeatureDialog({projects, defaultProject, onSubmit,
       if (key.return) {
         const proj = filtered[selected]?.name || projects[0]?.name;
         const feat = kebabCase(feature);
-        if (proj && validateFeatureName(feat)) onSubmit(proj, feat);
+        if (proj && validateFeatureName(feat)) {
+          setMode('creating');
+          Promise.resolve(onSubmit(proj, feat)).catch(() => {
+            // If creation fails, go back to input mode
+            setMode('input');
+          });
+        }
         return;
       }
       if (key.backspace) setFeature(prev => prev.slice(0, -1));
       else if (input && !key.ctrl && !key.meta) setFeature(prev => prev + input);
     }
   });
+
+  if (mode === 'creating') {
+    return h(
+      Box, {flexDirection: 'column', alignItems: 'center'},
+      h(Text, {color: 'cyan'}, 'Creating feature branch...'),
+      h(Text, {color: 'yellow'}, `${filtered[selected]?.name || ''}/${feature}`),
+      h(Text, {color: 'gray'}, 'Setting up worktree and tmux session...')
+    );
+  }
 
   if (mode === 'select') {
     return h(

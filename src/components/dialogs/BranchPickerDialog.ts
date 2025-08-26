@@ -20,7 +20,7 @@ type BranchInfo = {
 
 type Props = {
   branches: BranchInfo[];
-  onSubmit: (remoteBranch: string, localName: string) => void;
+  onSubmit: (remoteBranch: string, localName: string) => Promise<void> | void;
   onCancel: () => void;
   onRefresh?: () => void;
 };

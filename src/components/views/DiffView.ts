@@ -61,7 +61,7 @@ async function loadDiff(worktreePath: string, diffType: 'full' | 'uncommitted' =
 
 type Props = {worktreePath: string; title?: string; onClose: () => void; diffType?: 'full' | 'uncommitted'};
 
-export default function CleanDiffView({worktreePath, title = 'Diff Viewer', onClose, diffType = 'full'}: Props) {
+export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, diffType = 'full'}: Props) {
   const {isRawModeSupported} = useStdin();
   const [lines, setLines] = useState<DiffLine[]>([]);
   const [pos, setPos] = useState(0);

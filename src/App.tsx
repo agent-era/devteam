@@ -2,7 +2,7 @@ import React, {useState, useEffect} from 'react';
 import {useApp, useStdin, Box} from 'ink';
 import FullScreen from './components/common/FullScreen.js';
 import HelpOverlay from './components/dialogs/HelpOverlay.js';
-import CleanDiffView from './components/views/CleanDiffView.js';
+import DiffView from './components/views/DiffView.js';
 import ProjectPickerDialog from './components/dialogs/ProjectPickerDialog.js';
 import BranchPickerDialog from './components/dialogs/BranchPickerDialog.js';
 
@@ -137,16 +137,34 @@ function AppContent() {
       return;
     }
     
-    const success = gitService.createWorktreeFromRemote(project, remoteBranch, localName);
-    if (success) {
-      const worktreePath = [BASE_PATH, `${project}${DIR_BRANCHES_SUFFIX}`, localName].join('/');
-      worktreeService.setupWorktreeEnvironment(project, worktreePath);
-      worktreeService.createTmuxSession(project, localName, worktreePath);
+    try {
+      const success = gitService.createWorktreeFromRemote(project, remoteBranch, localName);
+      if (success) {
+        const worktreePath = [BASE_PATH, `${project}${DIR_BRANCHES_SUFFIX}`, localName].join('/');
+        worktreeService.setupWorktreeEnvironment(project, worktreePath);
+        worktreeService.createTmuxSession(project, localName, worktreePath);
+        
+        // Close dialog first
+        setUiMode('list');
+        setBranchProject(null);
+        setBranchList([]);
+        
+        // Small delay to ensure UI is updated and tmux session is ready
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // Auto-attach to the newly created session
+        worktreeService.attachOrCreateSession(project, localName, worktreePath);
+      } else {
+        setUiMode('list');
+        setBranchProject(null);
+        setBranchList([]);
+      }
+    } catch (error) {
+      console.error('Failed to create worktree from branch:', error);
+      setUiMode('list');
+      setBranchProject(null);
+      setBranchList([]);
     }
-    
-    setUiMode('list');
-    setBranchProject(null);
-    setBranchList([]);
   };
 
   const resetToList = () => {
@@ -193,7 +211,7 @@ function AppContent() {
   if (uiMode === 'diff' && diffWorktree) {
     return h(FullScreen, null,
       h(Box as any, {flexGrow: 1, paddingX: 1},
-        h(CleanDiffView, {
+        h(DiffView, {
           worktreePath: diffWorktree,
           title: diffType === 'uncommitted' ? 'Diff Viewer (Uncommitted Changes)' : 'Diff Viewer',
           diffType,
