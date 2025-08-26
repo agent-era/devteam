@@ -395,16 +395,31 @@ export default function App() {
           projects: createProjects as any,
           defaultProject,
           onCancel: () => setUiMode('list'),
-          onSubmit: (project: string, feature: string) => {
-            const result = createFeature(project, feature);
-            if (result) {
-              // Auto-attach to the newly created session
-              attachOrCreateSession(result.project, result.feature, result.path);
+          onSubmit: async (project: string, feature: string) => {
+            try {
+              const result = createFeature(project, feature);
+              if (result) {
+                // Refresh UI first to show the new worktree
+                const list = collectWorktrees();
+                const wtInfos = sortWorktrees(attachRuntimeData(list));
+                setState((s) => ({...s, worktrees: wtInfos}));
+                
+                // Close dialog
+                setUiMode('list');
+                
+                // Small delay to ensure UI is updated and tmux session is ready
+                await new Promise(resolve => setTimeout(resolve, 100));
+                
+                // Auto-attach to the newly created session
+                attachOrCreateSession(result.project, result.feature, result.path);
+              } else {
+                // Creation failed, close dialog
+                setUiMode('list');
+              }
+            } catch (error) {
+              console.error('Failed to create feature:', error);
+              setUiMode('list');
             }
-            const list = collectWorktrees();
-            const wtInfos = sortWorktrees(attachRuntimeData(list));
-            setState((s) => ({...s, worktrees: wtInfos}));
-            setUiMode('list');
           }
         })
       )
@@ -506,28 +521,50 @@ export default function App() {
           onSubmit: async (remoteBranch: string, localName: string) => {
             const proj = branchProject || state.worktrees[state.selectedIndex]?.project;
             if (!proj) { setUiMode('list'); return; }
-            const ok = gm.createWorktreeFromRemote(proj, remoteBranch, localName);
-            if (ok) {
-              const worktreePath = [BASE_PATH, `${proj}${DIR_BRANCHES_SUFFIX}`, localName].join('/');
-              setupWorktreeEnvironment(proj, worktreePath);
-              createTmuxSession(proj, localName, worktreePath);
-              // Auto-attach to the newly created session
-              attachOrCreateSession(proj, localName, worktreePath);
+            
+            try {
+              const ok = gm.createWorktreeFromRemote(proj, remoteBranch, localName);
+              if (ok) {
+                const worktreePath = [BASE_PATH, `${proj}${DIR_BRANCHES_SUFFIX}`, localName].join('/');
+                setupWorktreeEnvironment(proj, worktreePath);
+                createTmuxSession(proj, localName, worktreePath);
+                
+                // Refresh UI first to show the new worktree
+                const list = collectWorktrees();
+                const wtInfos = sortWorktrees(attachRuntimeData(list));
+                setState((s) => ({...s, worktrees: wtInfos}));
+                
+                // Close dialog
+                setUiMode('list');
+                setBranchProject(null);
+                setBranchList([]);
+                
+                // Small delay to ensure UI is updated and tmux session is ready
+                await new Promise(resolve => setTimeout(resolve, 100));
+                
+                // Auto-attach to the newly created session
+                attachOrCreateSession(proj, localName, worktreePath);
+                
+                // Fetch PR status asynchronously without blocking UI
+                Promise.resolve().then(async () => {
+                  try {
+                    const prMap = await gm.batchGetPRStatusForWorktreesAsync(wtInfos.map(w => ({project: w.project, path: w.path})), true);
+                    const withPr = sortWorktrees(wtInfos.map(w => new WorktreeInfo({...w, pr: prMap[w.path] || w.pr})));
+                    setState((s) => ({...s, worktrees: withPr}));
+                  } catch {}
+                });
+              } else {
+                // Creation failed
+                setUiMode('list');
+                setBranchProject(null);
+                setBranchList([]);
+              }
+            } catch (error) {
+              console.error('Failed to create worktree from branch:', error);
+              setUiMode('list');
+              setBranchProject(null);
+              setBranchList([]);
             }
-            const list = collectWorktrees();
-            const wtInfos = sortWorktrees(attachRuntimeData(list));
-            setState((s) => ({...s, worktrees: wtInfos}));
-            setUiMode('list');
-            setBranchProject(null);
-            setBranchList([]);
-            // Fetch PR status asynchronously without blocking UI
-            Promise.resolve().then(async () => {
-              try {
-                const prMap = await gm.batchGetPRStatusForWorktreesAsync(wtInfos.map(w => ({project: w.project, path: w.path})), true);
-                const withPr = sortWorktrees(wtInfos.map(w => new WorktreeInfo({...w, pr: prMap[w.path] || w.pr})));
-                setState((s) => ({...s, worktrees: withPr}));
-              } catch {}
-            });
           },
           onRefresh: () => {
             if (!branchProject) return;
