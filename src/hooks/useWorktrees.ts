@@ -3,6 +3,7 @@ import {WorktreeInfo} from '../models.js';
 import {useServices} from '../contexts/ServicesContext.js';
 import {useAppState} from '../contexts/AppStateContext.js';
 import {runCommandQuick} from '../utils.js';
+import {usePRStatus} from './usePRStatus.js';
 import {
   CACHE_DURATION,
   AI_STATUS_REFRESH_DURATION,
@@ -20,6 +21,7 @@ function useInterval(callback: () => void, delay: number) {
 export function useWorktrees() {
   const {gitService, tmuxService} = useServices();
   const {state, setState} = useAppState();
+  const {getPRStatus, fetchPRStatus} = usePRStatus();
 
   const collectWorktrees = useCallback((): Array<{
     project: string; 
@@ -68,12 +70,12 @@ export function useWorktrees() {
           attached, 
           claude_status: claudeStatus
         },
-        pr: undefined,
+        pr: getPRStatus(w.path) || undefined,
         mtime: (w as any).mtime || 0,
         last_commit_ts: lastCommitTimestamp,
       });
     });
-  }, [gitService, tmuxService]);
+  }, [gitService, tmuxService, getPRStatus]);
 
   const refreshAIStatus = useCallback((worktrees: WorktreeInfo[]): WorktreeInfo[] => {
     return worktrees.map(w => {
@@ -141,17 +143,14 @@ export function useWorktrees() {
     // Async PR status fetch
     Promise.resolve().then(async () => {
       try {
-        const prMap = await gitService.batchGetPRStatusForWorktreesAsync(
-          wtInfos.map(w => ({project: w.project, path: w.path})), 
-          true
-        );
+        await fetchPRStatus(wtInfos.map(w => ({project: w.project, path: w.path})), true);
         const withPr = sortWorktrees(wtInfos.map(w => 
-          new WorktreeInfo({...w, pr: prMap[w.path] || w.pr})
+          new WorktreeInfo({...w, pr: getPRStatus(w.path) || w.pr})
         ));
         setState(s => ({...s, worktrees: withPr}));
       } catch {}
     });
-  }, [collectWorktrees, sortWorktrees, attachRuntimeData, setState, gitService]);
+  }, [collectWorktrees, sortWorktrees, attachRuntimeData, setState, fetchPRStatus, getPRStatus]);
 
   // Initial load
   useEffect(() => {
@@ -184,14 +183,11 @@ export function useWorktrees() {
         const nonMergedWorktrees = currentWorktrees.filter(w => !w.pr?.is_merged);
         if (nonMergedWorktrees.length === 0) return;
         
-        const prMap = await gitService.batchGetPRStatusForWorktreesAsync(
-          nonMergedWorktrees.map(w => ({project: w.project, path: w.path})), 
-          true
-        );
+        await fetchPRStatus(nonMergedWorktrees.map(w => ({project: w.project, path: w.path})), true);
         
         const updated = currentWorktrees.map(w => {
           if (nonMergedWorktrees.some(nw => nw.path === w.path)) {
-            return new WorktreeInfo({...w, pr: prMap[w.path] || w.pr});
+            return new WorktreeInfo({...w, pr: getPRStatus(w.path) || w.pr});
           }
           return w;
         });
@@ -214,14 +210,11 @@ export function useWorktrees() {
     // Async PR status update
     Promise.resolve().then(async () => {
       try {
-        const prMap = await gitService.batchGetPRStatusForWorktreesAsync(
-          freshWtInfos.map(w => ({project: w.project, path: w.path})), 
-          true
-        );
+        await fetchPRStatus(freshWtInfos.map(w => ({project: w.project, path: w.path})), true);
         
         setState(s => {
           const withPr = s.worktrees.map(w => {
-            const prData = prMap[w.path];
+            const prData = getPRStatus(w.path);
             return prData ? new WorktreeInfo({...w, pr: prData}) : w;
           });
           return {...s, worktrees: sortWorktrees(withPr)};

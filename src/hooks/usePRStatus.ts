@@ -1,6 +1,7 @@
-import {useState, useCallback} from 'react';
+import {useState, useCallback, useEffect} from 'react';
 import {PRStatus} from '../models.js';
 import {useGitService} from '../contexts/ServicesContext.js';
+import {CacheService} from '../services/CacheService.js';
 
 export interface PRStatusCache {
   [worktreePath: string]: PRStatus;
@@ -10,35 +11,59 @@ export function usePRStatus() {
   const gitService = useGitService();
   const [cache, setCache] = useState<PRStatusCache>({});
   const [loading, setLoading] = useState<Set<string>>(new Set());
+  const [cacheService] = useState(() => new CacheService());
+
+  useEffect(() => {
+    const cachedData = cacheService.getCachedPRs();
+    if (Object.keys(cachedData).length > 0) {
+      setCache(cachedData);
+    }
+  }, [cacheService]);
 
   const fetchPRStatus = useCallback(async (
     worktrees: Array<{project: string; path: string; is_archived?: boolean}>,
     includeChecks = true
   ): Promise<Record<string, PRStatus>> => {
     const paths = worktrees.map(w => w.path);
-    const loadingPaths = new Set([...loading, ...paths]);
-    setLoading(loadingPaths);
+    const invalidatedPaths = cacheService.getInvalidatedPaths(paths);
+    const invalidatedWorktrees = worktrees.filter(w => invalidatedPaths.includes(w.path));
+    
+    // Return cached data if nothing needs to be refreshed
+    if (invalidatedWorktrees.length === 0) {
+      const validCached = cacheService.getCachedPRs();
+      const result: Record<string, PRStatus> = {};
+      paths.forEach(path => {
+        if (validCached[path]) result[path] = validCached[path];
+      });
+      return result;
+    }
+
+    setLoading(prev => new Set([...prev, ...invalidatedPaths]));
 
     try {
-      const result = await gitService.batchGetPRStatusForWorktreesAsync(worktrees, includeChecks);
+      const fetchedPRs = await gitService.batchGetPRStatusForWorktreesAsync(invalidatedWorktrees, includeChecks);
       
-      setCache(prevCache => ({
-        ...prevCache,
-        ...result
-      }));
+      setCache(prevCache => ({...prevCache, ...fetchedPRs}));
+      cacheService.saveCache(fetchedPRs);
+
+      // Combine fresh data with valid cached data
+      const allCached = cacheService.getCachedPRs();
+      const result: Record<string, PRStatus> = {};
+      paths.forEach(path => {
+        result[path] = fetchedPRs[path] || allCached[path] || new PRStatus();
+      });
 
       return result;
-    } catch (error) {
-      console.error('Failed to fetch PR status:', error);
+    } catch {
       return {};
     } finally {
       setLoading(prev => {
         const newLoading = new Set(prev);
-        paths.forEach(path => newLoading.delete(path));
+        invalidatedPaths.forEach(path => newLoading.delete(path));
         return newLoading;
       });
     }
-  }, [gitService, loading]);
+  }, [gitService, cacheService]);
 
   const getPRStatus = useCallback((worktreePath: string): PRStatus | null => {
     return cache[worktreePath] || null;
@@ -67,10 +92,12 @@ export function usePRStatus() {
         delete newCache[worktreePath];
         return newCache;
       });
+      cacheService.clearCache(worktreePath);
     } else {
       setCache({});
+      cacheService.clearCache();
     }
-  }, []);
+  }, [cacheService]);
 
   const refreshNonMergedPRs = useCallback(async (
     worktrees: Array<{project: string; path: string; pr?: PRStatus}>

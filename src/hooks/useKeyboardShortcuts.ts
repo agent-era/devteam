@@ -45,7 +45,12 @@ export function useKeyboardShortcuts(
   useEffect(() => {
     if (!isRawModeSupported || !enabled) return;
 
-    setRawMode(true);
+    try {
+      setRawMode(true);
+    } catch (error) {
+      // Silent fail if setRawMode fails - this can happen in non-TTY environments
+      return;
+    }
 
     const handler = (buf: Buffer) => {
       const input = buf.toString('utf8');
@@ -100,7 +105,11 @@ export function useKeyboardShortcuts(
 
     return () => {
       stdin.off('data', handler);
-      setRawMode(false);
+      try {
+        setRawMode(false);
+      } catch (error) {
+        // Silent fail if setRawMode fails during cleanup
+      }
     };
   }, [
     isRawModeSupported,
