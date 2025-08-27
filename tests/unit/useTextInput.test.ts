@@ -4,52 +4,78 @@
 describe('Text Input Logic', () => {
   // Helper to simulate the key input handling logic
   class TestTextInput {
-    value: string;
-    cursorPos: number;
+    state: {value: string; cursorPos: number};
 
     constructor(initialValue = '') {
-      this.value = initialValue;
-      this.cursorPos = initialValue.length;
+      this.state = {
+        value: initialValue,
+        cursorPos: initialValue.length
+      };
     }
+
+    get value() { return this.state.value; }
+    get cursorPos() { return this.state.cursorPos; }
 
     handleKeyInput(input: string, key: any): boolean {
       // Movement keys
       if (key.leftArrow) {
-        this.cursorPos = Math.max(0, this.cursorPos - 1);
+        this.state = {
+          ...this.state,
+          cursorPos: Math.max(0, this.state.cursorPos - 1)
+        };
         return true;
       }
       if (key.rightArrow) {
-        this.cursorPos = Math.min(this.value.length, this.cursorPos + 1);
+        this.state = {
+          ...this.state,
+          cursorPos: Math.min(this.state.value.length, this.state.cursorPos + 1)
+        };
         return true;
       }
       if (key.home || (key.ctrl && input === 'a')) {
-        this.cursorPos = 0;
+        this.state = {
+          ...this.state,
+          cursorPos: 0
+        };
         return true;
       }
       if (key.end || (key.ctrl && input === 'e')) {
-        this.cursorPos = this.value.length;
+        this.state = {
+          ...this.state,
+          cursorPos: this.state.value.length
+        };
         return true;
       }
       
       // Editing keys
       if (key.backspace) {
-        if (this.cursorPos > 0) {
-          this.value = this.value.slice(0, this.cursorPos - 1) + this.value.slice(this.cursorPos);
-          this.cursorPos = this.cursorPos - 1;
+        if (this.state.cursorPos > 0) {
+          const newValue = this.state.value.slice(0, this.state.cursorPos - 1) + this.state.value.slice(this.state.cursorPos);
+          this.state = {
+            value: newValue,
+            cursorPos: this.state.cursorPos - 1
+          };
         }
         return true;
       }
       if (key.delete) {
-        if (this.cursorPos < this.value.length) {
-          this.value = this.value.slice(0, this.cursorPos) + this.value.slice(this.cursorPos + 1);
+        if (this.state.cursorPos < this.state.value.length) {
+          const newValue = this.state.value.slice(0, this.state.cursorPos) + this.state.value.slice(this.state.cursorPos + 1);
+          this.state = {
+            ...this.state,
+            value: newValue
+          };
         }
         return true;
       }
       
       // Regular typing
       if (input && !key.ctrl && !key.meta) {
-        this.value = this.value.slice(0, this.cursorPos) + input + this.value.slice(this.cursorPos);
-        this.cursorPos = this.cursorPos + 1;
+        const newValue = this.state.value.slice(0, this.state.cursorPos) + input + this.state.value.slice(this.state.cursorPos);
+        this.state = {
+          value: newValue,
+          cursorPos: this.state.cursorPos + 1
+        };
         return true;
       }
       
@@ -57,13 +83,17 @@ describe('Text Input Logic', () => {
     }
 
     setValue(newValue: string) {
-      this.value = newValue;
-      this.cursorPos = Math.min(this.cursorPos, newValue.length);
+      this.state = {
+        value: newValue,
+        cursorPos: Math.min(this.state.cursorPos, newValue.length)
+      };
     }
 
     reset(newValue = '') {
-      this.value = newValue;
-      this.cursorPos = newValue.length;
+      this.state = {
+        value: newValue,
+        cursorPos: newValue.length
+      };
     }
   }
 

@@ -4,50 +4,79 @@ const h = React.createElement;
 
 // Single-source-of-truth text input hook
 export function useTextInput(initialValue = '') {
-  const [value, setValue] = useState(initialValue);
-  const [cursorPos, setCursorPos] = useState(initialValue.length);
+  const [state, setState] = useState({
+    value: initialValue,
+    cursorPos: initialValue.length
+  });
 
   const handleKeyInput = (input: string, key: any): boolean => {
     // Movement keys
     if (key.leftArrow) {
-      setCursorPos(Math.max(0, cursorPos - 1));
+      setState(prev => ({
+        ...prev,
+        cursorPos: Math.max(0, prev.cursorPos - 1)
+      }));
       return true;
     }
     if (key.rightArrow) {
-      setCursorPos(Math.min(value.length, cursorPos + 1));
+      setState(prev => ({
+        ...prev,
+        cursorPos: Math.min(prev.value.length, prev.cursorPos + 1)
+      }));
       return true;
     }
     if (key.home || (key.ctrl && input === 'a')) {
-      setCursorPos(0);
+      setState(prev => ({
+        ...prev,
+        cursorPos: 0
+      }));
       return true;
     }
     if (key.end || (key.ctrl && input === 'e')) {
-      setCursorPos(value.length);
+      setState(prev => ({
+        ...prev,
+        cursorPos: prev.value.length
+      }));
       return true;
     }
     
     // Editing keys
     if (key.backspace) {
-      if (cursorPos > 0) {
-        const newValue = value.slice(0, cursorPos - 1) + value.slice(cursorPos);
-        setValue(newValue);
-        setCursorPos(cursorPos - 1);
-      }
+      setState(prev => {
+        if (prev.cursorPos > 0) {
+          const newValue = prev.value.slice(0, prev.cursorPos - 1) + prev.value.slice(prev.cursorPos);
+          return {
+            value: newValue,
+            cursorPos: prev.cursorPos - 1
+          };
+        }
+        return prev;
+      });
       return true;
     }
     if (key.delete) {
-      if (cursorPos < value.length) {
-        const newValue = value.slice(0, cursorPos) + value.slice(cursorPos + 1);
-        setValue(newValue);
-      }
+      setState(prev => {
+        if (prev.cursorPos < prev.value.length) {
+          const newValue = prev.value.slice(0, prev.cursorPos) + prev.value.slice(prev.cursorPos + 1);
+          return {
+            ...prev,
+            value: newValue
+          };
+        }
+        return prev;
+      });
       return true;
     }
     
     // Regular typing
     if (input && !key.ctrl && !key.meta) {
-      const newValue = value.slice(0, cursorPos) + input + value.slice(cursorPos);
-      setValue(newValue);
-      setCursorPos(cursorPos + 1);
+      setState(prev => {
+        const newValue = prev.value.slice(0, prev.cursorPos) + input + prev.value.slice(prev.cursorPos);
+        return {
+          value: newValue,
+          cursorPos: prev.cursorPos + 1
+        };
+      });
       return true;
     }
     
@@ -55,14 +84,14 @@ export function useTextInput(initialValue = '') {
   };
 
   const renderText = (placeholder = '', color?: string, cursorColor = 'inverse') => {
-    const displayValue = value || placeholder;
-    const beforeCursor = displayValue.slice(0, cursorPos);
-    const atCursor = displayValue[cursorPos] || ' ';
-    const afterCursor = displayValue.slice(cursorPos + 1);
+    const displayValue = state.value || placeholder;
+    const beforeCursor = displayValue.slice(0, state.cursorPos);
+    const atCursor = displayValue[state.cursorPos] || ' ';
+    const afterCursor = displayValue.slice(state.cursorPos + 1);
 
     return h(
       Text,
-      {color: value ? color : 'gray'},
+      {color: state.value ? color : 'gray'},
       beforeCursor,
       h(Text, {color: cursorColor}, atCursor),
       afterCursor
@@ -70,19 +99,23 @@ export function useTextInput(initialValue = '') {
   };
 
   const reset = (newValue = '') => {
-    setValue(newValue);
-    setCursorPos(newValue.length);
+    setState({
+      value: newValue,
+      cursorPos: newValue.length
+    });
   };
 
   return {
-    value,
-    cursorPos,
+    value: state.value,
+    cursorPos: state.cursorPos,
     handleKeyInput,
     renderText,
     reset,
     setValue: (newValue: string) => {
-      setValue(newValue);
-      setCursorPos(Math.min(cursorPos, newValue.length));
+      setState(prev => ({
+        value: newValue,
+        cursorPos: Math.min(prev.cursorPos, newValue.length)
+      }));
     }
   };
 }
