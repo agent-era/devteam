@@ -8,6 +8,7 @@ import {
   AI_STATUS_REFRESH_DURATION,
   DIFF_STATUS_REFRESH_DURATION,
   PR_REFRESH_DURATION,
+  GIT_REFRESH_DURATION,
 } from '../constants.js';
 
 function useInterval(callback: () => void, delay: number) {
@@ -173,6 +174,42 @@ export function useWorktrees() {
       worktrees: sortWorktrees(refreshDiffStatus(s.worktrees)),
     }));
   }, DIFF_STATUS_REFRESH_DURATION);
+
+  // Async git status refresh every 5 seconds (includes conflict detection)
+  useInterval(() => {
+    (async () => {
+      const currentWorktrees = state.worktrees;
+      if (!currentWorktrees.length) return;
+      
+      try {
+        // Fetch git status for all worktrees with clean working trees
+        const statusPromises = currentWorktrees.map(async w => {
+          // Only check conflicts for worktrees with clean working trees
+          if (!w.git?.has_changes) {
+            const status = await gitService.getGitStatusAsync(w.path);
+            return {path: w.path, status};
+          }
+          return {path: w.path, status: null};
+        });
+        
+        const results = await Promise.all(statusPromises);
+        const statusMap: Record<string, any> = {};
+        results.forEach(({path, status}) => {
+          if (status) statusMap[path] = status;
+        });
+        
+        const updated = currentWorktrees.map(w => {
+          const newStatus = statusMap[w.path];
+          if (newStatus) {
+            return new WorktreeInfo({...w, git: newStatus});
+          }
+          return w;
+        });
+        
+        setState(s => ({...s, worktrees: sortWorktrees(updated)}));
+      } catch {}
+    })();
+  }, GIT_REFRESH_DURATION);
 
   // PR refresh every 30s for non-merged PRs only
   useInterval(() => {

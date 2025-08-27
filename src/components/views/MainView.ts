@@ -71,10 +71,12 @@ export default function MainView(props: Props) {
       
       const ahead = w.git?.ahead || 0;
       const behind = w.git?.behind || 0;
+      const hasConflicts = w.git?.has_merge_conflicts || false;
       let changes = '';
       if (ahead > 0) changes += `${GIT_AHEAD}${ahead} `;
-      if (behind > 0) changes += `${GIT_BEHIND}${behind}`;
-      if (!changes) changes = '-'; // No commits ahead/behind base branch
+      if (behind > 0) changes += `${GIT_BEHIND}${behind} `;
+      if (hasConflicts) changes += '⚠️';
+      if (!changes.trim()) changes = '-'; // No commits ahead/behind base branch
       
       // PUSHED column: show push status to remote
       let pushed = '';
@@ -91,7 +93,7 @@ export default function MainView(props: Props) {
       const pr = w.pr;
       let prStr = '';
       if (pr?.number) {
-        const badge = pr.has_conflicts ? '⚠️' : (pr.is_merged || pr.state === 'MERGED') ? '⟫' : pr.checks === 'passing' ? '✓' : pr?.checks === 'failing' ? '✗' : pr?.checks === 'pending' ? '⏳' : '';
+        const badge = (pr.is_merged || pr.state === 'MERGED') ? '⟫' : pr.checks === 'passing' ? '✓' : pr?.checks === 'failing' ? '✗' : pr?.checks === 'pending' ? '⏳' : '';
         prStr = `#${pr.number}${badge}`;
       } else if (pr !== undefined) {
         prStr = '-'; // PR data loaded, no PR exists
@@ -165,10 +167,12 @@ export default function MainView(props: Props) {
 
       const ahead = w.git?.ahead || 0;
       const behind = w.git?.behind || 0;
+      const hasConflicts = w.git?.has_merge_conflicts || false;
       let changes = '';
       if (ahead > 0) changes += `${GIT_AHEAD}${ahead} `;
-      if (behind > 0) changes += `${GIT_BEHIND}${behind}`;
-      if (!changes) changes = '-'; // No commits ahead/behind base branch
+      if (behind > 0) changes += `${GIT_BEHIND}${behind} `;
+      if (hasConflicts) changes += '⚠️';
+      if (!changes.trim()) changes = '-'; // No commits ahead/behind base branch
       
       // PUSHED column: show push status to remote
       let pushed = '';
@@ -185,7 +189,7 @@ export default function MainView(props: Props) {
       const pr = w.pr;
       let prStr = '';
       if (pr?.number) {
-        const badge = pr.has_conflicts ? '⚠️' : (pr.is_merged || pr.state === 'MERGED') ? '⟫' : pr.checks === 'passing' ? '✓' : pr?.checks === 'failing' ? '✗' : pr?.checks === 'pending' ? '⏳' : '';
+        const badge = (pr.is_merged || pr.state === 'MERGED') ? '⟫' : pr.checks === 'passing' ? '✓' : pr?.checks === 'failing' ? '✗' : pr?.checks === 'pending' ? '⏳' : '';
         prStr = `#${pr.number}${badge}`;
       } else if (pr !== undefined) {
         prStr = '-'; // PR data loaded, no PR exists
@@ -235,28 +239,28 @@ export default function MainView(props: Props) {
         highlightColor = COLORS.YELLOW;
         // claude-waiting
       }
-      // PRIORITY 2: Unstaged changes (need to commit before doing anything else)
+      // PRIORITY 2: Merge conflicts (needs resolution before merging)
+      else if (w.git?.has_merge_conflicts) {
+        highlightIndex = COLUMNS.CHANGES;
+        highlightColor = COLORS.RED;
+        // merge-conflicts
+      }
+      // PRIORITY 3: Unstaged changes (need to commit before doing anything else)
       else if (w.git?.has_changes) {
         highlightIndex = COLUMNS.DIFF;
         highlightColor = COLORS.YELLOW;
         // unstaged-changes';
       }
-      // PRIORITY 3: Unpushed commits (commits ready to push/sync)
+      // PRIORITY 4: Unpushed commits (commits ready to push/sync)
       else if ((w.git?.ahead || 0) > 0) {
         highlightIndex = COLUMNS.PUSHED;
         highlightColor = COLORS.YELLOW;
         // unpushed-commits';
       }
-      // PRIORITY 4+: PR-related priorities (only if PR status has been loaded)
+      // PRIORITY 5+: PR-related priorities (only if PR status has been loaded)
       else if (pr !== undefined) {
-        // PRIORITY 4: PR has merge conflicts (highest PR priority)
-        if (pr.has_conflicts) {
-          highlightIndex = COLUMNS.PR;
-          highlightColor = COLORS.RED;
-          // pr-conflicts';
-        }
         // PRIORITY 5: PR needs attention (failing checks, etc.)
-        else if (pr.checks === 'failing') {
+        if (pr.checks === 'failing') {
           highlightIndex = COLUMNS.PR;
           highlightColor = COLORS.RED;
           // pr-needs-attention';
