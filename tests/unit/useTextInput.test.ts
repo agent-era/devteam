@@ -47,8 +47,8 @@ describe('Text Input Logic', () => {
         return true;
       }
       
-      // Editing keys
-      if (key.backspace) {
+      // Editing keys (swapped due to terminal key mapping)
+      if (key.delete) {
         if (this.state.cursorPos > 0) {
           const newValue = this.state.value.slice(0, this.state.cursorPos - 1) + this.state.value.slice(this.state.cursorPos);
           this.state = {
@@ -58,7 +58,7 @@ describe('Text Input Logic', () => {
         }
         return true;
       }
-      if (key.delete) {
+      if (key.backspace) {
         if (this.state.cursorPos < this.state.value.length) {
           const newValue = this.state.value.slice(0, this.state.cursorPos) + this.state.value.slice(this.state.cursorPos + 1);
           this.state = {
@@ -137,16 +137,16 @@ describe('Text Input Logic', () => {
     expect(input.cursorPos).toBe(3);
   });
 
-  test('should handle backspace correctly', () => {
+  test('should handle delete key as backspace (terminal key mapping)', () => {
     const input = new TestTextInput('hello');
     
-    input.handleKeyInput('', {backspace: true});
+    input.handleKeyInput('', {delete: true});
     
     expect(input.value).toBe('hell');
     expect(input.cursorPos).toBe(4);
   });
 
-  test('should handle backspace in middle of text', () => {
+  test('should handle delete key as backspace in middle of text', () => {
     const input = new TestTextInput('hello');
     
     // Move cursor to position 2 (between 'e' and 'l')
@@ -156,14 +156,14 @@ describe('Text Input Logic', () => {
     
     expect(input.cursorPos).toBe(2);
     
-    // Backspace should delete 'e' and move cursor to position 1
-    input.handleKeyInput('', {backspace: true});
+    // Delete key should delete 'e' and move cursor to position 1
+    input.handleKeyInput('', {delete: true});
     
     expect(input.value).toBe('hllo');
     expect(input.cursorPos).toBe(1);
   });
 
-  test('should not backspace at beginning of text', () => {
+  test('should not delete at beginning of text', () => {
     const input = new TestTextInput('hello');
     
     // Move cursor to beginning
@@ -171,33 +171,33 @@ describe('Text Input Logic', () => {
     
     expect(input.cursorPos).toBe(0);
     
-    // Backspace should do nothing
-    input.handleKeyInput('', {backspace: true});
+    // Delete key should do nothing at beginning
+    input.handleKeyInput('', {delete: true});
     
     expect(input.value).toBe('hello');
     expect(input.cursorPos).toBe(0);
   });
 
-  test('should handle delete key correctly', () => {
+  test('should handle backspace key as delete (terminal key mapping)', () => {
     const input = new TestTextInput('hello');
     
     // Move cursor to beginning
     input.handleKeyInput('', {home: true});
     
-    // Delete should remove 'h'
-    input.handleKeyInput('', {delete: true});
+    // Backspace key should remove 'h'
+    input.handleKeyInput('', {backspace: true});
     
     expect(input.value).toBe('ello');
     expect(input.cursorPos).toBe(0);
   });
 
-  test('should not delete at end of text', () => {
+  test('should not backspace at end of text', () => {
     const input = new TestTextInput('hello');
     
     expect(input.cursorPos).toBe(5);
     
-    // Delete should do nothing at end
-    input.handleKeyInput('', {delete: true});
+    // Backspace key should do nothing at end
+    input.handleKeyInput('', {backspace: true});
     
     expect(input.value).toBe('hello');
     expect(input.cursorPos).toBe(5);
@@ -326,6 +326,7 @@ describe('Text Input Logic', () => {
     // Recognized keys should return true
     expect(input.handleKeyInput('a', {})).toBe(true);
     expect(input.handleKeyInput('', {leftArrow: true})).toBe(true);
+    expect(input.handleKeyInput('', {delete: true})).toBe(true);
     expect(input.handleKeyInput('', {backspace: true})).toBe(true);
   });
 });

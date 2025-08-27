@@ -40,8 +40,8 @@ export function useTextInput(initialValue = '') {
       return true;
     }
     
-    // Editing keys
-    if (key.backspace) {
+    // Editing keys (swapped due to terminal key mapping)
+    if (key.delete) {
       setState(prev => {
         if (prev.cursorPos > 0) {
           const newValue = prev.value.slice(0, prev.cursorPos - 1) + prev.value.slice(prev.cursorPos);
@@ -54,7 +54,7 @@ export function useTextInput(initialValue = '') {
       });
       return true;
     }
-    if (key.delete) {
+    if (key.backspace) {
       setState(prev => {
         if (prev.cursorPos < prev.value.length) {
           const newValue = prev.value.slice(0, prev.cursorPos) + prev.value.slice(prev.cursorPos + 1);
