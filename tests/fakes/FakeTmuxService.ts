@@ -4,6 +4,8 @@ import {memoryStore} from './stores.js';
 import {SESSION_PREFIX} from '../../src/constants.js';
 
 export class FakeTmuxService extends TmuxService {
+  private sentKeys: Array<{session: string, keys: string[]}> = [];
+  
   sessionName(project: string, feature: string): string {
     return `${SESSION_PREFIX}${project}-${feature}`;
   }
@@ -99,6 +101,23 @@ export class FakeTmuxService extends TmuxService {
     }
   }
 
+  // Track sent keys for testing
+  recordSentKeys(session: string, keys: string[]): void {
+    this.sentKeys.push({session, keys});
+  }
+  
+  // Get all sent keys for a session
+  getSentKeys(session: string): string[][] {
+    return this.sentKeys
+      .filter(entry => entry.session === session)
+      .map(entry => entry.keys);
+  }
+  
+  // Clear sent keys history
+  clearSentKeys(): void {
+    this.sentKeys = [];
+  }
+  
   // Helper method to determine if a session should be preserved
   private shouldPreserveSession(session: string, validWorktrees: string[]): boolean {
     const suffix = session.slice(SESSION_PREFIX.length);

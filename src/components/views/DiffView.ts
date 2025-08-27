@@ -339,10 +339,8 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
         runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, line]);
         
         // Send Alt+Enter (Escape followed by Enter) to insert newline without submitting
-        // Don't send a newline after the last line
-        if (index < messageLines.length - 1) {
-          runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 'Escape', 'Enter']);
-        }
+        // Send newline after every line including the last one to ensure proper formatting
+        runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 'Escape', 'Enter']);
       });
       
       // Clear comments after sending
