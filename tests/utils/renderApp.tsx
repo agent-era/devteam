@@ -1,5 +1,5 @@
 import React from 'react';
-import {render, RenderOptions} from 'ink-testing-library';
+import {render} from 'ink-testing-library';
 import App from '../../src/App.js';
 import {ServicesProvider} from '../../src/contexts/ServicesContext.js';
 import {AppStateProvider} from '../../src/contexts/AppStateContext.js';
@@ -23,20 +23,19 @@ export function TestApp({gitService, tmuxService, worktreeService}: TestAppProps
 
   return h(
     ServicesProvider,
-    {gitService: git, tmuxService: tmux, worktreeService: worktree},
-    h(AppStateProvider, null, h(App))
+    {gitService: git, tmuxService: tmux, worktreeService: worktree, children: h(AppStateProvider, null, h(App))}
   );
 }
 
 // Enhanced render function that provides better mock output
-export function renderTestApp(props?: TestAppProps, options?: RenderOptions) {
+export function renderTestApp(props?: TestAppProps, options?: any) {
   const services = {
     gitService: props?.gitService || new FakeGitService(),
     tmuxService: props?.tmuxService || new FakeTmuxService(),
     worktreeService: props?.worktreeService || new FakeWorktreeService()
   };
 
-  const result = render(h(TestApp, props), options);
+  const result = render(h(TestApp, props as any));
   
   // Enhance the lastFrame function to provide more realistic output
   const originalLastFrame = result.lastFrame;
@@ -45,10 +44,10 @@ export function renderTestApp(props?: TestAppProps, options?: RenderOptions) {
     return generateMockOutput();
   };
 
-  // Store services for access in tests
-  result.services = services;
+  // Store services for access in tests and add type assertion
+  (result as any).services = services;
   
-  return result;
+  return result as any;
 }
 
 // Generate mock terminal output based on memory store state

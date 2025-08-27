@@ -60,7 +60,7 @@ export class FakeTmuxService extends TmuxService {
     const devSessions = sessions.filter((s) => s.startsWith(SESSION_PREFIX));
     
     for (const session of devSessions) {
-      if (this.shouldPreservSession(session, validWorktrees)) continue;
+      if (this.shouldPreserveSession(session, validWorktrees)) continue;
       this.killSession(session);
     }
   }
@@ -99,8 +99,8 @@ export class FakeTmuxService extends TmuxService {
     }
   }
 
-  // Private helper methods (same logic as real service)
-  private shouldPreservSession(session: string, validWorktrees: string[]): boolean {
+  // Helper method to determine if a session should be preserved
+  private shouldPreserveSession(session: string, validWorktrees: string[]): boolean {
     const suffix = session.slice(SESSION_PREFIX.length);
     
     // Always preserve shell sessions

@@ -44,8 +44,12 @@ export class FakeWorktreeService extends WorktreeService {
   }
 
   archiveFeature(projectName: string, worktreePath: string, featureName: string): ArchiveResult {
-    // Terminate sessions
-    this.terminateFeatureSessions(projectName, featureName);
+    // Terminate sessions - manually do what terminateFeatureSessions would do
+    const sessionName = this.fakeTmuxService.sessionName(projectName, featureName);
+    const shellSessionName = this.fakeTmuxService.shellSessionName(projectName, featureName);
+    
+    this.fakeTmuxService.killSession(sessionName);
+    this.fakeTmuxService.killSession(shellSessionName);
     
     // Move worktree from active to archived in memory
     const archived = this.fakeGitService.archiveWorktree(projectName, worktreePath, featureName);
@@ -89,8 +93,8 @@ export class FakeWorktreeService extends WorktreeService {
     // No actual file operations needed for testing
   }
 
-  // Private methods that simulate tmux operations
-  private createTmuxSession(project: string, feature: string, cwd: string): string {
+  // Methods that simulate tmux operations - public to match base class
+  createTmuxSession(project: string, feature: string, cwd: string): string {
     const sessionName = this.fakeTmuxService.createSession(project, feature, 'idle');
     
     // Simulate starting Claude in the session
@@ -101,25 +105,9 @@ export class FakeWorktreeService extends WorktreeService {
     return sessionName;
   }
 
-  private createShellSession(project: string, feature: string, cwd: string): string {
+  createShellSession(project: string, feature: string, cwd: string): string {
     return this.fakeTmuxService.createShellSession(project, feature);
   }
 
-  private terminateFeatureSessions(projectName: string, featureName: string): void {
-    const sessionName = this.fakeTmuxService.sessionName(projectName, featureName);
-    const shellSessionName = this.fakeTmuxService.shellSessionName(projectName, featureName);
-    
-    this.fakeTmuxService.killSession(sessionName);
-    this.fakeTmuxService.killSession(shellSessionName);
-  }
 
-  private moveWorktreeToArchive(sourcePath: string, destPath: string): void {
-    // In real implementation, this would move directories
-    // In fake, this is handled by archiveWorktree in FakeGitService
-  }
-
-  private pruneWorktreeReferences(projectName: string): void {
-    // In real implementation, this would run git worktree prune
-    // In fake, this is a no-op since we handle it in memory
-  }
 }

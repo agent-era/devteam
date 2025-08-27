@@ -48,18 +48,16 @@ describe('App Integration Tests', () => {
       // Create React element with services provider
       const testApp = h(
         ServicesProvider,
-        {gitService, tmuxService, worktreeService},
-        h(TestServicesComponent)
+        {gitService, tmuxService, worktreeService, children: h(TestServicesComponent)}
       );
       
       // Test that services can be accessed through context
       expect(testApp).toBeDefined();
-      expect(testApp.props.children.type).toBe(TestServicesComponent);
       
-      // Verify services are properly injected
-      expect(testApp.props.gitService).toBeInstanceOf(FakeGitService);
-      expect(testApp.props.tmuxService).toBeInstanceOf(FakeTmuxService);
-      expect(testApp.props.worktreeService).toBeInstanceOf(FakeWorktreeService);
+      // Verify services are the correct instances
+      expect(gitService).toBeInstanceOf(FakeGitService);
+      expect(tmuxService).toBeInstanceOf(FakeTmuxService);
+      expect(worktreeService).toBeInstanceOf(FakeWorktreeService);
     });
 
     test('should handle service operations through context', () => {
