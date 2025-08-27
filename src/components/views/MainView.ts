@@ -218,12 +218,15 @@ export default function MainView(props: Props) {
         GREEN: 'green'     // Ready/good state
       };
       
+      // Check if this row should be dimmed (merged PRs)
+      const isDimmed = pr?.is_merged === true;
+      
       let highlightIndex = -1;
       let highlightColor: any = undefined;
       
-      // Skip all highlighting if agent is working or thinking
-      if (cs.includes('working') || cs.includes('thinking')) {
-        // Agent is busy - nothing is actionable, so no highlighting
+      // Skip all highlighting if agent is working or thinking, or if PR is merged (dimmed)
+      if (cs.includes('working') || cs.includes('thinking') || isDimmed) {
+        // Agent is busy or PR is merged - nothing is actionable, so no highlighting
       }
       // PRIORITY 1: Claude waiting for input (highest priority - blocks all work)
       else if (cs.includes('waiting')) {
@@ -282,15 +285,15 @@ export default function MainView(props: Props) {
       const bg = selected ? 'blue' : undefined;
       const common = {backgroundColor: bg, bold: selected} as any;
       const cells: Array<{text: string; color?: any}> = [
-        {text: num},
-        {text: pf},
-        {text: ai},
-        {text: diffStr},
-        {text: changes},
-        {text: pushed},
-        {text: prStr}
+        {text: num, color: isDimmed ? 'gray' : undefined},
+        {text: pf, color: isDimmed ? 'gray' : undefined},
+        {text: ai, color: isDimmed ? 'gray' : undefined},
+        {text: diffStr, color: isDimmed ? 'gray' : undefined},
+        {text: changes, color: isDimmed ? 'gray' : undefined},
+        {text: pushed, color: isDimmed ? 'gray' : undefined},
+        {text: prStr, color: isDimmed ? 'gray' : undefined}
       ];
-      if (highlightIndex >= 0) cells[highlightIndex].color = highlightColor;
+      if (highlightIndex >= 0 && !isDimmed) cells[highlightIndex].color = highlightColor;
 
       // Use auto-calculated column widths for perfect grid alignment
       return h(
