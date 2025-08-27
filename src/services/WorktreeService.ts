@@ -19,6 +19,13 @@ import {
 } from '../utils.js';
 import {GitService} from './GitService.js';
 import {TmuxService} from './TmuxService.js';
+import {
+  checkSettingsMergeOpportunity,
+  parseClaudeSettings,
+  mergePermissions,
+  writeClaudeSettings,
+  type ClaudeSettings
+} from '../claudeSettingsManager.js';
 
 export type WorktreeCreationResult = {
   project: string;
@@ -29,6 +36,14 @@ export type WorktreeCreationResult = {
 
 export type ArchiveResult = {
   archivedPath: string;
+};
+
+export type SettingsMergeInfo = {
+  canMerge: boolean;
+  scenario: 'no_worktree_settings' | 'copy_to_main' | 'merge_permissions';
+  newPermissions: string[];
+  worktreeSettingsPath: string | null;
+  mainSettingsPath: string | null;
 };
 
 export class WorktreeService {
@@ -207,5 +222,71 @@ export class WorktreeService {
     if (hasClaude) {
       runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 'claude', 'C-m']);
     }
+  }
+
+  // Claude Settings Management
+  checkClaudeSettingsMerge(projectName: string, worktreePath: string, featureName: string): SettingsMergeInfo {
+    const projectPath = path.join(BASE_PATH, projectName);
+    const opportunity = checkSettingsMergeOpportunity(worktreePath, projectPath);
+    
+    let newPermissions: string[] = [];
+    
+    if (opportunity.canMerge && opportunity.worktreeSettingsPath) {
+      const worktreeSettings = parseClaudeSettings(opportunity.worktreeSettingsPath);
+      
+      if (worktreeSettings) {
+        if (opportunity.scenario === 'copy_to_main') {
+          // All permissions from worktree are "new" since main has no settings
+          newPermissions = worktreeSettings.permissions.allow;
+        } else if (opportunity.scenario === 'merge_permissions' && opportunity.mainSettingsPath) {
+          // Find permissions that would be added
+          const mainSettings = parseClaudeSettings(opportunity.mainSettingsPath);
+          if (mainSettings) {
+            const mergeResult = mergePermissions(worktreeSettings, mainSettings);
+            newPermissions = mergeResult.newPermissions;
+          }
+        }
+      }
+    }
+    
+    return {
+      canMerge: opportunity.canMerge && newPermissions.length > 0,
+      scenario: opportunity.scenario,
+      newPermissions,
+      worktreeSettingsPath: opportunity.worktreeSettingsPath,
+      mainSettingsPath: opportunity.mainSettingsPath,
+    };
+  }
+
+  performClaudeSettingsMerge(projectName: string, worktreePath: string): boolean {
+    const projectPath = path.join(BASE_PATH, projectName);
+    const opportunity = checkSettingsMergeOpportunity(worktreePath, projectPath);
+    
+    if (!opportunity.canMerge || !opportunity.worktreeSettingsPath) {
+      return false;
+    }
+    
+    const worktreeSettings = parseClaudeSettings(opportunity.worktreeSettingsPath);
+    if (!worktreeSettings) {
+      return false;
+    }
+    
+    if (opportunity.scenario === 'copy_to_main') {
+      // Copy entire settings file to main project
+      return writeClaudeSettings(opportunity.mainSettingsPath!, worktreeSettings);
+    } else if (opportunity.scenario === 'merge_permissions' && opportunity.mainSettingsPath) {
+      // Merge permissions into existing main settings
+      const mainSettings = parseClaudeSettings(opportunity.mainSettingsPath);
+      if (!mainSettings) {
+        return false;
+      }
+      
+      const mergeResult = mergePermissions(worktreeSettings, mainSettings);
+      if (mergeResult.hasChanges) {
+        return writeClaudeSettings(opportunity.mainSettingsPath, mergeResult.mergedSettings);
+      }
+    }
+    
+    return false;
   }
 }

@@ -1,5 +1,5 @@
 import React, {useState, useEffect} from 'react';
-import {useApp, useStdin, Box} from 'ink';
+import {useApp, useStdin, Box, Text} from 'ink';
 import FullScreen from './components/common/FullScreen.js';
 import HelpOverlay from './components/dialogs/HelpOverlay.js';
 import DiffView from './components/views/DiffView.js';
@@ -9,6 +9,7 @@ import BranchPickerDialog from './components/dialogs/BranchPickerDialog.js';
 import WorktreeListScreen from './screens/WorktreeListScreen.js';
 import CreateFeatureScreen from './screens/CreateFeatureScreen.js';
 import ArchiveConfirmScreen from './screens/ArchiveConfirmScreen.js';
+import SettingsMergeScreen from './screens/SettingsMergeScreen.js';
 import ArchivedScreen from './screens/ArchivedScreen.js';
 
 import {ServicesProvider} from './contexts/ServicesContext.js';
@@ -18,7 +19,7 @@ import {BASE_PATH, DIR_BRANCHES_SUFFIX} from './constants.js';
 
 const h = React.createElement;
 
-type UIMode = 'list' | 'create' | 'confirmArchive' | 'archived' | 'help' | 'pickProjectForBranch' | 'pickBranch' | 'diff';
+type UIMode = 'list' | 'create' | 'confirmArchive' | 'settingsMerge' | 'archived' | 'help' | 'pickProjectForBranch' | 'pickBranch' | 'diff';
 
 interface PendingArchive {
   project: string;
@@ -40,6 +41,7 @@ function AppContent() {
   const [branchList, setBranchList] = useState<any[]>([]);
   const [diffWorktree, setDiffWorktree] = useState<string | null>(null);
   const [diffType, setDiffType] = useState<'full' | 'uncommitted'>('full');
+  const [settingsMergeInfo, setSettingsMergeInfo] = useState<any>(null);
 
   // Auto-exit for non-interactive environments
   useEffect(() => {
@@ -73,12 +75,29 @@ function AppContent() {
     const selectedWorktree = state.worktrees[state.selectedIndex];
     if (!selectedWorktree) return;
     
-    setPendingArchive({
+    // Check for Claude settings merge opportunities
+    const mergeInfo = worktreeService.checkClaudeSettingsMerge(
+      selectedWorktree.project,
+      selectedWorktree.path,
+      selectedWorktree.feature
+    );
+    
+    const pendingFeature = {
       project: selectedWorktree.project,
       feature: selectedWorktree.feature,
       path: selectedWorktree.path
-    });
-    setUiMode('confirmArchive');
+    };
+    
+    setPendingArchive(pendingFeature);
+    
+    if (mergeInfo.canMerge) {
+      // Show settings merge dialog first
+      setSettingsMergeInfo(mergeInfo);
+      setUiMode('settingsMerge');
+    } else {
+      // Proceed directly to archive confirmation
+      setUiMode('confirmArchive');
+    }
   };
 
   const handleBranch = () => {
@@ -170,6 +189,7 @@ function AppContent() {
   const resetToList = () => {
     setUiMode('list');
     setPendingArchive(null);
+    setSettingsMergeInfo(null);
     setBranchProject(null);
     setBranchList([]);
     setDiffWorktree(null);
@@ -186,11 +206,43 @@ function AppContent() {
     });
   }
 
+  if (uiMode === 'settingsMerge' && pendingArchive && settingsMergeInfo && settingsMergeInfo.canMerge) {
+    return h(SettingsMergeScreen, {
+      featureInfo: pendingArchive,
+      settingsMergeInfo: settingsMergeInfo,
+      onCancel: resetToList,
+      onContinueToArchive: () => {
+        // Ensure pendingArchive exists before proceeding
+        if (!pendingArchive) {
+          console.error('No pendingArchive when transitioning from settings merge');
+          resetToList();
+          return;
+        }
+        
+        // Clear settings merge info and transition to archive confirm
+        // Use React batch updates to ensure both state changes happen together
+        React.startTransition(() => {
+          setSettingsMergeInfo(null);
+          setUiMode('confirmArchive');
+        });
+      }
+    });
+  }
+
   if (uiMode === 'confirmArchive' && pendingArchive) {
     return h(ArchiveConfirmScreen, {
       featureInfo: pendingArchive,
       onCancel: resetToList,
       onSuccess: resetToList
+    });
+  }
+  
+  // Debug log for cases where confirmArchive mode doesn't render
+  if (uiMode === 'confirmArchive' && !pendingArchive) {
+    console.error('confirmArchive mode but no pendingArchive!', {
+      uiMode,
+      pendingArchive,
+      settingsMergeInfo
     });
   }
 
@@ -250,6 +302,26 @@ function AppContent() {
             if (branchProject) loadBranchList(branchProject);
           }
         })
+      )
+    );
+  }
+
+  // Fallback error handling for unmatched states
+  if (uiMode !== 'list') {
+    console.error('Unhandled UI mode, falling back to list', {
+      uiMode,
+      pendingArchive: !!pendingArchive,
+      settingsMergeInfo: !!settingsMergeInfo
+    });
+    
+    // Reset state and show error message
+    setTimeout(() => resetToList(), 100);
+    
+    return h(FullScreen, null,
+      h(Box as any, {flexGrow: 1, alignItems: 'center', justifyContent: 'center', flexDirection: 'column'},
+        h(Text, {color: 'red'}, 'Error: Invalid application state'),
+        h(Text, {color: 'gray'}, 'Returning to main screen...'),
+        h(Text, {color: 'gray'}, `Debug: mode=${uiMode}, archive=${!!pendingArchive}`)
       )
     );
   }

@@ -53,19 +53,20 @@ export default function SettingsMergeDialog({
     h(Text, null, description),
     h(Text, null, ''),
     
-    // Permissions list
-    scenario === 'copy_to_main' 
-      ? h(Text, {color: 'yellow'}, `All permissions from worktree will be copied (${newPermissions.length} permissions).`)
-      : h(
-          Box,
-          {flexDirection: 'column'},
-          h(Text, {color: 'yellow'}, `New permissions to be added to main project:`),
-          h(Text, null, ''),
-          ...newPermissions.slice(0, 8).map((permission, i) => 
-            h(Text, {key: i, color: 'green'}, `  + ${permission}`)
-          ),
-          newPermissions.length > 8 ? h(Text, {color: 'gray'}, `  ... and ${newPermissions.length - 8} more`) : null
-        ),
+    // Permissions list - Show ALL permissions, no truncation
+    h(
+      Box,
+      {flexDirection: 'column'},
+      h(Text, {color: 'yellow'}, 
+        scenario === 'copy_to_main' 
+          ? `All permissions from worktree will be copied:` 
+          : `New permissions to be added to main project:`
+      ),
+      h(Text, null, ''),
+      ...newPermissions.map((permission, i) => 
+        h(Text, {key: i, color: 'green'}, `  + ${permission}`)
+      )
+    ),
     
     h(Text, null, ''),
     
