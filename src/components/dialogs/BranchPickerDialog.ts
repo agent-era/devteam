@@ -1,6 +1,7 @@
 import React, {useEffect, useMemo, useState} from 'react';
 import {Box, Text, useInput, useStdin} from 'ink';
 import {fitDisplay, padStartDisplay} from '../../utils.js';
+import {useTextInput} from './TextInput.js';
 const h = React.createElement;
 
 type BranchInfo = {
@@ -26,17 +27,17 @@ type Props = {
 };
 
 export default function BranchPickerDialog({branches, onSubmit, onCancel, onRefresh}: Props) {
-  const [filter, setFilter] = useState('');
+  const filterInput = useTextInput();
   const [selected, setSelected] = useState(0);
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(Math.max(1, (process.stdout.rows || 24) - 6));
   const {isRawModeSupported} = useStdin();
   const filtered = useMemo(() => {
-    const f = filter.toLowerCase();
+    const f = filterInput.value.toLowerCase();
     const arr = branches.filter(b => (b.name + ' ' + b.local_name + ' ' + (b.pr_title || '')).toLowerCase().includes(f));
     arr.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
     return arr;
-  }, [branches, filter]);
+  }, [branches, filterInput.value]);
   useEffect(() => {
     const onResize = () => setPageSize(Math.max(1, (process.stdout.rows || 24) - 6));
     process.stdout.on('resize', onResize);
@@ -46,20 +47,48 @@ export default function BranchPickerDialog({branches, onSubmit, onCancel, onRefr
   useInput((input, key) => {
     if (!isRawModeSupported) return;
     if (key.escape) return onCancel();
-    if (key.downArrow || input === 'j') setSelected((s) => Math.min(filtered.length - 1, s + 1));
-    else if (key.upArrow || input === 'k') setSelected((s) => Math.max(0, s - 1));
-    else if (key.pageDown || input === 'f') setSelected((s) => Math.min(filtered.length - 1, s + pageSize));
-    else if (key.pageUp || input === 'b') setSelected((s) => Math.max(0, s - pageSize));
-    else if (/^[1-9]$/.test(input)) {
-      const idx = Number(input) - 1;
-      if (idx >= 0 && idx < filtered.length) setSelected(idx);
-    } else if (key.return) {
+    
+    // Handle control keys first
+    if (key.return) {
       const b = filtered[selected];
       if (b) onSubmit(b.name, b.local_name);
-    } else if (input === 'r' && onRefresh) {
+      return;
+    }
+    
+    if (input === 'r' && onRefresh) {
       onRefresh();
-    } else if (key.backspace) setFilter((f) => f.slice(0, -1));
-    else if (input && !key.ctrl && !key.meta) setFilter((f) => f + input);
+      return;
+    }
+    
+    // Navigation keys
+    if (key.downArrow || input === 'j') {
+      setSelected((s) => Math.min(filtered.length - 1, s + 1));
+      return;
+    }
+    if (key.upArrow || input === 'k') {
+      setSelected((s) => Math.max(0, s - 1));
+      return;
+    }
+    if (key.pageDown || input === 'f') {
+      setSelected((s) => Math.min(filtered.length - 1, s + pageSize));
+      return;
+    }
+    if (key.pageUp || input === 'b') {
+      setSelected((s) => Math.max(0, s - pageSize));
+      return;
+    }
+    
+    // Number keys for quick selection
+    if (/^[1-9]$/.test(input)) {
+      const idx = Number(input) - 1;
+      if (idx >= 0 && idx < filtered.length) setSelected(idx);
+      return;
+    }
+    
+    // Let the filter input hook handle text input
+    if (filterInput.handleKeyInput(input, key)) {
+      return;
+    }
   });
 
   const start = Math.floor(selected / pageSize) * pageSize;
@@ -79,6 +108,10 @@ export default function BranchPickerDialog({branches, onSubmit, onCancel, onRefr
     Box, {flexDirection: 'column'},
     h(Text, {color: 'cyan'}, 'Create from Remote Branch'),
     h(Text, {color: 'gray'}, `Type to filter, j/k arrows, PgUp/PgDn, 1-9 jump, r refresh, Enter select, ESC cancel  [${Math.floor(selected / pageSize) + 1}/${Math.max(1, Math.ceil(filtered.length / pageSize))}]`),
+    h(Box, {flexDirection: 'row'}, 
+      h(Text, {color: 'gray'}, 'Filter: '),
+      filterInput.renderText(' ')
+    ),
     ...pageItems.map((b, i) => {
       const idx = start + i;
       const sel = idx === selected;

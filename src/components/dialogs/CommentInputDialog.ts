@@ -1,5 +1,6 @@
 import React, {useState} from 'react';
 import {Box, Text, useInput} from 'ink';
+import {useTextInput} from './TextInput.js';
 const h = React.createElement;
 
 type Props = {
@@ -11,8 +12,7 @@ type Props = {
 };
 
 export default function CommentInputDialog({fileName, lineText, initialComment = '', onSave, onCancel}: Props) {
-  const [comment, setComment] = useState(initialComment);
-  const [cursorPosition, setCursorPosition] = useState(initialComment.length);
+  const commentInput = useTextInput(initialComment);
 
   useInput((input, key) => {
     if (key.escape) {
@@ -21,8 +21,8 @@ export default function CommentInputDialog({fileName, lineText, initialComment =
     }
 
     if (key.return && !key.shift) {
-      if (comment.trim()) {
-        onSave(comment.trim());
+      if (commentInput.value.trim()) {
+        onSave(commentInput.value.trim());
       } else {
         onCancel();
       }
@@ -30,48 +30,16 @@ export default function CommentInputDialog({fileName, lineText, initialComment =
     }
 
     if (key.return && key.shift) {
-      const newComment = comment.slice(0, cursorPosition) + '\n' + comment.slice(cursorPosition);
-      setComment(newComment);
-      setCursorPosition(cursorPosition + 1);
+      // Handle newlines for multi-line comments
+      commentInput.handleKeyInput('\n', {});
       return;
     }
 
-    if (key.backspace || key.delete) {
-      if (comment.length > 0 && cursorPosition > 0) {
-        const newComment = comment.slice(0, cursorPosition - 1) + comment.slice(cursorPosition);
-        setComment(newComment);
-        setCursorPosition(Math.max(0, cursorPosition - 1));
-      }
-      return;
-    }
-
-    if (key.leftArrow) {
-      setCursorPosition(Math.max(0, cursorPosition - 1));
-      return;
-    }
-
-    if (key.rightArrow) {
-      setCursorPosition(Math.min(comment.length, cursorPosition + 1));
-      return;
-    }
-
-    if (key.upArrow || key.downArrow) {
-      return;
-    }
-
-    if (input && !key.ctrl && !key.meta) {
-      const newComment = comment.slice(0, cursorPosition) + input + comment.slice(cursorPosition);
-      setComment(newComment);
-      setCursorPosition(cursorPosition + input.length);
-    }
+    // Let the text input hook handle all other input
+    commentInput.handleKeyInput(input, key);
   });
 
-  const displayComment = comment || '';
-  const beforeCursor = displayComment.slice(0, cursorPosition);
-  const atCursor = displayComment.slice(cursorPosition, cursorPosition + 1) || ' ';
-  const afterCursor = displayComment.slice(cursorPosition + 1);
-
-  const lines = displayComment.split('\n');
+  const lines = commentInput.value.split('\n');
   const boxWidth = 70; // Fixed width for consistent appearance
 
   return h(
@@ -95,18 +63,9 @@ export default function CommentInputDialog({fileName, lineText, initialComment =
         padding: 1,
         minHeight: 3
       },
-      ...lines.map((line, index) => {
-        if (index === 0 && lines.length === 1) {
-          return h(
-            Text,
-            {key: index},
-            h(Text, {}, beforeCursor),
-            h(Text, {inverse: true}, atCursor),
-            h(Text, {}, afterCursor)
-          );
-        }
-        return h(Text, {key: index}, line || ' ');
-      })
+      lines.length === 1 
+        ? commentInput.renderText(' ')  // Single line - show cursor
+        : lines.map((line, index) => h(Text, {key: index}, line || ' '))  // Multi-line - no cursor for simplicity
     ),
     h(
       Text,
