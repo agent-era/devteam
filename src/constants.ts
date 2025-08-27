@@ -18,6 +18,7 @@ export const PR_REFRESH_DURATION = 30_000; // 30s PR status refresh (non-merged 
 export const ENV_FILE = '.env.local';
 export const CLAUDE_SETTINGS_FILE = path.join('.claude', 'settings.local.json');
 export const CLAUDE_CONFIG_PATTERNS = ['CLAUDE.md', '.claude*', 'claude.config*'];
+export const RUN_CONFIG_FILE = 'run-session.config.json';
 
 // UI constants (kept for parity; Ink layout differs)
 export const UI_MIN_WIDTH = 50;
@@ -111,6 +112,8 @@ export const HELP_SECTIONS: string[] = [
   '  a           Archive selected feature',
   '  v           View archived sessions',
   '  s           Open shell in worktree',
+  '  x           Execute/run program in worktree',
+  '  X           Create/update run config with Claude',
   '',
   'NEW FEATURE DIALOG:',
   '  Type        Filter projects',
