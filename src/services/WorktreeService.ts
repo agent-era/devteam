@@ -8,6 +8,7 @@ import {
   ENV_FILE,
   CLAUDE_SETTINGS_FILE,
   TMUX_DISPLAY_TIME,
+  RUN_CONFIG_FILE,
 } from '../constants.js';
 import {
   ensureDirectory, 
@@ -15,7 +16,8 @@ import {
   runCommandQuick, 
   copyWithIgnore, 
   generateTimestamp, 
-  runInteractive
+  runInteractive,
+  runClaudeSync
 } from '../utils.js';
 import {GitService} from './GitService.js';
 import {TmuxService} from './TmuxService.js';
@@ -44,6 +46,13 @@ export type SettingsMergeInfo = {
   newPermissions: string[];
   worktreeSettingsPath: string | null;
   mainSettingsPath: string | null;
+};
+
+export type ConfigResult = {
+  success: boolean;
+  content?: string;
+  path: string;
+  error?: string;
 };
 
 export class WorktreeService {
@@ -157,6 +166,161 @@ export class WorktreeService {
     this.configureTmuxDisplayTime();
     
     return sessionName;
+  }
+
+  attachOrCreateRunSession(project: string, feature: string, cwd: string): 'success' | 'no_config' {
+    const projectPath = path.join(BASE_PATH, project);
+    const configPath = path.join(projectPath, RUN_CONFIG_FILE);
+    
+    // Check if config exists before creating session
+    if (!fs.existsSync(configPath)) {
+      return 'no_config';
+    }
+
+    const sessionName = this.tmuxService.runSessionName(project, feature);
+    const activeSessions = this.tmuxService.listSessions();
+    
+    if (!activeSessions.includes(sessionName)) {
+      this.createRunSession(project, feature, cwd);
+    }
+    
+    this.configureTmuxDisplayTime();
+    runInteractive('tmux', ['attach-session', '-t', sessionName]);
+    return 'success';
+  }
+
+  createRunSession(project: string, feature: string, cwd: string): string {
+    const sessionName = this.tmuxService.runSessionName(project, feature);
+    const projectPath = path.join(BASE_PATH, project);
+    const configPath = path.join(projectPath, RUN_CONFIG_FILE);
+    
+    // Create detached session at cwd
+    runCommand(['tmux', 'new-session', '-ds', sessionName, '-c', cwd]);
+    this.configureTmuxDisplayTime();
+    
+    try {
+      const configContent = fs.readFileSync(configPath, 'utf8');
+      const config = JSON.parse(configContent);
+      
+      // Run setup commands if they exist
+      if (config.setup && Array.isArray(config.setup)) {
+        for (const setupCmd of config.setup) {
+          runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, setupCmd, 'C-m']);
+        }
+      }
+      
+      // Set environment variables if they exist
+      if (config.env && typeof config.env === 'object') {
+        for (const [key, value] of Object.entries(config.env)) {
+          runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, `export ${key}="${value}"`, 'C-m']);
+        }
+      }
+      
+      // Run the main command
+      if (config.command) {
+        if (config.watch === false) {
+          // For non-watch commands (builds, tests), let session exit when command finishes
+          runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, config.command, 'C-m']);
+        } else {
+          // For watch commands (servers, dev), keep session alive after command exits
+          runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, `${config.command}; exec bash`, 'C-m']);
+        }
+      }
+    } catch (error) {
+      // Config file exists but is invalid, show error
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, `echo "Invalid run config at ${configPath}: ${errorMessage}"`, 'C-m']);
+    }
+    
+    return sessionName;
+  }
+
+  getRunConfigPath(project: string): string {
+    const projectPath = path.join(BASE_PATH, project);
+    return path.join(projectPath, RUN_CONFIG_FILE);
+  }
+
+  createOrFillRunConfig(project: string): ConfigResult {
+    const projectPath = path.join(BASE_PATH, project);
+    const configPath = path.join(projectPath, RUN_CONFIG_FILE);
+    
+    // Check if Claude CLI is available
+    const hasClaude = !!runCommandQuick(['bash', '-lc', 'command -v claude || true']);
+    if (!hasClaude) {
+      return {
+        success: false,
+        path: configPath,
+        error: 'Claude CLI not available. Please install it first.'
+      };
+    }
+    
+    const prompt = `Analyze this project directory and generate a run-session.config.json file.
+
+CRITICAL: Your response must be ONLY the JSON object. Do NOT use markdown code blocks or any formatting.
+
+Example of what to output:
+{"command": "npm start", "env": {}, "setup": [], "watch": true}
+
+Fill in values based on the project files you see:
+- "command": main run command (e.g. "npm run dev", "python app.py")
+- "env": object with environment variables (usually empty {})
+- "setup": array of setup commands (e.g. ["npm install"])
+- "watch": true for servers/long-running, false for build/test commands
+
+Your response must start with { and end with } - nothing else.`;
+    
+    // Use Claude to generate the config
+    const claudeResult = runClaudeSync(prompt, projectPath);
+    
+    if (!claudeResult.success) {
+      return {
+        success: false,
+        path: configPath,
+        error: claudeResult.error || 'Claude command failed'
+      };
+    }
+    
+    let output = claudeResult.output;
+    if (!output || !output.trim()) {
+      return {
+        success: false,
+        path: configPath,
+        error: 'Claude returned no output'
+      };
+    }
+    
+    // Strip markdown code blocks if Claude added them
+    output = output.replace(/^```json\s*\n?/, '').replace(/\n?```$/, '').trim();
+    
+    // Validate that it's valid JSON
+    try {
+      JSON.parse(output);
+    } catch (jsonError) {
+      return {
+        success: false,
+        content: output,
+        path: configPath,
+        error: 'Generated content is not valid JSON'
+      };
+    }
+    
+    // Write the output to the config file
+    try {
+      fs.writeFileSync(configPath, output);
+      return {
+        success: true,
+        content: output,
+        path: configPath
+      };
+    } catch (writeError) {
+      const errorMessage = writeError instanceof Error ? writeError.message : 'Unknown error';
+      return {
+        success: false,
+        content: output,
+        path: configPath,
+        error: `Failed to write config file: ${errorMessage}`
+      };
+    }
   }
 
   // Private helper methods

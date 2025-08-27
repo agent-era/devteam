@@ -5,21 +5,24 @@ import HelpOverlay from './components/dialogs/HelpOverlay.js';
 import DiffView from './components/views/DiffView.js';
 import ProjectPickerDialog from './components/dialogs/ProjectPickerDialog.js';
 import BranchPickerDialog from './components/dialogs/BranchPickerDialog.js';
+import RunConfigDialog from './components/dialogs/RunConfigDialog.js';
+import ProgressDialog from './components/dialogs/ProgressDialog.js';
+import ConfigResultsDialog from './components/dialogs/ConfigResultsDialog.js';
 
 import WorktreeListScreen from './screens/WorktreeListScreen.js';
 import CreateFeatureScreen from './screens/CreateFeatureScreen.js';
-import ArchiveConfirmScreen from './screens/ArchiveConfirmScreen.js';
-import SettingsMergeScreen from './screens/SettingsMergeScreen.js';
+import ArchiveFlowScreen from './screens/ArchiveFlowScreen.js';
 import ArchivedScreen from './screens/ArchivedScreen.js';
 
 import {ServicesProvider} from './contexts/ServicesContext.js';
 import {AppStateProvider, useAppState} from './contexts/AppStateContext.js';
 import {useServices} from './contexts/ServicesContext.js';
 import {BASE_PATH, DIR_BRANCHES_SUFFIX} from './constants.js';
+import {getRunConfigPath, createOrFillRunConfig, RUN_CONFIG_CLAUDE_PROMPT} from './ops.js';
 
 const h = React.createElement;
 
-type UIMode = 'list' | 'create' | 'confirmArchive' | 'settingsMerge' | 'archived' | 'help' | 'pickProjectForBranch' | 'pickBranch' | 'diff';
+type UIMode = 'list' | 'create' | 'archiveFlow' | 'archived' | 'help' | 'pickProjectForBranch' | 'pickBranch' | 'diff' | 'runConfig' | 'runProgress' | 'runResults';
 
 interface PendingArchive {
   project: string;
@@ -41,7 +44,10 @@ function AppContent() {
   const [branchList, setBranchList] = useState<any[]>([]);
   const [diffWorktree, setDiffWorktree] = useState<string | null>(null);
   const [diffType, setDiffType] = useState<'full' | 'uncommitted'>('full');
-  const [settingsMergeInfo, setSettingsMergeInfo] = useState<any>(null);
+  const [runProject, setRunProject] = useState<string | null>(null);
+  const [runFeature, setRunFeature] = useState<string | null>(null);
+  const [runPath, setRunPath] = useState<string | null>(null);
+  const [runConfigResult, setRunConfigResult] = useState<any | null>(null);
 
   // Auto-exit for non-interactive environments
   useEffect(() => {
@@ -75,29 +81,13 @@ function AppContent() {
     const selectedWorktree = state.worktrees[state.selectedIndex];
     if (!selectedWorktree) return;
     
-    // Check for Claude settings merge opportunities
-    const mergeInfo = worktreeService.checkClaudeSettingsMerge(
-      selectedWorktree.project,
-      selectedWorktree.path,
-      selectedWorktree.feature
-    );
-    
-    const pendingFeature = {
+    setPendingArchive({
       project: selectedWorktree.project,
       feature: selectedWorktree.feature,
       path: selectedWorktree.path
-    };
+    });
     
-    setPendingArchive(pendingFeature);
-    
-    if (mergeInfo.canMerge) {
-      // Show settings merge dialog first
-      setSettingsMergeInfo(mergeInfo);
-      setUiMode('settingsMerge');
-    } else {
-      // Proceed directly to archive confirmation
-      setUiMode('confirmArchive');
-    }
+    setUiMode('archiveFlow');
   };
 
   const handleBranch = () => {
@@ -123,6 +113,40 @@ function AppContent() {
       setDiffType(type);
       setUiMode('diff');
     }
+  };
+
+  const handleExecuteRun = () => {
+    const selectedWorktree = state.worktrees[state.selectedIndex];
+    if (!selectedWorktree) return;
+    
+    try {
+      const result = worktreeService.attachOrCreateRunSession(
+        selectedWorktree.project,
+        selectedWorktree.feature,
+        selectedWorktree.path
+      );
+      
+      if (result === 'no_config') {
+        // No config exists, show configuration dialog
+        setRunProject(selectedWorktree.project);
+        setRunFeature(selectedWorktree.feature);
+        setRunPath(selectedWorktree.path);
+        setUiMode('runConfig');
+      }
+      // If result === 'success', the session was attached and we'll exit naturally
+    } catch (error) {
+      // TODO: Show error message
+    }
+  };
+
+  const handleConfigureRun = () => {
+    const selectedWorktree = state.worktrees[state.selectedIndex];
+    if (!selectedWorktree) return;
+    
+    setRunProject(selectedWorktree.project);
+    setRunFeature(selectedWorktree.feature);
+    setRunPath(selectedWorktree.path);
+    setUiMode('runConfig');
   };
 
   const loadBranchList = (project: string) => {
@@ -189,10 +213,13 @@ function AppContent() {
   const resetToList = () => {
     setUiMode('list');
     setPendingArchive(null);
-    setSettingsMergeInfo(null);
     setBranchProject(null);
     setBranchList([]);
     setDiffWorktree(null);
+    setRunProject(null);
+    setRunFeature(null);
+    setRunPath(null);
+    setRunConfigResult(null);
   };
 
   // Screen routing
@@ -206,43 +233,11 @@ function AppContent() {
     });
   }
 
-  if (uiMode === 'settingsMerge' && pendingArchive && settingsMergeInfo && settingsMergeInfo.canMerge) {
-    return h(SettingsMergeScreen, {
-      featureInfo: pendingArchive,
-      settingsMergeInfo: settingsMergeInfo,
-      onCancel: resetToList,
-      onContinueToArchive: () => {
-        // Ensure pendingArchive exists before proceeding
-        if (!pendingArchive) {
-          console.error('No pendingArchive when transitioning from settings merge');
-          resetToList();
-          return;
-        }
-        
-        // Clear settings merge info and transition to archive confirm
-        // Use React batch updates to ensure both state changes happen together
-        React.startTransition(() => {
-          setSettingsMergeInfo(null);
-          setUiMode('confirmArchive');
-        });
-      }
-    });
-  }
-
-  if (uiMode === 'confirmArchive' && pendingArchive) {
-    return h(ArchiveConfirmScreen, {
+  if (uiMode === 'archiveFlow' && pendingArchive) {
+    return h(ArchiveFlowScreen, {
       featureInfo: pendingArchive,
       onCancel: resetToList,
       onSuccess: resetToList
-    });
-  }
-  
-  // Debug log for cases where confirmArchive mode doesn't render
-  if (uiMode === 'confirmArchive' && !pendingArchive) {
-    console.error('confirmArchive mode but no pendingArchive!', {
-      uiMode,
-      pendingArchive,
-      settingsMergeInfo
     });
   }
 
@@ -306,22 +301,58 @@ function AppContent() {
     );
   }
 
-  // Fallback error handling for unmatched states
-  if (uiMode !== 'list') {
-    console.error('Unhandled UI mode, falling back to list', {
-      uiMode,
-      pendingArchive: !!pendingArchive,
-      settingsMergeInfo: !!settingsMergeInfo
-    });
-    
-    // Reset state and show error message
-    setTimeout(() => resetToList(), 100);
-    
+  if (uiMode === 'runConfig' && runProject) {
     return h(FullScreen, null,
-      h(Box as any, {flexGrow: 1, alignItems: 'center', justifyContent: 'center', flexDirection: 'column'},
-        h(Text, {color: 'red'}, 'Error: Invalid application state'),
-        h(Text, {color: 'gray'}, 'Returning to main screen...'),
-        h(Text, {color: 'gray'}, `Debug: mode=${uiMode}, archive=${!!pendingArchive}`)
+      h(Box as any, {flexGrow: 1, alignItems: 'center', justifyContent: 'center'},
+        h(RunConfigDialog, {
+          project: runProject,
+          configPath: getRunConfigPath(runProject),
+          claudePrompt: RUN_CONFIG_CLAUDE_PROMPT,
+          onCancel: resetToList,
+          onCreateConfig: () => {
+            setUiMode('runProgress');
+            // Generate config in background
+            setTimeout(() => {
+              const result = createOrFillRunConfig(runProject);
+              setRunConfigResult(result);
+              setUiMode('runResults');
+            }, 100);
+          }
+        })
+      )
+    );
+  }
+
+  if (uiMode === 'runProgress' && runProject) {
+    return h(FullScreen, null,
+      h(Box as any, {flexGrow: 1, alignItems: 'center', justifyContent: 'center'},
+        h(ProgressDialog, {
+          title: 'Generating Run Configuration',
+          message: 'Claude is analyzing your project and generating a run configuration...',
+          project: runProject
+        })
+      )
+    );
+  }
+
+  if (uiMode === 'runResults' && runConfigResult && runProject && runFeature && runPath) {
+    return h(FullScreen, null,
+      h(Box as any, {flexGrow: 1, alignItems: 'center', justifyContent: 'center'},
+        h(ConfigResultsDialog, {
+          success: runConfigResult.success,
+          content: runConfigResult.content,
+          configPath: runConfigResult.path,
+          error: runConfigResult.error,
+          onClose: () => {
+            resetToList();
+            // If successful, try to execute the run session
+            if (runConfigResult.success) {
+              try {
+                worktreeService.attachOrCreateRunSession(runProject, runFeature, runPath);
+              } catch {}
+            }
+          }
+        })
       )
     );
   }
@@ -335,7 +366,9 @@ function AppContent() {
       onHelp: () => setUiMode('help'),
       onBranch: handleBranch,
       onDiff: handleDiff,
-      onQuit: handleQuit
+      onQuit: handleQuit,
+      onExecuteRun: handleExecuteRun,
+      onConfigureRun: handleConfigureRun
     })
   );
 }
