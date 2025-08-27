@@ -120,39 +120,6 @@ export class GitService {
     return status;
   }
 
-  async getGitStatusAsync(worktreePath: string): Promise<GitStatus> {
-    const status = new GitStatus();
-    
-    const porcelainStatus = await runCommandQuickAsync(['git', '-C', worktreePath, 'status', '--porcelain']);
-    if (porcelainStatus) {
-      status.modified_files = porcelainStatus.split('\n').filter(Boolean).length;
-      status.has_changes = true;
-    }
-    
-    const diffStats = await runCommandQuickAsync(['git', '-C', worktreePath, 'diff', '--shortstat', 'HEAD']);
-    if (diffStats) {
-      const [added, deleted] = parseGitShortstat(diffStats);
-      status.added_lines = added;
-      status.deleted_lines = deleted;
-    }
-    
-    if (porcelainStatus) {
-      // Count untracked lines synchronously for now (it's fast)
-      status.untracked_lines = this.countUntrackedLines(worktreePath, porcelainStatus);
-    }
-    
-    // Run these in parallel for better performance
-    await Promise.all([
-      this.addBaseBranchComparisonAsync(worktreePath, status),
-      this.addRemoteTrackingInfoAsync(worktreePath, status),
-      // Check for merge conflicts
-      this.checkMergeConflictsAsync(worktreePath).then(hasConflicts => {
-        status.has_merge_conflicts = hasConflicts;
-      })
-    ]);
-    
-    return status;
-  }
 
   createWorktree(project: string, featureName: string, branchName?: string): boolean {
     const mainRepo = path.join(this.basePath, project);
@@ -258,7 +225,7 @@ export class GitService {
   // PR Status Methods
   batchFetchPRData(repoPath: string, opts: {includeChecks?: boolean; includeTitle?: boolean} = {}): Record<string, PRStatus> {
     const prByBranch: Record<string, PRStatus> = {};
-    const fields = ['number', 'state', 'headRefName'];
+    const fields = ['number', 'state', 'headRefName', 'mergeable'];
     const includeChecks = opts.includeChecks !== false;
     const includeTitle = opts.includeTitle !== false;
     
@@ -283,6 +250,7 @@ export class GitService {
         }
         if (pr.url) (status as any).url = pr.url;
         if (includeTitle && pr.title) (status as any).title = pr.title;
+        (status as any).mergeable = pr.mergeable ?? null;
         
         prByBranch[branch] = status;
       }
@@ -293,7 +261,7 @@ export class GitService {
 
   async batchFetchPRDataAsync(repoPath: string, opts: {includeChecks?: boolean; includeTitle?: boolean} = {}): Promise<Record<string, PRStatus>> {
     const prByBranch: Record<string, PRStatus> = {};
-    const fields = ['number', 'state', 'headRefName'];
+    const fields = ['number', 'state', 'headRefName', 'mergeable'];
     const includeChecks = opts.includeChecks !== false;
     const includeTitle = opts.includeTitle !== false;
     
@@ -318,6 +286,7 @@ export class GitService {
         }
         if (pr.url) (status as any).url = pr.url;
         if (includeTitle && pr.title) (status as any).title = pr.title;
+        (status as any).mergeable = pr.mergeable ?? null;
         
         prByBranch[branch] = status;
       }
@@ -429,82 +398,6 @@ export class GitService {
     }
   }
 
-  private async addBaseBranchComparisonAsync(worktreePath: string, status: GitStatus): Promise<void> {
-    const base = findBaseBranch(worktreePath);
-    if (base) {
-      const mergeBase = await runCommandQuickAsync(['git', '-C', worktreePath, 'merge-base', 'HEAD', base]);
-      if (mergeBase) {
-        const committed = await runCommandQuickAsync(['git', '-C', worktreePath, 'diff', '--shortstat', mergeBase.trim(), 'HEAD']);
-        const [committedAdded, committedDeleted] = committed ? parseGitShortstat(committed) : [0, 0];
-        status.base_added_lines = committedAdded + status.added_lines + status.untracked_lines;
-        status.base_deleted_lines = committedDeleted + status.deleted_lines;
-      }
-    }
-  }
-
-  private async addRemoteTrackingInfoAsync(worktreePath: string, status: GitStatus): Promise<void> {
-    const upstream = await runCommandQuickAsync(['git', '-C', worktreePath, 'rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']);
-    if (upstream && !/fatal|no upstream/i.test(upstream)) {
-      status.has_remote = true;
-      const revList = await runCommandQuickAsync(['git', '-C', worktreePath, 'rev-list', '--left-right', '--count', 'HEAD...@{u}']);
-      if (revList) {
-        const [ahead, behind] = revList.split('\t').map((x) => Number(x.trim()));
-        status.ahead = ahead || 0;
-        status.behind = behind || 0;
-      }
-      status.is_pushed = status.ahead === 0 && !status.has_changes;
-    } else {
-      const base = findBaseBranch(worktreePath);
-      if (base) {
-        const revList = await runCommandQuickAsync(['git', '-C', worktreePath, 'rev-list', '--left-right', '--count', `HEAD...${base}`]);
-        if (revList) {
-          const [ahead, behind] = revList.split('\t').map((x) => Number(x.trim()));
-          status.ahead = ahead || 0;
-          status.behind = behind || 0;
-        }
-      }
-    }
-  }
-
-  async checkMergeConflictsAsync(worktreePath: string, targetBranch?: string): Promise<boolean> {
-    try {
-      // Use base branch if no target specified
-      const target = targetBranch || findBaseBranch(worktreePath);
-      if (!target) return false;
-      
-      // Get current branch to restore later
-      const currentBranch = await runCommandQuickAsync(['git', '-C', worktreePath, 'rev-parse', '--abbrev-ref', 'HEAD']);
-      if (!currentBranch) return false;
-      
-      // Check if working tree is clean (required for test merge)
-      const statusOutput = await runCommandQuickAsync(['git', '-C', worktreePath, 'status', '--porcelain']);
-      if (statusOutput) {
-        // Working tree not clean, can't test merge
-        return false;
-      }
-      
-      // Perform test merge in detached HEAD state
-      await runCommandQuickAsync(['git', '-C', worktreePath, 'checkout', '--detach', '--quiet']);
-      
-      // Try to merge target branch without committing
-      const mergeResult = await runCommandAsync(
-        ['git', '-C', worktreePath, 'merge', '--no-commit', '--no-ff', target],
-        {timeout: 5000}
-      );
-      
-      // Check if merge has conflicts (merge command returns empty string on conflict)
-      const hasConflicts = !mergeResult || mergeResult.includes('CONFLICT');
-      
-      // Abort the merge and return to original branch
-      await runCommandQuickAsync(['git', '-C', worktreePath, 'merge', '--abort']);
-      await runCommandQuickAsync(['git', '-C', worktreePath, 'checkout', currentBranch, '--quiet']);
-      
-      return hasConflicts;
-    } catch {
-      // If anything goes wrong, assume no conflicts
-      return false;
-    }
-  }
 
   private parseBranchCandidates(output: string, existing: string[], base: string): Array<[string, string]> {
     const candidates: Array<[string, string]> = [];
