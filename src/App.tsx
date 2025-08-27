@@ -11,7 +11,7 @@ import ConfigResultsDialog from './components/dialogs/ConfigResultsDialog.js';
 
 import WorktreeListScreen from './screens/WorktreeListScreen.js';
 import CreateFeatureScreen from './screens/CreateFeatureScreen.js';
-import ArchiveFlowScreen from './screens/ArchiveFlowScreen.js';
+import ArchiveConfirmScreen from './screens/ArchiveConfirmScreen.js';
 import ArchivedScreen from './screens/ArchivedScreen.js';
 
 import {ServicesProvider} from './contexts/ServicesContext.js';
@@ -22,7 +22,7 @@ import {getRunConfigPath, createOrFillRunConfig, RUN_CONFIG_CLAUDE_PROMPT} from 
 
 const h = React.createElement;
 
-type UIMode = 'list' | 'create' | 'archiveFlow' | 'archived' | 'help' | 'pickProjectForBranch' | 'pickBranch' | 'diff' | 'runConfig' | 'runProgress' | 'runResults';
+type UIMode = 'list' | 'create' | 'confirmArchive' | 'archived' | 'help' | 'pickProjectForBranch' | 'pickBranch' | 'diff' | 'runConfig' | 'runProgress' | 'runResults';
 
 interface PendingArchive {
   project: string;
@@ -87,7 +87,7 @@ function AppContent() {
       path: selectedWorktree.path
     });
     
-    setUiMode('archiveFlow');
+    setUiMode('confirmArchive');
   };
 
   const handleBranch = () => {
@@ -233,8 +233,8 @@ function AppContent() {
     });
   }
 
-  if (uiMode === 'archiveFlow' && pendingArchive) {
-    return h(ArchiveFlowScreen, {
+  if (uiMode === 'confirmArchive' && pendingArchive) {
+    return h(ArchiveConfirmScreen, {
       featureInfo: pendingArchive,
       onCancel: resetToList,
       onSuccess: resetToList

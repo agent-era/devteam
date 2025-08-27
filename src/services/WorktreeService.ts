@@ -21,13 +21,6 @@ import {
 } from '../utils.js';
 import {GitService} from './GitService.js';
 import {TmuxService} from './TmuxService.js';
-import {
-  checkSettingsMergeOpportunity,
-  parseClaudeSettings,
-  mergePermissions,
-  writeClaudeSettings,
-  type ClaudeSettings
-} from '../claudeSettingsManager.js';
 
 export type WorktreeCreationResult = {
   project: string;
@@ -40,13 +33,6 @@ export type ArchiveResult = {
   archivedPath: string;
 };
 
-export type SettingsMergeInfo = {
-  canMerge: boolean;
-  scenario: 'no_worktree_settings' | 'copy_to_main' | 'merge_permissions';
-  newPermissions: string[];
-  worktreeSettingsPath: string | null;
-  mainSettingsPath: string | null;
-};
 
 export type ConfigResult = {
   success: boolean;
@@ -388,69 +374,82 @@ Your response must start with { and end with } - nothing else.`;
     }
   }
 
-  // Claude Settings Management
-  checkClaudeSettingsMerge(projectName: string, worktreePath: string, featureName: string): SettingsMergeInfo {
-    const projectPath = path.join(BASE_PATH, projectName);
-    const opportunity = checkSettingsMergeOpportunity(worktreePath, projectPath);
+  // Claude Settings - Check if worktree has permissions to merge
+  getClaudeSettingsToMerge(projectName: string, worktreePath: string): string[] | null {
+    const worktreeSettingsPath = path.join(worktreePath, CLAUDE_SETTINGS_FILE);
+    const mainSettingsPath = path.join(BASE_PATH, projectName, CLAUDE_SETTINGS_FILE);
     
-    let newPermissions: string[] = [];
+    // Check if worktree has settings
+    if (!fs.existsSync(worktreeSettingsPath)) {
+      return null;
+    }
     
-    if (opportunity.canMerge && opportunity.worktreeSettingsPath) {
-      const worktreeSettings = parseClaudeSettings(opportunity.worktreeSettingsPath);
+    try {
+      const worktreeSettings = JSON.parse(fs.readFileSync(worktreeSettingsPath, 'utf8'));
+      const worktreePermissions = worktreeSettings?.permissions?.allow || [];
       
-      if (worktreeSettings) {
-        if (opportunity.scenario === 'copy_to_main') {
-          // All permissions from worktree are "new" since main has no settings
-          newPermissions = worktreeSettings.permissions.allow;
-        } else if (opportunity.scenario === 'merge_permissions' && opportunity.mainSettingsPath) {
-          // Find permissions that would be added
-          const mainSettings = parseClaudeSettings(opportunity.mainSettingsPath);
-          if (mainSettings) {
-            const mergeResult = mergePermissions(worktreeSettings, mainSettings);
-            newPermissions = mergeResult.newPermissions;
-          }
-        }
+      if (worktreePermissions.length === 0) {
+        return null;
       }
+      
+      // Check what's new compared to main
+      if (!fs.existsSync(mainSettingsPath)) {
+        // Main has no settings, all permissions are new
+        return worktreePermissions;
+      }
+      
+      const mainSettings = JSON.parse(fs.readFileSync(mainSettingsPath, 'utf8'));
+      const mainPermissions = new Set(mainSettings?.permissions?.allow || []);
+      
+      // Return only new permissions
+      const newPermissions = worktreePermissions.filter((p: string) => !mainPermissions.has(p));
+      return newPermissions.length > 0 ? newPermissions : null;
+    } catch {
+      // Silent fail for UI operations
+      return null;
     }
-    
-    return {
-      canMerge: opportunity.canMerge && newPermissions.length > 0,
-      scenario: opportunity.scenario,
-      newPermissions,
-      worktreeSettingsPath: opportunity.worktreeSettingsPath,
-      mainSettingsPath: opportunity.mainSettingsPath,
-    };
   }
-
-  performClaudeSettingsMerge(projectName: string, worktreePath: string): boolean {
-    const projectPath = path.join(BASE_PATH, projectName);
-    const opportunity = checkSettingsMergeOpportunity(worktreePath, projectPath);
+  
+  // Claude Settings - Merge permissions from worktree to main
+  mergeClaudeSettings(projectName: string, worktreePath: string): boolean {
+    const worktreeSettingsPath = path.join(worktreePath, CLAUDE_SETTINGS_FILE);
+    const mainSettingsPath = path.join(BASE_PATH, projectName, CLAUDE_SETTINGS_FILE);
     
-    if (!opportunity.canMerge || !opportunity.worktreeSettingsPath) {
-      return false;
-    }
-    
-    const worktreeSettings = parseClaudeSettings(opportunity.worktreeSettingsPath);
-    if (!worktreeSettings) {
-      return false;
-    }
-    
-    if (opportunity.scenario === 'copy_to_main') {
-      // Copy entire settings file to main project
-      return writeClaudeSettings(opportunity.mainSettingsPath!, worktreeSettings);
-    } else if (opportunity.scenario === 'merge_permissions' && opportunity.mainSettingsPath) {
-      // Merge permissions into existing main settings
-      const mainSettings = parseClaudeSettings(opportunity.mainSettingsPath);
-      if (!mainSettings) {
+    try {
+      const worktreeSettings = JSON.parse(fs.readFileSync(worktreeSettingsPath, 'utf8'));
+      const worktreePermissions = worktreeSettings?.permissions?.allow || [];
+      
+      if (worktreePermissions.length === 0) {
         return false;
       }
       
-      const mergeResult = mergePermissions(worktreeSettings, mainSettings);
-      if (mergeResult.hasChanges) {
-        return writeClaudeSettings(opportunity.mainSettingsPath, mergeResult.mergedSettings);
+      let mainSettings: any;
+      if (fs.existsSync(mainSettingsPath)) {
+        mainSettings = JSON.parse(fs.readFileSync(mainSettingsPath, 'utf8'));
+      } else {
+        mainSettings = { permissions: { allow: [], deny: [], ask: [] } };
       }
+      
+      // Merge permissions (dedupe)
+      const mergedPermissions = new Set([
+        ...(mainSettings.permissions.allow || []),
+        ...worktreePermissions
+      ]);
+      
+      mainSettings.permissions.allow = Array.from(mergedPermissions).sort();
+      
+      // Ensure directory exists
+      const mainSettingsDir = path.dirname(mainSettingsPath);
+      if (!fs.existsSync(mainSettingsDir)) {
+        fs.mkdirSync(mainSettingsDir, { recursive: true });
+      }
+      
+      // Write merged settings
+      fs.writeFileSync(mainSettingsPath, JSON.stringify(mainSettings, null, 2));
+      return true;
+    } catch {
+      // Silent fail for UI operations  
+      return false;
     }
-    
-    return false;
   }
 }

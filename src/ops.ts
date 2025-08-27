@@ -13,8 +13,6 @@ import {ensureDirectory, runCommand, runCommandQuick, commandExitCode, runComman
 import {TMUX_DISPLAY_TIME} from './constants.js';
 import {TmuxManager} from './tmuxManager.js';
 import {GitManager} from './gitManager.js';
-import {checkSettingsMergeOpportunity, parseClaudeSettings, mergePermissions, writeClaudeSettings, type ClaudeSettings} from './claudeSettingsManager.js';
-// constants already imported above; remove duplicate import
 
 const tm = new TmuxManager();
 const gm = new GitManager();
@@ -265,86 +263,6 @@ export function setupWorktreeEnvironment(projectName: string, worktreePath: stri
   if (fs.existsSync(claudeDoc)) fs.copyFileSync(claudeDoc, path.join(worktreePath, 'CLAUDE.md'));
 }
 
-export interface SettingsMergeInfo {
-  canMerge: boolean;
-  scenario: 'no_worktree_settings' | 'copy_to_main' | 'merge_permissions';
-  newPermissions: string[];
-  worktreeSettingsPath: string | null;
-  mainSettingsPath: string | null;
-}
-
-export interface ActiveSettingsMergeInfo {
-  canMerge: true;
-  scenario: 'copy_to_main' | 'merge_permissions';
-  newPermissions: string[];
-  worktreeSettingsPath: string;
-  mainSettingsPath: string;
-}
-
-export function checkClaudeSettingsMerge(projectName: string, worktreePath: string, featureName: string): SettingsMergeInfo {
-  const projectPath = path.join(BASE_PATH, projectName);
-  const opportunity = checkSettingsMergeOpportunity(worktreePath, projectPath);
-  
-  let newPermissions: string[] = [];
-  
-  if (opportunity.canMerge && opportunity.worktreeSettingsPath) {
-    const worktreeSettings = parseClaudeSettings(opportunity.worktreeSettingsPath);
-    
-    if (worktreeSettings) {
-      if (opportunity.scenario === 'copy_to_main') {
-        // All permissions from worktree are "new" since main has no settings
-        newPermissions = worktreeSettings.permissions.allow;
-      } else if (opportunity.scenario === 'merge_permissions' && opportunity.mainSettingsPath) {
-        // Find permissions that would be added
-        const mainSettings = parseClaudeSettings(opportunity.mainSettingsPath);
-        if (mainSettings) {
-          const mergeResult = mergePermissions(worktreeSettings, mainSettings);
-          newPermissions = mergeResult.newPermissions;
-        }
-      }
-    }
-  }
-  
-  return {
-    canMerge: opportunity.canMerge && newPermissions.length > 0,
-    scenario: opportunity.scenario,
-    newPermissions,
-    worktreeSettingsPath: opportunity.worktreeSettingsPath,
-    mainSettingsPath: opportunity.mainSettingsPath,
-  };
-}
-
-export function performClaudeSettingsMerge(projectName: string, worktreePath: string): boolean {
-  const projectPath = path.join(BASE_PATH, projectName);
-  const opportunity = checkSettingsMergeOpportunity(worktreePath, projectPath);
-  
-  if (!opportunity.canMerge || !opportunity.worktreeSettingsPath) {
-    return false;
-  }
-  
-  const worktreeSettings = parseClaudeSettings(opportunity.worktreeSettingsPath);
-  if (!worktreeSettings) {
-    return false;
-  }
-  
-  if (opportunity.scenario === 'copy_to_main') {
-    // Copy entire settings file to main project
-    return writeClaudeSettings(opportunity.mainSettingsPath!, worktreeSettings);
-  } else if (opportunity.scenario === 'merge_permissions' && opportunity.mainSettingsPath) {
-    // Merge permissions into existing main settings
-    const mainSettings = parseClaudeSettings(opportunity.mainSettingsPath);
-    if (!mainSettings) {
-      return false;
-    }
-    
-    const mergeResult = mergePermissions(worktreeSettings, mainSettings);
-    if (mergeResult.hasChanges) {
-      return writeClaudeSettings(opportunity.mainSettingsPath, mergeResult.mergedSettings);
-    }
-  }
-  
-  return false;
-}
 
 export function archiveFeature(projectName: string, worktreePath: string, featureName: string) {
   // Kill tmux session if running
