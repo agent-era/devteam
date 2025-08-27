@@ -120,6 +120,7 @@ export class GitService {
     return status;
   }
 
+
   createWorktree(project: string, featureName: string, branchName?: string): boolean {
     const mainRepo = path.join(this.basePath, project);
     const branchesDir = path.join(this.basePath, `${project}${DIR_BRANCHES_SUFFIX}`);
@@ -224,7 +225,7 @@ export class GitService {
   // PR Status Methods
   batchFetchPRData(repoPath: string, opts: {includeChecks?: boolean; includeTitle?: boolean} = {}): Record<string, PRStatus> {
     const prByBranch: Record<string, PRStatus> = {};
-    const fields = ['number', 'state', 'headRefName'];
+    const fields = ['number', 'state', 'headRefName', 'mergeable'];
     const includeChecks = opts.includeChecks !== false;
     const includeTitle = opts.includeTitle !== false;
     
@@ -249,6 +250,7 @@ export class GitService {
         }
         if (pr.url) (status as any).url = pr.url;
         if (includeTitle && pr.title) (status as any).title = pr.title;
+        (status as any).mergeable = pr.mergeable ?? null;
         
         prByBranch[branch] = status;
       }
@@ -259,7 +261,7 @@ export class GitService {
 
   async batchFetchPRDataAsync(repoPath: string, opts: {includeChecks?: boolean; includeTitle?: boolean} = {}): Promise<Record<string, PRStatus>> {
     const prByBranch: Record<string, PRStatus> = {};
-    const fields = ['number', 'state', 'headRefName'];
+    const fields = ['number', 'state', 'headRefName', 'mergeable'];
     const includeChecks = opts.includeChecks !== false;
     const includeTitle = opts.includeTitle !== false;
     
@@ -284,6 +286,7 @@ export class GitService {
         }
         if (pr.url) (status as any).url = pr.url;
         if (includeTitle && pr.title) (status as any).title = pr.title;
+        (status as any).mergeable = pr.mergeable ?? null;
         
         prByBranch[branch] = status;
       }
@@ -394,6 +397,7 @@ export class GitService {
       }
     }
   }
+
 
   private parseBranchCandidates(output: string, existing: string[], base: string): Array<[string, string]> {
     const candidates: Array<[string, string]> = [];
