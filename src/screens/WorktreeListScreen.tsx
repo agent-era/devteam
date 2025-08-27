@@ -16,6 +16,8 @@ interface WorktreeListScreenProps {
   onBranch: () => void;
   onDiff: (type: 'full' | 'uncommitted') => void;
   onQuit: () => void;
+  onExecuteRun: () => void;
+  onConfigureRun: () => void;
 }
 
 export default function WorktreeListScreen({
@@ -25,7 +27,9 @@ export default function WorktreeListScreen({
   onHelp,
   onBranch,
   onDiff,
-  onQuit
+  onQuit,
+  onExecuteRun,
+  onConfigureRun
 }: WorktreeListScreenProps) {
   const {worktrees, refreshWorktrees, selectedIndex, page, pageSize} = useWorktrees();
   const {worktreeService} = useServices();
@@ -114,7 +118,9 @@ export default function WorktreeListScreen({
     onDiffUncommitted: handleDiffUncommitted,
     onPreviousPage: handlePreviousPage,
     onNextPage: handleNextPage,
-    onQuit: onQuit
+    onQuit: onQuit,
+    onExecuteRun: onExecuteRun,
+    onConfigureRun: onConfigureRun
   }, {
     page,
     pageSize,
