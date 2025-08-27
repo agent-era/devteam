@@ -91,7 +91,7 @@ export default function MainView(props: Props) {
       const pr = w.pr;
       let prStr = '';
       if (pr?.number) {
-        const badge = pr.is_merged ? '⟫' : pr.checks === 'passing' ? '✓' : pr?.checks === 'failing' ? '✗' : pr?.checks === 'pending' ? '⏳' : '';
+        const badge = (pr.is_merged || pr.state === 'MERGED') ? '⟫' : pr.checks === 'passing' ? '✓' : pr?.checks === 'failing' ? '✗' : pr?.checks === 'pending' ? '⏳' : '';
         prStr = `#${pr.number}${badge}`;
       } else if (pr !== undefined) {
         prStr = '-'; // PR data loaded, no PR exists
@@ -185,7 +185,7 @@ export default function MainView(props: Props) {
       const pr = w.pr;
       let prStr = '';
       if (pr?.number) {
-        const badge = pr.is_merged ? '⟫' : pr.checks === 'passing' ? '✓' : pr?.checks === 'failing' ? '✗' : pr?.checks === 'pending' ? '⏳' : '';
+        const badge = (pr.is_merged || pr.state === 'MERGED') ? '⟫' : pr.checks === 'passing' ? '✓' : pr?.checks === 'failing' ? '✗' : pr?.checks === 'pending' ? '⏳' : '';
         prStr = `#${pr.number}${badge}`;
       } else if (pr !== undefined) {
         prStr = '-'; // PR data loaded, no PR exists
@@ -219,7 +219,8 @@ export default function MainView(props: Props) {
       };
       
       // Check if this row should be dimmed (merged PRs)
-      const isDimmed = pr?.is_merged === true;
+      // Handle both PRStatus instances and plain objects
+      const isDimmed = pr?.is_merged === true || pr?.state === 'MERGED';
       
       let highlightIndex = -1;
       let highlightColor: any = undefined;
