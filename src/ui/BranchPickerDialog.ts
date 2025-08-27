@@ -46,20 +46,55 @@ export default function BranchPickerDialog({branches, onSubmit, onCancel, onRefr
   useInput((input, key) => {
     if (!isRawModeSupported) return;
     if (key.escape) return onCancel();
-    if (key.downArrow || input === 'j') setSelected((s) => Math.min(filtered.length - 1, s + 1));
-    else if (key.upArrow || input === 'k') setSelected((s) => Math.max(0, s - 1));
-    else if (key.pageDown || input === 'f') setSelected((s) => Math.min(filtered.length - 1, s + pageSize));
-    else if (key.pageUp || input === 'b') setSelected((s) => Math.max(0, s - pageSize));
-    else if (/^[1-9]$/.test(input)) {
-      const idx = Number(input) - 1;
-      if (idx >= 0 && idx < filtered.length) setSelected(idx);
-    } else if (key.return) {
+    
+    // Handle control keys first
+    if (key.return) {
       const b = filtered[selected];
       if (b) onSubmit(b.name, b.local_name);
-    } else if (input === 'r' && onRefresh) {
+      return;
+    }
+    
+    if (input === 'r' && onRefresh) {
       onRefresh();
-    } else if (key.backspace) setFilter((f) => f.slice(0, -1));
-    else if (input && !key.ctrl && !key.meta) setFilter((f) => f + input);
+      return;
+    }
+    
+    // Navigation keys
+    if (key.downArrow || input === 'j') {
+      setSelected((s) => Math.min(filtered.length - 1, s + 1));
+      return;
+    }
+    if (key.upArrow || input === 'k') {
+      setSelected((s) => Math.max(0, s - 1));
+      return;
+    }
+    if (key.pageDown || input === 'f') {
+      setSelected((s) => Math.min(filtered.length - 1, s + pageSize));
+      return;
+    }
+    if (key.pageUp || input === 'b') {
+      setSelected((s) => Math.max(0, s - pageSize));
+      return;
+    }
+    
+    // Number keys for quick selection
+    if (/^[1-9]$/.test(input)) {
+      const idx = Number(input) - 1;
+      if (idx >= 0 && idx < filtered.length) setSelected(idx);
+      return;
+    }
+    
+    // Text filtering with simple backspace
+    if (key.backspace) {
+      setFilter((f) => f.slice(0, -1));
+      return;
+    }
+    
+    // Regular typing
+    if (input && !key.ctrl && !key.meta) {
+      setFilter((f) => f + input);
+      return;
+    }
   });
 
   const start = Math.floor(selected / pageSize) * pageSize;
@@ -79,6 +114,10 @@ export default function BranchPickerDialog({branches, onSubmit, onCancel, onRefr
     Box, {flexDirection: 'column'},
     h(Text, {color: 'cyan'}, 'Create from Remote Branch'),
     h(Text, {color: 'gray'}, `Type to filter, j/k arrows, PgUp/PgDn, 1-9 jump, r refresh, Enter select, ESC cancel  [${Math.floor(selected / pageSize) + 1}/${Math.max(1, Math.ceil(filtered.length / pageSize))}]`),
+    h(Box, {flexDirection: 'row'}, 
+      h(Text, {color: 'gray'}, 'Filter: '),
+      h(Text, null, filter || ' ')
+    ),
     ...pageItems.map((b, i) => {
       const idx = start + i;
       const sel = idx === selected;
