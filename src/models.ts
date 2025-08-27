@@ -124,6 +124,71 @@ export class ProjectInfo {
   }
 }
 
+export class DiffComment {
+  lineIndex: number;
+  fileName: string;
+  lineText: string;
+  commentText: string;
+  timestamp: number;
+  constructor(init: Partial<DiffComment> = {}) {
+    this.lineIndex = 0;
+    this.fileName = '';
+    this.lineText = '';
+    this.commentText = '';
+    this.timestamp = Date.now();
+    Object.assign(this, init);
+  }
+}
+
+export class CommentStore {
+  comments: DiffComment[];
+  constructor() {
+    this.comments = [];
+  }
+  
+  addComment(lineIndex: number, fileName: string, lineText: string, commentText: string): DiffComment {
+    // Remove existing comment for this line if any
+    this.comments = this.comments.filter(c => c.lineIndex !== lineIndex || c.fileName !== fileName);
+    
+    const comment = new DiffComment({
+      lineIndex,
+      fileName,
+      lineText,
+      commentText,
+      timestamp: Date.now()
+    });
+    
+    this.comments.push(comment);
+    return comment;
+  }
+  
+  removeComment(lineIndex: number, fileName: string): boolean {
+    const initialLength = this.comments.length;
+    this.comments = this.comments.filter(c => !(c.lineIndex === lineIndex && c.fileName === fileName));
+    return this.comments.length < initialLength;
+  }
+  
+  getComment(lineIndex: number, fileName: string): DiffComment | undefined {
+    return this.comments.find(c => c.lineIndex === lineIndex && c.fileName === fileName);
+  }
+  
+  hasComment(lineIndex: number, fileName: string): boolean {
+    return this.comments.some(c => c.lineIndex === lineIndex && c.fileName === fileName);
+  }
+  
+  getAllComments(): DiffComment[] {
+    return [...this.comments].sort((a, b) => a.lineIndex - b.lineIndex);
+  }
+  
+  clear(): void {
+    this.comments = [];
+  }
+  
+  get count(): number {
+    return this.comments.length;
+  }
+}
+
 export class AppState {
   worktrees: WorktreeInfo[];
   selectedIndex: number;
