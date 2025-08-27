@@ -10,7 +10,6 @@ function useApp() {
 
 function useStdin() {
   return {
-    isRawModeSupported: true,
     stdin: {
       setEncoding: jest.fn(),
       resume: jest.fn(),

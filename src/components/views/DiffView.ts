@@ -69,7 +69,6 @@ async function loadDiff(worktreePath: string, diffType: 'full' | 'uncommitted' =
 type Props = {worktreePath: string; title?: string; onClose: () => void; diffType?: 'full' | 'uncommitted'};
 
 export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, diffType = 'full'}: Props) {
-  const {isRawModeSupported} = useStdin();
   const [lines, setLines] = useState<DiffLine[]>([]);
   const [pos, setPos] = useState(0);
   const [offset, setOffset] = useState(0);
@@ -179,8 +178,6 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
   }, [animationId]);
 
   useInput((input, key) => {
-    if (!isRawModeSupported) return;
-    
     // Don't handle inputs when comment dialog is open
     if (showCommentDialog) return;
     

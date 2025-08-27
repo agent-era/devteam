@@ -11,10 +11,7 @@ type Props = {
 };
 
 export default function ConfigResultsDialog({success, content, configPath, error, onClose}: Props) {
-  const {isRawModeSupported} = useStdin();
-  
   useInput((input, key) => {
-    if (!isRawModeSupported) return;
     // Any key closes the dialog
     onClose();
   });

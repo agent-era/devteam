@@ -23,7 +23,6 @@ export default function ArchiveConfirmScreen({
   onSuccess
 }: ArchiveConfirmScreenProps) {
   const {worktreeService} = useServices();
-  const {isRawModeSupported} = useStdin();
 
   const handleConfirm = () => {
     try {
@@ -41,8 +40,6 @@ export default function ArchiveConfirmScreen({
   };
   
   useInput((input, key) => {
-    if (!isRawModeSupported) return;
-    
     if (key.escape || input === 'n') {
       onCancel();
     } else if (key.return || input === 'y') {

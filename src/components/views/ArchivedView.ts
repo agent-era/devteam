@@ -21,15 +21,12 @@ type Props = {
 };
 
 export default function ArchivedView({items, selectedIndex, onMove, onDelete, onBack}: Props) {
-  const {isRawModeSupported} = useStdin();
-  if (isRawModeSupported) {
-    useInput((input, key) => {
-      if (key.escape || input === 'v') onBack?.();
-      if (input === 'j' || key.downArrow) onMove?.(1);
-      if (input === 'k' || key.upArrow) onMove?.(-1);
-      if (input === 'd') onDelete?.(selectedIndex);
-    });
-  }
+  useInput((input, key) => {
+    if (key.escape || input === 'v') onBack?.();
+    if (input === 'j' || key.downArrow) onMove?.(1);
+    if (input === 'k' || key.upArrow) onMove?.(-1);
+    if (input === 'd') onDelete?.(selectedIndex);
+  });
 
   const rows = useMemo(() => items.map((it, i) => {
     const sel = i === selectedIndex;

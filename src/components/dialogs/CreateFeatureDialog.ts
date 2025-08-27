@@ -16,7 +16,6 @@ export default function CreateFeatureDialog({projects, defaultProject, onSubmit,
   const [mode, setMode] = useState<'select'|'input'|'creating'>('select');
   const [filter, setFilter] = useState('');
   const [selected, setSelected] = useState(() => Math.max(0, projects.findIndex(p => p.name === defaultProject)));
-  const {isRawModeSupported} = useStdin();
   const featureInput = useTextInput();
 
   const filtered = useMemo(() => {
@@ -25,7 +24,6 @@ export default function CreateFeatureDialog({projects, defaultProject, onSubmit,
   }, [projects, filter]);
 
   useInput((input, key) => {
-    if (!isRawModeSupported) return;
     if (mode === 'creating') return; // Disable input during creation
     if (key.escape) {
       if (mode === 'input') setMode('select');

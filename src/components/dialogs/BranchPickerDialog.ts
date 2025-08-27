@@ -31,7 +31,6 @@ export default function BranchPickerDialog({branches, onSubmit, onCancel, onRefr
   const [selected, setSelected] = useState(0);
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(Math.max(1, (process.stdout.rows || 24) - 6));
-  const {isRawModeSupported} = useStdin();
   const filtered = useMemo(() => {
     const f = filterInput.value.toLowerCase();
     const arr = branches.filter(b => (b.name + ' ' + b.local_name + ' ' + (b.pr_title || '')).toLowerCase().includes(f));
@@ -45,7 +44,6 @@ export default function BranchPickerDialog({branches, onSubmit, onCancel, onRefr
   }, []);
 
   useInput((input, key) => {
-    if (!isRawModeSupported) return;
     if (key.escape) return onCancel();
     
     // Handle control keys first
