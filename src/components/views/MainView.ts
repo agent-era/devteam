@@ -221,8 +221,12 @@ export default function MainView(props: Props) {
       let highlightIndex = -1;
       let highlightColor: any = undefined;
       
+      // Skip all highlighting if agent is working or thinking
+      if (cs.includes('working') || cs.includes('thinking')) {
+        // Agent is busy - nothing is actionable, so no highlighting
+      }
       // PRIORITY 1: Claude waiting for input (highest priority - blocks all work)
-      if (cs.includes('waiting')) {
+      else if (cs.includes('waiting')) {
         highlightIndex = COLUMNS.AI;
         highlightColor = COLORS.YELLOW;
         // claude-waiting
