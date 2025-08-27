@@ -345,12 +345,17 @@ Your response must start with { and end with } - nothing else.`;
   }
 
   private copyClaudeSettings(projectPath: string, worktreePath: string): void {
-    const claudeSrc = path.join(projectPath, CLAUDE_SETTINGS_FILE);
-    const claudeDst = path.join(worktreePath, CLAUDE_SETTINGS_FILE);
+    // Create symlink to .claude directory instead of copying
+    const claudeDirSrc = path.join(projectPath, '.claude');
+    const claudeDirDst = path.join(worktreePath, '.claude');
     
-    if (fs.existsSync(claudeSrc)) {
-      ensureDirectory(path.dirname(claudeDst));
-      fs.copyFileSync(claudeSrc, claudeDst);
+    if (fs.existsSync(claudeDirSrc)) {
+      // Remove existing .claude if it exists (in case it was previously copied)
+      if (fs.existsSync(claudeDirDst)) {
+        fs.rmSync(claudeDirDst, { recursive: true, force: true });
+      }
+      // Create symlink to the original .claude directory
+      fs.symlinkSync(claudeDirSrc, claudeDirDst, 'dir');
     }
   }
 
@@ -374,82 +379,4 @@ Your response must start with { and end with } - nothing else.`;
     }
   }
 
-  // Claude Settings - Check if worktree has permissions to merge
-  getClaudeSettingsToMerge(projectName: string, worktreePath: string): string[] | null {
-    const worktreeSettingsPath = path.join(worktreePath, CLAUDE_SETTINGS_FILE);
-    const mainSettingsPath = path.join(BASE_PATH, projectName, CLAUDE_SETTINGS_FILE);
-    
-    // Check if worktree has settings
-    if (!fs.existsSync(worktreeSettingsPath)) {
-      return null;
-    }
-    
-    try {
-      const worktreeSettings = JSON.parse(fs.readFileSync(worktreeSettingsPath, 'utf8'));
-      const worktreePermissions = worktreeSettings?.permissions?.allow || [];
-      
-      if (worktreePermissions.length === 0) {
-        return null;
-      }
-      
-      // Check what's new compared to main
-      if (!fs.existsSync(mainSettingsPath)) {
-        // Main has no settings, all permissions are new
-        return worktreePermissions;
-      }
-      
-      const mainSettings = JSON.parse(fs.readFileSync(mainSettingsPath, 'utf8'));
-      const mainPermissions = new Set(mainSettings?.permissions?.allow || []);
-      
-      // Return only new permissions
-      const newPermissions = worktreePermissions.filter((p: string) => !mainPermissions.has(p));
-      return newPermissions.length > 0 ? newPermissions : null;
-    } catch {
-      // Silent fail for UI operations
-      return null;
-    }
-  }
-  
-  // Claude Settings - Merge permissions from worktree to main
-  mergeClaudeSettings(projectName: string, worktreePath: string): boolean {
-    const worktreeSettingsPath = path.join(worktreePath, CLAUDE_SETTINGS_FILE);
-    const mainSettingsPath = path.join(BASE_PATH, projectName, CLAUDE_SETTINGS_FILE);
-    
-    try {
-      const worktreeSettings = JSON.parse(fs.readFileSync(worktreeSettingsPath, 'utf8'));
-      const worktreePermissions = worktreeSettings?.permissions?.allow || [];
-      
-      if (worktreePermissions.length === 0) {
-        return false;
-      }
-      
-      let mainSettings: any;
-      if (fs.existsSync(mainSettingsPath)) {
-        mainSettings = JSON.parse(fs.readFileSync(mainSettingsPath, 'utf8'));
-      } else {
-        mainSettings = { permissions: { allow: [], deny: [], ask: [] } };
-      }
-      
-      // Merge permissions (dedupe)
-      const mergedPermissions = new Set([
-        ...(mainSettings.permissions.allow || []),
-        ...worktreePermissions
-      ]);
-      
-      mainSettings.permissions.allow = Array.from(mergedPermissions).sort();
-      
-      // Ensure directory exists
-      const mainSettingsDir = path.dirname(mainSettingsPath);
-      if (!fs.existsSync(mainSettingsDir)) {
-        fs.mkdirSync(mainSettingsDir, { recursive: true });
-      }
-      
-      // Write merged settings
-      fs.writeFileSync(mainSettingsPath, JSON.stringify(mainSettings, null, 2));
-      return true;
-    } catch {
-      // Silent fail for UI operations  
-      return false;
-    }
-  }
 }

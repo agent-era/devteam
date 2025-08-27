@@ -231,11 +231,16 @@ export function createFeature(projectName: string, featureName: string) {
     ensureDirectory(path.dirname(envDst));
     fs.copyFileSync(envSrc, envDst);
   }
-  const claudeSrc = path.join(projectPath, CLAUDE_SETTINGS_FILE);
-  const claudeDst = path.join(worktreePath, CLAUDE_SETTINGS_FILE);
-  if (fs.existsSync(claudeSrc)) {
-    ensureDirectory(path.dirname(claudeDst));
-    fs.copyFileSync(claudeSrc, claudeDst);
+  // Create symlink to .claude directory instead of copying
+  const claudeDirSrc = path.join(projectPath, '.claude');
+  const claudeDirDst = path.join(worktreePath, '.claude');
+  if (fs.existsSync(claudeDirSrc)) {
+    // Remove existing .claude if it exists (in case it was previously copied)
+    if (fs.existsSync(claudeDirDst)) {
+      fs.rmSync(claudeDirDst, { recursive: true, force: true });
+    }
+    // Create symlink to the original .claude directory
+    fs.symlinkSync(claudeDirSrc, claudeDirDst, 'dir');
   }
   // Copy common Claude config files if present
   const claudeDoc = path.join(projectPath, 'CLAUDE.md');
@@ -253,11 +258,16 @@ export function setupWorktreeEnvironment(projectName: string, worktreePath: stri
     ensureDirectory(path.dirname(envDst));
     fs.copyFileSync(envSrc, envDst);
   }
-  const claudeSrc = path.join(projectPath, CLAUDE_SETTINGS_FILE);
-  const claudeDst = path.join(worktreePath, CLAUDE_SETTINGS_FILE);
-  if (fs.existsSync(claudeSrc)) {
-    ensureDirectory(path.dirname(claudeDst));
-    fs.copyFileSync(claudeSrc, claudeDst);
+  // Create symlink to .claude directory instead of copying
+  const claudeDirSrc = path.join(projectPath, '.claude');
+  const claudeDirDst = path.join(worktreePath, '.claude');
+  if (fs.existsSync(claudeDirSrc)) {
+    // Remove existing .claude if it exists (in case it was previously copied)
+    if (fs.existsSync(claudeDirDst)) {
+      fs.rmSync(claudeDirDst, { recursive: true, force: true });
+    }
+    // Create symlink to the original .claude directory
+    fs.symlinkSync(claudeDirSrc, claudeDirDst, 'dir');
   }
   const claudeDoc = path.join(projectPath, 'CLAUDE.md');
   if (fs.existsSync(claudeDoc)) fs.copyFileSync(claudeDoc, path.join(worktreePath, 'CLAUDE.md'));
