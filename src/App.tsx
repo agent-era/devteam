@@ -5,6 +5,9 @@ import HelpOverlay from './components/dialogs/HelpOverlay.js';
 import DiffView from './components/views/DiffView.js';
 import ProjectPickerDialog from './components/dialogs/ProjectPickerDialog.js';
 import BranchPickerDialog from './components/dialogs/BranchPickerDialog.js';
+import RunConfigDialog from './components/dialogs/RunConfigDialog.js';
+import ProgressDialog from './components/dialogs/ProgressDialog.js';
+import ConfigResultsDialog from './components/dialogs/ConfigResultsDialog.js';
 
 import WorktreeListScreen from './screens/WorktreeListScreen.js';
 import CreateFeatureScreen from './screens/CreateFeatureScreen.js';
@@ -15,10 +18,11 @@ import {ServicesProvider} from './contexts/ServicesContext.js';
 import {AppStateProvider, useAppState} from './contexts/AppStateContext.js';
 import {useServices} from './contexts/ServicesContext.js';
 import {BASE_PATH, DIR_BRANCHES_SUFFIX} from './constants.js';
+import {getRunConfigPath, createOrFillRunConfig, RUN_CONFIG_CLAUDE_PROMPT} from './ops.js';
 
 const h = React.createElement;
 
-type UIMode = 'list' | 'create' | 'confirmArchive' | 'archived' | 'help' | 'pickProjectForBranch' | 'pickBranch' | 'diff';
+type UIMode = 'list' | 'create' | 'confirmArchive' | 'archived' | 'help' | 'pickProjectForBranch' | 'pickBranch' | 'diff' | 'runConfig' | 'runProgress' | 'runResults';
 
 interface PendingArchive {
   project: string;
@@ -40,6 +44,10 @@ function AppContent() {
   const [branchList, setBranchList] = useState<any[]>([]);
   const [diffWorktree, setDiffWorktree] = useState<string | null>(null);
   const [diffType, setDiffType] = useState<'full' | 'uncommitted'>('full');
+  const [runProject, setRunProject] = useState<string | null>(null);
+  const [runFeature, setRunFeature] = useState<string | null>(null);
+  const [runPath, setRunPath] = useState<string | null>(null);
+  const [runConfigResult, setRunConfigResult] = useState<any | null>(null);
 
   // Auto-exit for non-interactive environments
   useEffect(() => {
@@ -104,6 +112,40 @@ function AppContent() {
       setDiffType(type);
       setUiMode('diff');
     }
+  };
+
+  const handleExecuteRun = () => {
+    const selectedWorktree = state.worktrees[state.selectedIndex];
+    if (!selectedWorktree) return;
+    
+    try {
+      const result = worktreeService.attachOrCreateRunSession(
+        selectedWorktree.project,
+        selectedWorktree.feature,
+        selectedWorktree.path
+      );
+      
+      if (result === 'no_config') {
+        // No config exists, show configuration dialog
+        setRunProject(selectedWorktree.project);
+        setRunFeature(selectedWorktree.feature);
+        setRunPath(selectedWorktree.path);
+        setUiMode('runConfig');
+      }
+      // If result === 'success', the session was attached and we'll exit naturally
+    } catch (error) {
+      // TODO: Show error message
+    }
+  };
+
+  const handleConfigureRun = () => {
+    const selectedWorktree = state.worktrees[state.selectedIndex];
+    if (!selectedWorktree) return;
+    
+    setRunProject(selectedWorktree.project);
+    setRunFeature(selectedWorktree.feature);
+    setRunPath(selectedWorktree.path);
+    setUiMode('runConfig');
   };
 
   const loadBranchList = (project: string) => {
@@ -173,6 +215,10 @@ function AppContent() {
     setBranchProject(null);
     setBranchList([]);
     setDiffWorktree(null);
+    setRunProject(null);
+    setRunFeature(null);
+    setRunPath(null);
+    setRunConfigResult(null);
   };
 
   // Screen routing
@@ -254,6 +300,62 @@ function AppContent() {
     );
   }
 
+  if (uiMode === 'runConfig' && runProject) {
+    return h(FullScreen, null,
+      h(Box as any, {flexGrow: 1, alignItems: 'center', justifyContent: 'center'},
+        h(RunConfigDialog, {
+          project: runProject,
+          configPath: getRunConfigPath(runProject),
+          claudePrompt: RUN_CONFIG_CLAUDE_PROMPT,
+          onCancel: resetToList,
+          onCreateConfig: () => {
+            setUiMode('runProgress');
+            // Generate config in background
+            setTimeout(() => {
+              const result = createOrFillRunConfig(runProject);
+              setRunConfigResult(result);
+              setUiMode('runResults');
+            }, 100);
+          }
+        })
+      )
+    );
+  }
+
+  if (uiMode === 'runProgress' && runProject) {
+    return h(FullScreen, null,
+      h(Box as any, {flexGrow: 1, alignItems: 'center', justifyContent: 'center'},
+        h(ProgressDialog, {
+          title: 'Generating Run Configuration',
+          message: 'Claude is analyzing your project and generating a run configuration...',
+          project: runProject
+        })
+      )
+    );
+  }
+
+  if (uiMode === 'runResults' && runConfigResult && runProject && runFeature && runPath) {
+    return h(FullScreen, null,
+      h(Box as any, {flexGrow: 1, alignItems: 'center', justifyContent: 'center'},
+        h(ConfigResultsDialog, {
+          success: runConfigResult.success,
+          content: runConfigResult.content,
+          configPath: runConfigResult.path,
+          error: runConfigResult.error,
+          onClose: () => {
+            resetToList();
+            // If successful, try to execute the run session
+            if (runConfigResult.success) {
+              try {
+                worktreeService.attachOrCreateRunSession(runProject, runFeature, runPath);
+              } catch {}
+            }
+          }
+        })
+      )
+    );
+  }
+
   // Default: Main worktree list screen
   return h(FullScreen, null,
     h(WorktreeListScreen, {
@@ -263,7 +365,9 @@ function AppContent() {
       onHelp: () => setUiMode('help'),
       onBranch: handleBranch,
       onDiff: handleDiff,
-      onQuit: handleQuit
+      onQuit: handleQuit,
+      onExecuteRun: handleExecuteRun,
+      onConfigureRun: handleConfigureRun
     })
   );
 }
