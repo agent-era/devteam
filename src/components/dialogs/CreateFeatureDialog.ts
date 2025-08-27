@@ -1,8 +1,8 @@
 import React, {useEffect, useMemo, useState} from 'react';
 import {Box, Text, useInput, useStdin} from 'ink';
 const h = React.createElement;
-import type {ProjectInfo} from '../models.js';
-import {kebabCase, validateFeatureName, truncateText} from '../utils.js';
+import type {ProjectInfo} from '../../models.js';
+import {kebabCase, validateFeatureName, truncateText} from '../../utils.js';
 
 type Props = {
   projects: ProjectInfo[];

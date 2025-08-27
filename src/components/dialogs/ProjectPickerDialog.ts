@@ -1,7 +1,7 @@
 import React, {useMemo, useState} from 'react';
 import {Box, Text, useInput, useStdin} from 'ink';
 const h = React.createElement;
-import type {ProjectInfo} from '../models.js';
+import type {ProjectInfo} from '../../models.js';
 
 type Props = {
   projects: ProjectInfo[];

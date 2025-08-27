@@ -1,7 +1,7 @@
 import React, {useMemo} from 'react';
-import {Box, Text, useInput, useStdin} from 'ink';
+import {Box, Text} from 'ink';
 const h = React.createElement;
-import type {WorktreeInfo} from '../models.js';
+import type {WorktreeInfo} from '../../models.js';
 import {
     COL_NUMBER_WIDTH,
     COL_AI_WIDTH,
@@ -18,7 +18,7 @@ import {
     GIT_BEHIND,
     USE_EMOJI_SYMBOLS,
     ASCII_SYMBOLS,
-  } from '../constants.js';
+  } from '../../constants.js';
 
 // props: {worktrees, selectedIndex, onMove, onSelect, onQuit}
 type Prompt = {title?: string; text?: string; hint?: string};
@@ -37,22 +37,6 @@ type Props = {
 
 export default function MainView(props: Props) {
   const {worktrees, selectedIndex, mode, prompt, message, page = 0, pageSize = 20} = props;
-  const {isRawModeSupported} = useStdin();
-  if (isRawModeSupported) {
-    useInput((input, key) => {
-      if (key.escape || input === 'q') props.onQuit?.();
-      if (input === 'j' || key.downArrow) props.onMove?.(1);
-      if (input === 'k' || key.upArrow) props.onMove?.(-1);
-      if (key.return) props.onSelect?.(selectedIndex);
-      if (/^[1-9]$/.test(input)) {
-        const n = Number(input) - 1;
-        const absoluteIndex = (page * pageSize) + n;
-        if (absoluteIndex < worktrees.length) props.onMove?.(absoluteIndex - selectedIndex);
-      }
-      if (key.pageDown) props.onMove?.(pageSize);
-      if (key.pageUp) props.onMove?.(-pageSize);
-    });
-  }
 
   // Auto-grid: Calculate optimal column widths based on content with min/max constraints
   const columnWidths = useMemo(() => {
@@ -237,8 +221,12 @@ export default function MainView(props: Props) {
       let highlightIndex = -1;
       let highlightColor: any = undefined;
       
+      // Skip all highlighting if agent is working or thinking
+      if (cs.includes('working') || cs.includes('thinking')) {
+        // Agent is busy - nothing is actionable, so no highlighting
+      }
       // PRIORITY 1: Claude waiting for input (highest priority - blocks all work)
-      if (cs.includes('waiting')) {
+      else if (cs.includes('waiting')) {
         highlightIndex = COLUMNS.AI;
         highlightColor = COLORS.YELLOW;
         // claude-waiting
