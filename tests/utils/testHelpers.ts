@@ -7,6 +7,7 @@ import {
   setupTestGitStatus,
 } from '../fakes/stores.js';
 export {memoryStore, setupTestProject, setupTestWorktree} from '../fakes/stores.js';
+export * from './testDataFactories.js';
 import {WorktreeInfo, GitStatus, PRStatus} from '../../src/models.js';
 
 // Reset all test data before each test
