@@ -1,7 +1,7 @@
 import React, {useMemo} from 'react';
-import {Box, Text, useInput, useStdin} from 'ink';
+import {Box, Text} from 'ink';
 const h = React.createElement;
-import type {WorktreeInfo} from '../models.js';
+import type {WorktreeInfo} from '../../models.js';
 import {
     COL_NUMBER_WIDTH,
     COL_AI_WIDTH,
@@ -18,7 +18,7 @@ import {
     GIT_BEHIND,
     USE_EMOJI_SYMBOLS,
     ASCII_SYMBOLS,
-  } from '../constants.js';
+  } from '../../constants.js';
 
 // props: {worktrees, selectedIndex, onMove, onSelect, onQuit}
 type Prompt = {title?: string; text?: string; hint?: string};
@@ -37,22 +37,6 @@ type Props = {
 
 export default function MainView(props: Props) {
   const {worktrees, selectedIndex, mode, prompt, message, page = 0, pageSize = 20} = props;
-  const {isRawModeSupported} = useStdin();
-  if (isRawModeSupported) {
-    useInput((input, key) => {
-      if (key.escape || input === 'q') props.onQuit?.();
-      if (input === 'j' || key.downArrow) props.onMove?.(1);
-      if (input === 'k' || key.upArrow) props.onMove?.(-1);
-      if (key.return) props.onSelect?.(selectedIndex);
-      if (/^[1-9]$/.test(input)) {
-        const n = Number(input) - 1;
-        const absoluteIndex = (page * pageSize) + n;
-        if (absoluteIndex < worktrees.length) props.onMove?.(absoluteIndex - selectedIndex);
-      }
-      if (key.pageDown) props.onMove?.(pageSize);
-      if (key.pageUp) props.onMove?.(-pageSize);
-    });
-  }
 
   // Auto-grid: Calculate optimal column widths based on content with min/max constraints
   const columnWidths = useMemo(() => {
@@ -107,7 +91,7 @@ export default function MainView(props: Props) {
       const pr = w.pr;
       let prStr = '';
       if (pr?.number) {
-        const badge = pr.is_merged ? '⟫' : pr.checks === 'passing' ? '✓' : pr?.checks === 'failing' ? '✗' : pr?.checks === 'pending' ? '⏳' : '';
+        const badge = (pr.is_merged || pr.state === 'MERGED') ? '⟫' : pr.checks === 'passing' ? '✓' : pr?.checks === 'failing' ? '✗' : pr?.checks === 'pending' ? '⏳' : '';
         prStr = `#${pr.number}${badge}`;
       } else if (pr !== undefined) {
         prStr = '-'; // PR data loaded, no PR exists
@@ -201,7 +185,7 @@ export default function MainView(props: Props) {
       const pr = w.pr;
       let prStr = '';
       if (pr?.number) {
-        const badge = pr.is_merged ? '⟫' : pr.checks === 'passing' ? '✓' : pr?.checks === 'failing' ? '✗' : pr?.checks === 'pending' ? '⏳' : '';
+        const badge = (pr.is_merged || pr.state === 'MERGED') ? '⟫' : pr.checks === 'passing' ? '✓' : pr?.checks === 'failing' ? '✗' : pr?.checks === 'pending' ? '⏳' : '';
         prStr = `#${pr.number}${badge}`;
       } else if (pr !== undefined) {
         prStr = '-'; // PR data loaded, no PR exists
@@ -234,11 +218,19 @@ export default function MainView(props: Props) {
         GREEN: 'green'     // Ready/good state
       };
       
+      // Check if this row should be dimmed (merged PRs)
+      // Handle both PRStatus instances and plain objects
+      const isDimmed = pr?.is_merged === true || pr?.state === 'MERGED';
+      
       let highlightIndex = -1;
       let highlightColor: any = undefined;
       
+      // Skip all highlighting if agent is working or thinking, or if PR is merged (dimmed)
+      if (cs.includes('working') || cs.includes('thinking') || isDimmed) {
+        // Agent is busy or PR is merged - nothing is actionable, so no highlighting
+      }
       // PRIORITY 1: Claude waiting for input (highest priority - blocks all work)
-      if (cs.includes('waiting')) {
+      else if (cs.includes('waiting')) {
         highlightIndex = COLUMNS.AI;
         highlightColor = COLORS.YELLOW;
         // claude-waiting
@@ -294,15 +286,15 @@ export default function MainView(props: Props) {
       const bg = selected ? 'blue' : undefined;
       const common = {backgroundColor: bg, bold: selected} as any;
       const cells: Array<{text: string; color?: any}> = [
-        {text: num},
-        {text: pf},
-        {text: ai},
-        {text: diffStr},
-        {text: changes},
-        {text: pushed},
-        {text: prStr}
+        {text: num, color: isDimmed ? 'gray' : undefined},
+        {text: pf, color: isDimmed ? 'gray' : undefined},
+        {text: ai, color: isDimmed ? 'gray' : undefined},
+        {text: diffStr, color: isDimmed ? 'gray' : undefined},
+        {text: changes, color: isDimmed ? 'gray' : undefined},
+        {text: pushed, color: isDimmed ? 'gray' : undefined},
+        {text: prStr, color: isDimmed ? 'gray' : undefined}
       ];
-      if (highlightIndex >= 0) cells[highlightIndex].color = highlightColor;
+      if (highlightIndex >= 0 && !isDimmed) cells[highlightIndex].color = highlightColor;
 
       // Use auto-calculated column widths for perfect grid alignment
       return h(

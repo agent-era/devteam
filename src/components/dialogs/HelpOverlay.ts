@@ -1,6 +1,6 @@
 import React from 'react';
 import {Box, Text, useInput, useStdin} from 'ink';
-import {HELP_SECTIONS} from '../constants.js';
+import {HELP_SECTIONS} from '../../constants.js';
 const h = React.createElement;
 
 type Props = { onClose: () => void };

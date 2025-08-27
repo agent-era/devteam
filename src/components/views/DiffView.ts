@@ -1,9 +1,9 @@
 import React, {useEffect, useMemo, useState} from 'react';
 import {Box, Text, useInput, useStdin, Static} from 'ink';
 const h = React.createElement;
-import {runCommandAsync} from '../utils.js';
-import {findBaseBranch} from '../utils.js';
-import {BASE_BRANCH_CANDIDATES} from '../constants.js';
+import {runCommandAsync} from '../../utils.js';
+import {findBaseBranch} from '../../utils.js';
+import {BASE_BRANCH_CANDIDATES} from '../../constants.js';
 
 type DiffLine = {type: 'added'|'removed'|'context'|'header'; text: string};
 
@@ -66,6 +66,8 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
   const [lines, setLines] = useState<DiffLine[]>([]);
   const [pos, setPos] = useState(0);
   const [offset, setOffset] = useState(0);
+  const [targetOffset, setTargetOffset] = useState(0);
+  const [animationId, setAnimationId] = useState<NodeJS.Timeout | null>(null);
   const [terminalHeight, setTerminalHeight] = useState<number>(process.stdout.rows || 24);
   const [terminalWidth, setTerminalWidth] = useState<number>(process.stdout.columns || 80);
 
@@ -73,6 +75,10 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     (async () => {
       const lns = await loadDiff(worktreePath, diffType);
       setLines(lns);
+      // Reset scroll position when loading new diff
+      setOffset(0);
+      setTargetOffset(0);
+      setPos(0);
     })();
     const onResize = () => {
       const newHeight = process.stdout.rows || 24;
@@ -86,6 +92,79 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
 
   // Calculate page size dynamically - reserve space for debug, title, and help
   const pageSize = Math.max(1, terminalHeight - 3);
+
+  // Smooth scrolling animation
+  useEffect(() => {
+    if (offset === targetOffset) return;
+
+    // Clear any existing animation
+    if (animationId) {
+      clearTimeout(animationId);
+    }
+
+    const distance = Math.abs(targetOffset - offset);
+    
+    // Skip animation only for very small movements (1-2 lines)
+    if (distance <= 2) {
+      setOffset(targetOffset);
+      setAnimationId(null);
+      return;
+    }
+
+    // Animation parameters - scale duration with distance for better feel
+    const baseDuration = 200;
+    const maxDuration = 400;
+    const duration = Math.min(maxDuration, baseDuration + distance * 2);
+    const fps = 30; // Reduced for better performance in terminals
+    const frameTime = 1000 / fps;
+    const totalFrames = Math.ceil(duration / frameTime);
+    let currentFrame = 0;
+    const startOffset = offset;
+    const deltaOffset = targetOffset - startOffset;
+
+    // Easing function (ease-out cubic)
+    const easeOutCubic = (t: number): number => {
+      return 1 - Math.pow(1 - t, 3);
+    };
+
+    let cancelled = false;
+    
+    const animate = () => {
+      if (cancelled) return;
+      
+      currentFrame++;
+      const progress = Math.min(currentFrame / totalFrames, 1);
+      const easedProgress = easeOutCubic(progress);
+      const newOffset = Math.round(startOffset + deltaOffset * easedProgress);
+      
+      setOffset(newOffset);
+
+      if (progress < 1 && !cancelled) {
+        const id = setTimeout(animate, frameTime);
+        setAnimationId(id);
+      } else {
+        setAnimationId(null);
+      }
+    };
+
+    const initialId = setTimeout(animate, frameTime);
+    setAnimationId(initialId);
+
+    // Cleanup function
+    return () => {
+      cancelled = true;
+      if (initialId) clearTimeout(initialId);
+    };
+  }, [targetOffset, pageSize]); // Removed offset and animationId from deps to prevent infinite loops
+
+  // Cleanup animation on unmount
+  useEffect(() => {
+    return () => {
+      if (animationId) {
+        clearTimeout(animationId);
+      }
+    };
+  }, [animationId]);
 
   useInput((input, key) => {
     if (!isRawModeSupported) return;
@@ -102,7 +181,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       for (let i = pos - 1; i >= 0; i--) {
         if (lines[i]?.type === 'header' && lines[i]?.text.includes('▼')) {
           setPos(i);
-          setOffset(i); // Position chunk at top of screen
+          setTargetOffset(i); // Position chunk at top of screen with smooth scrolling
           break;
         }
       }
@@ -113,7 +192,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       for (let i = pos + 1; i < lines.length; i++) {
         if (lines[i]?.type === 'header' && lines[i]?.text.includes('▼')) {
           setPos(i);
-          setOffset(i); // Position chunk at top of screen
+          setTargetOffset(i); // Position chunk at top of screen with smooth scrolling
           break;
         }
       }
@@ -124,7 +203,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       for (let i = pos - 1; i >= 0; i--) {
         if (lines[i]?.type === 'header' && lines[i]?.text.startsWith('📁')) {
           setPos(i);
-          setOffset(i); // Position file at top of screen
+          setTargetOffset(i); // Position file at top of screen with smooth scrolling
           break;
         }
       }
@@ -135,18 +214,27 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       for (let i = pos + 1; i < lines.length; i++) {
         if (lines[i]?.type === 'header' && lines[i]?.text.startsWith('📁')) {
           setPos(i);
-          setOffset(i); // Position file at top of screen
+          setTargetOffset(i); // Position file at top of screen with smooth scrolling
           break;
         }
       }
     }
   });
 
-  // ensure pos visible
+  // ensure pos visible with smooth scrolling
   useEffect(() => {
-    if (pos < offset) setOffset(pos);
-    else if (pos >= offset + pageSize) setOffset(pos - pageSize + 1);
-  }, [pos, offset, pageSize]);
+    let newTargetOffset = targetOffset;
+    
+    if (pos < targetOffset) {
+      newTargetOffset = pos;
+    } else if (pos >= targetOffset + pageSize) {
+      newTargetOffset = pos - pageSize + 1;
+    }
+    
+    if (newTargetOffset !== targetOffset) {
+      setTargetOffset(Math.max(0, Math.min(lines.length - pageSize, newTargetOffset)));
+    }
+  }, [pos, targetOffset, pageSize, lines.length]);
 
   // Truncate text to fit terminal width
   const truncateText = (text: string, maxWidth: number): string => {
@@ -154,7 +242,9 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     return text.substring(0, maxWidth - 3) + '...';
   };
 
-  const visible = useMemo(() => lines.slice(offset, offset + pageSize), [lines, offset, pageSize]);
+  const visible = useMemo(() => {
+    return lines.slice(offset, offset + pageSize);
+  }, [lines, offset, pageSize]);
 
   return h(
     Box,
