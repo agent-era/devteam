@@ -34,7 +34,7 @@ export class PRStatus {
   url?: string | null;
   head?: string | null;
   title?: string | null;
-  mergeable?: boolean | null;
+  mergeable?: string | null; // MERGEABLE, CONFLICTING, UNKNOWN
   constructor(init: Partial<PRStatus> = {}) {
     this.number = null;
     this.state = null;
@@ -47,9 +47,9 @@ export class PRStatus {
   }
   get is_merged(): boolean { return this.state === 'MERGED'; }
   get is_open(): boolean { return this.state === 'OPEN'; }
-  get has_conflicts(): boolean { return this.mergeable === false; }
+  get has_conflicts(): boolean { return this.mergeable === 'CONFLICTING'; }
   get needs_attention(): boolean { return this.checks === 'failing' || this.has_conflicts; }
-  get is_ready_to_merge(): boolean { return this.state === 'OPEN' && this.checks === 'passing' && !this.loading; }
+  get is_ready_to_merge(): boolean { return this.state === 'OPEN' && this.checks === 'passing' && this.mergeable === 'MERGEABLE' && !this.loading; }
 }
 
 export class SessionInfo {
