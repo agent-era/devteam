@@ -46,7 +46,7 @@ export class GitManager {
     if (includeChecks) fields.push('statusCheckRollup');
     if (includeTitle) fields.push('title');
     try {
-      const out = runCommand(['gh', 'pr', 'list', '--state', 'all', '--json', fields.join(','), '--limit', '200'], {cwd: repoPath});
+      const out = runCommand(['gh', 'pr', 'list', '--state', 'all', '--json', fields.join(','), '--limit', '20'], {cwd: repoPath});
       if (!out) return prByBranch;
       const data = JSON.parse(out);
       for (const pr of data) {
