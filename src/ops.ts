@@ -13,7 +13,6 @@ import {ensureDirectory, runCommand, runCommandQuick, commandExitCode, runComman
 import {TMUX_DISPLAY_TIME} from './constants.js';
 import {TmuxManager} from './tmuxManager.js';
 import {GitManager} from './gitManager.js';
-// constants already imported above; remove duplicate import
 
 const tm = new TmuxManager();
 const gm = new GitManager();
@@ -263,6 +262,7 @@ export function setupWorktreeEnvironment(projectName: string, worktreePath: stri
   const claudeDoc = path.join(projectPath, 'CLAUDE.md');
   if (fs.existsSync(claudeDoc)) fs.copyFileSync(claudeDoc, path.join(worktreePath, 'CLAUDE.md'));
 }
+
 
 export function archiveFeature(projectName: string, worktreePath: string, featureName: string) {
   // Kill tmux session if running

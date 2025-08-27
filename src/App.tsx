@@ -1,5 +1,5 @@
 import React, {useState, useEffect} from 'react';
-import {useApp, useStdin, Box} from 'ink';
+import {useApp, useStdin, Box, Text} from 'ink';
 import FullScreen from './components/common/FullScreen.js';
 import HelpOverlay from './components/dialogs/HelpOverlay.js';
 import DiffView from './components/views/DiffView.js';
@@ -86,6 +86,7 @@ function AppContent() {
       feature: selectedWorktree.feature,
       path: selectedWorktree.path
     });
+    
     setUiMode('confirmArchive');
   };
 

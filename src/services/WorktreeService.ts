@@ -33,6 +33,7 @@ export type ArchiveResult = {
   archivedPath: string;
 };
 
+
 export type ConfigResult = {
   success: boolean;
   content?: string;
@@ -370,6 +371,85 @@ Your response must start with { and end with } - nothing else.`;
     const hasClaude = !!runCommandQuick(['bash', '-lc', 'command -v claude || true']);
     if (hasClaude) {
       runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 'claude', 'C-m']);
+    }
+  }
+
+  // Claude Settings - Check if worktree has permissions to merge
+  getClaudeSettingsToMerge(projectName: string, worktreePath: string): string[] | null {
+    const worktreeSettingsPath = path.join(worktreePath, CLAUDE_SETTINGS_FILE);
+    const mainSettingsPath = path.join(BASE_PATH, projectName, CLAUDE_SETTINGS_FILE);
+    
+    // Check if worktree has settings
+    if (!fs.existsSync(worktreeSettingsPath)) {
+      return null;
+    }
+    
+    try {
+      const worktreeSettings = JSON.parse(fs.readFileSync(worktreeSettingsPath, 'utf8'));
+      const worktreePermissions = worktreeSettings?.permissions?.allow || [];
+      
+      if (worktreePermissions.length === 0) {
+        return null;
+      }
+      
+      // Check what's new compared to main
+      if (!fs.existsSync(mainSettingsPath)) {
+        // Main has no settings, all permissions are new
+        return worktreePermissions;
+      }
+      
+      const mainSettings = JSON.parse(fs.readFileSync(mainSettingsPath, 'utf8'));
+      const mainPermissions = new Set(mainSettings?.permissions?.allow || []);
+      
+      // Return only new permissions
+      const newPermissions = worktreePermissions.filter((p: string) => !mainPermissions.has(p));
+      return newPermissions.length > 0 ? newPermissions : null;
+    } catch {
+      // Silent fail for UI operations
+      return null;
+    }
+  }
+  
+  // Claude Settings - Merge permissions from worktree to main
+  mergeClaudeSettings(projectName: string, worktreePath: string): boolean {
+    const worktreeSettingsPath = path.join(worktreePath, CLAUDE_SETTINGS_FILE);
+    const mainSettingsPath = path.join(BASE_PATH, projectName, CLAUDE_SETTINGS_FILE);
+    
+    try {
+      const worktreeSettings = JSON.parse(fs.readFileSync(worktreeSettingsPath, 'utf8'));
+      const worktreePermissions = worktreeSettings?.permissions?.allow || [];
+      
+      if (worktreePermissions.length === 0) {
+        return false;
+      }
+      
+      let mainSettings: any;
+      if (fs.existsSync(mainSettingsPath)) {
+        mainSettings = JSON.parse(fs.readFileSync(mainSettingsPath, 'utf8'));
+      } else {
+        mainSettings = { permissions: { allow: [], deny: [], ask: [] } };
+      }
+      
+      // Merge permissions (dedupe)
+      const mergedPermissions = new Set([
+        ...(mainSettings.permissions.allow || []),
+        ...worktreePermissions
+      ]);
+      
+      mainSettings.permissions.allow = Array.from(mergedPermissions).sort();
+      
+      // Ensure directory exists
+      const mainSettingsDir = path.dirname(mainSettingsPath);
+      if (!fs.existsSync(mainSettingsDir)) {
+        fs.mkdirSync(mainSettingsDir, { recursive: true });
+      }
+      
+      // Write merged settings
+      fs.writeFileSync(mainSettingsPath, JSON.stringify(mainSettings, null, 2));
+      return true;
+    } catch {
+      // Silent fail for UI operations  
+      return false;
     }
   }
 }
