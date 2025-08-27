@@ -10,9 +10,10 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "jsx": "react-jsx",
+    "isolatedModules": true,
     "outDir": "dist",
-    "rootDir": "src"
+    "rootDir": "."
   },
-  "include": ["src/**/*"],
-  "exclude": ["src/**/*_old.ts", "src/**/*_old.tsx"]
+  "include": ["src/**/*", "tests/**/*"],
+  "exclude": ["src/**/*_old.ts", "src/**/*_old.tsx", "dist/**/*"]
 }
