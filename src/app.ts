@@ -11,11 +11,12 @@ import {GitManager} from './gitManager.js';
 import {TmuxManager} from './tmuxManager.js';
 import {AppState, WorktreeInfo} from './models.js';
 import {CACHE_DURATION, AI_STATUS_REFRESH_DURATION, DIFF_STATUS_REFRESH_DURATION, PR_REFRESH_DURATION, BASE_PATH, DIR_BRANCHES_SUFFIX} from './constants.js';
-import {attachOrCreateSession, createFeature, archiveFeature, getPRStatus, deleteArchived, attachOrCreateShellSession, setupWorktreeEnvironment, createTmuxSession} from './ops.js';
+import {attachOrCreateSession, createFeature, archiveFeature, getPRStatus, deleteArchived, attachOrCreateShellSession, setupWorktreeEnvironment, createTmuxSession, checkClaudeSettingsMerge, performClaudeSettingsMerge, type SettingsMergeInfo} from './ops.js';
 import {runCommandQuick} from './utils.js';
 import ProjectPickerDialog from './ui/ProjectPickerDialog.js';
 import BranchPickerDialog from './ui/BranchPickerDialog.js';
 import DiffView from './ui/DiffView.js';
+import SettingsMergeDialog, { type SettingsMergeAction } from './ui/SettingsMergeDialog.js';
 
 const gm = new GitManager();
 const tm = new TmuxManager();
@@ -113,7 +114,7 @@ function sortWorktrees(wt: WorktreeInfo[]): WorktreeInfo[] {
   });
 }
 
-type UIMode = 'list' | 'create' | 'confirmArchive' | 'archived' | 'help' | 'pickProjectForBranch' | 'pickBranch' | 'diff';
+type UIMode = 'list' | 'create' | 'confirmArchive' | 'settingsMerge' | 'archived' | 'help' | 'pickProjectForBranch' | 'pickBranch' | 'diff';
 
 export default function App() {
   const [state, setState] = useState(new AppState());
@@ -129,6 +130,7 @@ export default function App() {
   const [branchList, setBranchList] = useState<any[]>([]);
   const [diffWorktree, setDiffWorktree] = useState<string | null>(null);
   const [diffType, setDiffType] = useState<'full' | 'uncommitted'>('full');
+  const [settingsMergeInfo, setSettingsMergeInfo] = useState<SettingsMergeInfo | null>(null);
 
   useEffect(() => {
     // initial load (do not block on PR)
@@ -278,7 +280,42 @@ export default function App() {
   const onArchive = () => {
     const w = state.worktrees[state.selectedIndex];
     if (!w) return;
+    
+    // Check for Claude settings merge opportunities
+    const mergeInfo = checkClaudeSettingsMerge(w.project, w.path, w.feature);
+    
     setPendingArchive({project: w.project, feature: w.feature, path: w.path});
+    
+    if (mergeInfo.canMerge) {
+      // Show settings merge dialog first
+      setSettingsMergeInfo(mergeInfo);
+      setUiMode('settingsMerge');
+    } else {
+      // Proceed directly to archive confirmation
+      setUiMode('confirmArchive');
+    }
+  };
+
+  const onSettingsMergeAction = (action: SettingsMergeAction) => {
+    if (action === 'cancel') {
+      // Cancel the entire archive operation
+      setPendingArchive(null);
+      setSettingsMergeInfo(null);
+      setUiMode('list');
+      return;
+    }
+    
+    if (action === 'merge' && pendingArchive && settingsMergeInfo) {
+      // Perform the merge
+      const success = performClaudeSettingsMerge(pendingArchive.project, pendingArchive.path);
+      if (!success) {
+        // TODO: Show error message - for now just continue
+        console.warn('Failed to merge Claude settings');
+      }
+    }
+    
+    // Continue to archive confirmation (whether merge succeeded, skipped, or failed)
+    setSettingsMergeInfo(null);
     setUiMode('confirmArchive');
   };
 
@@ -421,6 +458,20 @@ export default function App() {
               setUiMode('list');
             }
           }
+        })
+      )
+    );
+  }
+
+  if (uiMode === 'settingsMerge' && pendingArchive && settingsMergeInfo && settingsMergeInfo.canMerge) {
+    return h(FullScreen, null,
+      h(Box as any, {flexGrow: 1, alignItems: 'center', justifyContent: 'center'},
+        h(SettingsMergeDialog, {
+          projectName: pendingArchive.project,
+          featureName: pendingArchive.feature,
+          newPermissions: settingsMergeInfo.newPermissions,
+          scenario: settingsMergeInfo.scenario as 'copy_to_main' | 'merge_permissions',
+          onAction: onSettingsMergeAction
         })
       )
     );
