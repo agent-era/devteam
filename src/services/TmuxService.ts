@@ -12,6 +12,10 @@ export class TmuxService {
     return `${this.sessionName(project, feature)}-shell`;
   }
 
+  runSessionName(project: string, feature: string): string {
+    return `${this.sessionName(project, feature)}-run`;
+  }
+
   hasSession(session: string): boolean {
     const code = commandExitCode(['tmux', 'has-session', '-t', `=${session}`]);
     return code === 0;
