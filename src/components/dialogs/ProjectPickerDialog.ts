@@ -2,6 +2,7 @@ import React, {useMemo, useState} from 'react';
 import {Box, Text, useInput, useStdin} from 'ink';
 const h = React.createElement;
 import type {ProjectInfo} from '../../models.js';
+import {useTextInput} from './TextInput.js';
 
 type Props = {
   projects: ProjectInfo[];
@@ -11,13 +12,13 @@ type Props = {
 };
 
 export default function ProjectPickerDialog({projects, defaultProject, onSubmit, onCancel}: Props) {
-  const [filter, setFilter] = useState('');
+  const filterInput = useTextInput();
   const [selected, setSelected] = useState(() => Math.max(0, projects.findIndex(p => p.name === defaultProject)));
   const {isRawModeSupported} = useStdin();
   const filtered = useMemo(() => {
-    const f = filter.toLowerCase();
+    const f = filterInput.value.toLowerCase();
     return projects.filter(p => p.name.toLowerCase().includes(f));
-  }, [projects, filter]);
+  }, [projects, filterInput.value]);
 
   useInput((input, key) => {
     if (!isRawModeSupported) return;
@@ -47,15 +48,8 @@ export default function ProjectPickerDialog({projects, defaultProject, onSubmit,
       return;
     }
     
-    // Text filtering with simple backspace
-    if (key.backspace) {
-      setFilter((f) => f.slice(0, -1));
-      return;
-    }
-    
-    // Regular typing
-    if (input && !key.ctrl && !key.meta) {
-      setFilter((f) => f + input);
+    // Let the filter input hook handle text input
+    if (filterInput.handleKeyInput(input, key)) {
       return;
     }
   });
@@ -66,7 +60,7 @@ export default function ProjectPickerDialog({projects, defaultProject, onSubmit,
     h(Text, {color: 'gray'}, 'Type to filter, j/k arrows to move, 1-9 jump, Enter select, ESC cancel'),
     h(Box, {flexDirection: 'row'}, 
       h(Text, {color: 'gray'}, 'Filter: '),
-      h(Text, null, filter || ' ')
+      filterInput.renderText(' ')
     ),
     ...filtered.slice(0, 20).map((p, i) => h(Text, {key: p.name, color: i === selected ? 'green' : undefined}, `${i === selected ? '› ' : '  '}${p.name}`))
   );

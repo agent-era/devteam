@@ -1,6 +1,7 @@
 import React, {useEffect, useMemo, useState} from 'react';
 import {Box, Text, useInput, useStdin} from 'ink';
 import {fitDisplay, padStartDisplay} from '../../utils.js';
+import {useTextInput} from './TextInput.js';
 const h = React.createElement;
 
 type BranchInfo = {
@@ -26,17 +27,17 @@ type Props = {
 };
 
 export default function BranchPickerDialog({branches, onSubmit, onCancel, onRefresh}: Props) {
-  const [filter, setFilter] = useState('');
+  const filterInput = useTextInput();
   const [selected, setSelected] = useState(0);
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(Math.max(1, (process.stdout.rows || 24) - 6));
   const {isRawModeSupported} = useStdin();
   const filtered = useMemo(() => {
-    const f = filter.toLowerCase();
+    const f = filterInput.value.toLowerCase();
     const arr = branches.filter(b => (b.name + ' ' + b.local_name + ' ' + (b.pr_title || '')).toLowerCase().includes(f));
     arr.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
     return arr;
-  }, [branches, filter]);
+  }, [branches, filterInput.value]);
   useEffect(() => {
     const onResize = () => setPageSize(Math.max(1, (process.stdout.rows || 24) - 6));
     process.stdout.on('resize', onResize);
@@ -84,15 +85,8 @@ export default function BranchPickerDialog({branches, onSubmit, onCancel, onRefr
       return;
     }
     
-    // Text filtering with simple backspace
-    if (key.backspace) {
-      setFilter((f) => f.slice(0, -1));
-      return;
-    }
-    
-    // Regular typing
-    if (input && !key.ctrl && !key.meta) {
-      setFilter((f) => f + input);
+    // Let the filter input hook handle text input
+    if (filterInput.handleKeyInput(input, key)) {
       return;
     }
   });
@@ -116,7 +110,7 @@ export default function BranchPickerDialog({branches, onSubmit, onCancel, onRefr
     h(Text, {color: 'gray'}, `Type to filter, j/k arrows, PgUp/PgDn, 1-9 jump, r refresh, Enter select, ESC cancel  [${Math.floor(selected / pageSize) + 1}/${Math.max(1, Math.ceil(filtered.length / pageSize))}]`),
     h(Box, {flexDirection: 'row'}, 
       h(Text, {color: 'gray'}, 'Filter: '),
-      h(Text, null, filter || ' ')
+      filterInput.renderText(' ')
     ),
     ...pageItems.map((b, i) => {
       const idx = start + i;
