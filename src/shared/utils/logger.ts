@@ -154,3 +154,35 @@ export function clearLogs(): void {
     // Silent fail
   }
 }
+
+// Dump logs to console on exit
+export function dumpLogsToConsole(): void {
+  try {
+    originalConsoleError('\n=== ERROR LOGS ===');
+    if (fs.existsSync(ERROR_LOG_FILE)) {
+      const errorLogs = fs.readFileSync(ERROR_LOG_FILE, 'utf8');
+      if (errorLogs.trim()) {
+        originalConsoleError(errorLogs);
+      } else {
+        originalConsoleError('No error logs found.');
+      }
+    } else {
+      originalConsoleError('No error log file found.');
+    }
+
+    originalConsoleError('\n=== CONSOLE LOGS ===');
+    if (fs.existsSync(CONSOLE_LOG_FILE)) {
+      const consoleLogs = fs.readFileSync(CONSOLE_LOG_FILE, 'utf8');
+      if (consoleLogs.trim()) {
+        originalConsoleError(consoleLogs);
+      } else {
+        originalConsoleError('No console logs found.');
+      }
+    } else {
+      originalConsoleError('No console log file found.');
+    }
+    originalConsoleError('=== END LOGS ===\n');
+  } catch (error) {
+    originalConsoleError('Failed to dump logs:', error);
+  }
+}
