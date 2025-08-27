@@ -1,11 +1,16 @@
 import React, {useEffect, useMemo, useState} from 'react';
-import {Box, Text, useInput, useStdin, Static} from 'ink';
+import {Box, Text, useInput, useStdin} from 'ink';
 const h = React.createElement;
 import {runCommandAsync} from '../../utils.js';
 import {findBaseBranch} from '../../utils.js';
 import {BASE_BRANCH_CANDIDATES} from '../../constants.js';
+import {CommentStore} from '../../models.js';
+import {commentStoreManager} from '../../services/CommentStoreManager.js';
+import {TmuxService} from '../../services/TmuxService.js';
+import {runCommand} from '../../utils.js';
+import CommentInputDialog from '../dialogs/CommentInputDialog.js';
 
-type DiffLine = {type: 'added'|'removed'|'context'|'header'; text: string};
+type DiffLine = {type: 'added'|'removed'|'context'|'header'; text: string; fileName?: string};
 
 async function loadDiff(worktreePath: string, diffType: 'full' | 'uncommitted' = 'full'): Promise<DiffLine[]> {
   const lines: DiffLine[] = [];
@@ -27,32 +32,34 @@ async function loadDiff(worktreePath: string, diffType: 'full' | 'uncommitted' =
   
   if (!diff) return lines;
   const raw = diff.split('\n');
+  let currentFileName = '';
   for (const line of raw) {
     if (line.startsWith('diff --git')) {
       const parts = line.split(' ');
       const fp = parts[3]?.slice(2) || parts[2]?.slice(2) || '';
-      lines.push({type: 'header', text: `📁 ${fp}`});
+      currentFileName = fp;
+      lines.push({type: 'header', text: `📁 ${fp}`, fileName: fp});
     } else if (line.startsWith('@@')) {
       const ctx = line.replace(/^@@.*@@ ?/, '');
-      if (ctx) lines.push({type: 'header', text: `  ▼ ${ctx}`});
+      if (ctx) lines.push({type: 'header', text: `  ▼ ${ctx}`, fileName: currentFileName});
     } else if (line.startsWith('+') && !line.startsWith('+++')) {
-      lines.push({type: 'added', text: line.slice(1)});
+      lines.push({type: 'added', text: line.slice(1), fileName: currentFileName});
     } else if (line.startsWith('-') && !line.startsWith('---')) {
-      lines.push({type: 'removed', text: line.slice(1)});
+      lines.push({type: 'removed', text: line.slice(1), fileName: currentFileName});
     } else if (line.startsWith(' ')) {
-      lines.push({type: 'context', text: line.slice(1)});
+      lines.push({type: 'context', text: line.slice(1), fileName: currentFileName});
     } else if (line === '') {
-      lines.push({type: 'context', text: ' '}); // Empty line gets a space so cursor is visible
+      lines.push({type: 'context', text: ' ', fileName: currentFileName}); // Empty line gets a space so cursor is visible
     }
   }
   // Append untracked files
   const untracked = await runCommandAsync(['git', '-C', worktreePath, 'ls-files', '--others', '--exclude-standard']);
   if (untracked) {
     for (const fp of untracked.split('\n').filter(Boolean)) {
-      lines.push({type: 'header', text: `📁 ${fp} (new file)`});
+      lines.push({type: 'header', text: `📁 ${fp} (new file)`, fileName: fp});
       try {
         const cat = await runCommandAsync(['bash', '-lc', `cd ${JSON.stringify(worktreePath)} && sed -n '1,200p' ${JSON.stringify(fp)}`]);
-        for (const l of (cat || '').split('\n').filter(Boolean)) lines.push({type: 'added', text: l});
+        for (const l of (cat || '').split('\n').filter(Boolean)) lines.push({type: 'added', text: l, fileName: fp});
       } catch {}
     }
   }
@@ -70,6 +77,11 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
   const [animationId, setAnimationId] = useState<NodeJS.Timeout | null>(null);
   const [terminalHeight, setTerminalHeight] = useState<number>(process.stdout.rows || 24);
   const [terminalWidth, setTerminalWidth] = useState<number>(process.stdout.columns || 80);
+  const commentStore = useMemo(() => commentStoreManager.getStore(worktreePath), [worktreePath]);
+  const [tmuxService] = useState(() => new TmuxService());
+  const [showCommentDialog, setShowCommentDialog] = useState(false);
+  const [showAllComments, setShowAllComments] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string>('');
 
   useEffect(() => {
     (async () => {
@@ -168,6 +180,10 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
 
   useInput((input, key) => {
     if (!isRawModeSupported) return;
+    
+    // Don't handle inputs when comment dialog is open
+    if (showCommentDialog) return;
+    
     if (key.escape || input === 'q') return onClose();
     if (key.upArrow || input === 'k') setPos((p) => Math.max(0, p - 1));
     if (key.downArrow || input === 'j') setPos((p) => Math.min(lines.length - 1, p + 1));
@@ -175,6 +191,31 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     if (key.pageDown || input === 'f' || input === ' ') setPos((p) => Math.min(lines.length - 1, p + pageSize));
     if (input === 'g') setPos(0);
     if (input === 'G') setPos(Math.max(0, lines.length - 1));
+    
+    // Comment functionality
+    if (input === 'c') {
+      const currentLine = lines[pos];
+      if (currentLine && currentLine.fileName && currentLine.type !== 'header') {
+        setShowCommentDialog(true);
+      }
+    }
+    
+    if (input === 'C') {
+      setShowAllComments(!showAllComments);
+    }
+    
+    if (input === 'd') {
+      const currentLine = lines[pos];
+      if (currentLine && currentLine.fileName) {
+        commentStore.removeComment(pos, currentLine.fileName);
+      }
+    }
+    
+    if (input === 'S') {
+      if (commentStore.count > 0) {
+        sendCommentsToTmux();
+      }
+    }
     
     // Left arrow: jump to previous chunk (▼ header)
     if (key.leftArrow) {
@@ -236,6 +277,99 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     }
   }, [pos, targetOffset, pageSize, lines.length]);
 
+  const sendCommentsToTmux = () => {
+    const comments = commentStore.getAllComments();
+    if (comments.length === 0) {
+      setStatusMessage('No comments to send');
+      setTimeout(() => setStatusMessage(''), 2000);
+      return;
+    }
+
+    setStatusMessage(`Sending ${comments.length} comment${comments.length > 1 ? 's' : ''} to Claude...`);
+
+    try {
+      // Extract project and feature correctly from worktree path
+      // Path format: /base/path/project-branches/feature
+      const pathParts = worktreePath.split('/');
+      const feature = pathParts[pathParts.length - 1];
+      const projectWithBranches = pathParts[pathParts.length - 2];
+      const project = projectWithBranches.replace(/-branches$/, '');
+      
+      // Construct proper session name: dev-project-feature
+      const sessionName = tmuxService.sessionName(project, feature);
+      
+      // Check if session exists
+      const sessionExists = tmuxService.listSessions().includes(sessionName);
+      
+      if (!sessionExists) {
+        // Create new detached session
+        runCommand(['tmux', 'new-session', '-ds', sessionName, '-c', worktreePath]);
+        
+        // Start Claude if available
+        const hasClaude = runCommand(['bash', '-lc', 'command -v claude || true']).trim();
+        if (hasClaude) {
+          runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 'claude', 'C-m']);
+        }
+      }
+      
+      // Format the message as an array of lines
+      const messageLines: string[] = [];
+      messageLines.push("Please address the following code review comments:");
+      messageLines.push("");
+      
+      const commentsByFile: {[key: string]: typeof comments} = {};
+      comments.forEach(comment => {
+        if (!commentsByFile[comment.fileName]) {
+          commentsByFile[comment.fileName] = [];
+        }
+        commentsByFile[comment.fileName].push(comment);
+      });
+
+      Object.entries(commentsByFile).forEach(([fileName, fileComments]) => {
+        messageLines.push(`File: ${fileName}`);
+        fileComments.forEach(comment => {
+          messageLines.push(`  Line ${comment.lineIndex + 1}: ${comment.commentText}`);
+        });
+        messageLines.push("");
+      });
+      
+      // Send all lines with Alt+Enter (Escape Enter) to avoid auto-submission
+      messageLines.forEach((line, index) => {
+        // Send the line text
+        runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, line]);
+        
+        // Send Alt+Enter (Escape followed by Enter) to insert newline without submitting
+        // Don't send a newline after the last line
+        if (index < messageLines.length - 1) {
+          runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 'Escape', 'Enter']);
+        }
+      });
+      
+      // Clear comments after sending
+      commentStore.clear();
+      
+      setStatusMessage(`✓ Sent ${comments.length} comment${comments.length > 1 ? 's' : ''} to session: ${sessionName}`);
+      setTimeout(() => setStatusMessage(''), 3000);
+      
+    } catch (error) {
+      setStatusMessage('✗ Failed to send comments');
+      setTimeout(() => setStatusMessage(''), 3000);
+      console.error('Failed to send comments to tmux:', error);
+    }
+  };
+
+  const handleCommentSave = (commentText: string) => {
+    const currentLine = lines[pos];
+    if (currentLine && currentLine.fileName) {
+      commentStore.addComment(pos, currentLine.fileName, currentLine.text, commentText);
+    }
+    setShowCommentDialog(false);
+  };
+
+  const handleCommentCancel = () => {
+    setShowCommentDialog(false);
+  };
+
   // Truncate text to fit terminal width
   const truncateText = (text: string, maxWidth: number): string => {
     if (text.length <= maxWidth) return text;
@@ -246,15 +380,34 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     return lines.slice(offset, offset + pageSize);
   }, [lines, offset, pageSize]);
 
+  const statusText = `Terminal: ${terminalHeight}x${terminalWidth} | PageSize: ${pageSize} | Pos: ${pos}/${lines.length} | Offset: ${offset} | Visible: ${visible.length} | Comments: ${commentStore.count}`;
+
+  // Create comment dialog if needed - render it instead of the main view when active
+  if (showCommentDialog) {
+    return h(
+      Box,
+      {flexDirection: 'column', height: terminalHeight, justifyContent: 'center', alignItems: 'center'},
+      h(CommentInputDialog, {
+        fileName: lines[pos]?.fileName || '',
+        lineText: lines[pos]?.text || '',
+        initialComment: lines[pos]?.fileName ? commentStore.getComment(pos, lines[pos].fileName)?.commentText || '' : '',
+        onSave: handleCommentSave,
+        onCancel: handleCommentCancel
+      })
+    );
+  }
+
   return h(
     Box,
     {flexDirection: 'column'},
-    h(Text, {color: 'yellow'}, `Terminal: ${terminalHeight}x${terminalWidth} | PageSize: ${pageSize} | Pos: ${pos}/${lines.length} | Offset: ${offset} | Visible: ${visible.length}`),
+    h(Text, {color: 'yellow'}, statusText),
     h(Text, {bold: true}, title),
     ...visible.map((l, idx) => {
       const actualLineIndex = offset + idx;
       const isCurrentLine = actualLineIndex === pos;
-      const displayText = truncateText(l.text || ' ', terminalWidth - 2); // -2 for padding
+      const hasComment = l.fileName && commentStore.hasComment(actualLineIndex, l.fileName);
+      const commentIndicator = hasComment ? '[C] ' : '';
+      const displayText = truncateText(commentIndicator + (l.text || ' '), terminalWidth - 2); // -2 for padding
       return h(Text, {
         key: idx,
         color: l.type === 'added' ? 'green' : l.type === 'removed' ? 'red' : l.type === 'header' ? 'cyan' : undefined,
@@ -262,7 +415,16 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
         bold: isCurrentLine
       }, displayText);
     }),
-    h(Text, {color: 'gray'}, 'j/k move  b/f PgUp/PgDn  g/G top/bottom  ←/→ chunk  Shift+←/→ file  q close')
+    showAllComments && commentStore.count > 0 ? h(
+      Box,
+      {flexDirection: 'column', borderStyle: 'single', borderColor: 'blue', padding: 1, marginTop: 1},
+      h(Text, {bold: true, color: 'blue'}, `All Comments (${commentStore.count}):`),
+      ...commentStore.getAllComments().map((comment, idx) => 
+        h(Text, {key: idx, color: 'gray'}, `${comment.fileName}:${comment.lineIndex} - ${comment.commentText}`)
+      )
+    ) : null,
+    h(Text, {color: 'gray'}, 'j/k move  c comment  C show all  d delete  S send to Claude  q close'),
+    statusMessage ? h(Text, {color: statusMessage.startsWith('✓') ? 'green' : statusMessage.startsWith('✗') ? 'red' : 'yellow', bold: true}, statusMessage) : null
   );
 }
 
