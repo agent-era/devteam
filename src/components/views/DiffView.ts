@@ -81,6 +81,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
   const [tmuxService] = useState(() => new TmuxService());
   const [showCommentDialog, setShowCommentDialog] = useState(false);
   const [showAllComments, setShowAllComments] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string>('');
 
   useEffect(() => {
     (async () => {
@@ -276,50 +277,26 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     }
   }, [pos, targetOffset, pageSize, lines.length]);
 
-  const waitForClaudeReady = async (sessionName: string, maxWait: number = 10000): Promise<boolean> => {
-    const startTime = Date.now();
-    while (Date.now() - startTime < maxWait) {
-      const status = tmuxService.getClaudeStatus(sessionName);
-      if (status === 'idle' || status === 'waiting') {
-        return true;
-      }
-      await new Promise(resolve => setTimeout(resolve, 500));
-    }
-    return false;
-  };
-
-  const formatCommentsMessage = (comments: ReturnType<CommentStore['getAllComments']>): string => {
-    let message = "Here are my comments on the diff for automatic fixes:\\n\\n";
-    
-    const commentsByFile: {[key: string]: typeof comments} = {};
-    comments.forEach(comment => {
-      if (!commentsByFile[comment.fileName]) {
-        commentsByFile[comment.fileName] = [];
-      }
-      commentsByFile[comment.fileName].push(comment);
-    });
-
-    Object.entries(commentsByFile).forEach(([fileName, fileComments]) => {
-      message += `File: ${fileName}\\n`;
-      fileComments.forEach(comment => {
-        message += `  Line: ${comment.lineText.trim() || '(empty line)'}\\n`;
-        message += `  Comment: ${comment.commentText}\\n\\n`;
-      });
-      message += "\\n";
-    });
-
-    message += "Please review these comments and implement the suggested fixes.";
-    return message;
-  };
-
-  const sendCommentsToTmux = async () => {
+  const sendCommentsToTmux = () => {
     const comments = commentStore.getAllComments();
-    if (comments.length === 0) return;
+    if (comments.length === 0) {
+      setStatusMessage('No comments to send');
+      setTimeout(() => setStatusMessage(''), 2000);
+      return;
+    }
+
+    setStatusMessage(`Sending ${comments.length} comment${comments.length > 1 ? 's' : ''} to Claude...`);
 
     try {
-      // Extract project and feature from worktreePath
-      const pathSegments = worktreePath.split('/');
-      const sessionName = `dev-${pathSegments.slice(-2).join('-')}`;
+      // Extract project and feature correctly from worktree path
+      // Path format: /base/path/project-branches/feature
+      const pathParts = worktreePath.split('/');
+      const feature = pathParts[pathParts.length - 1];
+      const projectWithBranches = pathParts[pathParts.length - 2];
+      const project = projectWithBranches.replace(/-branches$/, '');
+      
+      // Construct proper session name: dev-project-feature
+      const sessionName = tmuxService.sessionName(project, feature);
       
       // Check if session exists
       const sessionExists = tmuxService.listSessions().includes(sessionName);
@@ -332,37 +309,51 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
         const hasClaude = runCommand(['bash', '-lc', 'command -v claude || true']).trim();
         if (hasClaude) {
           runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 'claude', 'C-m']);
-          // Wait for Claude to start
-          await new Promise(resolve => setTimeout(resolve, 3000));
         }
       }
-
-      // Wait for Claude to be ready
-      const ready = await waitForClaudeReady(sessionName, 10000);
       
-      if (ready) {
-        const message = formatCommentsMessage(comments);
-        // Send comments to tmux session
-        runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, message, 'C-m']);
-        
-        // Switch to that session to show user what happened
-        try {
-          runCommand(['tmux', 'switch-client', '-t', sessionName]);
-        } catch {
-          // If switch-client fails (no active client), try to attach interactively
-          // This will exit the current app, but that's expected behavior
-          runCommand(['tmux', 'attach-session', '-t', sessionName]);
+      // Format the message as an array of lines
+      const messageLines: string[] = [];
+      messageLines.push("Please address the following code review comments:");
+      messageLines.push("");
+      
+      const commentsByFile: {[key: string]: typeof comments} = {};
+      comments.forEach(comment => {
+        if (!commentsByFile[comment.fileName]) {
+          commentsByFile[comment.fileName] = [];
         }
+        commentsByFile[comment.fileName].push(comment);
+      });
+
+      Object.entries(commentsByFile).forEach(([fileName, fileComments]) => {
+        messageLines.push(`File: ${fileName}`);
+        fileComments.forEach(comment => {
+          messageLines.push(`  Line ${comment.lineIndex + 1}: ${comment.commentText}`);
+        });
+        messageLines.push("");
+      });
+      
+      // Send all lines with Alt+Enter (Escape Enter) to avoid auto-submission
+      messageLines.forEach((line, index) => {
+        // Send the line text
+        runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, line]);
         
-        // Clear comments after successful send
-        commentStore.clear();
-      } else {
-        // If Claude isn't ready, still send the message but don't clear comments
-        const message = formatCommentsMessage(comments);
-        runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, message, 'C-m']);
-      }
+        // Send Alt+Enter (Escape followed by Enter) to insert newline without submitting
+        // Don't send a newline after the last line
+        if (index < messageLines.length - 1) {
+          runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 'Escape', 'Enter']);
+        }
+      });
+      
+      // Clear comments after sending
+      commentStore.clear();
+      
+      setStatusMessage(`✓ Sent ${comments.length} comment${comments.length > 1 ? 's' : ''} to session: ${sessionName}`);
+      setTimeout(() => setStatusMessage(''), 3000);
+      
     } catch (error) {
-      // If anything fails, silently continue
+      setStatusMessage('✗ Failed to send comments');
+      setTimeout(() => setStatusMessage(''), 3000);
       console.error('Failed to send comments to tmux:', error);
     }
   };
@@ -432,7 +423,8 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
         h(Text, {key: idx, color: 'gray'}, `${comment.fileName}:${comment.lineIndex} - ${comment.commentText}`)
       )
     ) : null,
-    h(Text, {color: 'gray'}, 'j/k move  c comment  C show all  d delete  S send to Claude  q close')
+    h(Text, {color: 'gray'}, 'j/k move  c comment  C show all  d delete  S send to Claude  q close'),
+    statusMessage ? h(Text, {color: statusMessage.startsWith('✓') ? 'green' : statusMessage.startsWith('✗') ? 'red' : 'yellow', bold: true}, statusMessage) : null
   );
 }
 
