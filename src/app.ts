@@ -11,11 +11,14 @@ import {GitManager} from './gitManager.js';
 import {TmuxManager} from './tmuxManager.js';
 import {AppState, WorktreeInfo} from './models.js';
 import {CACHE_DURATION, AI_STATUS_REFRESH_DURATION, DIFF_STATUS_REFRESH_DURATION, PR_REFRESH_DURATION, BASE_PATH, DIR_BRANCHES_SUFFIX} from './constants.js';
-import {attachOrCreateSession, createFeature, archiveFeature, getPRStatus, deleteArchived, attachOrCreateShellSession, setupWorktreeEnvironment, createTmuxSession} from './ops.js';
+import {attachOrCreateSession, createFeature, archiveFeature, getPRStatus, deleteArchived, attachOrCreateShellSession, attachOrCreateRunSession, createOrFillRunConfig, getRunConfigPath, ConfigResult, RUN_CONFIG_CLAUDE_PROMPT, setupWorktreeEnvironment, createTmuxSession} from './ops.js';
 import {runCommandQuick} from './utils.js';
 import ProjectPickerDialog from './ui/ProjectPickerDialog.js';
 import BranchPickerDialog from './ui/BranchPickerDialog.js';
 import DiffView from './ui/DiffView.js';
+import RunConfigDialog from './ui/RunConfigDialog.js';
+import ProgressDialog from './ui/ProgressDialog.js';
+import ConfigResultsDialog from './ui/ConfigResultsDialog.js';
 
 const gm = new GitManager();
 const tm = new TmuxManager();
@@ -113,7 +116,7 @@ function sortWorktrees(wt: WorktreeInfo[]): WorktreeInfo[] {
   });
 }
 
-type UIMode = 'list' | 'create' | 'confirmArchive' | 'archived' | 'help' | 'pickProjectForBranch' | 'pickBranch' | 'diff';
+type UIMode = 'list' | 'create' | 'confirmArchive' | 'archived' | 'help' | 'pickProjectForBranch' | 'pickBranch' | 'diff' | 'runConfig' | 'generatingConfig' | 'showConfigResult';
 
 export default function App() {
   const [state, setState] = useState(new AppState());
@@ -129,6 +132,8 @@ export default function App() {
   const [branchList, setBranchList] = useState<any[]>([]);
   const [diffWorktree, setDiffWorktree] = useState<string | null>(null);
   const [diffType, setDiffType] = useState<'full' | 'uncommitted'>('full');
+  const [runConfigProject, setRunConfigProject] = useState<{project: string; feature: string; path: string} | null>(null);
+  const [configResult, setConfigResult] = useState<ConfigResult | null>(null);
 
   useEffect(() => {
     // initial load (do not block on PR)
@@ -337,6 +342,29 @@ export default function App() {
           const w = state.worktrees[state.selectedIndex];
           if (w) {
             try { attachOrCreateShellSession(w.project, w.feature, w.path); } catch {}
+            onRefresh();
+          }
+        }
+        else if (s === 'x') {
+          const w = state.worktrees[state.selectedIndex];
+          if (w) {
+            try {
+              const result = attachOrCreateRunSession(w.project, w.feature, w.path);
+              if (result === 'no_config') {
+                setRunConfigProject({project: w.project, feature: w.feature, path: w.path});
+                setUiMode('runConfig');
+              } else {
+                onRefresh();
+              }
+            } catch {
+              onRefresh();
+            }
+          }
+        }
+        else if (s === 'X') {
+          const w = state.worktrees[state.selectedIndex];
+          if (w) {
+            try { createOrFillRunConfig(w.project); } catch {}
             onRefresh();
           }
         }
@@ -581,6 +609,71 @@ export default function App() {
                 setBranchList(enriched);
               } catch {}
             })();
+          }
+        })
+      )
+    );
+  }
+
+  if (uiMode === 'runConfig' && runConfigProject) {
+    return h(FullScreen, null,
+      h(Box as any, {flexGrow: 1, alignItems: 'center', justifyContent: 'center'},
+        h(RunConfigDialog, {
+          project: runConfigProject.project,
+          configPath: getRunConfigPath(runConfigProject.project),
+          claudePrompt: RUN_CONFIG_CLAUDE_PROMPT,
+          onCancel: () => { setUiMode('list'); setRunConfigProject(null); },
+          onCreateConfig: () => {
+            // Show progress dialog
+            setUiMode('generatingConfig');
+            
+            // Use setTimeout to allow UI to update before starting sync operation
+            setTimeout(() => {
+              try {
+                const result = createOrFillRunConfig(runConfigProject.project);
+                setConfigResult(result);
+                setUiMode('showConfigResult');
+                setRunConfigProject(null);
+              } catch (error) {
+                const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+                setConfigResult({
+                  success: false,
+                  path: getRunConfigPath(runConfigProject.project),
+                  error: errorMessage
+                });
+                setUiMode('showConfigResult');
+                setRunConfigProject(null);
+              }
+            }, 100);
+          }
+        })
+      )
+    );
+  }
+
+  if (uiMode === 'generatingConfig' && runConfigProject) {
+    return h(FullScreen, null,
+      h(Box as any, {flexGrow: 1, alignItems: 'center', justifyContent: 'center'},
+        h(ProgressDialog, {
+          title: 'Generating Configuration',
+          message: 'Generating run session configuration file...',
+          project: runConfigProject.project
+        })
+      )
+    );
+  }
+
+  if (uiMode === 'showConfigResult' && configResult) {
+    return h(FullScreen, null,
+      h(Box as any, {flexGrow: 1, alignItems: 'center', justifyContent: 'center'},
+        h(ConfigResultsDialog, {
+          success: configResult.success,
+          content: configResult.content,
+          configPath: configResult.path,
+          error: configResult.error,
+          onClose: () => {
+            setUiMode('list');
+            setConfigResult(null);
           }
         })
       )

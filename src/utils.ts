@@ -59,6 +59,38 @@ export function commandExitCode(args: string[], cwd?: string): number {
   return res.status ?? 1;
 }
 
+export function runClaudeSync(prompt: string, cwd?: string): {success: boolean; output: string; error?: string} {
+  try {
+    const res = spawnSync('claude', ['-p', prompt], {
+      cwd,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: SUBPROCESS_TIMEOUT,
+    });
+    
+    if (res.status === 0 && res.stdout) {
+      return {
+        success: true,
+        output: res.stdout.trim()
+      };
+    }
+    
+    const errorMessage = res.stderr || `Claude exited with code ${res.status}`;
+    return {
+      success: false,
+      output: '',
+      error: errorMessage
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error running Claude';
+    return {
+      success: false,
+      output: '',
+      error: errorMessage
+    };
+  }
+}
+
 export function runInteractive(cmd: string, args: string[], opts: {cwd?: string} = {}): number {
   const res = spawnSync(cmd, args, {cwd: opts.cwd, stdio: 'inherit'});
   return res.status ?? 0;
