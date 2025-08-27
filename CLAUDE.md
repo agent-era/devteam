@@ -359,11 +359,93 @@ useKeyboardShortcuts({
 });
 ```
 
-## Debugging
+## Logging and Debugging
 
-1. **Console Output**: Use `console.error()` (stdout is used by Ink)
-2. **Test Mode**: Run with fake services for testing
-3. **Tmux Inspection**: Check sessions with `tmux ls`
+### File Logging System
+
+The app includes comprehensive file-based logging for all console output and errors:
+
+#### Log Files Location
+```
+./logs/
+├── errors.log    # Error messages and stack traces
+└── console.log   # All console output (log, warn, info, debug)
+```
+
+#### Using the Logger
+
+1. **Automatic Console Logging**: All `console.log`, `console.error`, `console.warn`, `console.info`, and `console.debug` calls are automatically logged to files when `initializeFileLogging()` is called.
+
+2. **Manual Logging Functions**: Use these functions for structured logging:
+   ```typescript
+   import {logError, logInfo, logWarn, logDebug} from '../shared/utils/logger.js';
+   
+   logError('Database connection failed', error);
+   logInfo('User created successfully', {userId: 123});
+   logWarn('API rate limit approaching', {remaining: 10});
+   logDebug('Cache hit', {key: 'user:123'});
+   ```
+
+3. **Log Management**:
+   ```typescript
+   import {getLogPaths, clearLogs} from '../shared/utils/logger.js';
+   
+   // Get log file paths
+   const {errorLog, consoleLog} = getLogPaths();
+   
+   // Clear all logs
+   clearLogs();
+   ```
+
+#### Log Format
+Each log entry includes:
+- ISO timestamp
+- Log level (ERROR, LOG, WARN, INFO, DEBUG)
+- Message
+- Data object (JSON formatted if provided)
+
+Example:
+```
+[2025-08-27T10:30:45.123Z] ERROR: Database connection failed {"host":"localhost","port":5432}
+[2025-08-27T10:30:46.456Z] INFO: User login successful {"userId":123,"email":"user@example.com"}
+```
+
+#### Log Rotation
+- Logs automatically rotate when they exceed 10MB
+- Old logs are renamed with timestamp suffix: `errors.log.1724765445123`
+- Silent failure ensures logging issues never crash the app
+
+### Debugging Tips
+
+1. **File Logs**: Check `./logs/` for detailed error traces and debug info
+2. **Console Output**: Use `console.error()` (stdout is used by Ink) 
+3. **Test Mode**: Run with fake services for testing
+4. **Tmux Inspection**: Check sessions with `tmux ls`
+5. **Log Analysis**: Use `tail -f ./logs/errors.log` to monitor errors in real-time
+
+### Best Practices for Logging
+
+1. **Error Logging**: Always log errors with context:
+   ```typescript
+   try {
+     await createWorktree(project, feature);
+   } catch (error) {
+     logError('Failed to create worktree', {project, feature, error});
+     throw error;
+   }
+   ```
+
+2. **Debug Information**: Log debug info for complex operations:
+   ```typescript
+   logDebug('Starting worktree creation', {project, feature, targetPath});
+   ```
+
+3. **Performance Monitoring**: Log timing for slow operations:
+   ```typescript
+   const start = Date.now();
+   await longOperation();
+   logInfo('Operation completed', {duration: Date.now() - start});
+   ```
 
 ## Build & Deployment
 
