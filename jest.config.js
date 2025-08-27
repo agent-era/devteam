@@ -4,7 +4,13 @@ export default {
   extensionsToTreatAsEsm: ['.ts', '.tsx'],
   moduleNameMapper: {
     '^(\\.{1,2}/.*)\\.js$': '$1',
+    // Mock ink and ink-testing-library to avoid ESM issues
+    '^ink$': '<rootDir>/tests/__mocks__/ink.js',
+    '^ink-testing-library$': '<rootDir>/tests/__mocks__/ink-testing-library.js'
   },
+  transformIgnorePatterns: [
+    'node_modules/(?!(ink|ink-testing-library)/)'
+  ],
   transform: {
     '^.+\\.tsx?$': ['ts-jest', {
       useESM: true,
@@ -12,11 +18,8 @@ export default {
         module: 'ES2022',
         target: 'ES2022'
       }
-    }],
+    }]
   },
-  transformIgnorePatterns: [
-    'node_modules/(?!(ink-testing-library|@testing-library)/)'
-  ],
   testEnvironment: 'node',
   setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
   testMatch: [
@@ -27,5 +30,8 @@ export default {
     'src/**/*.{ts,tsx}',
     '!src/**/*.d.ts',
   ],
-  testTimeout: 10000
+  testTimeout: 10000,
+  // Clear mocks between tests
+  clearMocks: true,
+  resetMocks: true
 };

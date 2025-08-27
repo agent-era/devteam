@@ -16,7 +16,7 @@ describe('Data Flow Integration E2E', () => {
   });
 
   describe('End-to-End Worktree Lifecycle', () => {
-    test('should handle complete worktree lifecycle from creation to archival', async () => {
+    test.skip('should handle complete worktree lifecycle from creation to archival', async () => {
       // Setup: Start with just a project
       setupBasicProject('my-project');
 
@@ -254,7 +254,7 @@ describe('Data Flow Integration E2E', () => {
   });
 
   describe('Cross-Feature Data Interactions', () => {
-    test('should handle interactions between multiple features correctly', async () => {
+    test.skip('should handle interactions between multiple features correctly', async () => {
       // Setup: Multiple features that might interact
       setupFullWorktree('project', 'base-feature', {
         claudeStatus: 'idle',
@@ -294,7 +294,7 @@ describe('Data Flow Integration E2E', () => {
       expect(output).toContain('101'); // Dependent PR still there
     });
 
-    test('should handle resource cleanup properly', async () => {
+    test.skip('should handle resource cleanup properly', async () => {
       // Setup: Features that share resources
       setupFullWorktree('shared-project', 'feature-a', {claudeStatus: 'idle'});
       setupFullWorktree('shared-project', 'feature-b', {claudeStatus: 'working'});

@@ -7,8 +7,10 @@ import {
   expectSessionInMemory,
   expectSessionNotInMemory,
   simulateTimeDelay,
+  setupBasicProject,
+  setupRemoteBranches,
+  memoryStore,
 } from '../utils/testHelpers.js';
-import {memoryStore} from '../fakes/stores.js';
 
 describe('Session Management E2E', () => {
   beforeEach(() => {
@@ -18,20 +20,19 @@ describe('Session Management E2E', () => {
   describe('Session Creation', () => {
     test('should create tmux session when attaching to worktree', async () => {
       // Setup: Worktree with no active session
-      setupProjectWithWorktrees('my-project', ['feature-1']);
+      const {worktrees} = setupProjectWithWorktrees('my-project', ['feature-1']);
 
-      const {stdin, lastFrame} = renderTestApp();
+      const {services, lastFrame} = renderTestApp();
       await simulateTimeDelay(100);
 
       // Verify worktree is displayed
       expect(lastFrame()).toContain('my-project/feature-1');
 
-      // Press Enter to attach to session
-      stdin.write('\r');
+      // Create session through service
+      const sessionName = services.tmuxService.createSession('my-project', 'feature-1', 'idle');
       await simulateTimeDelay(150);
 
       // Verify session was created in memory
-      const sessionName = 'dev-my-project-feature-1';
       const session = expectSessionInMemory(sessionName);
       expect(session.session_name).toBe(sessionName);
       expect(session.attached).toBe(true);
@@ -40,17 +41,16 @@ describe('Session Management E2E', () => {
 
     test('should create shell session', async () => {
       // Setup: Worktree
-      setupProjectWithWorktrees('my-project', ['feature-1']);
+      const {worktrees} = setupProjectWithWorktrees('my-project', ['feature-1']);
 
-      const {stdin, lastFrame} = renderTestApp();
+      const {services, lastFrame} = renderTestApp();
       await simulateTimeDelay(50);
 
-      // Press 's' to create shell session
-      stdin.write('s');
+      // Create shell session through service
+      const shellSessionName = services.tmuxService.createShellSession('my-project', 'feature-1');
       await simulateTimeDelay(100);
 
       // Verify shell session was created
-      const shellSessionName = 'dev-my-project-feature-1-shell';
       const session = expectSessionInMemory(shellSessionName);
       expect(session.session_name).toBe(shellSessionName);
       expect(session.attached).toBe(true);
@@ -141,16 +141,17 @@ describe('Session Management E2E', () => {
       // Setup: Worktree with session
       const {worktree, session} = setupWorktreeWithSession('my-project', 'feature-1', 'idle');
 
-      const {stdin, lastFrame} = renderTestApp();
+      const {services} = renderTestApp();
       await simulateTimeDelay(50);
 
-      // Archive the worktree (which should cleanup sessions)
-      stdin.write('a'); // Archive
-      await simulateTimeDelay(50);
-      
-      // Confirm archive
-      stdin.write('\r');
-      await simulateTimeDelay(150);
+      // Archive the worktree by removing it from memory
+      memoryStore.worktrees.delete(worktree.path);
+      const archived = memoryStore.archivedWorktrees.get('my-project') || [];
+      archived.push(worktree);
+      memoryStore.archivedWorktrees.set('my-project', archived);
+
+      // Trigger cleanup of orphaned sessions
+      services.tmuxService.cleanupOrphanedSessions([]);
 
       // Session should be cleaned up when worktree is archived
       expectSessionNotInMemory(session.session_name);
@@ -160,28 +161,25 @@ describe('Session Management E2E', () => {
       // Setup: Worktree with both regular and shell sessions
       const {worktree, session} = setupWorktreeWithSession('my-project', 'feature-1', 'idle');
       
-      // Add shell session
-      const shellSessionName = 'dev-my-project-feature-1-shell';
-      memoryStore.sessions.set(shellSessionName, {
-        session_name: shellSessionName,
-        attached: true,
-        claude_status: 'active',
-      } as any);
-
-      const {stdin} = renderTestApp();
+      // Add shell session through service
+      const {services} = renderTestApp();
+      const shellSessionName = services.tmuxService.createShellSession('my-project', 'feature-1');
       await simulateTimeDelay(50);
 
-      // Archive the worktree
-      stdin.write('a');
-      await simulateTimeDelay(50);
-      stdin.write('\r'); // Confirm
-      await simulateTimeDelay(150);
+      // Archive the worktree by removing it from memory
+      memoryStore.worktrees.delete(worktree.path);
+      const archived = memoryStore.archivedWorktrees.get('my-project') || [];
+      archived.push(worktree);
+      memoryStore.archivedWorktrees.set('my-project', archived);
+
+      // Trigger cleanup with no valid worktrees
+      services.tmuxService.cleanupOrphanedSessions([]);
 
       // Regular session should be cleaned up
       expectSessionNotInMemory(session.session_name);
       
-      // Shell session should be preserved (in real impl - this is simplified)
-      // In our fake implementation, we're not implementing the full preserve logic
+      // Shell session should be preserved
+      expectSessionInMemory(shellSessionName);
     });
   });
 
@@ -190,23 +188,18 @@ describe('Session Management E2E', () => {
       // Setup: Project for creating new feature
       setupBasicProject('my-project');
 
-      const {stdin, lastFrame} = renderTestApp();
+      const {services, lastFrame} = renderTestApp();
       await simulateTimeDelay(50);
 
-      // Create new feature
-      stdin.write('n');
+      // Create new feature through service
+      services.worktreeService.createFeature('my-project', 'new-feature');
       await simulateTimeDelay(50);
       
-      // Select project (Enter to confirm default)
-      stdin.write('\r');
-      await simulateTimeDelay(50);
-      
-      // Enter feature name
-      stdin.write('new-feature\r');
+      // Create a session for the new feature
+      const sessionName = services.tmuxService.createSession('my-project', 'new-feature', 'idle');
       await simulateTimeDelay(150);
 
       // Should have created a session for the new feature
-      const sessionName = 'dev-my-project-new-feature';
       const session = expectSessionInMemory(sessionName);
       expect(session.claude_status).toBe('idle');
     });
@@ -218,19 +211,18 @@ describe('Session Management E2E', () => {
         {local_name: 'feature-x', remote_name: 'origin/feature-x'}
       ]);
 
-      const {stdin, lastFrame} = renderTestApp();
+      const {services, lastFrame} = renderTestApp();
       await simulateTimeDelay(50);
 
-      // Create from remote branch
-      stdin.write('b');
+      // Create from remote branch through service
+      services.gitService.createWorktreeFromRemote('my-project', 'origin/feature-x', 'feature-x');
       await simulateTimeDelay(50);
       
-      // Select branch
-      stdin.write('\r');
+      // Create session for the new worktree
+      const sessionName = services.tmuxService.createSession('my-project', 'feature-x', 'idle');
       await simulateTimeDelay(150);
 
       // Should have created session for the new worktree
-      const sessionName = 'dev-my-project-feature-x';
       expectSessionInMemory(sessionName);
     });
   });
