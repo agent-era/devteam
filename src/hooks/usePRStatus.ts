@@ -108,6 +108,16 @@ export function usePRStatus() {
     return await fetchPRStatus(nonMergedWorktrees, true);
   }, [fetchPRStatus]);
 
+  const forceRefreshAllPRs = useCallback(async (
+    worktrees: Array<{project: string; path: string}>
+  ): Promise<Record<string, PRStatus>> => {
+    // Clear entire cache to force fresh fetches
+    clearPRStatusCache();
+    
+    // Fetch fresh data for all worktrees
+    return await fetchPRStatus(worktrees, true);
+  }, [fetchPRStatus, clearPRStatusCache]);
+
   return {
     cache,
     fetchPRStatus,
@@ -115,6 +125,7 @@ export function usePRStatus() {
     isPRStatusLoading,
     fetchSingleWorktreePRStatus,
     clearPRStatusCache,
-    refreshNonMergedPRs
+    refreshNonMergedPRs,
+    forceRefreshAllPRs
   };
 }

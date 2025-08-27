@@ -21,7 +21,7 @@ function useInterval(callback: () => void, delay: number) {
 export function useWorktrees() {
   const {gitService, tmuxService} = useServices();
   const {state, setState} = useAppState();
-  const {getPRStatus, fetchPRStatus} = usePRStatus();
+  const {getPRStatus, fetchPRStatus, forceRefreshAllPRs} = usePRStatus();
 
   const collectWorktrees = useCallback((): Array<{
     project: string; 
@@ -140,17 +140,17 @@ export function useWorktrees() {
       pageSize
     }));
 
-    // Async PR status fetch
+    // Async PR status fetch with cache clear for manual refresh
     Promise.resolve().then(async () => {
       try {
-        await fetchPRStatus(wtInfos.map(w => ({project: w.project, path: w.path})), true);
+        await forceRefreshAllPRs(wtInfos.map(w => ({project: w.project, path: w.path})));
         const withPr = sortWorktrees(wtInfos.map(w => 
           new WorktreeInfo({...w, pr: getPRStatus(w.path) || w.pr})
         ));
         setState(s => ({...s, worktrees: withPr}));
       } catch {}
     });
-  }, [collectWorktrees, sortWorktrees, attachRuntimeData, setState, fetchPRStatus, getPRStatus]);
+  }, [collectWorktrees, sortWorktrees, attachRuntimeData, setState, forceRefreshAllPRs, getPRStatus]);
 
   // Initial load
   useEffect(() => {
