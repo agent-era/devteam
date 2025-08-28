@@ -50,7 +50,6 @@ interface WorktreeContextType {
   createFeature: (projectName: string, featureName: string) => Promise<WorktreeInfo | null>;
   createFromBranch: (project: string, remoteBranch: string, localName: string) => Promise<boolean>;
   archiveFeature: (worktreeOrProject: WorktreeInfo | string, path?: string, feature?: string) => Promise<{archivedPath: string}>;
-  refreshPRSelective: () => Promise<void>;
   deleteArchived: (archivedPath: string) => Promise<boolean>;
   
   // Session operations  
