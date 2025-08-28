@@ -30,7 +30,8 @@ export class FakeGitHubService {
       if (pr) {
         result[wt.path] = pr;
       } else {
-        result[wt.path] = new PRStatus();
+        // Return 'no_pr' status instead of default 'not_checked'
+        result[wt.path] = new PRStatus({ loadingStatus: 'no_pr' });
       }
     }
     

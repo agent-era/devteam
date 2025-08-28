@@ -312,12 +312,21 @@ function AppContent() {
 
 export default function App() {
   return h(InputFocusProvider, null,
-    h(WorktreeProvider, null,
-      h(GitHubProvider, null,
-        h(UIProvider, null,
-          h(AppContent)
-        )
-      )
+    h(GitHubProvider, null,
+      h(AppWithGitHub)
     )
   );
+}
+
+function AppWithGitHub() {
+  const {getPRStatus, setVisibleWorktrees, refreshPRStatus} = useGitHubContext();
+  
+  return h(WorktreeProvider, {
+    getPRStatus,
+    setVisibleWorktrees,
+    refreshPRStatus,
+    children: h(UIProvider, null,
+      h(AppContent)
+    )
+  });
 }

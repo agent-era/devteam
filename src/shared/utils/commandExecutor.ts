@@ -1,13 +1,25 @@
 import {execFileSync, spawnSync, execFile} from 'child_process';
 import {SUBPROCESS_SHORT_TIMEOUT, SUBPROCESS_TIMEOUT} from '../../constants.js';
 
+// Clean environment for tmux commands to fix nvm compatibility
+function getCleanEnvironment(): NodeJS.ProcessEnv {
+  const cleanEnv = {...process.env};
+  // Remove npm_config_prefix that npm link sets, which conflicts with nvm
+  delete cleanEnv.npm_config_prefix;
+  return cleanEnv;
+}
+
 export function runCommand(args: string[], opts: {timeout?: number; cwd?: string} = {}): string {
   try {
+    // Clean environment for tmux commands to fix nvm compatibility
+    const env = args[0] === 'tmux' ? getCleanEnvironment() : process.env;
+    
     const output = execFileSync(args[0], args.slice(1), {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
       timeout: opts.timeout ?? SUBPROCESS_TIMEOUT,
       cwd: opts.cwd,
+      env,
     });
     return output.trim();
   } catch (e) {
@@ -17,11 +29,15 @@ export function runCommand(args: string[], opts: {timeout?: number; cwd?: string
 
 export function runCommandQuick(args: string[], cwd?: string): string {
   try {
+    // Clean environment for tmux commands to fix nvm compatibility
+    const env = args[0] === 'tmux' ? getCleanEnvironment() : process.env;
+    
     const output = execFileSync(args[0], args.slice(1), {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
       timeout: SUBPROCESS_SHORT_TIMEOUT,
       cwd,
+      env,
     });
     return output.trim();
   } catch {

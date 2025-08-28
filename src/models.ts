@@ -26,7 +26,15 @@ export class GitStatus {
   }
 }
 
+export type PRLoadingStatus = 
+  | 'not_checked'    // Initial state, no API call made yet
+  | 'loading'        // API call in progress
+  | 'no_pr'          // API checked, no PR exists for this branch
+  | 'exists'         // PR exists (use other fields for details)
+  | 'error';         // API call failed
+
 export class PRStatus {
+  loadingStatus: PRLoadingStatus;
   number?: number | null;
   state?: string | null; // OPEN, MERGED, CLOSED
   checks?: string | null; // passing, failing, pending
@@ -36,6 +44,7 @@ export class PRStatus {
   title?: string | null;
   mergeable?: string | null; // MERGEABLE, CONFLICTING, UNKNOWN
   constructor(init: Partial<PRStatus> = {}) {
+    this.loadingStatus = 'not_checked';
     this.number = null;
     this.state = null;
     this.checks = null;
@@ -82,7 +91,6 @@ export class WorktreeInfo {
     this.branch = '';
     this.git = new GitStatus();
     this.session = new SessionInfo();
-    this.pr = new PRStatus();
     this.is_archived = false;
     this.mtime = 0;
     this.last_commit_ts = 0;

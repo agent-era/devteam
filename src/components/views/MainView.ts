@@ -91,7 +91,7 @@ export default function MainView(props: Props) {
       const pr = w.pr;
       let prStr = '';
       if (pr?.number) {
-        const badge = pr.has_conflicts ? '⚠️' : (pr.is_merged || pr.state === 'MERGED') ? '⟫' : pr.checks === 'passing' ? '✓' : pr?.checks === 'failing' ? '✗' : pr?.checks === 'pending' ? '⏳' : '';
+        const badge = pr?.has_conflicts ? '⚠️' : (pr.is_merged || pr.state === 'MERGED') ? '⟫' : pr.checks === 'passing' ? '✓' : pr?.checks === 'failing' ? '✗' : pr?.checks === 'pending' ? '⏳' : '';
         prStr = `#${pr.number}${badge}`;
       } else if (pr !== undefined) {
         prStr = '-'; // PR data loaded, no PR exists
@@ -184,13 +184,24 @@ export default function MainView(props: Props) {
 
       const pr = w.pr;
       let prStr = '';
-      if (pr?.number) {
-        const badge = pr.has_conflicts ? '⚠️' : (pr.is_merged || pr.state === 'MERGED') ? '⟫' : pr.checks === 'passing' ? '✓' : pr?.checks === 'failing' ? '✗' : pr?.checks === 'pending' ? '⏳' : '';
+      
+      if (!pr || pr.loadingStatus === 'not_checked') {
+        prStr = '';  // Blank - not checked yet
+      } else if (pr.loadingStatus === 'loading') {
+        prStr = '⏳';  // Loading indicator
+      } else if (pr.loadingStatus === 'no_pr') {
+        prStr = '-';  // No PR exists
+      } else if (pr.loadingStatus === 'error') {
+        prStr = '!';  // Error indicator
+      } else if (pr.loadingStatus === 'exists' && pr.number) {
+        // PR exists, show details
+        const badge = pr.has_conflicts ? '⚠️' 
+          : pr.is_merged ? '⟫' 
+          : pr.checks === 'passing' ? '✓' 
+          : pr.checks === 'failing' ? '✗' 
+          : pr.checks === 'pending' ? '⏳' 
+          : '';
         prStr = `#${pr.number}${badge}`;
-      } else if (pr !== undefined) {
-        prStr = '-'; // PR data loaded, no PR exists
-      } else {
-        prStr = ''; // PR data still loading
       }
 
       // =============================================================================
@@ -248,9 +259,9 @@ export default function MainView(props: Props) {
         // unpushed-commits';
       }
       // PRIORITY 4+: PR-related priorities (only if PR status has been loaded)
-      else if (pr !== undefined) {
+      else if (pr) {
         // PRIORITY 4: PR has merge conflicts (highest PR priority)
-        if (pr.has_conflicts) {
+        if (pr?.has_conflicts) {
           highlightIndex = COLUMNS.PR;
           highlightColor = COLORS.RED;
           // pr-conflicts';
