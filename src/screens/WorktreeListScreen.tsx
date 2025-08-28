@@ -29,7 +29,7 @@ export default function WorktreeListScreen({
   onExecuteRun,
   onConfigureRun
 }: WorktreeListScreenProps) {
-  const {worktrees, selectedIndex, selectWorktree, refresh, attachOrCreateSession, attachOrCreateShellSession} = useWorktreeContext();
+  const {worktrees, selectedIndex, selectWorktree, refresh, attachSession, attachShellSession} = useWorktreeContext();
 
   const handleMove = (delta: number) => {
     const nextIndex = Math.max(0, Math.min(worktrees.length - 1, selectedIndex + delta));
@@ -41,11 +41,7 @@ export default function WorktreeListScreen({
     if (!selectedWorktree) return;
     
     try {
-      attachOrCreateSession(
-        selectedWorktree.project, 
-        selectedWorktree.feature, 
-        selectedWorktree.path
-      );
+      attachSession(selectedWorktree);
     } catch {}
     
     refresh();
@@ -56,11 +52,7 @@ export default function WorktreeListScreen({
     if (!selectedWorktree) return;
     
     try {
-      attachOrCreateShellSession(
-        selectedWorktree.project,
-        selectedWorktree.feature,
-        selectedWorktree.path
-      );
+      attachShellSession(selectedWorktree);
     } catch {}
     
     refresh();

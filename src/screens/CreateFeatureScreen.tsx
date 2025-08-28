@@ -19,7 +19,7 @@ export default function CreateFeatureScreen({
   onCancel,
   onSuccess
 }: CreateFeatureScreenProps) {
-  const {createFeature, attachOrCreateSession} = useWorktreeContext();
+  const {createFeature, attachSession} = useWorktreeContext();
 
   const handleSubmit = async (project: string, feature: string) => {
     try {
@@ -32,7 +32,7 @@ export default function CreateFeatureScreen({
         await new Promise(resolve => setTimeout(resolve, 100));
         
         // Auto-attach to the newly created session
-        attachOrCreateSession(result.project, result.feature, result.path);
+        attachSession(result);
       } else {
         onCancel();
       }

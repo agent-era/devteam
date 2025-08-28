@@ -48,13 +48,14 @@ interface WorktreeContextType {
   // Worktree operations
   createFeature: (projectName: string, featureName: string) => Promise<WorktreeInfo | null>;
   createFromBranch: (project: string, remoteBranch: string, localName: string) => Promise<boolean>;
-  archiveFeature: (worktreeOrProject: WorktreeInfo | string, path?: string, feature?: string) => Promise<{archivedPath: string}>;
+  archiveFeature: (worktreeOrProject: WorktreeInfo | string, worktreePath?: string, feature?: string) => Promise<{archivedPath: string}>;
   deleteArchived: (archivedPath: string) => Promise<boolean>;
   
   // Session operations  
   attachSession: (worktree: WorktreeInfo) => void;
   attachShellSession: (worktree: WorktreeInfo) => void;
   attachRunSession: (worktree: WorktreeInfo) => 'success' | 'no_config';
+  
   
   
   // Projects
@@ -214,7 +215,7 @@ export function WorktreeProvider({children}: WorktreeProviderProps) {
     }
   }, [gitService, refresh]);
 
-  const archiveFeature = useCallback(async (worktreeOrProject: WorktreeInfo | string, path?: string, feature?: string): Promise<{archivedPath: string}> => {
+  const archiveFeature = useCallback(async (worktreeOrProject: WorktreeInfo | string, worktreePath?: string, feature?: string): Promise<{archivedPath: string}> => {
     setLoading(true);
     try {
       let project: string, workPath: string, featureName: string;
@@ -222,7 +223,7 @@ export function WorktreeProvider({children}: WorktreeProviderProps) {
       if (typeof worktreeOrProject === 'string') {
         // Called with (project, path, feature) format
         project = worktreeOrProject;
-        workPath = path!;
+        workPath = worktreePath!;
         featureName = feature!;
       } else {
         // Called with WorktreeInfo object
@@ -302,6 +303,7 @@ export function WorktreeProvider({children}: WorktreeProviderProps) {
     runInteractive('tmux', ['attach-session', '-t', sessionName]);
     return 'success';
   }, [tmuxService]);
+
 
 
   const selectWorktree = useCallback((index: number) => {
@@ -584,6 +586,7 @@ export function WorktreeProvider({children}: WorktreeProviderProps) {
     attachSession,
     attachShellSession,
     attachRunSession,
+    
     
     // Projects
     discoverProjects,
