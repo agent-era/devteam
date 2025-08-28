@@ -23,6 +23,7 @@ export default function ArchiveConfirmScreen({
   onSuccess
 }: ArchiveConfirmScreenProps) {
   const {archiveFeature} = useWorktreeContext();
+  const {isRawModeSupported} = useStdin();
 
   const handleConfirm = async () => {
     try {

@@ -42,20 +42,20 @@ interface WorktreeContextType {
   getSelectedWorktree: () => WorktreeInfo | null;
   
   // Data operations
-  refresh: () => void;
+  refresh: () => Promise<void>;
   refreshSelected: () => void;
   
   // Worktree operations
   createFeature: (projectName: string, featureName: string) => Promise<WorktreeInfo | null>;
   createFromBranch: (project: string, remoteBranch: string, localName: string) => Promise<boolean>;
-  archiveFeature: (worktreeOrProject: WorktreeInfo | string, worktreePath?: string, feature?: string) => Promise<{archivedPath: string}>;
+  archiveFeature: (worktreeOrProject: WorktreeInfo | string, path?: string, feature?: string) => Promise<{archivedPath: string}>;
+  refreshPRSelective: () => Promise<void>;
   deleteArchived: (archivedPath: string) => Promise<boolean>;
   
   // Session operations  
   attachSession: (worktree: WorktreeInfo) => void;
   attachShellSession: (worktree: WorktreeInfo) => void;
   attachRunSession: (worktree: WorktreeInfo) => 'success' | 'no_config';
-  
   
   
   // Projects
@@ -71,9 +71,17 @@ const WorktreeContext = createContext<WorktreeContextType | null>(null);
 
 interface WorktreeProviderProps {
   children: ReactNode;
+  getPRStatus?: (path: string) => any;
+  setVisibleWorktrees?: (paths: string[]) => void;
+  refreshPRStatus?: (worktrees: any[], visibleOnly?: boolean) => Promise<void>;
 }
 
-export function WorktreeProvider({children}: WorktreeProviderProps) {
+export function WorktreeProvider({
+  children, 
+  getPRStatus, 
+  setVisibleWorktrees, 
+  refreshPRStatus
+}: WorktreeProviderProps) {
   const [worktrees, setWorktrees] = useState<WorktreeInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [lastRefreshed, setLastRefreshed] = useState(0);
@@ -104,7 +112,7 @@ export function WorktreeProvider({children}: WorktreeProviderProps) {
     feature: string; 
     path: string; 
     branch: string
-  }>): WorktreeInfo[] => {
+  }>, getPRStatus?: (path: string) => any): WorktreeInfo[] => {
     return list.map((w: any) => {
       const gitStatus = gitService.getGitStatus(w.path);
       const sessionName = tmuxService.sessionName(w.project, w.feature);
@@ -117,6 +125,9 @@ export function WorktreeProvider({children}: WorktreeProviderProps) {
         attached,
         claude_status: claudeStatus
       });
+
+      // Get PR status if available
+      const prStatus = getPRStatus ? getPRStatus(w.path) : undefined;
       
       return new WorktreeInfo({
         project: w.project,
@@ -125,26 +136,38 @@ export function WorktreeProvider({children}: WorktreeProviderProps) {
         branch: w.branch,
         git: gitStatus,
         session: sessionInfo,
+        pr: prStatus,
         mtime: w.mtime || 0,
       });
     });
   }, [gitService, tmuxService]);
 
-  const refresh = useCallback(() => {
+  const refresh = useCallback(async () => {
     if (loading) return;
     setLoading(true);
     
     try {
       const rawList = collectWorktrees();
-      const enrichedList = attachRuntimeData(rawList);
+      const enrichedList = attachRuntimeData(rawList, getPRStatus);
       setWorktrees(enrichedList);
       setLastRefreshed(Date.now());
+      
+      // Signal visible worktrees to GitHub context for selective refresh
+      if (setVisibleWorktrees) {
+        const visiblePaths = enrichedList.map(wt => wt.path);
+        setVisibleWorktrees(visiblePaths);
+      }
+      
+      // Refresh PR status for all worktrees (will use cache if available)
+      if (refreshPRStatus) {
+        await refreshPRStatus(enrichedList, false);
+      }
     } catch (error) {
       console.error('Failed to refresh worktrees:', error);
     } finally {
       setLoading(false);
     }
-  }, [loading, collectWorktrees, attachRuntimeData]);
+  }, [loading, collectWorktrees, attachRuntimeData, getPRStatus, setVisibleWorktrees, refreshPRStatus]);
 
   const refreshSelected = useCallback(() => {
     const selected = worktrees[selectedIndex];
@@ -173,6 +196,25 @@ export function WorktreeProvider({children}: WorktreeProviderProps) {
       console.error('Failed to refresh selected worktree:', error);
     }
   }, [worktrees, selectedIndex, gitService, tmuxService]);
+
+  const refreshPRSelective = useCallback(async () => {
+    if (!refreshPRStatus) return;
+    
+    try {
+      // Refresh PR status for visible worktrees only
+      await refreshPRStatus(worktrees, true);
+      
+      // Update worktrees with fresh PR data
+      const updatedWorktrees = worktrees.map(wt => ({
+        ...wt,
+        pr: getPRStatus ? getPRStatus(wt.path) : wt.pr
+      }));
+      
+      setWorktrees(updatedWorktrees);
+    } catch (error) {
+      console.error('Failed to refresh PR status:', error);
+    }
+  }, [worktrees, refreshPRStatus, getPRStatus]);
 
   // Operations
   const createFeature = useCallback(async (projectName: string, featureName: string): Promise<WorktreeInfo | null> => {
@@ -215,7 +257,7 @@ export function WorktreeProvider({children}: WorktreeProviderProps) {
     }
   }, [gitService, refresh]);
 
-  const archiveFeature = useCallback(async (worktreeOrProject: WorktreeInfo | string, worktreePath?: string, feature?: string): Promise<{archivedPath: string}> => {
+  const archiveFeature = useCallback(async (worktreeOrProject: WorktreeInfo | string, path?: string, feature?: string): Promise<{archivedPath: string}> => {
     setLoading(true);
     try {
       let project: string, workPath: string, featureName: string;
@@ -223,7 +265,7 @@ export function WorktreeProvider({children}: WorktreeProviderProps) {
       if (typeof worktreeOrProject === 'string') {
         // Called with (project, path, feature) format
         project = worktreeOrProject;
-        workPath = worktreePath!;
+        workPath = path!;
         featureName = feature!;
       } else {
         // Called with WorktreeInfo object
@@ -303,7 +345,6 @@ export function WorktreeProvider({children}: WorktreeProviderProps) {
     runInteractive('tmux', ['attach-session', '-t', sessionName]);
     return 'success';
   }, [tmuxService]);
-
 
 
   const selectWorktree = useCallback((index: number) => {
@@ -575,6 +616,7 @@ export function WorktreeProvider({children}: WorktreeProviderProps) {
     // Data operations
     refresh,
     refreshSelected,
+    refreshPRSelective,
     
     // Worktree operations
     createFeature,
@@ -586,7 +628,6 @@ export function WorktreeProvider({children}: WorktreeProviderProps) {
     attachSession,
     attachShellSession,
     attachRunSession,
-    
     
     // Projects
     discoverProjects,
