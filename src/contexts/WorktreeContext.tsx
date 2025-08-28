@@ -1,7 +1,7 @@
 import React, {createContext, useContext, useState, useCallback, useEffect, ReactNode, useMemo} from 'react';
 import path from 'node:path';
 import fs from 'node:fs';
-import {WorktreeInfo, GitStatus, SessionInfo, ProjectInfo} from '../models.js';
+import {WorktreeInfo, GitStatus, SessionInfo, ProjectInfo, PRStatus} from '../models.js';
 import {GitService} from '../services/GitService.js';
 import {TmuxService} from '../services/TmuxService.js';
 import {
@@ -72,7 +72,7 @@ const WorktreeContext = createContext<WorktreeContextType | null>(null);
 
 interface WorktreeProviderProps {
   children: ReactNode;
-  getPRStatus?: (path: string) => any;
+  getPRStatus?: (path: string) => PRStatus;
   setVisibleWorktrees?: (paths: string[]) => void;
   refreshPRStatus?: (worktrees: any[], visibleOnly?: boolean) => Promise<void>;
 }
@@ -127,8 +127,8 @@ export function WorktreeProvider({
         claude_status: claudeStatus
       });
 
-      // Get PR status if available
-      const prStatus = getPRStatus ? getPRStatus(w.path) : undefined;
+      // Get PR status if available, otherwise create with 'not_checked' status
+      const prStatus = getPRStatus ? getPRStatus(w.path) : new PRStatus({ loadingStatus: 'not_checked' });
       
       return new WorktreeInfo({
         project: w.project,
@@ -162,6 +162,13 @@ export function WorktreeProvider({
       // Refresh PR status for all worktrees (will use cache if available)
       if (refreshPRStatus) {
         await refreshPRStatus(enrichedList, false);
+        
+        // Update worktrees with fresh PR data after refresh completes
+        const updatedWorktrees = enrichedList.map(wt => new WorktreeInfo({
+          ...wt,
+          pr: getPRStatus ? getPRStatus(wt.path) : wt.pr
+        }));
+        setWorktrees(updatedWorktrees);
       }
     } catch (error) {
       console.error('Failed to refresh worktrees:', error);
@@ -206,7 +213,7 @@ export function WorktreeProvider({
       await refreshPRStatus(worktrees, true);
       
       // Update worktrees with fresh PR data
-      const updatedWorktrees = worktrees.map(wt => ({
+      const updatedWorktrees = worktrees.map(wt => new WorktreeInfo({
         ...wt,
         pr: getPRStatus ? getPRStatus(wt.path) : wt.pr
       }));
@@ -258,7 +265,7 @@ export function WorktreeProvider({
     }
   }, [gitService, refresh]);
 
-  const archiveFeature = useCallback(async (worktreeOrProject: WorktreeInfo | string, path?: string, feature?: string): Promise<{archivedPath: string}> => {
+  const archiveFeature = useCallback(async (worktreeOrProject: WorktreeInfo | string, worktreePath?: string, feature?: string): Promise<{archivedPath: string}> => {
     setLoading(true);
     try {
       let project: string, workPath: string, featureName: string;
@@ -266,7 +273,7 @@ export function WorktreeProvider({
       if (typeof worktreeOrProject === 'string') {
         // Called with (project, path, feature) format
         project = worktreeOrProject;
-        workPath = path!;
+        workPath = worktreePath!;
         featureName = feature!;
       } else {
         // Called with WorktreeInfo object
@@ -585,10 +592,10 @@ export function WorktreeProvider({
   // Auto-refresh intervals
   useEffect(() => {
     const shouldRefresh = Date.now() - lastRefreshed > CACHE_DURATION;
-    if (shouldRefresh && worktrees.length === 0) {
+    if (shouldRefresh) {
       refresh();
     }
-  }, [lastRefreshed, worktrees.length, refresh]);
+  }, [lastRefreshed, refresh]);
 
   useEffect(() => {
     const interval = setInterval(() => {

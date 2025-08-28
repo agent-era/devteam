@@ -18,8 +18,8 @@ export class GitHubService {
       
       // Add branch filtering if specified
       if (branches && branches.length > 0) {
-        // Use search with head: filter for specific branches
-        const searchQuery = branches.map(branch => `head:${branch}`).join(' OR ');
+        // Use search with head: filter for specific branches (spaces act as implicit OR)
+        const searchQuery = branches.map(branch => `head:${branch}`).join(' ');
         args = ['gh', 'pr', 'list', '--search', searchQuery, '--state', 'all', '--json', fields.join(','), '--limit', '200'];
       }
       
@@ -69,8 +69,8 @@ export class GitHubService {
       
       // Add branch filtering if specified
       if (branches && branches.length > 0) {
-        // Use search with head: filter for specific branches
-        const searchQuery = branches.map(branch => `head:${branch}`).join(' OR ');
+        // Use search with head: filter for specific branches (spaces act as implicit OR)
+        const searchQuery = branches.map(branch => `head:${branch}`).join(' ');
         args = ['gh', 'pr', 'list', '--search', searchQuery, '--state', 'all', '--json', fields.join(','), '--limit', '200'];
       }
       
@@ -113,7 +113,6 @@ export class GitHubService {
       if (!group.length) continue;
       
       const repoPath = group[0].path;
-      for (const wt of group) result[wt.path] = new PRStatus();
       
       // Get branch mapping first to know which branches to filter for
       const pathToBranch = this.getWorktreeBranchMapping(repoPath);
@@ -145,23 +144,41 @@ export class GitHubService {
       if (!group.length) continue;
       
       const repoPath = group[0].path;
-      for (const wt of group) result[wt.path] = new PRStatus();
       
-      // Get branch mapping first to know which branches to filter for
-      const pathToBranch = await this.getWorktreeBranchMappingAsync(repoPath);
-      const branches = Object.values(pathToBranch).filter(Boolean);
-      
-      // Only fetch PRs for the branches we actually need
-      const prByBranch = await this.batchFetchPRDataAsync(repoPath, {
-        includeChecks: true, 
-        includeTitle: true,
-        branches: branches.length > 0 ? branches : undefined
-      });
-      
-      for (const wt of group) {
-        const branch = pathToBranch[wt.path];
-        if (branch && prByBranch[branch]) {
-          result[wt.path] = prByBranch[branch];
+      try {
+        // Get branch mapping first to know which branches to filter for
+        const pathToBranch = await this.getWorktreeBranchMappingAsync(repoPath);
+        const branches = Object.values(pathToBranch).filter(Boolean);
+        
+        // Only fetch PRs for the branches we actually need
+        const prByBranch = await this.batchFetchPRDataAsync(repoPath, {
+          includeChecks: true, 
+          includeTitle: true,
+          branches: branches.length > 0 ? branches : undefined
+        });
+        
+        // Set status for each worktree based on results
+        for (const wt of group) {
+          const branch = pathToBranch[wt.path];
+          if (branch && prByBranch[branch]) {
+            // PR exists - set status to 'exists' and copy PR data
+            result[wt.path] = new PRStatus({
+              ...prByBranch[branch],
+              loadingStatus: 'exists'
+            });
+          } else {
+            // No PR for this branch - set status to 'no_pr'
+            result[wt.path] = new PRStatus({ 
+              loadingStatus: 'no_pr' 
+            });
+          }
+        }
+      } catch (error) {
+        // API call failed - mark all worktrees in this group as error
+        for (const wt of group) {
+          result[wt.path] = new PRStatus({ 
+            loadingStatus: 'error' 
+          });
         }
       }
     }

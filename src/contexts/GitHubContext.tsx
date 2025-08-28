@@ -3,6 +3,7 @@ import {PRStatus, WorktreeInfo} from '../models.js';
 import {GitHubService} from '../services/GitHubService.js';
 import {PRStatusCacheService} from '../services/PRStatusCacheService.js';
 import {PR_REFRESH_DURATION} from '../constants.js';
+import {logError} from '../shared/utils/logger.js';
 
 const h = React.createElement;
 
@@ -15,7 +16,7 @@ interface GitHubContextType {
   // Operations
   refreshPRStatus: (worktrees: WorktreeInfo[], visibleOnly?: boolean) => Promise<void>;
   refreshPRForWorktree: (worktreePath: string) => Promise<PRStatus | null>;
-  getPRStatus: (worktreePath: string) => PRStatus | null;
+  getPRStatus: (worktreePath: string) => PRStatus;
   setVisibleWorktrees: (worktreePaths: string[]) => void;
   
   // GitHub operations
@@ -139,16 +140,39 @@ export function GitHubProvider({children}: GitHubProviderProps) {
     try {
       const prStatusMap = await gitHubService.batchGetPRStatusForWorktreesAsync(worktreesToRefresh, true);
       
-      // Update cache and state
+      // Only cache and update state for successful responses
       const newPRs: Record<string, PRStatus> = {};
+      const successfulPaths: string[] = [];
+      const errorPaths: string[] = [];
+      
       for (const [path, prStatus] of Object.entries(prStatusMap)) {
-        cacheService.set(path, prStatus);
-        newPRs[path] = prStatus;
+        if (prStatus.loadingStatus === 'error') {
+          // Don't cache error states, just update in-memory state
+          newPRs[path] = prStatus;
+          errorPaths.push(path);
+        } else {
+          // Cache successful responses (exists, no_pr)
+          cacheService.set(path, prStatus);
+          newPRs[path] = prStatus;
+          successfulPaths.push(path);
+        }
       }
       
       setPullRequests(prev => ({...prev, ...newPRs}));
       setLastUpdated(Date.now());
+      
+      if (errorPaths.length > 0) {
+        logError('PR status API errors occurred', {
+          errorPaths,
+          successfulPaths: successfulPaths.length,
+          totalPaths: Object.keys(prStatusMap).length
+        });
+      }
     } catch (error) {
+      logError('Failed to refresh PR status', { 
+        error: error instanceof Error ? error.message : String(error),
+        worktreePaths: worktreesToRefresh.map(wt => wt.path)
+      });
       console.error('Failed to refresh PR status:', error);
     } finally {
       setLoading(false);
@@ -196,17 +220,23 @@ export function GitHubProvider({children}: GitHubProviderProps) {
     }
   }, [gitHubService, cacheService]);
 
-  const getPRStatus = useCallback((worktreePath: string): PRStatus | null => {
-    // First try memory, then cache
+  const getPRStatus = useCallback((worktreePath: string): PRStatus => {
+    // Always return a PRStatus object, never null/undefined
     let prStatus = pullRequests[worktreePath];
+    
     if (!prStatus) {
-      prStatus = cacheService.get(worktreePath);
-      if (prStatus) {
+      const cachedStatus = cacheService.get(worktreePath);
+      if (cachedStatus) {
         // Load from cache into memory
-        setPullRequests(prev => ({...prev, [worktreePath]: prStatus!}));
+        prStatus = cachedStatus;
+        setPullRequests(prev => ({...prev, [worktreePath]: cachedStatus}));
+      } else {
+        // Return "not_checked" status if nothing found
+        prStatus = new PRStatus({ loadingStatus: 'not_checked' });
       }
     }
-    return prStatus || null;
+    
+    return prStatus;
   }, [pullRequests, cacheService]);
 
   const setVisibleWorktreesCallback = useCallback((worktreePaths: string[]) => {

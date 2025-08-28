@@ -48,7 +48,16 @@ export class PRStatusCacheService {
     }
 
     // Reconstruct PRStatus with methods
-    return this.reconstructPRStatus(entry.data);
+    const prStatus = this.reconstructPRStatus(entry.data);
+    
+    // Safety check: don't return cached entries with invalid loadingStatus
+    if (prStatus.loadingStatus === 'not_checked' || prStatus.loadingStatus === 'loading') {
+      delete this.cache[worktreePath];
+      this.saveToDisk();
+      return null;
+    }
+
+    return prStatus;
   }
 
   /**
@@ -56,6 +65,12 @@ export class PRStatusCacheService {
    */
   set(worktreePath: string, prStatus: PRStatus): void {
     const ttl = this.getTTL(prStatus);
+    
+    // Don't cache states that have TTL = 0
+    if (ttl === 0) {
+      return;
+    }
+    
     const commitHash = this.getCurrentCommitHash(worktreePath);
 
     this.cache[worktreePath] = {
@@ -152,29 +167,47 @@ export class PRStatusCacheService {
   // Private methods
 
   private getTTL(prStatus: PRStatus): number {
-    // Dynamic TTL based on PR state
-    if (prStatus.is_merged) {
-      // Merged PRs never change - cache indefinitely (1 year)
-      return 365 * 24 * 60 * 60 * 1000;
-    }
+    // Dynamic TTL based on loading status first, then PR state
+    switch (prStatus.loadingStatus) {
+      case 'not_checked':
+      case 'loading':
+        return 0;  // Don't cache these states
+        
+      case 'no_pr':
+        return 30 * 1000;  // 30 seconds for no PR
+        
+      case 'error':
+        return 60 * 1000;  // 1 minute for errors
+        
+      case 'exists':
+        // For existing PRs, use dynamic TTL based on PR state
+        if (prStatus.is_merged) {
+          // Merged PRs never change - cache indefinitely (1 year)
+          return 365 * 24 * 60 * 60 * 1000;
+        }
 
-    if (prStatus.checks === 'failing') {
-      // Failing checks might be fixed quickly
-      return 2 * 60 * 1000; // 2 minutes
-    }
+        if (prStatus.checks === 'failing') {
+          // Failing checks might be fixed quickly
+          return 2 * 60 * 1000; // 2 minutes
+        }
 
-    if (prStatus.state === 'OPEN') {
-      // Open PRs change moderately
-      return 5 * 60 * 1000; // 5 minutes
-    }
+        if (prStatus.state === 'OPEN') {
+          // Open PRs change moderately
+          return 5 * 60 * 1000; // 5 minutes
+        }
 
-    if (prStatus.state === 'CLOSED') {
-      // Closed PRs rarely change
-      return 60 * 60 * 1000; // 1 hour
-    }
+        if (prStatus.state === 'CLOSED') {
+          // Closed PRs rarely change
+          return 60 * 60 * 1000; // 1 hour
+        }
 
-    // No PR or unknown state
-    return 10 * 60 * 1000; // 10 minutes
+        // Unknown PR state - moderate TTL
+        return 10 * 60 * 1000; // 10 minutes
+        
+      default:
+        // Fallback for unknown loading status
+        return 5 * 60 * 1000; // 5 minutes
+    }
   }
 
   private getCurrentCommitHash(worktreePath: string): string | undefined {
@@ -193,6 +226,7 @@ export class PRStatusCacheService {
   private serializePRStatus(prStatus: PRStatus): any {
     // Extract all properties for JSON serialization
     return {
+      loadingStatus: prStatus.loadingStatus,
       number: prStatus.number,
       state: prStatus.state,
       checks: prStatus.checks,
