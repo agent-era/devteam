@@ -89,8 +89,17 @@ function generateMockOutput(uiMode: string = 'list', viewData: any = {}): string
     case 'confirmArchive':
       return generateArchiveConfirmOutput(viewData);
     case 'pickProjectForBranch':
+      return generateProjectPickerOutput(viewData);
     case 'pickBranch':
-      return generatePickerOutput(viewData);
+      return generateBranchPickerOutput(viewData);
+    case 'runConfig':
+      return generateRunConfigOutput(viewData);
+    case 'runProgress':
+      return generateRunProgressOutput(viewData);
+    case 'runResults':
+      return generateRunResultsOutput(viewData);
+    case 'commentInput':
+      return generateCommentInputOutput(viewData);
     default:
       return generateMainListOutput();
   }
@@ -145,9 +154,11 @@ function generateMainListOutput(): string {
     // PR status
     let prStr = '-';
     if (prStatus?.number) {
-      prStr = `#${prStatus.number}`;
+      prStr = `${prStatus.number}`; // Just the number, no # prefix for cleaner display
       if (prStatus.checks === 'failing') prStr += '✗';
       else if (prStatus.checks === 'passing') prStr += '✓';
+      else if (prStatus.checks === 'pending') prStr += '⏳';
+      if (prStatus.is_merged || prStatus.state === 'MERGED') prStr += '⟫';
     }
     
     output += `${displayName} ${aiSymbol}   ${diffStr.padEnd(8)} ${changes.padEnd(8)} ${pushed}       ${prStr}\n`;
@@ -158,7 +169,30 @@ function generateMainListOutput(): string {
 }
 
 function generateHelpOutput(): string {
-  return `Help\n\nKeyboard Shortcuts:\nj/k - Navigate up/down\nn - Create new feature\na - Archive selected feature\n? - Toggle this help\nv - View archived features\nd - View diff\nD - View uncommitted changes\nr - Refresh\nq - Quit\n\nPress ESC to close this help.`;
+  return `Help
+
+Keyboard Shortcuts:
+j/k - Navigate up/down
+Enter - Select/confirm action  
+n - Create new feature
+a - Archive selected feature
+? - Toggle this help
+v - View archived features
+d - View diff
+D - View uncommitted changes
+x - Execute run configuration
+X - Configure run settings
+r - Refresh
+q - Quit
+
+Column Explanations:
+AI - Claude AI status (●=working, ◐=waiting, ○=idle)
+DIFF - Added/removed lines (+10/-5)
+CHANGES - Commits ahead/behind (↑2 ↓1)  
+PUSHED - Whether changes are pushed (✓/○)
+PR - Pull request number and status
+
+Press ESC to close this help.`;
 }
 
 function generateArchivedOutput(): string {
@@ -170,7 +204,18 @@ function generateArchivedOutput(): string {
   let output = 'Archived Features\n\n';
   for (const [project, worktrees] of archived) {
     for (const worktree of worktrees) {
-      output += `${project}/${worktree.feature}\n`;
+      let line = `${project}/${worktree.feature}`;
+      
+      // Add PR information if available
+      if (worktree.pr && worktree.pr.number) {
+        line += ` (PR #${worktree.pr.number}`;
+        if (worktree.pr.state) {
+          line += ` - ${worktree.pr.state}`;
+        }
+        line += ')';
+      }
+      
+      output += line + '\n';
     }
   }
   output += '\nPress ESC to go back.';
@@ -179,29 +224,197 @@ function generateArchivedOutput(): string {
 
 function generateDiffOutput(viewData: any): string {
   const title = viewData.title || 'Diff Viewer';
-  return `${title}\n\n📁 src/example.ts\n  ▼ function example() {\n+ Added new line\n- Removed old line\n  Context line\n\nPress ESC to close.`;
+  
+  // Handle large diffs with navigation
+  if (title.includes('Large')) {
+    return `${title}
+
+📁 src/example.ts
+  ▼ 
+Line 1 added: function newFeature() {
+Line 2 added:   return 'implemented';
+Line 3 added: }
+Line 10 modified: - return 'Old content';
+Line 10 modified: + return 'New content';
+
+📁 src/another-file.ts
+  ▼ 
+Line 5 added: const newVariable = 'value';
+Line 12 removed: // Old comment
+
+Press j/k to navigate, ESC to close.`;
+  }
+  
+  // Generate realistic diff output based on mock git diff data
+  return `${title}
+
+📁 src/example.ts
+  ▼ 
+// Added new function
+function newFeature() {
+  return 'implemented';
+}
+
+export default function existing() {
+- return 'Old content';
++ return 'New content';
+}
+
+Press ESC to close.`;
 }
 
 function generateCreateFeatureOutput(viewData: any): string {
-  return `Create Feature\n\nSelect Project:\n> ${viewData.project || 'project-1'}\n\nFeature Name: ${viewData.featureName || ''}\n\nPress ENTER to create, ESC to cancel.`;
+  const projects = viewData.projects || [];
+  let output = 'Create Feature\n\nSelect Project:\n';
+  
+  if (projects.length > 0) {
+    for (const project of projects) {
+      const name = typeof project === 'string' ? project : project.name;
+      const isSelected = name === viewData.defaultProject;
+      output += `${isSelected ? '>' : ' '} ${name}\n`;
+    }
+  }
+  
+  output += `\nFeature Name: ${viewData.featureName || ''}\n`;
+  if (viewData.validationError) {
+    output += `\nError: ${viewData.validationError}\n`;
+  }
+  output += '\nPress ENTER to create, ESC to cancel.';
+  return output;
 }
 
 function generateArchiveConfirmOutput(viewData: any): string {
+  const project = viewData.project || 'project';
   const feature = viewData.feature || 'unknown';
-  return `Archive Feature\n\nAre you sure you want to archive ${feature}?\n\n[y] Yes  [n] No\n\nPress y to confirm, n to cancel.`;
+  let output = `Archive Feature\n\nAre you sure you want to archive ${project}/${feature}?\n\n`;
+  
+  // Add session cleanup warning if there's an active session
+  if (viewData.hasActiveSession) {
+    output += `Warning: This will also cleanup the active session.\n\n`;
+  }
+  
+  output += `[y] Yes  [n] No\n\nPress y to confirm, n to cancel.`;
+  return output;
 }
 
-function generatePickerOutput(viewData: any): string {
-  const items = viewData.items || [];
-  let output = viewData.title || 'Select Item';
-  output += '\n\n';
+function generateProjectPickerOutput(viewData: any): string {
+  const projects = viewData.items || viewData.projects || [];
+  let output = 'Select Project\n\n';
   
-  for (let i = 0; i < items.length; i++) {
-    const prefix = i === (viewData.selectedIndex || 0) ? '>' : ' ';
-    output += `${prefix} ${items[i]}\n`;
+  for (let i = 0; i < projects.length; i++) {
+    const project = projects[i];
+    const name = typeof project === 'string' ? project : project.name;
+    const isSelected = i === (viewData.selectedIndex || 0) || name === viewData.defaultProject;
+    output += `${isSelected ? '>' : ' '} ${name}\n`;
   }
   
   output += '\nUse j/k to navigate, ENTER to select, ESC to cancel.';
+  return output;
+}
+
+function generateBranchPickerOutput(viewData: any): string {
+  const branches = viewData.items || viewData.branches || [];
+  let output = 'Select Branch\n\n';
+  
+  for (let i = 0; i < branches.length; i++) {
+    const branch = branches[i];
+    const name = typeof branch === 'string' ? branch : branch.name;
+    const isSelected = i === (viewData.selectedIndex || 0);
+    const prefix = isSelected ? '>' : ' ';
+    
+    output += `${prefix} ${name}`;
+    if (branch.prNumber) {
+      output += ` (#${branch.prNumber})`;
+    }
+    if (branch.prTitle) {
+      output += ` - ${branch.prTitle}`;
+    }
+    output += '\n';
+  }
+  
+  output += '\nUse j/k to navigate, ENTER to select, ESC to cancel.';
+  return output;
+}
+
+function generateRunConfigOutput(viewData: any): string {
+  const project = viewData.project || 'project';
+  const configPath = viewData.configPath || '.claude/run.json';
+  
+  return `Run Configuration
+
+Project: ${project}
+Config Path: ${configPath}
+
+Claude will analyze your project and generate a run configuration.
+
+Press ENTER to generate config, ESC to cancel.`;
+}
+
+function generateRunProgressOutput(viewData: any): string {
+  const project = viewData.project || 'project';
+  const title = viewData.title || 'Generating Run Configuration';
+  
+  // Handle different progress types
+  if (viewData.message && viewData.message.includes('Please wait while')) {
+    return `Processing
+
+${viewData.message || 'Please wait while the operation completes...'}
+
+Project: ${project}
+
+Please wait...`;
+  }
+  
+  return `${title}
+
+${viewData.message || 'Claude is analyzing your project and generating run configuration...'}
+
+Project: ${project}
+
+Please wait...`;
+}
+
+function generateRunResultsOutput(viewData: any): string {
+  const result = viewData.result || {};
+  
+  if (result.success) {
+    return `Success
+
+Configuration generated successfully!
+
+Content: ${result.content || 'Configuration created'}
+Path: ${result.path || '.claude/run.json'}
+
+Press ENTER to close and execute, ESC to close.`;
+  } else {
+    return `Error
+
+Failed to generate configuration.
+
+Error: ${result.error || 'Unknown error occurred'}
+Path: ${result.path || '.claude/run.json'}
+
+Press ESC to close.`;
+  }
+}
+
+function generateCommentInputOutput(viewData: any): string {
+  const fileName = viewData.fileName || 'file.ts';
+  const lineIndex = viewData.lineIndex || 1;
+  const lineText = viewData.lineText || 'code line';
+  
+  let output = `Add Comment
+
+File: ${fileName}
+Line ${lineIndex}: ${lineText}
+
+Comment: ${viewData.commentText || ''}`;
+
+  if (viewData.validationError) {
+    output += `\nError: ${viewData.validationError}`;
+  }
+  
+  output += '\n\nPress ENTER to submit, ESC to cancel.';
   return output;
 }
 

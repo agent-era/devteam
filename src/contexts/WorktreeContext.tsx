@@ -281,7 +281,6 @@ export function WorktreeProvider({
       console.error('Failed to refresh PR status:', error);
     }
   }, [worktrees, refreshPRStatus, getPRStatus]);
-
   // Operations
   const createFeature = useCallback(async (projectName: string, featureName: string): Promise<WorktreeInfo | null> => {
     setLoading(true);
@@ -532,7 +531,6 @@ export function WorktreeProvider({
     return sessionName;
   }, [tmuxService]);
 
-
   const createShellSession = useCallback((project: string, feature: string, cwd: string): string => {
     const sessionName = tmuxService.shellSessionName(project, feature);
     const shell = process.env.SHELL || '/bin/bash';
@@ -668,7 +666,6 @@ export function WorktreeProvider({
       runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 'claude', 'C-m']);
     }
   }, []);
-
 
   // Auto-refresh intervals
   useEffect(() => {

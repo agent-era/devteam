@@ -61,7 +61,7 @@ describe('Fake Services Unit Tests', () => {
     test('should create and manage sessions', () => {
       const tmuxService = new FakeTmuxService();
       
-      const sessionName = tmuxService.createSession('test-project', 'test-feature', 'idle');
+      const sessionName = tmuxService.createSession('test-project', 'test-feature', 'idle')!;
       
       expect(sessionName).toBe('dev-test-project-test-feature');
       expect(tmuxService.hasSession(sessionName)).toBe(true);
@@ -71,7 +71,7 @@ describe('Fake Services Unit Tests', () => {
     test('should track Claude status', () => {
       const tmuxService = new FakeTmuxService();
       
-      const sessionName = tmuxService.createSession('project', 'feature', 'working');
+      const sessionName = tmuxService.createSession('project', 'feature', 'working')!;
       
       expect(tmuxService.getClaudeStatus(sessionName)).toBe('working');
       
@@ -83,7 +83,7 @@ describe('Fake Services Unit Tests', () => {
     test('should kill sessions', () => {
       const tmuxService = new FakeTmuxService();
       
-      const sessionName = tmuxService.createSession('project', 'feature');
+      const sessionName = tmuxService.createSession('project', 'feature')!;
       expect(tmuxService.hasSession(sessionName)).toBe(true);
       
       tmuxService.killSession(sessionName);
@@ -103,7 +103,7 @@ describe('Fake Services Unit Tests', () => {
       expect(worktreeCreated).toBe(true);
       
       // Create session
-      const sessionName = tmuxService.createSession('integration-test', 'test-feature', 'idle');
+      const sessionName = tmuxService.createSession('integration-test', 'test-feature', 'idle')!;
       expect(sessionName).toBe('dev-integration-test-test-feature');
       expect(tmuxService.hasSession(sessionName)).toBe(true);
       
