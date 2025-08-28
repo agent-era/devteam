@@ -35,7 +35,7 @@ describe('Worktree Management E2E', () => {
       expect(lastFrame()).toContain('n new');
 
       // Simulate creating a worktree using service layer (since UI simulation is mocked)
-      services.worktreeService.createFeature('my-project', 'new-feature');
+      services.gitService.createWorktree('my-project', 'new-feature');
       
       await simulateTimeDelay(50);
 
@@ -169,7 +169,7 @@ describe('Worktree Management E2E', () => {
 
       // Navigate down with 'j'
       stdin.write('j');
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await simulateTimeDelay(50);
 
       // Should highlight second item
       expect(lastFrame()).toContain('my-project/feature-2');
@@ -177,14 +177,14 @@ describe('Worktree Management E2E', () => {
       // Navigate down with arrow key
       const downArrow = simulateKeyPress('', {downArrow: true});
       stdin.write(downArrow.input);
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await simulateTimeDelay(50);
 
       // Should highlight third item
       expect(lastFrame()).toContain('my-project/feature-3');
 
       // Navigate up with 'k'
       stdin.write('k');
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await simulateTimeDelay(50);
 
       // Should be back to second item
       expect(lastFrame()).toContain('my-project/feature-2');
@@ -198,7 +198,7 @@ describe('Worktree Management E2E', () => {
 
       // Press '2' to select second item
       stdin.write('2');
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await simulateTimeDelay(50);
 
       // Should select second worktree (index 1)
       // The exact behavior depends on the app's selection logic

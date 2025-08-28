@@ -1,12 +1,19 @@
 import React, {useEffect, useMemo, useState} from 'react';
-import {Box, Text, useInput, useStdin, Static} from 'ink';
+import {Box, Text, useInput, useStdin} from 'ink';
 const h = React.createElement;
 import {runCommandAsync} from '../../utils.js';
 import {findBaseBranch} from '../../utils.js';
 import {useTerminalDimensions} from '../../hooks/useTerminalDimensions.js';
 import {BASE_BRANCH_CANDIDATES} from '../../constants.js';
+import {CommentStore} from '../../models.js';
+import {commentStoreManager} from '../../services/CommentStoreManager.js';
+import {TmuxService} from '../../services/TmuxService.js';
+import {runCommand} from '../../utils.js';
+import CommentInputDialog from '../dialogs/CommentInputDialog.js';
+import SessionWaitingDialog from '../dialogs/SessionWaitingDialog.js';
+import UnsubmittedCommentsDialog from '../dialogs/UnsubmittedCommentsDialog.js';
 
-type DiffLine = {type: 'added'|'removed'|'context'|'header'; text: string};
+type DiffLine = {type: 'added'|'removed'|'context'|'header'; text: string; fileName?: string};
 
 async function loadDiff(worktreePath: string, diffType: 'full' | 'uncommitted' = 'full'): Promise<DiffLine[]> {
   const lines: DiffLine[] = [];
@@ -28,48 +35,58 @@ async function loadDiff(worktreePath: string, diffType: 'full' | 'uncommitted' =
   
   if (!diff) return lines;
   const raw = diff.split('\n');
+  let currentFileName = '';
   for (const line of raw) {
     if (line.startsWith('diff --git')) {
       const parts = line.split(' ');
       const fp = parts[3]?.slice(2) || parts[2]?.slice(2) || '';
-      lines.push({type: 'header', text: `📁 ${fp}`});
+      currentFileName = fp;
+      lines.push({type: 'header', text: `📁 ${fp}`, fileName: fp});
     } else if (line.startsWith('@@')) {
       const ctx = line.replace(/^@@.*@@ ?/, '');
-      if (ctx) lines.push({type: 'header', text: `  ▼ ${ctx}`});
+      if (ctx) lines.push({type: 'header', text: `  ▼ ${ctx}`, fileName: currentFileName});
     } else if (line.startsWith('+') && !line.startsWith('+++')) {
-      lines.push({type: 'added', text: line.slice(1)});
+      lines.push({type: 'added', text: line.slice(1), fileName: currentFileName});
     } else if (line.startsWith('-') && !line.startsWith('---')) {
-      lines.push({type: 'removed', text: line.slice(1)});
+      lines.push({type: 'removed', text: line.slice(1), fileName: currentFileName});
     } else if (line.startsWith(' ')) {
-      lines.push({type: 'context', text: line.slice(1)});
+      lines.push({type: 'context', text: line.slice(1), fileName: currentFileName});
     } else if (line === '') {
-      lines.push({type: 'context', text: ' '}); // Empty line gets a space so cursor is visible
+      lines.push({type: 'context', text: ' ', fileName: currentFileName}); // Empty line gets a space so cursor is visible
     }
   }
   // Append untracked files
   const untracked = await runCommandAsync(['git', '-C', worktreePath, 'ls-files', '--others', '--exclude-standard']);
   if (untracked) {
     for (const fp of untracked.split('\n').filter(Boolean)) {
-      lines.push({type: 'header', text: `📁 ${fp} (new file)`});
+      lines.push({type: 'header', text: `📁 ${fp} (new file)`, fileName: fp});
       try {
         const cat = await runCommandAsync(['bash', '-lc', `cd ${JSON.stringify(worktreePath)} && sed -n '1,200p' ${JSON.stringify(fp)}`]);
-        for (const l of (cat || '').split('\n').filter(Boolean)) lines.push({type: 'added', text: l});
+        for (const l of (cat || '').split('\n').filter(Boolean)) lines.push({type: 'added', text: l, fileName: fp});
       } catch {}
     }
   }
   return lines;
 }
 
-type Props = {worktreePath: string; title?: string; onClose: () => void; diffType?: 'full' | 'uncommitted'};
+type Props = {worktreePath: string; title?: string; onClose: () => void; diffType?: 'full' | 'uncommitted'; onAttachToSession?: (sessionName: string) => void};
 
-export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, diffType = 'full'}: Props) {
-  const {isRawModeSupported} = useStdin();
+export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, diffType = 'full', onAttachToSession}: Props) {
   const {rows: terminalHeight, columns: terminalWidth} = useTerminalDimensions();
   const [lines, setLines] = useState<DiffLine[]>([]);
   const [pos, setPos] = useState(0);
   const [offset, setOffset] = useState(0);
   const [targetOffset, setTargetOffset] = useState(0);
   const [animationId, setAnimationId] = useState<NodeJS.Timeout | null>(null);
+  const [currentFileHeader, setCurrentFileHeader] = useState<string>('');
+  const [currentHunkHeader, setCurrentHunkHeader] = useState<string>('');
+  const commentStore = useMemo(() => commentStoreManager.getStore(worktreePath), [worktreePath]);
+  const [tmuxService] = useState(() => new TmuxService());
+  const [showCommentDialog, setShowCommentDialog] = useState(false);
+  const [showAllComments, setShowAllComments] = useState(true);
+  const [showSessionWaitingDialog, setShowSessionWaitingDialog] = useState(false);
+  const [sessionWaitingInfo, setSessionWaitingInfo] = useState<{sessionName: string}>({sessionName: ''});
+  const [showUnsubmittedCommentsDialog, setShowUnsubmittedCommentsDialog] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -82,8 +99,8 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     })();
   }, [worktreePath, diffType]);
 
-  // Calculate page size dynamically - reserve space for debug, title, and help
-  const pageSize = Math.max(1, terminalHeight - 3);
+  // Calculate page size dynamically - reserve space for title, help, and sticky headers
+  const pageSize = Math.max(1, terminalHeight - 4); // -1 title, -2 sticky headers, -1 help
 
   // Smooth scrolling animation
   useEffect(() => {
@@ -159,14 +176,48 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
   }, [animationId]);
 
   useInput((input, key) => {
-    if (!isRawModeSupported) return;
-    if (key.escape || input === 'q') return onClose();
+    // Don't handle inputs when any dialog is open
+    if (showCommentDialog || showSessionWaitingDialog || showUnsubmittedCommentsDialog) return;
+    
+    if (key.escape || input === 'q') {
+      // Check if there are unsaved comments
+      if (commentStore.count > 0) {
+        setShowUnsubmittedCommentsDialog(true);
+        return;
+      }
+      return onClose();
+    }
     if (key.upArrow || input === 'k') setPos((p) => Math.max(0, p - 1));
     if (key.downArrow || input === 'j') setPos((p) => Math.min(lines.length - 1, p + 1));
     if (key.pageUp || input === 'b') setPos((p) => Math.max(0, p - pageSize));
     if (key.pageDown || input === 'f' || input === ' ') setPos((p) => Math.min(lines.length - 1, p + pageSize));
     if (input === 'g') setPos(0);
     if (input === 'G') setPos(Math.max(0, lines.length - 1));
+    
+    // Comment functionality
+    if (input === 'c') {
+      const currentLine = lines[pos];
+      if (currentLine && currentLine.fileName && currentLine.type !== 'header') {
+        setShowCommentDialog(true);
+      }
+    }
+    
+    if (input === 'C') {
+      setShowAllComments(!showAllComments);
+    }
+    
+    if (input === 'd') {
+      const currentLine = lines[pos];
+      if (currentLine && currentLine.fileName) {
+        commentStore.removeComment(pos, currentLine.fileName);
+      }
+    }
+    
+    if (input === 'S') {
+      if (commentStore.count > 0) {
+        sendCommentsToTmux();
+      }
+    }
     
     // Left arrow: jump to previous chunk (▼ header)
     if (key.leftArrow) {
@@ -228,25 +279,346 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     }
   }, [pos, targetOffset, pageSize, lines.length]);
 
+  const formatCommentsAsPrompt = (comments: any[]): string => {
+    let prompt = "Please address the following code review comments:\\n\\n";
+    
+    const commentsByFile: {[key: string]: typeof comments} = {};
+    comments.forEach(comment => {
+      if (!commentsByFile[comment.fileName]) {
+        commentsByFile[comment.fileName] = [];
+      }
+      commentsByFile[comment.fileName].push(comment);
+    });
+
+    Object.entries(commentsByFile).forEach(([fileName, fileComments]) => {
+      prompt += `File: ${fileName}\\n`;
+      fileComments.forEach(comment => {
+        prompt += `  Line ${comment.lineIndex + 1}: ${comment.commentText}\\n`;
+      });
+      prompt += "\\n";
+    });
+    
+    return prompt;
+  };
+
+  const getLastTwoCommentLines = (comments: any[]): string[] => {
+    const lines: string[] = [];
+    
+    // Get the last comment's text and file info
+    if (comments.length > 0) {
+      const lastComment = comments[comments.length - 1];
+      lines.push(`  Line ${lastComment.lineIndex + 1}: ${lastComment.commentText}`);
+      lines.push(`File: ${lastComment.fileName}`);
+    }
+    
+    // If we have multiple comments, also include the second-to-last one
+    if (comments.length > 1) {
+      const secondLastComment = comments[comments.length - 2];
+      lines.push(`  Line ${secondLastComment.lineIndex + 1}: ${secondLastComment.commentText}`);
+    }
+    
+    return lines.filter(line => line.trim().length > 0);
+  };
+
+  const verifyCommentsReceived = (sessionName: string, comments: any[]): boolean => {
+    // Wait a brief moment for tmux to process the input
+    // This is synchronous in our case since runCommand is blocking
+    
+    // Capture the current pane content
+    const paneContent = tmuxService.capturePane(sessionName);
+    
+    if (!paneContent || paneContent.trim().length === 0) {
+      return false; // No content captured
+    }
+    
+    // Check if at least the last 2 lines we sent are visible
+    // (checking last 2 ensures we're not just seeing partial input)
+    const lastTwoLines = getLastTwoCommentLines(comments);
+    
+    if (lastTwoLines.length === 0) {
+      return false; // No lines to verify
+    }
+    
+    // At least one of the last two lines should be visible
+    let foundLines = 0;
+    for (const line of lastTwoLines) {
+      if (paneContent.includes(line.trim())) {
+        foundLines++;
+      }
+    }
+    
+    // Require at least one line to be found (being lenient for race conditions)
+    return foundLines > 0;
+  };
+
+  const sendCommentsViaAltEnter = (sessionName: string, comments: any[]) => {
+    // Format as lines and send with Alt+Enter (existing logic)
+    const messageLines: string[] = [];
+    messageLines.push("Please address the following code review comments:");
+    messageLines.push("");
+    
+    const commentsByFile: {[key: string]: typeof comments} = {};
+    comments.forEach(comment => {
+      if (!commentsByFile[comment.fileName]) {
+        commentsByFile[comment.fileName] = [];
+      }
+      commentsByFile[comment.fileName].push(comment);
+    });
+
+    Object.entries(commentsByFile).forEach(([fileName, fileComments]) => {
+      messageLines.push(`File: ${fileName}`);
+      fileComments.forEach(comment => {
+        messageLines.push(`  Line ${comment.lineIndex + 1}: ${comment.commentText}`);
+      });
+      messageLines.push("");
+    });
+    
+    messageLines.forEach((line) => {
+      runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, line]);
+      runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 'Escape', 'Enter']);
+    });
+  };
+
+  const sendCommentsToTmux = () => {
+    const comments = commentStore.getAllComments();
+    if (comments.length === 0) {
+      // No comments to send, just return
+      return;
+    }
+
+    try {
+      // Extract project and feature correctly from worktree path
+      // Path format: /base/path/project-branches/feature
+      const pathParts = worktreePath.split('/');
+      const feature = pathParts[pathParts.length - 1];
+      const projectWithBranches = pathParts[pathParts.length - 2];
+      const project = projectWithBranches.replace(/-branches$/, '');
+      
+      // Construct proper session name: dev-project-feature
+      const sessionName = tmuxService.sessionName(project, feature);
+      
+      // Check if session exists
+      const sessionExists = tmuxService.listSessions().includes(sessionName);
+      
+      if (sessionExists) {
+        // IMPORTANT: Refresh status right before checking
+        const claudeStatus = tmuxService.getClaudeStatus(sessionName);
+        
+        if (claudeStatus === 'waiting') {
+          // Claude is waiting for a response - can't accept new input
+          setSessionWaitingInfo({sessionName});
+          setShowSessionWaitingDialog(true);
+          return; // Don't send comments
+        }
+        
+        // For idle/working/thinking/not_running - we can proceed
+        if (claudeStatus === 'not_running') {
+          // Start Claude with the prompt pre-filled!
+          const commentPrompt = formatCommentsAsPrompt(comments);
+          runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 
+                     `claude ${JSON.stringify(commentPrompt)}`, 'C-m']);
+        } else {
+          // Claude is idle/working/active - can accept input via Alt+Enter
+          sendCommentsViaAltEnter(sessionName, comments);
+          
+          // Wait a brief moment for tmux to process the input
+          runCommand(['sleep', '0.5']);
+          
+          // VERIFY: Check if comments were actually received (handle race condition)
+          const received = verifyCommentsReceived(sessionName, comments);
+          
+          if (!received) {
+            // Race condition detected - Claude probably transitioned to waiting
+            // Keep comments and show dialog
+            setSessionWaitingInfo({sessionName});
+            setShowSessionWaitingDialog(true);
+            return; // Don't clear comments or attach
+          }
+        }
+      } else {
+        // No session - create and start Claude with pre-filled prompt
+        runCommand(['tmux', 'new-session', '-ds', sessionName, '-c', worktreePath]);
+        const hasClaude = runCommand(['bash', '-lc', 'command -v claude || true']).trim();
+        if (hasClaude) {
+          // Launch Claude with the comments as the initial prompt!
+          const commentPrompt = formatCommentsAsPrompt(comments);
+          runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 
+                     `claude ${JSON.stringify(commentPrompt)}`, 'C-m']);
+          
+          // For new sessions, we can assume the prompt was received
+          // since we're starting fresh with the prompt
+        }
+      }
+      
+      // Clear comments only after successful sending/verification
+      commentStore.clear();
+      
+      // Close DiffView and attach to session
+      onClose();
+      if (onAttachToSession) {
+        onAttachToSession(sessionName);
+      }
+      
+    } catch (error) {
+      // Log error but don't show dialog
+      console.error('Failed to send comments to tmux:', error);
+    }
+  };
+
+  const handleCommentSave = (commentText: string) => {
+    const currentLine = lines[pos];
+    if (currentLine && currentLine.fileName) {
+      commentStore.addComment(pos, currentLine.fileName, currentLine.text, commentText);
+    }
+    setShowCommentDialog(false);
+  };
+
+  const handleCommentCancel = () => {
+    setShowCommentDialog(false);
+  };
+
+  const handleSessionWaitingGoToSession = () => {
+    setShowSessionWaitingDialog(false);
+    // Close DiffView and attach to session
+    onClose();
+    if (onAttachToSession) {
+      onAttachToSession(sessionWaitingInfo.sessionName);
+    }
+  };
+
+  const handleSessionWaitingCancel = () => {
+    setShowSessionWaitingDialog(false);
+  };
+
+  const handleUnsubmittedCommentsSubmit = () => {
+    setShowUnsubmittedCommentsDialog(false);
+    sendCommentsToTmux();
+  };
+
+  const handleUnsubmittedCommentsExitWithoutSubmitting = () => {
+    setShowUnsubmittedCommentsDialog(false);
+    onClose();
+  };
+
+  const handleUnsubmittedCommentsCancel = () => {
+    setShowUnsubmittedCommentsDialog(false);
+  };
+
   // Truncate text to fit terminal width
   const truncateText = (text: string, maxWidth: number): string => {
     if (text.length <= maxWidth) return text;
     return text.substring(0, maxWidth - 3) + '...';
   };
 
+  // Update sticky headers based on scroll offset
+  useEffect(() => {
+    if (lines.length === 0) return;
+
+    let fileHeader = '';
+    let hunkHeader = '';
+    let fileHeaderIndex = -1;
+    let hunkHeaderIndex = -1;
+
+    // Search backwards from offset-1 to find headers that have scrolled off screen
+    for (let i = offset - 1; i >= 0; i--) {
+      const line = lines[i];
+      if (!line) continue;
+
+      // Find hunk header first (only if we haven't found the file yet)
+      if (hunkHeaderIndex === -1 && fileHeaderIndex === -1 && line.type === 'header' && line.text.includes('▼')) {
+        hunkHeader = line.text;
+        hunkHeaderIndex = i;
+      }
+
+      // Find file header
+      if (fileHeaderIndex === -1 && line.type === 'header' && line.text.startsWith('📁')) {
+        fileHeader = line.text;
+        fileHeaderIndex = i;
+        
+        // Clear hunk if it belongs to a different file
+        if (hunkHeaderIndex !== -1 && hunkHeaderIndex < fileHeaderIndex) {
+          hunkHeader = '';
+          hunkHeaderIndex = -1;
+        }
+        break; // Found file, we're done
+      }
+    }
+
+    // Only show headers that have actually scrolled off screen
+    const shouldShowFileHeader = fileHeaderIndex >= 0 && fileHeaderIndex < offset;
+    const shouldShowHunkHeader = hunkHeaderIndex >= 0 && hunkHeaderIndex < offset;
+
+    setCurrentFileHeader(shouldShowFileHeader ? fileHeader : '');
+    setCurrentHunkHeader(shouldShowHunkHeader ? hunkHeader : '');
+  }, [lines, offset]);
+
   const visible = useMemo(() => {
     return lines.slice(offset, offset + pageSize);
   }, [lines, offset, pageSize]);
 
+  // Create unsubmitted comments dialog if needed - render it instead of the main view when active
+  if (showUnsubmittedCommentsDialog) {
+    return h(
+      Box,
+      {flexDirection: 'column', height: terminalHeight, justifyContent: 'center', alignItems: 'center'},
+      h(UnsubmittedCommentsDialog, {
+        commentCount: commentStore.count,
+        onSubmit: handleUnsubmittedCommentsSubmit,
+        onExitWithoutSubmitting: handleUnsubmittedCommentsExitWithoutSubmitting,
+        onCancel: handleUnsubmittedCommentsCancel
+      })
+    );
+  }
+
+  // Create session waiting dialog if needed - render it instead of the main view when active
+  if (showSessionWaitingDialog) {
+    return h(
+      Box,
+      {flexDirection: 'column', height: terminalHeight, justifyContent: 'center', alignItems: 'center'},
+      h(SessionWaitingDialog, {
+        sessionName: sessionWaitingInfo.sessionName,
+        onGoToSession: handleSessionWaitingGoToSession,
+        onCancel: handleSessionWaitingCancel
+      })
+    );
+  }
+
+  // Create comment dialog if needed - render it instead of the main view when active
+  if (showCommentDialog) {
+    return h(
+      Box,
+      {flexDirection: 'column', height: terminalHeight, justifyContent: 'center', alignItems: 'center'},
+      h(CommentInputDialog, {
+        fileName: lines[pos]?.fileName || '',
+        lineText: lines[pos]?.text || '',
+        initialComment: lines[pos]?.fileName ? commentStore.getComment(pos, lines[pos].fileName)?.commentText || '' : '',
+        onSave: handleCommentSave,
+        onCancel: handleCommentCancel
+      })
+    );
+  }
+
   return h(
     Box,
     {flexDirection: 'column'},
-    h(Text, {color: 'yellow'}, `Terminal: ${terminalHeight}x${terminalWidth} | PageSize: ${pageSize} | Pos: ${pos}/${lines.length} | Offset: ${offset} | Visible: ${visible.length}`),
     h(Text, {bold: true}, title),
+    // Sticky headers
+    h(Text, {
+      color: 'cyan',
+      bold: true,
+      backgroundColor: 'gray'
+    }, currentFileHeader || ''),
+    h(Text, {
+      color: 'cyan',
+      bold: true,
+      backgroundColor: 'gray'
+    }, currentHunkHeader || ''),
     ...visible.map((l, idx) => {
       const actualLineIndex = offset + idx;
       const isCurrentLine = actualLineIndex === pos;
-      const displayText = truncateText(l.text || ' ', terminalWidth - 2); // -2 for padding
+      const hasComment = l.fileName && commentStore.hasComment(actualLineIndex, l.fileName);
+      const commentIndicator = hasComment ? '[C] ' : '';
+      const displayText = truncateText(commentIndicator + (l.text || ' '), terminalWidth - 2); // -2 for padding
       return h(Text, {
         key: idx,
         color: l.type === 'added' ? 'green' : l.type === 'removed' ? 'red' : l.type === 'header' ? 'cyan' : undefined,
@@ -254,7 +626,15 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
         bold: isCurrentLine
       }, displayText);
     }),
-    h(Text, {color: 'gray'}, 'j/k move  b/f PgUp/PgDn  g/G top/bottom  ←/→ chunk  Shift+←/→ file  q close')
+    showAllComments && commentStore.count > 0 ? h(
+      Box,
+      {flexDirection: 'column', borderStyle: 'single', borderColor: 'blue', padding: 1, marginTop: 1},
+      h(Text, {bold: true, color: 'blue'}, `All Comments (${commentStore.count}):`),
+      ...commentStore.getAllComments().map((comment, idx) => 
+        h(Text, {key: idx, color: 'gray'}, `${comment.fileName}:${comment.lineIndex} - ${comment.commentText}`)
+      )
+    ) : null,
+    h(Text, {color: 'gray'}, 'j/k move  c comment  C show all  d delete  S send to Claude  q close')
   );
 }
 

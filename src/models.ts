@@ -26,27 +26,55 @@ export class GitStatus {
   }
 }
 
+export type PRLoadingStatus = 
+  | 'not_checked'    // Initial state, no API call made yet
+  | 'loading'        // API call in progress
+  | 'no_pr'          // API checked, no PR exists for this branch
+  | 'exists'         // PR exists (use other fields for details)
+  | 'error';         // API call failed
+
 export class PRStatus {
+  loadingStatus: PRLoadingStatus;
   number?: number | null;
   state?: string | null; // OPEN, MERGED, CLOSED
   checks?: string | null; // passing, failing, pending
-  loading?: boolean;
   url?: string | null;
   head?: string | null;
   title?: string | null;
+  mergeable?: string | null; // MERGEABLE, CONFLICTING, UNKNOWN
   constructor(init: Partial<PRStatus> = {}) {
+    this.loadingStatus = 'not_checked';
     this.number = null;
     this.state = null;
     this.checks = null;
-    this.loading = false;
     this.url = null;
     this.title = null;
+    this.mergeable = null;
     Object.assign(this, init);
   }
+  
+  // Loading state helpers
+  get isLoading(): boolean { return this.loadingStatus === 'loading'; }
+  get hasError(): boolean { return this.loadingStatus === 'error'; }
+  get isNotChecked(): boolean { return this.loadingStatus === 'not_checked'; }
+  get exists(): boolean { return this.loadingStatus === 'exists'; }
+  get noPR(): boolean { return this.loadingStatus === 'no_pr'; }
+  
+  // PR state helpers
   get is_merged(): boolean { return this.state === 'MERGED'; }
   get is_open(): boolean { return this.state === 'OPEN'; }
-  get needs_attention(): boolean { return this.checks === 'failing'; }
-  get is_ready_to_merge(): boolean { return this.state === 'OPEN' && this.checks === 'passing' && !this.loading; }
+  get is_closed(): boolean { return this.state === 'CLOSED'; }
+  get has_conflicts(): boolean { return this.mergeable === 'CONFLICTING'; }
+  get is_mergeable(): boolean { return this.mergeable === 'MERGEABLE'; }
+  
+  // Status aggregation helpers
+  get needs_attention(): boolean { return this.checks === 'failing' || this.has_conflicts; }
+  get is_ready_to_merge(): boolean { 
+    return this.state === 'OPEN' && 
+           this.checks === 'passing' && 
+           this.mergeable === 'MERGEABLE' && 
+           !this.isLoading; 
+  }
 }
 
 export class SessionInfo {
@@ -72,6 +100,8 @@ export class WorktreeInfo {
   is_archived?: boolean;
   mtime?: number;
   last_commit_ts?: number;
+  idleStartTime?: number | null;
+  wasKilledIdle?: boolean;
   constructor(init: Partial<WorktreeInfo> = {}) {
     this.project = '';
     this.feature = '';
@@ -79,10 +109,11 @@ export class WorktreeInfo {
     this.branch = '';
     this.git = new GitStatus();
     this.session = new SessionInfo();
-    this.pr = new PRStatus();
     this.is_archived = false;
     this.mtime = 0;
     this.last_commit_ts = 0;
+    this.idleStartTime = null;
+    this.wasKilledIdle = false;
     Object.assign(this, init);
   }
 
@@ -121,6 +152,71 @@ export class ProjectInfo {
     this.name = '';
     this.path = '';
     Object.assign(this, init);
+  }
+}
+
+export class DiffComment {
+  lineIndex: number;
+  fileName: string;
+  lineText: string;
+  commentText: string;
+  timestamp: number;
+  constructor(init: Partial<DiffComment> = {}) {
+    this.lineIndex = 0;
+    this.fileName = '';
+    this.lineText = '';
+    this.commentText = '';
+    this.timestamp = Date.now();
+    Object.assign(this, init);
+  }
+}
+
+export class CommentStore {
+  comments: DiffComment[];
+  constructor() {
+    this.comments = [];
+  }
+  
+  addComment(lineIndex: number, fileName: string, lineText: string, commentText: string): DiffComment {
+    // Remove existing comment for this line if any
+    this.comments = this.comments.filter(c => c.lineIndex !== lineIndex || c.fileName !== fileName);
+    
+    const comment = new DiffComment({
+      lineIndex,
+      fileName,
+      lineText,
+      commentText,
+      timestamp: Date.now()
+    });
+    
+    this.comments.push(comment);
+    return comment;
+  }
+  
+  removeComment(lineIndex: number, fileName: string): boolean {
+    const initialLength = this.comments.length;
+    this.comments = this.comments.filter(c => !(c.lineIndex === lineIndex && c.fileName === fileName));
+    return this.comments.length < initialLength;
+  }
+  
+  getComment(lineIndex: number, fileName: string): DiffComment | undefined {
+    return this.comments.find(c => c.lineIndex === lineIndex && c.fileName === fileName);
+  }
+  
+  hasComment(lineIndex: number, fileName: string): boolean {
+    return this.comments.some(c => c.lineIndex === lineIndex && c.fileName === fileName);
+  }
+  
+  getAllComments(): DiffComment[] {
+    return [...this.comments].sort((a, b) => a.lineIndex - b.lineIndex);
+  }
+  
+  clear(): void {
+    this.comments = [];
+  }
+  
+  get count(): number {
+    return this.comments.length;
   }
 }
 

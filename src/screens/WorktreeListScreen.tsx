@@ -1,9 +1,7 @@
 import React from 'react';
 import {Box} from 'ink';
 import MainView from '../components/views/MainView.js';
-import {useWorktrees} from '../hooks/useWorktrees.js';
-import {useServices} from '../contexts/ServicesContext.js';
-import {useAppState} from '../contexts/AppStateContext.js';
+import {useWorktreeContext} from '../contexts/WorktreeContext.js';
 import {useKeyboardShortcuts} from '../hooks/useKeyboardShortcuts.js';
 
 const h = React.createElement;
@@ -31,29 +29,11 @@ export default function WorktreeListScreen({
   onExecuteRun,
   onConfigureRun
 }: WorktreeListScreenProps) {
-  const {worktrees, refreshWorktrees, selectedIndex, page, pageSize} = useWorktrees();
-  const {worktreeService} = useServices();
-  const {state, setState} = useAppState();
+  const {worktrees, selectedIndex, selectWorktree, refresh, attachSession, attachShellSession} = useWorktreeContext();
 
   const handleMove = (delta: number) => {
-    setState(s => {
-      if (!s.worktrees.length) return s;
-      
-      let nextIndex = s.selectedIndex + delta;
-      const totalItems = s.worktrees.length;
-      
-      // Clamp to valid range
-      nextIndex = Math.max(0, Math.min(totalItems - 1, nextIndex));
-      
-      // Calculate which page this index belongs to
-      const targetPage = Math.floor(nextIndex / s.pageSize);
-      
-      return {
-        ...s, 
-        selectedIndex: nextIndex,
-        page: targetPage
-      };
-    });
+    const nextIndex = Math.max(0, Math.min(worktrees.length - 1, selectedIndex + delta));
+    selectWorktree(nextIndex);
   };
 
   const handleSelect = () => {
@@ -61,14 +41,10 @@ export default function WorktreeListScreen({
     if (!selectedWorktree) return;
     
     try {
-      worktreeService.attachOrCreateSession(
-        selectedWorktree.project, 
-        selectedWorktree.feature, 
-        selectedWorktree.path
-      );
+      attachSession(selectedWorktree);
     } catch {}
     
-    refreshWorktrees();
+    refresh();
   };
 
   const handleShell = () => {
@@ -76,14 +52,10 @@ export default function WorktreeListScreen({
     if (!selectedWorktree) return;
     
     try {
-      worktreeService.attachOrCreateShellSession(
-        selectedWorktree.project,
-        selectedWorktree.feature,
-        selectedWorktree.path
-      );
+      attachShellSession(selectedWorktree);
     } catch {}
     
-    refreshWorktrees();
+    refresh();
   };
 
   const handleDiffFull = () => {
@@ -101,33 +73,18 @@ export default function WorktreeListScreen({
   };
 
   const handlePreviousPage = () => {
-    setState(st => {
-      if (!st.worktrees.length) return st;
-      
-      const totalPages = Math.ceil(st.worktrees.length / st.pageSize);
-      if (totalPages <= 1) return st;
-      
-      const prevPage = st.page === 0 ? totalPages - 1 : st.page - 1;
-      const startIndex = prevPage * st.pageSize;
-      const newIndex = Math.min(startIndex, st.worktrees.length - 1);
-      
-      return {...st, page: prevPage, selectedIndex: newIndex};
-    });
+    // Pagination is now handled by the MainView component
+    // This could be extended to support pagination in the future
   };
 
   const handleNextPage = () => {
-    setState(st => {
-      if (!st.worktrees.length) return st;
-      
-      const totalPages = Math.ceil(st.worktrees.length / st.pageSize);
-      if (totalPages <= 1) return st;
-      
-      const nextPage = (st.page + 1) % totalPages;
-      const startIndex = nextPage * st.pageSize;
-      const newIndex = Math.min(startIndex, st.worktrees.length - 1);
-      
-      return {...st, page: nextPage, selectedIndex: newIndex};
-    });
+    // Pagination is now handled by the MainView component  
+    // This could be extended to support pagination in the future
+  };
+
+  const handleRefresh = async () => {
+    // Full refresh: worktrees and PR status for visible items only
+    await refresh('visible');
   };
 
   const handleJumpToFirst = () => {
@@ -158,7 +115,7 @@ export default function WorktreeListScreen({
     onSelect: handleSelect,
     onCreate: onCreateFeature,
     onArchive: onArchiveFeature,
-    onRefresh: refreshWorktrees,
+    onRefresh: handleRefresh,
     onViewArchived: onViewArchived,
     onHelp: onHelp,
     onBranch: onBranch,
@@ -173,8 +130,8 @@ export default function WorktreeListScreen({
     onExecuteRun: onExecuteRun,
     onConfigureRun: onConfigureRun
   }, {
-    page,
-    pageSize,
+    page: 0,
+    pageSize: 20,
     selectedIndex,
     totalItems: worktrees.length
   });
@@ -185,9 +142,7 @@ export default function WorktreeListScreen({
     onMove: handleMove,
     onSelect: handleSelect,
     onQuit,
-    mode: state.mode,
-    message: state.message,
-    page,
-    pageSize,
+    page: 0,
+    pageSize: 20,
   });
 }

@@ -7,6 +7,7 @@ import {
   setupTestGitStatus,
 } from '../fakes/stores.js';
 export {memoryStore, setupTestProject, setupTestWorktree} from '../fakes/stores.js';
+export * from './testDataFactories.js';
 import {WorktreeInfo, GitStatus, PRStatus} from '../../src/models.js';
 
 // Reset all test data before each test
@@ -172,7 +173,14 @@ export function getWorktreesFromMemory(project: string): WorktreeInfo[] {
 
 // Simulate time passing for refresh intervals
 export function simulateTimeDelay(ms: number = 0): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  if (jest.isMockFunction(setTimeout)) {
+    // Using fake timers - advance time and resolve immediately
+    jest.advanceTimersByTime(ms);
+    return Promise.resolve();
+  } else {
+    // Using real timers - actual delay
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
 }
 
 // Mock stdin input helper

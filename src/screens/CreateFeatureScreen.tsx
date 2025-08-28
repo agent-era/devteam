@@ -2,7 +2,7 @@ import React from 'react';
 import {Box} from 'ink';
 import CreateFeatureDialog from '../components/dialogs/CreateFeatureDialog.js';
 import FullScreen from '../components/common/FullScreen.js';
-import {useServices} from '../contexts/ServicesContext.js';
+import {useWorktreeContext} from '../contexts/WorktreeContext.js';
 
 const h = React.createElement;
 
@@ -19,11 +19,11 @@ export default function CreateFeatureScreen({
   onCancel,
   onSuccess
 }: CreateFeatureScreenProps) {
-  const {worktreeService} = useServices();
+  const {createFeature, attachSession} = useWorktreeContext();
 
   const handleSubmit = async (project: string, feature: string) => {
     try {
-      const result = worktreeService.createFeature(project, feature);
+      const result = await createFeature(project, feature);
       if (result) {
         // Auto-attach functionality from main
         onSuccess();
@@ -32,7 +32,7 @@ export default function CreateFeatureScreen({
         await new Promise(resolve => setTimeout(resolve, 100));
         
         // Auto-attach to the newly created session
-        worktreeService.attachOrCreateSession(result.project, result.feature, result.path);
+        attachSession(result);
       } else {
         onCancel();
       }

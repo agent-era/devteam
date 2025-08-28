@@ -1,7 +1,7 @@
 import React, {useState, useEffect} from 'react';
 import ArchivedView from '../components/views/ArchivedView.js';
 import FullScreen from '../components/common/FullScreen.js';
-import {useServices} from '../contexts/ServicesContext.js';
+import {useWorktreeContext} from '../contexts/WorktreeContext.js';
 
 const h = React.createElement;
 
@@ -10,15 +10,15 @@ interface ArchivedScreenProps {
 }
 
 export default function ArchivedScreen({onBack}: ArchivedScreenProps) {
-  const {gitService, worktreeService} = useServices();
+  const {discoverProjects, getArchivedForProject, deleteArchived} = useWorktreeContext();
   const [archivedItems, setArchivedItems] = useState<any[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
 
   const loadArchivedItems = () => {
-    const projects = gitService.discoverProjects();
+    const projects = discoverProjects();
     const items: any[] = [];
     for (const project of projects) {
-      items.push(...gitService.getArchivedForProject(project));
+      items.push(...getArchivedForProject(project));
     }
     setArchivedItems(items);
     setSelectedIndex(prevIndex => Math.min(Math.max(0, items.length - 1), prevIndex));
@@ -34,12 +34,12 @@ export default function ArchivedScreen({onBack}: ArchivedScreenProps) {
     );
   };
 
-  const handleDelete = (index: number) => {
+  const handleDelete = async (index: number) => {
     const item = archivedItems[index];
     if (!item) return;
     
     try {
-      const success = worktreeService.deleteArchived(item.path);
+      const success = await deleteArchived(item.path);
       if (success) {
         loadArchivedItems();
       }

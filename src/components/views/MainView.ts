@@ -92,7 +92,7 @@ export default function MainView(props: Props) {
       const pr = w.pr;
       let prStr = '';
       if (pr?.number) {
-        const badge = (pr.is_merged || pr.state === 'MERGED') ? '⟫' : pr.checks === 'passing' ? '✓' : pr?.checks === 'failing' ? '✗' : pr?.checks === 'pending' ? '⏳' : '';
+        const badge = pr?.has_conflicts ? '⚠️' : (pr.is_merged || pr.state === 'MERGED') ? '⟫' : pr.checks === 'passing' ? '✓' : pr?.checks === 'failing' ? '✗' : pr?.checks === 'pending' ? '⏳' : '';
         prStr = `#${pr.number}${badge}`;
       } else if (pr !== undefined) {
         prStr = '-'; // PR data loaded, no PR exists
@@ -185,13 +185,24 @@ export default function MainView(props: Props) {
 
       const pr = w.pr;
       let prStr = '';
-      if (pr?.number) {
-        const badge = (pr.is_merged || pr.state === 'MERGED') ? '⟫' : pr.checks === 'passing' ? '✓' : pr?.checks === 'failing' ? '✗' : pr?.checks === 'pending' ? '⏳' : '';
+      
+      if (!pr || pr.isNotChecked) {
+        prStr = '';  // Blank - not checked yet
+      } else if (pr.isLoading) {
+        prStr = '⏳';  // Loading indicator
+      } else if (pr.noPR) {
+        prStr = '-';  // No PR exists
+      } else if (pr.hasError) {
+        prStr = '!';  // Error indicator
+      } else if (pr.exists && pr.number) {
+        // PR exists, show details
+        const badge = pr.has_conflicts ? '⚠️' 
+          : pr.is_merged ? '⟫' 
+          : pr.checks === 'passing' ? '✓' 
+          : pr.checks === 'failing' ? '✗' 
+          : pr.checks === 'pending' ? '⏳' 
+          : '';
         prStr = `#${pr.number}${badge}`;
-      } else if (pr !== undefined) {
-        prStr = '-'; // PR data loaded, no PR exists
-      } else {
-        prStr = ''; // PR data still loading
       }
 
       // =============================================================================
@@ -249,32 +260,38 @@ export default function MainView(props: Props) {
         // unpushed-commits';
       }
       // PRIORITY 4+: PR-related priorities (only if PR status has been loaded)
-      else if (pr !== undefined) {
-        // PRIORITY 4: PR needs attention (failing checks, conflicts, etc.)
-        if (pr.needs_attention) {
+      else if (pr) {
+        // PRIORITY 4: PR has merge conflicts (highest PR priority)
+        if (pr?.has_conflicts) {
+          highlightIndex = COLUMNS.PR;
+          highlightColor = COLORS.RED;
+          // pr-conflicts';
+        }
+        // PRIORITY 5: PR needs attention (failing checks, etc.)
+        else if (pr.checks === 'failing') {
           highlightIndex = COLUMNS.PR;
           highlightColor = COLORS.RED;
           // pr-needs-attention';
         }
-        // PRIORITY 5: PR ready to merge (positive action available)
+        // PRIORITY 6: PR ready to merge (positive action available)
         else if (pr.is_ready_to_merge) {
           highlightIndex = COLUMNS.PR;
           highlightColor = COLORS.GREEN;
           // pr-ready-to-merge';
         }
-        // PRIORITY 6: PR exists but no urgent action (informational)
+        // PRIORITY 7: PR exists but no urgent action (informational)
         else if (pr.is_open && pr.number) {
           highlightIndex = COLUMNS.PR;
           highlightColor = COLORS.YELLOW;
           // pr-informational';
         }
-        // PRIORITY 6.5: PR successfully merged (completed work)
+        // PRIORITY 7.5: PR successfully merged (completed work)
         else if (pr.is_merged && pr.number) {
           highlightIndex = COLUMNS.PR;
           highlightColor = COLORS.GREEN;
           // pr-merged';
         }
-        // PRIORITY 7: Claude idle - ready for work (when nothing else needs attention)
+        // PRIORITY 8: Claude idle - ready for work (when nothing else needs attention)
         else if (w.session?.attached && (cs.includes('idle') || cs.includes('active'))) {
           highlightIndex = COLUMNS.AI;
           highlightColor = COLORS.GREEN;

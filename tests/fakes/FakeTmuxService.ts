@@ -4,6 +4,8 @@ import {memoryStore} from './stores.js';
 import {SESSION_PREFIX} from '../../src/constants.js';
 
 export class FakeTmuxService extends TmuxService {
+  private sentKeys: Array<{session: string, keys: string[]}> = [];
+  
   sessionName(project: string, feature: string): string {
     return `${SESSION_PREFIX}${project}-${feature}`;
   }
@@ -66,7 +68,12 @@ export class FakeTmuxService extends TmuxService {
   }
 
   // Test helpers
-  createSession(project: string, feature: string, claudeStatus: ClaudeStatus = 'not_running'): string {
+  createSession(project: string, feature: string, claudeStatus: ClaudeStatus = 'not_running'): string | null {
+    // Check if session creation should fail (for error testing)
+    if ((global as any).__mockTmuxShouldFail) {
+      return null;
+    }
+
     const sessionName = this.sessionName(project, feature);
     const sessionInfo = new SessionInfo({
       session_name: sessionName,
@@ -90,6 +97,30 @@ export class FakeTmuxService extends TmuxService {
     return sessionName;
   }
 
+  createRunSession(project: string, feature: string): string | null {
+    // Check if run config exists (in real implementation)
+    // For tests, we'll assume it exists if fs.existsSync returns true
+    const configPath = `/fake/projects/${project}/.claude/run.json`;
+    try {
+      const fs = require('fs');
+      if (!fs.existsSync(configPath)) {
+        return null; // No config, can't create run session
+      }
+    } catch {
+      return null;
+    }
+
+    const sessionName = `${this.sessionName(project, feature)}-run`;
+    const sessionInfo = new SessionInfo({
+      session_name: sessionName,
+      attached: true,
+      claude_status: 'active', // Run sessions are active when executing
+    });
+    
+    memoryStore.sessions.set(sessionName, sessionInfo);
+    return sessionName;
+  }
+
   updateClaudeStatus(session: string, status: ClaudeStatus): void {
     const sessionInfo = memoryStore.sessions.get(session);
     if (sessionInfo) {
@@ -99,6 +130,23 @@ export class FakeTmuxService extends TmuxService {
     }
   }
 
+  // Track sent keys for testing
+  recordSentKeys(session: string, keys: string[]): void {
+    this.sentKeys.push({session, keys});
+  }
+  
+  // Get all sent keys for a session
+  getSentKeys(session: string): string[][] {
+    return this.sentKeys
+      .filter(entry => entry.session === session)
+      .map(entry => entry.keys);
+  }
+  
+  // Clear sent keys history
+  clearSentKeys(): void {
+    this.sentKeys = [];
+  }
+  
   // Helper method to determine if a session should be preserved
   private shouldPreserveSession(session: string, validWorktrees: string[]): boolean {
     const suffix = session.slice(SESSION_PREFIX.length);

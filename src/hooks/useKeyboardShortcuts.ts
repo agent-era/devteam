@@ -1,5 +1,6 @@
 import {useEffect} from 'react';
 import {useStdin} from 'ink';
+import {useInputFocus} from '../contexts/InputFocusContext.js';
 
 export interface KeyboardActions {
   onMove?: (delta: number) => void;
@@ -35,7 +36,8 @@ export function useKeyboardShortcuts(
   actions: KeyboardActions,
   options: KeyboardShortcutsOptions = {}
 ) {
-  const {stdin, setRawMode, isRawModeSupported} = useStdin();
+  const {stdin, setRawMode} = useStdin();
+  const {hasFocus, requestFocus, isAnyDialogFocused} = useInputFocus();
   const {
     enabled = true,
     page = 0,
@@ -45,11 +47,21 @@ export function useKeyboardShortcuts(
   } = options;
 
   useEffect(() => {
-    if (!isRawModeSupported || !enabled) return;
+    if (!enabled) return;
+
+    // Request focus for main shortcuts if no dialog is focused
+    if (!isAnyDialogFocused) {
+      requestFocus('main');
+    }
 
     setRawMode(true);
 
     const handler = (buf: Buffer) => {
+      // Only process input if we have focus and no dialog is focused
+      if (isAnyDialogFocused || !hasFocus('main')) {
+        return;
+      }
+
       const input = buf.toString('utf8');
 
       // Navigation
@@ -112,7 +124,6 @@ export function useKeyboardShortcuts(
       setRawMode(false);
     };
   }, [
-    isRawModeSupported,
     enabled,
     actions,
     page,
@@ -120,11 +131,13 @@ export function useKeyboardShortcuts(
     selectedIndex,
     totalItems,
     stdin,
-    setRawMode
+    setRawMode,
+    hasFocus,
+    requestFocus,
+    isAnyDialogFocused
   ]);
 
   return {
-    isRawModeSupported,
-    enabled: enabled && isRawModeSupported
+    enabled
   };
 }

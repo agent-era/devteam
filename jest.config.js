@@ -31,6 +31,11 @@ export default {
     '!src/**/*.d.ts',
   ],
   testTimeout: 10000,
+  // Configure fake timers for performance
+  fakeTimers: {
+    enableGlobally: true,
+    advanceTimers: true,
+  },
   // Clear mocks between tests
   clearMocks: true,
   resetMocks: true

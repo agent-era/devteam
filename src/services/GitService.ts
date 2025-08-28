@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import {GitStatus, ProjectInfo, PRStatus} from '../models.js';
+import {GitStatus, ProjectInfo} from '../models.js';
 import {
   BASE_PATH,
   BASE_BRANCH_CANDIDATES,
@@ -10,13 +10,13 @@ import {
 import {
   runCommand,
   runCommandQuick,
-  runCommandAsync,
-  runCommandQuickAsync,
   parseGitShortstat,
   findBaseBranch,
   ensureDirectory,
   formatTimeAgo,
 } from '../utils.js';
+import {logInfo, logDebug} from '../shared/utils/logger.js';
+import {Timer} from '../shared/utils/timing.js';
 
 export class GitService {
   basePath: string;
@@ -26,7 +26,12 @@ export class GitService {
   }
 
   discoverProjects(): ProjectInfo[] {
-    if (!fs.existsSync(this.basePath)) return [];
+    const timer = new Timer();
+    
+    if (!fs.existsSync(this.basePath)) {
+      logDebug(`[Project.Discovery] Base path does not exist: ${this.basePath}`);
+      return [];
+    }
     
     const entries = fs.readdirSync(this.basePath, {withFileTypes: true});
     const projects = entries
@@ -40,6 +45,9 @@ export class GitService {
       .map((e) => new ProjectInfo({name: e.name, path: path.join(this.basePath, e.name)}))
       .sort((a, b) => a.name.localeCompare(b.name));
     
+    const timing = timer.elapsed();
+    logInfo(`[Project.Discovery] Found ${projects.length} projects in ${timing.formatted}`);
+    
     return projects;
   }
 
@@ -50,10 +58,14 @@ export class GitService {
     branch: string; 
     mtime: number
   }> {
+    const timer = new Timer();
     const worktrees: Array<{project: string; feature: string; path: string; branch: string; mtime: number}> = [];
     const branchesDirName = `${project.name}${DIR_BRANCHES_SUFFIX}`;
     const output = runCommand(['git', '-C', project.path, 'worktree', 'list', '--porcelain']);
-    if (!output) return worktrees;
+    if (!output) {
+      logDebug(`[Worktree.Collection] ${project.name}: no worktrees found`);
+      return worktrees;
+    }
 
     let current: {path?: string; branch?: string} = {};
     for (const line of output.split('\n')) {
@@ -91,11 +103,17 @@ export class GitService {
     }
     
     worktrees.sort((a, b) => b.mtime - a.mtime);
+    
+    const timing = timer.elapsed();
+    logInfo(`[Worktree.Collection] ${project.name}: ${worktrees.length} worktrees in ${timing.formatted}`);
+    
     return worktrees;
   }
 
   getGitStatus(worktreePath: string): GitStatus {
+    const timer = new Timer();
     const status = new GitStatus();
+    const worktreeName = path.basename(worktreePath);
     
     const porcelainStatus = runCommandQuick(['git', '-C', worktreePath, 'status', '--porcelain']);
     if (porcelainStatus) {
@@ -117,8 +135,16 @@ export class GitService {
     this.addBaseBranchComparison(worktreePath, status);
     this.addRemoteTrackingInfo(worktreePath, status);
     
+    // Only log if there are significant changes
+    if (status.modified_files > 5 || status.added_lines + status.deleted_lines > 50) {
+      const timing = timer.elapsed();
+      const changesDesc = `${status.modified_files} modified files, +${status.added_lines}/-${status.deleted_lines} lines`;
+      logDebug(`[Git.Status] ${worktreeName}: ${changesDesc} in ${timing.formatted}`);
+    }
+    
     return status;
   }
+
 
   createWorktree(project: string, featureName: string, branchName?: string): boolean {
     const mainRepo = path.join(this.basePath, project);
@@ -221,124 +247,6 @@ export class GitService {
     return archived;
   }
 
-  // PR Status Methods
-  batchFetchPRData(repoPath: string, opts: {includeChecks?: boolean; includeTitle?: boolean} = {}): Record<string, PRStatus> {
-    const prByBranch: Record<string, PRStatus> = {};
-    const fields = ['number', 'state', 'headRefName'];
-    const includeChecks = opts.includeChecks !== false;
-    const includeTitle = opts.includeTitle !== false;
-    
-    if (includeChecks) fields.push('statusCheckRollup');
-    if (includeTitle) fields.push('title');
-    
-    try {
-      const output = runCommand(['gh', 'pr', 'list', '--state', 'all', '--json', fields.join(','), '--limit', '200'], {cwd: repoPath});
-      if (!output) return prByBranch;
-      
-      const data = JSON.parse(output);
-      for (const pr of data) {
-        const branch = pr.headRefName;
-        if (!branch) continue;
-        
-        const status = new PRStatus();
-        status.number = pr.number ?? null;
-        status.state = (pr.state || '').toUpperCase();
-        
-        if (includeChecks && pr.statusCheckRollup) {
-          status.checks = this.parseCheckStatus(pr.statusCheckRollup);
-        }
-        if (pr.url) (status as any).url = pr.url;
-        if (includeTitle && pr.title) (status as any).title = pr.title;
-        
-        prByBranch[branch] = status;
-      }
-    } catch {}
-    
-    return prByBranch;
-  }
-
-  async batchFetchPRDataAsync(repoPath: string, opts: {includeChecks?: boolean; includeTitle?: boolean} = {}): Promise<Record<string, PRStatus>> {
-    const prByBranch: Record<string, PRStatus> = {};
-    const fields = ['number', 'state', 'headRefName'];
-    const includeChecks = opts.includeChecks !== false;
-    const includeTitle = opts.includeTitle !== false;
-    
-    if (includeChecks) fields.push('statusCheckRollup');
-    if (includeTitle) fields.push('title');
-    
-    try {
-      const output = await runCommandAsync(['gh', 'pr', 'list', '--state', 'all', '--json', fields.join(','), '--limit', '200'], {cwd: repoPath});
-      if (!output) return prByBranch;
-      
-      const data = JSON.parse(output);
-      for (const pr of data) {
-        const branch = pr.headRefName;
-        if (!branch) continue;
-        
-        const status = new PRStatus();
-        status.number = pr.number ?? null;
-        status.state = (pr.state || '').toUpperCase();
-        
-        if (includeChecks && pr.statusCheckRollup) {
-          status.checks = this.parseCheckStatus(pr.statusCheckRollup);
-        }
-        if (pr.url) (status as any).url = pr.url;
-        if (includeTitle && pr.title) (status as any).title = pr.title;
-        
-        prByBranch[branch] = status;
-      }
-    } catch {}
-    
-    return prByBranch;
-  }
-
-  batchGetPRStatusForWorktrees(worktrees: Array<{project: string; path: string; is_archived?: boolean}>, includeChecks = true): Record<string, PRStatus> {
-    const result: Record<string, PRStatus> = {};
-    const projectGroups = this.groupWorktreesByProject(worktrees);
-    
-    for (const [project, group] of Object.entries(projectGroups)) {
-      if (!group.length) continue;
-      
-      const repoPath = group[0].path;
-      for (const wt of group) result[wt.path] = new PRStatus();
-      
-      const prByBranch = this.batchFetchPRData(repoPath, {includeChecks: true, includeTitle: true});
-      const pathToBranch = this.getWorktreeBranchMapping(repoPath);
-      
-      for (const wt of group) {
-        const branch = pathToBranch[wt.path];
-        if (branch && prByBranch[branch]) {
-          result[wt.path] = prByBranch[branch];
-        }
-      }
-    }
-    
-    return result;
-  }
-
-  async batchGetPRStatusForWorktreesAsync(worktrees: Array<{project: string; path: string; is_archived?: boolean}>, includeChecks = true): Promise<Record<string, PRStatus>> {
-    const result: Record<string, PRStatus> = {};
-    const projectGroups = this.groupWorktreesByProject(worktrees);
-    
-    for (const [project, group] of Object.entries(projectGroups)) {
-      if (!group.length) continue;
-      
-      const repoPath = group[0].path;
-      for (const wt of group) result[wt.path] = new PRStatus();
-      
-      const prByBranch = await this.batchFetchPRDataAsync(repoPath, {includeChecks: true, includeTitle: true});
-      const pathToBranch = await this.getWorktreeBranchMappingAsync(repoPath);
-      
-      for (const wt of group) {
-        const branch = pathToBranch[wt.path];
-        if (branch && prByBranch[branch]) {
-          result[wt.path] = prByBranch[branch];
-        }
-      }
-    }
-    
-    return result;
-  }
 
   // Private helper methods
   private countUntrackedLines(worktreePath: string, porcelainStatus: string): number {
@@ -394,6 +302,7 @@ export class GitService {
       }
     }
   }
+
 
   private parseBranchCandidates(output: string, existing: string[], base: string): Array<[string, string]> {
     const candidates: Array<[string, string]> = [];
@@ -482,58 +391,8 @@ export class GitService {
     return {feature: name};
   }
 
-  private parseCheckStatus(checks: any[]): string | null {
-    let hasFailure = false, hasPending = false, hasSuccess = false;
-    
-    for (const check of checks) {
-      const conclusion = (check?.conclusion || check?.state || '').toString().toUpperCase();
-      if (['SUCCESS', 'PASS'].includes(conclusion)) hasSuccess = true;
-      else if (['FAILURE', 'ERROR'].includes(conclusion)) hasFailure = true;
-      else hasPending = true;
-    }
-    
-    if (hasFailure) return 'failing';
-    if (hasPending) return 'pending';
-    if (hasSuccess) return 'passing';
-    return null;
-  }
-
-  private groupWorktreesByProject(worktrees: Array<{project: string; path: string; is_archived?: boolean}>): Record<string, Array<{project: string; path: string}>> {
-    const groups: Record<string, Array<{project: string; path: string}>> = {};
-    
-    for (const wt of worktrees) {
-      if ((wt as any).is_archived) continue;
-      const project = wt.project;
-      if (!groups[project]) groups[project] = [];
-      groups[project].push({project: wt.project, path: wt.path});
-    }
-    
-    return groups;
-  }
-
-  private getWorktreeBranchMapping(repoPath: string): Record<string, string> {
+  getWorktreeBranchMapping(repoPath: string): Record<string, string> {
     const wtInfo = runCommandQuick(['git', '-C', repoPath, 'worktree', 'list', '--porcelain']);
-    const pathToBranch: Record<string, string> = {};
-    let currentPath: string | null = null;
-    
-    if (wtInfo) {
-      for (const line of wtInfo.trim().split('\n')) {
-        if (line.startsWith('worktree ')) {
-          currentPath = line.slice(9).trim();
-        } else if (line.startsWith('branch ') && currentPath) {
-          let branch = line.slice(7).trim();
-          if (branch.startsWith('refs/heads/')) branch = branch.slice(11);
-          pathToBranch[currentPath] = branch;
-          currentPath = null;
-        }
-      }
-    }
-    
-    return pathToBranch;
-  }
-
-  private async getWorktreeBranchMappingAsync(repoPath: string): Promise<Record<string, string>> {
-    const wtInfo = await runCommandQuickAsync(['git', '-C', repoPath, 'worktree', 'list', '--porcelain']);
     const pathToBranch: Record<string, string> = {};
     let currentPath: string | null = null;
     

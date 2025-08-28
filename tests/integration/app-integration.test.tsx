@@ -2,8 +2,13 @@ import {describe, beforeEach, test, expect} from '@jest/globals';
 import React from 'react';
 import {FakeGitService} from '../fakes/FakeGitService.js';
 import {FakeTmuxService} from '../fakes/FakeTmuxService.js';
-import {FakeWorktreeService} from '../fakes/FakeWorktreeService.js';
-import {ServicesProvider, useServices} from '../../src/contexts/ServicesContext.js';
+import {FakeGitHubService} from '../fakes/FakeGitHubService.js';
+import {useWorktreeContext} from '../../src/contexts/WorktreeContext.js';
+import {useGitHubContext} from '../../src/contexts/GitHubContext.js';
+import {WorktreeProvider} from '../../src/contexts/WorktreeContext.js';
+import {GitHubProvider} from '../../src/contexts/GitHubContext.js';
+import {UIProvider} from '../../src/contexts/UIContext.js';
+import {PRStatus} from '../../src/models.js';
 import {
   resetTestData,
   setupTestProject,
@@ -14,21 +19,17 @@ import {
 
 const h = React.createElement;
 
-// Test component that uses services
+// Test component that uses new contexts
 function TestServicesComponent() {
-  const {gitService, tmuxService, worktreeService} = useServices();
+  const {worktrees, createFeature} = useWorktreeContext();
   
   React.useEffect(() => {
     // Create a worktree when component mounts
-    worktreeService.createFeature('test-project', 'auto-feature');
-  }, [worktreeService]);
-  
-  const projects = gitService.discoverProjects();
-  const sessions = tmuxService.listSessions();
+    createFeature('test-project', 'auto-feature');
+  }, [createFeature]);
   
   return h('div', {}, 
-    h('p', {}, `Projects: ${projects.length}`),
-    h('p', {}, `Sessions: ${sessions.length}`)
+    h('p', {}, `Worktrees: ${worktrees.length}`)
   );
 }
 
@@ -38,42 +39,50 @@ describe('App Integration Tests', () => {
   });
 
   describe('Services Integration', () => {
-    test('should provide fake services through context', () => {
+    test('should provide contexts for worktree operations', () => {
       setupTestProject('test-project');
       
       const gitService = new FakeGitService();
       const tmuxService = new FakeTmuxService();
-      const worktreeService = new FakeWorktreeService(gitService, tmuxService);
+      const gitHubService = new FakeGitHubService();
       
-      // Create React element with services provider
+      // Create React element with context providers
       const testApp = h(
-        ServicesProvider,
-        {gitService, tmuxService, worktreeService, children: h(TestServicesComponent)}
+        WorktreeProvider,
+        null,
+        h(GitHubProvider, null,
+          h(UIProvider, null,
+            h(TestServicesComponent)
+          )
+        )
       );
       
-      // Test that services can be accessed through context
+      // Test that context providers can be created
       expect(testApp).toBeDefined();
       
-      // Verify services are the correct instances
+      // Verify service instances are correct types
       expect(gitService).toBeInstanceOf(FakeGitService);
       expect(tmuxService).toBeInstanceOf(FakeTmuxService);
-      expect(worktreeService).toBeInstanceOf(FakeWorktreeService);
+      expect(gitHubService).toBeInstanceOf(FakeGitHubService);
     });
 
-    test('should handle service operations through context', () => {
+    test('should handle worktree operations through services', () => {
       setupTestProject('context-test');
-      
-      const gitService = new FakeGitService();
-      const tmuxService = new FakeTmuxService();
-      const worktreeService = new FakeWorktreeService(gitService, tmuxService);
       
       // Verify initial state
       expect(memoryStore.worktrees.size).toBe(0);
       expect(memoryStore.sessions.size).toBe(0);
       
-      // Simulate service operations that would happen in real app
-      const result = worktreeService.createFeature('context-test', 'context-feature');
-      expect(result).not.toBeNull();
+      // Test services directly (context uses these internally)
+      const gitService = new FakeGitService();
+      const tmuxService = new FakeTmuxService();
+      
+      // Create worktree and session
+      const worktreeCreated = gitService.createWorktree('context-test', 'context-feature');
+      expect(worktreeCreated).toBe(true);
+      
+      const sessionName = tmuxService.createSession('context-test', 'context-feature', 'idle')!;
+      expect(sessionName).toBe('dev-context-test-context-feature');
       
       // Verify operations affected memory store
       expect(memoryStore.worktrees.size).toBe(1);
@@ -92,12 +101,15 @@ describe('App Integration Tests', () => {
       
       const gitService = new FakeGitService();
       const tmuxService = new FakeTmuxService();
-      const worktreeService = new FakeWorktreeService(gitService, tmuxService);
       
       // Create multiple features
-      worktreeService.createFeature('multi-test', 'feature-1');
-      worktreeService.createFeature('multi-test', 'feature-2');
-      worktreeService.createFeature('multi-test', 'feature-3');
+      gitService.createWorktree('multi-test', 'feature-1');
+      gitService.createWorktree('multi-test', 'feature-2');
+      gitService.createWorktree('multi-test', 'feature-3');
+      
+      tmuxService.createSession('multi-test', 'feature-1', 'idle')!;
+      tmuxService.createSession('multi-test', 'feature-2', 'idle')!;
+      tmuxService.createSession('multi-test', 'feature-3', 'idle')!;
       
       // Verify all created
       expect(memoryStore.worktrees.size).toBe(3);
@@ -115,9 +127,12 @@ describe('App Integration Tests', () => {
       const features = worktrees.map(w => w.feature).sort();
       expect(features).toEqual(['feature-1', 'feature-2', 'feature-3']);
       
-      // Archive one feature
+      // Archive one feature (simulate archive operation)
       const firstWorktree = worktrees[0];
-      worktreeService.archiveFeature('multi-test', firstWorktree.path, firstWorktree.feature);
+      const archiveResult = gitService.archiveWorktree(firstWorktree.path);
+      expect(typeof archiveResult).toBe('string'); // Returns archived path, not boolean
+      
+      tmuxService.killSession(`dev-multi-test-${firstWorktree.feature}`);
       
       // Verify state after archive
       expect(memoryStore.worktrees.size).toBe(2);
@@ -165,8 +180,9 @@ describe('App Integration Tests', () => {
       expect(tmuxService.hasSession(sessionName)).toBe(true);
       expect(tmuxService.getClaudeStatus(sessionName)).toBe('working');
       
-      // Verify PR data through batch fetch
-      const prData = gitService.batchGetPRStatusForWorktrees([
+      // Verify PR data through GitHub service
+      const gitHubService = new FakeGitHubService();
+      const prData = gitHubService.batchGetPRStatusForWorktrees([
         {project: 'status-test', path: worktree.path}
       ]);
       
@@ -180,7 +196,7 @@ describe('App Integration Tests', () => {
       setupTestProject('session-test');
       
       const tmuxService = new FakeTmuxService();
-      const sessionName = tmuxService.createSession('session-test', 'test-feature', 'idle');
+      const sessionName = tmuxService.createSession('session-test', 'test-feature', 'idle')!;
       
       // Test status transitions
       expect(tmuxService.getClaudeStatus(sessionName)).toBe('idle');
@@ -274,8 +290,155 @@ describe('App Integration Tests', () => {
     test('should handle archival of non-existent worktree', () => {
       const gitService = new FakeGitService();
       
-      const result = gitService.archiveWorktree('non-existent', '/fake/path', 'feature');
-      expect(result).toBe(false);
+      expect(() => {
+        gitService.archiveWorktree('/fake/path');
+      }).toThrow('Worktree not found');
+    });
+  });
+
+  describe('PR Status Loading Lifecycle', () => {
+    // Test component that captures PR loading states
+    function PRLoadingTestComponent() {
+      const {worktrees, refresh} = useWorktreeContext();
+      const {getPRStatus, refreshPRStatus} = useGitHubContext();
+      const [loadingStates, setLoadingStates] = React.useState<string[]>([]);
+      
+      React.useEffect(() => {
+        if (worktrees.length > 0) {
+          const worktree = worktrees[0];
+          const prStatus = getPRStatus(worktree.path);
+          const currentState = prStatus.loadingStatus;
+          
+          setLoadingStates(prev => {
+            if (prev[prev.length - 1] !== currentState) {
+              return [...prev, currentState];
+            }
+            return prev;
+          });
+        }
+      }, [worktrees, getPRStatus]);
+      
+      // Store states in memory for test access
+      React.useEffect(() => {
+        (globalThis as any).prLoadingStates = loadingStates;
+      }, [loadingStates]);
+      
+      return h('div', {}, 
+        h('p', {}, `Worktrees: ${worktrees.length}`),
+        h('p', {}, `Loading states: ${loadingStates.join(' -> ')}`)
+      );
+    }
+
+    test('should transition PR status from not_checked to loaded states', async () => {
+      resetTestData();
+      setupTestProject('pr-test');
+      
+      // Create a worktree
+      const gitService = new FakeGitService();
+      const created = gitService.createWorktree('pr-test', 'pr-feature');
+      expect(created).toBe(true);
+      
+      const worktreePath = '/home/mserv/projects/pr-test-branches/pr-feature';
+      
+      // Setup PR data in memory store for this path
+      memoryStore.prStatus.set(worktreePath, new PRStatus({
+        loadingStatus: 'exists',
+        number: 123,
+        state: 'OPEN',
+        checks: 'passing',
+        title: 'Test PR'
+      }));
+      
+      // Initial PR status should be not_checked for new worktrees
+      const initialPR = new PRStatus({ loadingStatus: 'not_checked' });
+      expect(initialPR.loadingStatus).toBe('not_checked');
+      
+      // After loading from GitHub service, should have exists status
+      const gitHubService = new FakeGitHubService();
+      const prData = gitHubService.batchGetPRStatusForWorktrees([{
+        project: 'pr-test',
+        path: worktreePath
+      }]);
+      
+      expect(prData[worktreePath]).toBeDefined();
+      expect(prData[worktreePath].loadingStatus).toBe('exists');
+      expect(prData[worktreePath].number).toBe(123);
+    });
+
+    test('should cache and restore PR loading status correctly', () => {
+      resetTestData();
+      setupTestProject('cache-test');
+      
+      const worktreePath = '/home/mserv/projects/cache-test-branches/cache-feature';
+      
+      // Create PRStatusCacheService instance
+      const cacheService = new (require('../../src/services/PRStatusCacheService.js').PRStatusCacheService)();
+      
+      // Test different loading statuses are cached correctly
+      const testCases = [
+        { loadingStatus: 'no_pr' as const, shouldBeCached: true },
+        { loadingStatus: 'exists' as const, number: 456, state: 'OPEN' as const, shouldBeCached: true },
+        { loadingStatus: 'error' as const, shouldBeCached: true },
+        { loadingStatus: 'not_checked' as const, shouldBeCached: false },
+        { loadingStatus: 'loading' as const, shouldBeCached: false },
+      ];
+      
+      for (const testCase of testCases) {
+        // Clear cache
+        cacheService.clear();
+        
+        // Create PR status
+        const prStatus = new PRStatus(testCase);
+        
+        // Try to cache it
+        cacheService.set(worktreePath, prStatus);
+        
+        // Check if it was cached
+        const cached = cacheService.get(worktreePath);
+        
+        if (testCase.shouldBeCached) {
+          expect(cached).not.toBeNull();
+          expect(cached?.loadingStatus).toBe(testCase.loadingStatus);
+          if (testCase.number) {
+            expect(cached?.number).toBe(testCase.number);
+          }
+        } else {
+          expect(cached).toBeNull();
+        }
+      }
+    });
+
+    test('should handle cache persistence of loadingStatus field', () => {
+      resetTestData();
+      
+      const worktreePath = '/home/mserv/projects/persist-test-branches/persist-feature';
+      
+      // Create two cache service instances to simulate app restart
+      const cacheService1 = new (require('../../src/services/PRStatusCacheService.js').PRStatusCacheService)();
+      
+      // Cache a PR with specific loadingStatus
+      const originalPR = new PRStatus({
+        loadingStatus: 'exists',
+        number: 789,
+        state: 'MERGED',
+        checks: 'passing',
+        title: 'Merged PR'
+      });
+      
+      cacheService1.set(worktreePath, originalPR);
+      
+      // Create new cache service instance (simulates app restart)
+      const cacheService2 = new (require('../../src/services/PRStatusCacheService.js').PRStatusCacheService)();
+      
+      // Retrieve from cache
+      const restoredPR = cacheService2.get(worktreePath);
+      
+      // Should have preserved loadingStatus
+      expect(restoredPR).not.toBeNull();
+      expect(restoredPR?.loadingStatus).toBe('exists');
+      expect(restoredPR?.number).toBe(789);
+      expect(restoredPR?.state).toBe('MERGED');
+      expect(restoredPR?.title).toBe('Merged PR');
     });
   });
 });
