@@ -44,7 +44,7 @@ describe('Session Management E2E', () => {
       const {worktrees} = setupProjectWithWorktrees('my-project', ['feature-1']);
 
       const {services, lastFrame} = renderTestApp();
-      await simulateTimeDelay(50);
+      await simulateTimeDelay(100);
 
       // Create shell session through service
       const shellSessionName = services.tmuxService.createShellSession('my-project', 'feature-1');
@@ -62,7 +62,7 @@ describe('Session Management E2E', () => {
       const {worktree, session} = setupWorktreeWithSession('my-project', 'feature-1', 'idle');
 
       const {stdin, lastFrame} = renderTestApp();
-      await simulateTimeDelay(50);
+      await simulateTimeDelay(100);
 
       const sessionsCountBefore = memoryStore.sessions.size;
 
@@ -109,8 +109,8 @@ describe('Session Management E2E', () => {
         sessionInfo.claude_status = 'working';
       }
 
-      // Wait for refresh cycle (AI status refreshes every 2 seconds)
-      await simulateTimeDelay(2100);
+      // Simulate AI status refresh cycle with fast timing
+      await simulateTimeDelay(100);
 
       // Should show updated status
       output = lastFrame();
@@ -127,7 +127,7 @@ describe('Session Management E2E', () => {
         const {worktree, session} = setupWorktreeWithSession('my-project', 'feature-1', status);
 
         const {lastFrame} = renderTestApp();
-        await simulateTimeDelay(50);
+        await simulateTimeDelay(100);
 
         const output = lastFrame();
         expect(output).toContain('my-project/feature-1');
@@ -142,7 +142,7 @@ describe('Session Management E2E', () => {
       const {worktree, session} = setupWorktreeWithSession('my-project', 'feature-1', 'idle');
 
       const {services} = renderTestApp();
-      await simulateTimeDelay(50);
+      await simulateTimeDelay(100);
 
       // Archive the worktree by removing it from memory
       memoryStore.worktrees.delete(worktree.path);
@@ -164,7 +164,7 @@ describe('Session Management E2E', () => {
       // Add shell session through service
       const {services} = renderTestApp();
       const shellSessionName = services.tmuxService.createShellSession('my-project', 'feature-1');
-      await simulateTimeDelay(50);
+      await simulateTimeDelay(100);
 
       // Archive the worktree by removing it from memory
       memoryStore.worktrees.delete(worktree.path);
@@ -189,7 +189,7 @@ describe('Session Management E2E', () => {
       setupBasicProject('my-project');
 
       const {services, lastFrame} = renderTestApp();
-      await simulateTimeDelay(50);
+      await simulateTimeDelay(100);
 
       // Create new feature through service
       services.gitService.createWorktree('my-project', 'new-feature');
@@ -212,7 +212,7 @@ describe('Session Management E2E', () => {
       ]);
 
       const {services, lastFrame} = renderTestApp();
-      await simulateTimeDelay(50);
+      await simulateTimeDelay(100);
 
       // Create from remote branch through service
       services.gitService.createWorktreeFromRemote('my-project', 'origin/feature-x', 'feature-x');
@@ -233,7 +233,7 @@ describe('Session Management E2E', () => {
       const {worktree, session} = setupWorktreeWithSession('my-project', 'feature-1', 'working');
 
       const {stdin, lastFrame} = renderTestApp();
-      await simulateTimeDelay(50);
+      await simulateTimeDelay(100);
 
       // Manual refresh
       stdin.write('r');
@@ -254,7 +254,7 @@ describe('Session Management E2E', () => {
       const {worktree, session} = setupWorktreeWithSession('my-project', 'feature-1', 'idle');
 
       const {lastFrame} = renderTestApp();
-      await simulateTimeDelay(50);
+      await simulateTimeDelay(100);
 
       // Simulate Claude starting to work
       const sessionInfo = memoryStore.sessions.get(session.session_name);
@@ -308,7 +308,7 @@ describe('Session Management E2E', () => {
       setupWorktreeWithSession('my-project', 'feature-2', 'idle');
 
       const {lastFrame} = renderTestApp();
-      await simulateTimeDelay(50);
+      await simulateTimeDelay(100);
 
       // Change status of first session
       const session1 = memoryStore.sessions.get('dev-my-project-feature-1');
