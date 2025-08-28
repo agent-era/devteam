@@ -1,7 +1,7 @@
 import React from 'react';
-import {Box, Text, useInput, useStdin} from 'ink';
+import {Box, Text, useInput} from 'ink';
 import FullScreen from '../components/common/FullScreen.js';
-import {useServices} from '../contexts/ServicesContext.js';
+import {useWorktreeContext} from '../contexts/WorktreeContext.js';
 
 const h = React.createElement;
 
@@ -22,12 +22,12 @@ export default function ArchiveConfirmScreen({
   onCancel,
   onSuccess
 }: ArchiveConfirmScreenProps) {
-  const {worktreeService} = useServices();
+  const {archiveFeature} = useWorktreeContext();
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     try {
       // Archive the feature
-      worktreeService.archiveFeature(
+      await archiveFeature(
         featureInfo.project,
         featureInfo.path,
         featureInfo.feature

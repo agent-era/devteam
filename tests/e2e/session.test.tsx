@@ -192,7 +192,7 @@ describe('Session Management E2E', () => {
       await simulateTimeDelay(50);
 
       // Create new feature through service
-      services.worktreeService.createFeature('my-project', 'new-feature');
+      services.gitService.createWorktree('my-project', 'new-feature');
       await simulateTimeDelay(50);
       
       // Create a session for the new feature
