@@ -44,6 +44,7 @@ interface WorktreeContextType {
   // Data operations
   refresh: () => Promise<void>;
   refreshSelected: () => void;
+  refreshPRSelective: () => Promise<void>;
   
   // Worktree operations
   createFeature: (projectName: string, featureName: string) => Promise<WorktreeInfo | null>;
