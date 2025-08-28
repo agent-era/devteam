@@ -88,26 +88,13 @@ export default function WorktreeListScreen({
   };
 
   const handleJumpToFirst = () => {
-    setState(st => ({
-      ...st,
-      selectedIndex: 0,
-      page: 0
-    }));
+    selectWorktree(0);
   };
 
   const handleJumpToLast = () => {
-    setState(st => {
-      if (!st.worktrees.length) return st;
-      
-      const lastIndex = st.worktrees.length - 1;
-      const lastPage = Math.floor(lastIndex / st.pageSize);
-      
-      return {
-        ...st,
-        selectedIndex: lastIndex,
-        page: lastPage
-      };
-    });
+    if (worktrees.length > 0) {
+      selectWorktree(worktrees.length - 1);
+    }
   };
 
   useKeyboardShortcuts({
