@@ -497,3 +497,7 @@ When adding features:
 - [ ] Update fake implementations
 - [ ] Verify TypeScript types compile
 - [ ] Test error cases and edge conditions
+
+## PRs
+- Always use --auto and --squash when merging PRs
+- Keep the local branch when merging
