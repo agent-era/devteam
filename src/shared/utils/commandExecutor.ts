@@ -21,6 +21,7 @@ export function runCommand(args: string[], opts: {timeout?: number; cwd?: string
       cwd: opts.cwd,
       env,
     });
+    
     return output.trim();
   } catch (e) {
     return '';
@@ -39,6 +40,7 @@ export function runCommandQuick(args: string[], cwd?: string): string {
       cwd,
       env,
     });
+    
     return output.trim();
   } catch {
     return '';
