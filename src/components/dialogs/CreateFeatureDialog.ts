@@ -4,6 +4,7 @@ const h = React.createElement;
 import type {ProjectInfo} from '../../models.js';
 import {kebabCase, validateFeatureName, truncateText} from '../../utils.js';
 import {useTextInput} from './TextInput.js';
+import {useInputFocus} from '../../contexts/InputFocusContext.js';
 
 type Props = {
   projects: ProjectInfo[];
@@ -12,11 +13,20 @@ type Props = {
   onCancel: () => void;
 };
 
-export default function CreateFeatureDialog({projects, defaultProject, onSubmit, onCancel}: Props) {
+const CreateFeatureDialog = React.memo(function CreateFeatureDialog({projects, defaultProject, onSubmit, onCancel}: Props) {
   const [mode, setMode] = useState<'select'|'input'|'creating'>('select');
   const [filter, setFilter] = useState('');
   const [selected, setSelected] = useState(() => Math.max(0, projects.findIndex(p => p.name === defaultProject)));
   const featureInput = useTextInput();
+  const {requestFocus, releaseFocus} = useInputFocus();
+
+  // Request focus when dialog mounts
+  useEffect(() => {
+    requestFocus('create-feature-dialog');
+    return () => {
+      releaseFocus('create-feature-dialog');
+    };
+  }, [requestFocus, releaseFocus]);
 
   const filtered = useMemo(() => {
     const f = filter.toLowerCase();
@@ -114,5 +124,7 @@ export default function CreateFeatureDialog({projects, defaultProject, onSubmit,
     h(Text, null, 'Enter feature name (kebab-case suggested), ESC back'),
     featureInput.renderText(' ', 'yellow')
   );
-}
+});
+
+export default CreateFeatureDialog;
 

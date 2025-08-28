@@ -9,6 +9,8 @@ import {commentStoreManager} from '../../services/CommentStoreManager.js';
 import {TmuxService} from '../../services/TmuxService.js';
 import {runCommand} from '../../utils.js';
 import CommentInputDialog from '../dialogs/CommentInputDialog.js';
+import SessionWaitingDialog from '../dialogs/SessionWaitingDialog.js';
+import UnsubmittedCommentsDialog from '../dialogs/UnsubmittedCommentsDialog.js';
 
 type DiffLine = {type: 'added'|'removed'|'context'|'header'; text: string; fileName?: string};
 
@@ -66,9 +68,9 @@ async function loadDiff(worktreePath: string, diffType: 'full' | 'uncommitted' =
   return lines;
 }
 
-type Props = {worktreePath: string; title?: string; onClose: () => void; diffType?: 'full' | 'uncommitted'};
+type Props = {worktreePath: string; title?: string; onClose: () => void; diffType?: 'full' | 'uncommitted'; onAttachToSession?: (sessionName: string) => void};
 
-export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, diffType = 'full'}: Props) {
+export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, diffType = 'full', onAttachToSession}: Props) {
   const [lines, setLines] = useState<DiffLine[]>([]);
   const [pos, setPos] = useState(0);
   const [offset, setOffset] = useState(0);
@@ -79,8 +81,10 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
   const commentStore = useMemo(() => commentStoreManager.getStore(worktreePath), [worktreePath]);
   const [tmuxService] = useState(() => new TmuxService());
   const [showCommentDialog, setShowCommentDialog] = useState(false);
-  const [showAllComments, setShowAllComments] = useState(false);
-  const [statusMessage, setStatusMessage] = useState<string>('');
+  const [showAllComments, setShowAllComments] = useState(true);
+  const [showSessionWaitingDialog, setShowSessionWaitingDialog] = useState(false);
+  const [sessionWaitingInfo, setSessionWaitingInfo] = useState<{sessionName: string}>({sessionName: ''});
+  const [showUnsubmittedCommentsDialog, setShowUnsubmittedCommentsDialog] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -178,10 +182,17 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
   }, [animationId]);
 
   useInput((input, key) => {
-    // Don't handle inputs when comment dialog is open
-    if (showCommentDialog) return;
+    // Don't handle inputs when any dialog is open
+    if (showCommentDialog || showSessionWaitingDialog || showUnsubmittedCommentsDialog) return;
     
-    if (key.escape || input === 'q') return onClose();
+    if (key.escape || input === 'q') {
+      // Check if there are unsaved comments
+      if (commentStore.count > 0) {
+        setShowUnsubmittedCommentsDialog(true);
+        return;
+      }
+      return onClose();
+    }
     if (key.upArrow || input === 'k') setPos((p) => Math.max(0, p - 1));
     if (key.downArrow || input === 'j') setPos((p) => Math.min(lines.length - 1, p + 1));
     if (key.pageUp || input === 'b') setPos((p) => Math.max(0, p - pageSize));
@@ -274,15 +285,112 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     }
   }, [pos, targetOffset, pageSize, lines.length]);
 
+  const formatCommentsAsPrompt = (comments: any[]): string => {
+    let prompt = "Please address the following code review comments:\\n\\n";
+    
+    const commentsByFile: {[key: string]: typeof comments} = {};
+    comments.forEach(comment => {
+      if (!commentsByFile[comment.fileName]) {
+        commentsByFile[comment.fileName] = [];
+      }
+      commentsByFile[comment.fileName].push(comment);
+    });
+
+    Object.entries(commentsByFile).forEach(([fileName, fileComments]) => {
+      prompt += `File: ${fileName}\\n`;
+      fileComments.forEach(comment => {
+        prompt += `  Line ${comment.lineIndex + 1}: ${comment.commentText}\\n`;
+      });
+      prompt += "\\n";
+    });
+    
+    return prompt;
+  };
+
+  const getLastTwoCommentLines = (comments: any[]): string[] => {
+    const lines: string[] = [];
+    
+    // Get the last comment's text and file info
+    if (comments.length > 0) {
+      const lastComment = comments[comments.length - 1];
+      lines.push(`  Line ${lastComment.lineIndex + 1}: ${lastComment.commentText}`);
+      lines.push(`File: ${lastComment.fileName}`);
+    }
+    
+    // If we have multiple comments, also include the second-to-last one
+    if (comments.length > 1) {
+      const secondLastComment = comments[comments.length - 2];
+      lines.push(`  Line ${secondLastComment.lineIndex + 1}: ${secondLastComment.commentText}`);
+    }
+    
+    return lines.filter(line => line.trim().length > 0);
+  };
+
+  const verifyCommentsReceived = (sessionName: string, comments: any[]): boolean => {
+    // Wait a brief moment for tmux to process the input
+    // This is synchronous in our case since runCommand is blocking
+    
+    // Capture the current pane content
+    const paneContent = tmuxService.capturePane(sessionName);
+    
+    if (!paneContent || paneContent.trim().length === 0) {
+      return false; // No content captured
+    }
+    
+    // Check if at least the last 2 lines we sent are visible
+    // (checking last 2 ensures we're not just seeing partial input)
+    const lastTwoLines = getLastTwoCommentLines(comments);
+    
+    if (lastTwoLines.length === 0) {
+      return false; // No lines to verify
+    }
+    
+    // At least one of the last two lines should be visible
+    let foundLines = 0;
+    for (const line of lastTwoLines) {
+      if (paneContent.includes(line.trim())) {
+        foundLines++;
+      }
+    }
+    
+    // Require at least one line to be found (being lenient for race conditions)
+    return foundLines > 0;
+  };
+
+  const sendCommentsViaAltEnter = (sessionName: string, comments: any[]) => {
+    // Format as lines and send with Alt+Enter (existing logic)
+    const messageLines: string[] = [];
+    messageLines.push("Please address the following code review comments:");
+    messageLines.push("");
+    
+    const commentsByFile: {[key: string]: typeof comments} = {};
+    comments.forEach(comment => {
+      if (!commentsByFile[comment.fileName]) {
+        commentsByFile[comment.fileName] = [];
+      }
+      commentsByFile[comment.fileName].push(comment);
+    });
+
+    Object.entries(commentsByFile).forEach(([fileName, fileComments]) => {
+      messageLines.push(`File: ${fileName}`);
+      fileComments.forEach(comment => {
+        messageLines.push(`  Line ${comment.lineIndex + 1}: ${comment.commentText}`);
+      });
+      messageLines.push("");
+    });
+    
+    messageLines.forEach((line) => {
+      runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, line]);
+      runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 'Escape', 'Enter']);
+    });
+  };
+
   const sendCommentsToTmux = () => {
     const comments = commentStore.getAllComments();
     if (comments.length === 0) {
-      setStatusMessage('No comments to send');
-      setTimeout(() => setStatusMessage(''), 2000);
+      // No comments to send, just return
       return;
     }
-
-    setStatusMessage(`Sending ${comments.length} comment${comments.length > 1 ? 's' : ''} to Claude...`);
 
     try {
       // Extract project and feature correctly from worktree path
@@ -298,57 +406,67 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       // Check if session exists
       const sessionExists = tmuxService.listSessions().includes(sessionName);
       
-      if (!sessionExists) {
-        // Create new detached session
-        runCommand(['tmux', 'new-session', '-ds', sessionName, '-c', worktreePath]);
+      if (sessionExists) {
+        // IMPORTANT: Refresh status right before checking
+        const claudeStatus = tmuxService.getClaudeStatus(sessionName);
         
-        // Start Claude if available
+        if (claudeStatus === 'waiting') {
+          // Claude is waiting for a response - can't accept new input
+          setSessionWaitingInfo({sessionName});
+          setShowSessionWaitingDialog(true);
+          return; // Don't send comments
+        }
+        
+        // For idle/working/thinking/not_running - we can proceed
+        if (claudeStatus === 'not_running') {
+          // Start Claude with the prompt pre-filled!
+          const commentPrompt = formatCommentsAsPrompt(comments);
+          runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 
+                     `claude ${JSON.stringify(commentPrompt)}`, 'C-m']);
+        } else {
+          // Claude is idle/working/active - can accept input via Alt+Enter
+          sendCommentsViaAltEnter(sessionName, comments);
+          
+          // Wait a brief moment for tmux to process the input
+          runCommand(['sleep', '0.5']);
+          
+          // VERIFY: Check if comments were actually received (handle race condition)
+          const received = verifyCommentsReceived(sessionName, comments);
+          
+          if (!received) {
+            // Race condition detected - Claude probably transitioned to waiting
+            // Keep comments and show dialog
+            setSessionWaitingInfo({sessionName});
+            setShowSessionWaitingDialog(true);
+            return; // Don't clear comments or attach
+          }
+        }
+      } else {
+        // No session - create and start Claude with pre-filled prompt
+        runCommand(['tmux', 'new-session', '-ds', sessionName, '-c', worktreePath]);
         const hasClaude = runCommand(['bash', '-lc', 'command -v claude || true']).trim();
         if (hasClaude) {
-          runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 'claude', 'C-m']);
+          // Launch Claude with the comments as the initial prompt!
+          const commentPrompt = formatCommentsAsPrompt(comments);
+          runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 
+                     `claude ${JSON.stringify(commentPrompt)}`, 'C-m']);
+          
+          // For new sessions, we can assume the prompt was received
+          // since we're starting fresh with the prompt
         }
       }
       
-      // Format the message as an array of lines
-      const messageLines: string[] = [];
-      messageLines.push("Please address the following code review comments:");
-      messageLines.push("");
-      
-      const commentsByFile: {[key: string]: typeof comments} = {};
-      comments.forEach(comment => {
-        if (!commentsByFile[comment.fileName]) {
-          commentsByFile[comment.fileName] = [];
-        }
-        commentsByFile[comment.fileName].push(comment);
-      });
-
-      Object.entries(commentsByFile).forEach(([fileName, fileComments]) => {
-        messageLines.push(`File: ${fileName}`);
-        fileComments.forEach(comment => {
-          messageLines.push(`  Line ${comment.lineIndex + 1}: ${comment.commentText}`);
-        });
-        messageLines.push("");
-      });
-      
-      // Send all lines with Alt+Enter (Escape Enter) to avoid auto-submission
-      messageLines.forEach((line, index) => {
-        // Send the line text
-        runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, line]);
-        
-        // Send Alt+Enter (Escape followed by Enter) to insert newline without submitting
-        // Send newline after every line including the last one to ensure proper formatting
-        runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 'Escape', 'Enter']);
-      });
-      
-      // Clear comments after sending
+      // Clear comments only after successful sending/verification
       commentStore.clear();
       
-      setStatusMessage(`✓ Sent ${comments.length} comment${comments.length > 1 ? 's' : ''} to session: ${sessionName}`);
-      setTimeout(() => setStatusMessage(''), 3000);
+      // Close DiffView and attach to session
+      onClose();
+      if (onAttachToSession) {
+        onAttachToSession(sessionName);
+      }
       
     } catch (error) {
-      setStatusMessage('✗ Failed to send comments');
-      setTimeout(() => setStatusMessage(''), 3000);
+      // Log error but don't show dialog
       console.error('Failed to send comments to tmux:', error);
     }
   };
@@ -365,6 +483,33 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     setShowCommentDialog(false);
   };
 
+  const handleSessionWaitingGoToSession = () => {
+    setShowSessionWaitingDialog(false);
+    // Close DiffView and attach to session
+    onClose();
+    if (onAttachToSession) {
+      onAttachToSession(sessionWaitingInfo.sessionName);
+    }
+  };
+
+  const handleSessionWaitingCancel = () => {
+    setShowSessionWaitingDialog(false);
+  };
+
+  const handleUnsubmittedCommentsSubmit = () => {
+    setShowUnsubmittedCommentsDialog(false);
+    sendCommentsToTmux();
+  };
+
+  const handleUnsubmittedCommentsExitWithoutSubmitting = () => {
+    setShowUnsubmittedCommentsDialog(false);
+    onClose();
+  };
+
+  const handleUnsubmittedCommentsCancel = () => {
+    setShowUnsubmittedCommentsDialog(false);
+  };
+
   // Truncate text to fit terminal width
   const truncateText = (text: string, maxWidth: number): string => {
     if (text.length <= maxWidth) return text;
@@ -376,6 +521,33 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
   }, [lines, offset, pageSize]);
 
   const statusText = `Terminal: ${terminalHeight}x${terminalWidth} | PageSize: ${pageSize} | Pos: ${pos}/${lines.length} | Offset: ${offset} | Visible: ${visible.length} | Comments: ${commentStore.count}`;
+
+  // Create unsubmitted comments dialog if needed - render it instead of the main view when active
+  if (showUnsubmittedCommentsDialog) {
+    return h(
+      Box,
+      {flexDirection: 'column', height: terminalHeight, justifyContent: 'center', alignItems: 'center'},
+      h(UnsubmittedCommentsDialog, {
+        commentCount: commentStore.count,
+        onSubmit: handleUnsubmittedCommentsSubmit,
+        onExitWithoutSubmitting: handleUnsubmittedCommentsExitWithoutSubmitting,
+        onCancel: handleUnsubmittedCommentsCancel
+      })
+    );
+  }
+
+  // Create session waiting dialog if needed - render it instead of the main view when active
+  if (showSessionWaitingDialog) {
+    return h(
+      Box,
+      {flexDirection: 'column', height: terminalHeight, justifyContent: 'center', alignItems: 'center'},
+      h(SessionWaitingDialog, {
+        sessionName: sessionWaitingInfo.sessionName,
+        onGoToSession: handleSessionWaitingGoToSession,
+        onCancel: handleSessionWaitingCancel
+      })
+    );
+  }
 
   // Create comment dialog if needed - render it instead of the main view when active
   if (showCommentDialog) {
@@ -418,8 +590,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
         h(Text, {key: idx, color: 'gray'}, `${comment.fileName}:${comment.lineIndex} - ${comment.commentText}`)
       )
     ) : null,
-    h(Text, {color: 'gray'}, 'j/k move  c comment  C show all  d delete  S send to Claude  q close'),
-    statusMessage ? h(Text, {color: statusMessage.startsWith('✓') ? 'green' : statusMessage.startsWith('✗') ? 'red' : 'yellow', bold: true}, statusMessage) : null
+    h(Text, {color: 'gray'}, 'j/k move  c comment  C show all  d delete  S send to Claude  q close')
   );
 }
 

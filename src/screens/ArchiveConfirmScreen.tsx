@@ -1,5 +1,5 @@
 import React from 'react';
-import {Box, Text, useInput} from 'ink';
+import {Box, Text, useInput, useStdin} from 'ink';
 import FullScreen from '../components/common/FullScreen.js';
 import {useWorktreeContext} from '../contexts/WorktreeContext.js';
 
@@ -23,6 +23,7 @@ export default function ArchiveConfirmScreen({
   onSuccess
 }: ArchiveConfirmScreenProps) {
   const {archiveFeature} = useWorktreeContext();
+  const {isRawModeSupported} = useStdin();
 
   const handleConfirm = async () => {
     try {

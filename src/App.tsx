@@ -1,5 +1,6 @@
 import React, {useEffect} from 'react';
 import {useApp, useStdin, Box} from 'ink';
+import {runInteractive} from './shared/utils/commandExecutor.js';
 import FullScreen from './components/common/FullScreen.js';
 import HelpOverlay from './components/dialogs/HelpOverlay.js';
 import DiffView from './components/views/DiffView.js';
@@ -17,6 +18,7 @@ import ArchivedScreen from './screens/ArchivedScreen.js';
 import {WorktreeProvider, useWorktreeContext} from './contexts/WorktreeContext.js';
 import {GitHubProvider, useGitHubContext} from './contexts/GitHubContext.js';
 import {UIProvider, useUIContext} from './contexts/UIContext.js';
+import {InputFocusProvider} from './contexts/InputFocusContext.js';
 
 const h = React.createElement;
 
@@ -85,6 +87,11 @@ function AppContent() {
       setTimeout(() => process.exit(0), 100);
     }
   }, [shouldExit, exit]);
+
+  const handleAttachToSession = (sessionName: string) => {
+    // Attach to the tmux session interactively
+    runInteractive('tmux', ['attach-session', '-t', sessionName]);
+  };
 
   // Operations simplified to use contexts
   const handleCreateFeature = () => {
@@ -199,7 +206,8 @@ function AppContent() {
           worktreePath: diffWorktree,
           title: diffType === 'uncommitted' ? 'Diff Viewer (Uncommitted Changes)' : 'Diff Viewer',
           diffType: diffType,
-          onClose: showList
+          onClose: showList,
+          onAttachToSession: handleAttachToSession
         })
       )
     );
@@ -310,11 +318,22 @@ function AppContent() {
 }
 
 export default function App() {
-  return h(WorktreeProvider, null,
+  return h(InputFocusProvider, null,
     h(GitHubProvider, null,
-      h(UIProvider, null,
-        h(AppContent)
-      )
+      h(AppWithGitHub)
     )
   );
+}
+
+function AppWithGitHub() {
+  const {getPRStatus, setVisibleWorktrees, refreshPRStatus} = useGitHubContext();
+  
+  return h(WorktreeProvider, {
+    getPRStatus,
+    setVisibleWorktrees,
+    refreshPRStatus,
+    children: h(UIProvider, null,
+      h(AppContent)
+    )
+  });
 }

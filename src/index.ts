@@ -1,8 +1,8 @@
 import {run} from './app.js';
-import {initializeFileLogging, logError, dumpLogsToConsole} from './shared/utils/logger.js';
+import {initializeMemoryLogging, logError, dumpLogsToConsole} from './shared/utils/logger.js';
 
-// Initialize file logging before running the app
-initializeFileLogging();
+// Initialize memory logging before running the app
+initializeMemoryLogging();
 
 // Handle graceful shutdown and dump logs
 function handleExit() {
