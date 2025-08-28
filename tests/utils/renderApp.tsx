@@ -187,14 +187,14 @@ function generateMainListOutput(): string {
   return output;
 }
 
-<<<<<<< HEAD
 // Alias for backward compatibility
 export const renderApp = renderTestApp;
 
 // Add delay utility for tests
 export function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
-=======
+}
+
 function generateHelpOutput(): string {
   return `Help
 
@@ -443,7 +443,6 @@ Comment: ${viewData.commentText || ''}`;
   
   output += '\n\nPress ENTER to submit, ESC to cancel.';
   return output;
->>>>>>> origin/main
 }
 
 export * from 'ink-testing-library';

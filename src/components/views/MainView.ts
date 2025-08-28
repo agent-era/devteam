@@ -3,6 +3,8 @@ import {Box, Text} from 'ink';
 const h = React.createElement;
 import type {WorktreeInfo} from '../../models.js';
 import {calculatePaginationInfo} from '../../utils/pagination.js';
+import {useTerminalDimensions} from '../../hooks/useTerminalDimensions.js';
+import {fitDisplay, stringDisplayWidth} from '../../shared/utils/formatting.js';
 import {
     COL_NUMBER_WIDTH,
     COL_AI_WIDTH,
@@ -38,8 +40,9 @@ type Props = {
 
 export default function MainView(props: Props) {
   const {worktrees, selectedIndex, mode, prompt, message, page = 0, pageSize = 20} = props;
+  const {columns: terminalWidth} = useTerminalDimensions();
 
-  // Auto-grid: Calculate optimal column widths based on content with min/max constraints
+  // Auto-grid: Calculate optimal column widths based on terminal width and content
   const columnWidths = useMemo(() => {
     const start = page * pageSize;
     const pageItems = worktrees.slice(start, start + pageSize);
@@ -113,13 +116,25 @@ export default function MainView(props: Props) {
     
     const allRows = [headerRow, ...dataRows];
     
-    // Calculate optimal width for each column
-    return headerRow.map((_, colIndex) => {
-      const maxContentWidth = Math.max(...allRows.map(row => row[colIndex]?.length || 0));
-      const [minWidth, maxWidth] = constraints[colIndex];
-      return Math.max(minWidth, Math.min(maxWidth, maxContentWidth));
+    // Calculate content-based widths for all columns except PROJECT/FEATURE (index 1)
+    const fixedWidths = [0, 1, 2, 3, 4, 5, 6].map(colIndex => {
+      if (colIndex === 1) return 0; // PROJECT/FEATURE will be calculated separately
+      const maxContentWidth = Math.max(...allRows.map(row => stringDisplayWidth(row[colIndex] || '')));
+      return Math.max(4, maxContentWidth); // Minimum 4 chars for readability
     });
-  }, [worktrees, page, pageSize]);
+    
+    // Calculate space used by fixed columns + margins (6 spaces between 7 columns)
+    const fixedColumnsWidth = fixedWidths.reduce((sum, width, index) => index === 1 ? sum : sum + width, 0);
+    const marginsWidth = 6; // 6 spaces between columns
+    const usedWidth = fixedColumnsWidth + marginsWidth;
+    
+    // Calculate available width for PROJECT/FEATURE column
+    // Ensure total width never exceeds terminal width
+    const availableWidth = Math.max(15, terminalWidth - usedWidth); // Minimum 15 chars for readability  
+    fixedWidths[1] = Math.min(availableWidth, terminalWidth - usedWidth);
+    
+    return fixedWidths;
+  }, [worktrees, page, pageSize, terminalWidth]);
 
   const rows = useMemo(() => {
     const start = page * pageSize;
@@ -303,9 +318,14 @@ export default function MainView(props: Props) {
 
       const bg = selected ? 'blue' : undefined;
       const common = {backgroundColor: bg, bold: selected} as any;
+      // Truncate PROJECT/FEATURE if it's too long
+      const truncatedPf = stringDisplayWidth(pf) > columnWidths[1] 
+        ? pf.slice(0, Math.max(0, columnWidths[1] - 3)) + '...'
+        : pf;
+      
       const cells: Array<{text: string; color?: any}> = [
         {text: num, color: isDimmed ? 'gray' : undefined},
-        {text: pf, color: isDimmed ? 'gray' : undefined},
+        {text: truncatedPf, color: isDimmed ? 'gray' : undefined}, // Truncated with ellipsis
         {text: ai, color: isDimmed ? 'gray' : undefined},
         {text: diffStr, color: isDimmed ? 'gray' : undefined},
         {text: changes, color: isDimmed ? 'gray' : undefined},

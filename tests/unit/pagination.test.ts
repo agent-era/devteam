@@ -15,31 +15,19 @@ describe('Pagination Logic', () => {
   });
 
   describe('Page calculations', () => {
-    test('should calculate total pages correctly', () => {
-      const pageSize = 10;
-      const totalPages = Math.ceil(mockWorktrees.length / pageSize);
-      expect(totalPages).toBe(3); // 25 items / 10 per page = 3 pages
-    });
-
-    test('should handle edge case with exact page boundary', () => {
-      const worktrees = mockWorktrees.slice(0, 20); // Exactly 20 items
-      const pageSize = 10;
-      const totalPages = Math.ceil(worktrees.length / pageSize);
-      expect(totalPages).toBe(2); // 20 items / 10 per page = 2 pages
-    });
-
-    test('should handle single page', () => {
-      const worktrees = mockWorktrees.slice(0, 5); // 5 items
-      const pageSize = 10;
-      const totalPages = Math.ceil(worktrees.length / pageSize);
-      expect(totalPages).toBe(1);
-    });
-
-    test('should handle empty list', () => {
-      const worktrees: WorktreeInfo[] = [];
-      const pageSize = 10;
-      const totalPages = Math.max(1, Math.ceil(worktrees.length / pageSize));
-      expect(totalPages).toBe(1);
+    test('should calculate total pages for various data sizes', () => {
+      const testCases = [
+        {items: 25, pageSize: 10, expected: 3},
+        {items: 20, pageSize: 10, expected: 2}, // Exact boundary
+        {items: 5, pageSize: 10, expected: 1},  // Single page
+        {items: 0, pageSize: 10, expected: 1}   // Empty (min 1)
+      ];
+      
+      for (const {items, pageSize, expected} of testCases) {
+        const data = items === 0 ? [] : mockWorktrees.slice(0, items);
+        const totalPages = items === 0 ? Math.max(1, Math.ceil(data.length / pageSize)) : Math.ceil(data.length / pageSize);
+        expect(totalPages).toBe(expected);
+      }
     });
   });
 
@@ -81,25 +69,25 @@ describe('Pagination Logic', () => {
   describe('Selection index calculations', () => {
     test('should calculate correct page for given index', () => {
       const pageSize = 10;
+      const testCases = [
+        {index: 0, expectedPage: 0},   // First item
+        {index: 9, expectedPage: 0},   // Last item on page 0
+        {index: 10, expectedPage: 1},  // First item on page 1
+        {index: 24, expectedPage: 2}   // Last item
+      ];
       
-      expect(Math.floor(0 / pageSize)).toBe(0); // First item -> page 0
-      expect(Math.floor(9 / pageSize)).toBe(0); // Last item on page 0
-      expect(Math.floor(10 / pageSize)).toBe(1); // First item on page 1
-      expect(Math.floor(19 / pageSize)).toBe(1); // Last item on page 1
-      expect(Math.floor(24 / pageSize)).toBe(2); // Last item on page 2
+      for (const {index, expectedPage} of testCases) {
+        expect(Math.floor(index / pageSize)).toBe(expectedPage);
+      }
     });
 
     test('should clamp selection index to valid range', () => {
       const totalItems = mockWorktrees.length;
+      const clamp = (value: number) => Math.max(0, Math.min(totalItems - 1, value));
       
-      // Test lower bound
-      expect(Math.max(0, Math.min(totalItems - 1, -5))).toBe(0);
-      
-      // Test upper bound
-      expect(Math.max(0, Math.min(totalItems - 1, 50))).toBe(24);
-      
-      // Test valid index
-      expect(Math.max(0, Math.min(totalItems - 1, 15))).toBe(15);
+      expect(clamp(-5)).toBe(0);   // Lower bound
+      expect(clamp(50)).toBe(24);  // Upper bound
+      expect(clamp(15)).toBe(15);  // Valid index
     });
   });
 
@@ -224,21 +212,15 @@ describe('Pagination Logic', () => {
   });
 
   describe('Jump to first/last logic', () => {
-    test('should jump to first item', () => {
-      const newIndex = 0;
-      const targetPage = Math.floor(newIndex / 10);
+    test('should handle jump navigation', () => {
+      const pageSize = 10;
       
-      expect(newIndex).toBe(0);
-      expect(targetPage).toBe(0);
-    });
-
-    test('should jump to last item', () => {
-      const totalItems = mockWorktrees.length;
-      const newIndex = totalItems - 1;
-      const targetPage = Math.floor(newIndex / 10);
+      // Jump to first
+      expect(Math.floor(0 / pageSize)).toBe(0);
       
-      expect(newIndex).toBe(24);
-      expect(targetPage).toBe(2);
+      // Jump to last
+      const lastIndex = mockWorktrees.length - 1;
+      expect(Math.floor(lastIndex / pageSize)).toBe(2);
     });
   });
 
