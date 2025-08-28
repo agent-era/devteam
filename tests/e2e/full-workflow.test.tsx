@@ -445,10 +445,11 @@ index 1234567..abcdefg 100644
       const {lastFrame} = renderTestApp();
       await simulateTimeDelay(100);
       
-      // Step 2: Verify all worktrees are loaded
+      // Step 2: Verify worktrees are loaded with pagination
       const output = lastFrame();
       expect(output).toContain('performance-test/feature-1');
-      expect(output).toContain('performance-test/feature-25');
+      expect(output).toContain('[Page 1/2: 1-19/25]'); // Pagination info
+      expect(output).toContain('performance-test/feature-19'); // Last item on first page
       
       // Step 3: Add new feature to large project
       const {services} = renderTestApp();
