@@ -191,6 +191,11 @@ export class PRStatusCacheService {
           return 2 * 60 * 1000; // 2 minutes
         }
 
+        if (prStatus.checks === 'pending') {
+          // Pending checks should be refreshed quickly to catch completion
+          return 20 * 1000; // 20 seconds
+        }
+
         if (prStatus.state === 'OPEN') {
           // Open PRs change moderately
           return 5 * 60 * 1000; // 5 minutes

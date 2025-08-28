@@ -26,6 +26,7 @@ interface GitHubContextType {
   
   // Cache operations
   clearCache: () => void;
+  invalidateCache: (worktreePath: string) => void;
   getCacheStats: () => {total: number; valid: number; expired: number};
 }
 
@@ -282,6 +283,15 @@ export function GitHubProvider({children}: GitHubProviderProps) {
     setPullRequests({});
   }, [cacheService]);
 
+  const invalidateCache = useCallback((worktreePath: string) => {
+    cacheService.invalidate(worktreePath);
+    setPullRequests(prev => {
+      const newPRs = {...prev};
+      delete newPRs[worktreePath];
+      return newPRs;
+    });
+  }, [cacheService]);
+
   const getCacheStats = useCallback(() => {
     return cacheService.getStats();
   }, [cacheService]);
@@ -305,6 +315,7 @@ export function GitHubProvider({children}: GitHubProviderProps) {
     
     // Cache operations
     clearCache,
+    invalidateCache,
     getCacheStats
   };
 
