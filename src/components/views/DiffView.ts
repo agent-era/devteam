@@ -66,9 +66,9 @@ async function loadDiff(worktreePath: string, diffType: 'full' | 'uncommitted' =
   return lines;
 }
 
-type Props = {worktreePath: string; title?: string; onClose: () => void; diffType?: 'full' | 'uncommitted'};
+type Props = {worktreePath: string; title?: string; onClose: () => void; diffType?: 'full' | 'uncommitted'; onAttachToSession?: (sessionName: string) => void};
 
-export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, diffType = 'full'}: Props) {
+export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, diffType = 'full', onAttachToSession}: Props) {
   const {isRawModeSupported} = useStdin();
   const [lines, setLines] = useState<DiffLine[]>([]);
   const [pos, setPos] = useState(0);
@@ -81,7 +81,6 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
   const [tmuxService] = useState(() => new TmuxService());
   const [showCommentDialog, setShowCommentDialog] = useState(false);
   const [showAllComments, setShowAllComments] = useState(false);
-  const [statusMessage, setStatusMessage] = useState<string>('');
 
   useEffect(() => {
     (async () => {
@@ -280,12 +279,9 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
   const sendCommentsToTmux = () => {
     const comments = commentStore.getAllComments();
     if (comments.length === 0) {
-      setStatusMessage('No comments to send');
-      setTimeout(() => setStatusMessage(''), 2000);
+      // No comments to send, just return
       return;
     }
-
-    setStatusMessage(`Sending ${comments.length} comment${comments.length > 1 ? 's' : ''} to Claude...`);
 
     try {
       // Extract project and feature correctly from worktree path
@@ -346,12 +342,14 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       // Clear comments after sending
       commentStore.clear();
       
-      setStatusMessage(`✓ Sent ${comments.length} comment${comments.length > 1 ? 's' : ''} to session: ${sessionName}`);
-      setTimeout(() => setStatusMessage(''), 3000);
+      // Close DiffView and attach to session
+      onClose();
+      if (onAttachToSession) {
+        onAttachToSession(sessionName);
+      }
       
     } catch (error) {
-      setStatusMessage('✗ Failed to send comments');
-      setTimeout(() => setStatusMessage(''), 3000);
+      // Log error but don't show dialog
       console.error('Failed to send comments to tmux:', error);
     }
   };
@@ -421,8 +419,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
         h(Text, {key: idx, color: 'gray'}, `${comment.fileName}:${comment.lineIndex} - ${comment.commentText}`)
       )
     ) : null,
-    h(Text, {color: 'gray'}, 'j/k move  c comment  C show all  d delete  S send to Claude  q close'),
-    statusMessage ? h(Text, {color: statusMessage.startsWith('✓') ? 'green' : statusMessage.startsWith('✗') ? 'red' : 'yellow', bold: true}, statusMessage) : null
+    h(Text, {color: 'gray'}, 'j/k move  c comment  C show all  d delete  S send to Claude  q close')
   );
 }
 

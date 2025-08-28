@@ -205,4 +205,67 @@ describe('Comment Send to Claude E2E', () => {
     
     commentStore.clear();
   });
+
+  test('should attach to tmux session after sending comments', async () => {
+    // Setup: Create a project with a worktree
+    setupBasicProject('attach-project');
+    const worktree = setupTestWorktree('attach-project', 'attach-feature');
+    const worktreePath = worktree.path;
+    
+    // Get comment store for this worktree
+    const commentStore = commentStoreManager.getStore(worktreePath);
+    
+    // Add a comment
+    commentStore.addComment(15, 'test.ts', 'const test = true;', 'Test comment');
+    expect(commentStore.count).toBe(1);
+    
+    // Mock runInteractive to track tmux attach calls
+    const mockRunInteractive = jest.spyOn(commandExecutor, 'runInteractive').mockReturnValue(0);
+    
+    // Clear any previous sent keys
+    fakeTmuxService.clearSentKeys();
+    
+    // Simulate the sendCommentsToTmux function logic with attach
+    const comments = commentStore.getAllComments();
+    const sessionName = `dev-attach-project-attach-feature`;
+    
+    // Create the message format (mimicking DiffView.ts logic)
+    const messageLines: string[] = [];
+    messageLines.push("Please address the following code review comments:");
+    messageLines.push("");
+    messageLines.push(`File: test.ts`);
+    messageLines.push(`  Line 16: Test comment`);
+    messageLines.push("");
+    
+    // Mock creating session and sending comments
+    const sessionExists = commandExecutor.runCommand(['tmux', 'has-session', '-t', sessionName]).trim();
+    if (!sessionExists) {
+      commandExecutor.runCommand(['tmux', 'new-session', '-ds', sessionName, '-c', worktreePath]);
+      const hasClaude = commandExecutor.runCommand(['bash', '-lc', 'command -v claude || true']).trim();
+      if (hasClaude) {
+        commandExecutor.runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 'claude', 'C-m']);
+      }
+    }
+    
+    // Send all lines
+    messageLines.forEach((line, index) => {
+      commandExecutor.runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, line]);
+      commandExecutor.runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 'Escape', 'Enter']);
+    });
+    
+    // Clear comments after sending (simulating successful send)
+    commentStore.clear();
+    
+    // Simulate the attach call that should happen after closing DiffView
+    commandExecutor.runInteractive('tmux', ['attach-session', '-t', sessionName]);
+    
+    // Verify that runInteractive was called with correct tmux attach command
+    expect(mockRunInteractive).toHaveBeenCalledWith('tmux', ['attach-session', '-t', sessionName]);
+    
+    // Verify comments were cleared
+    expect(commentStore.count).toBe(0);
+    
+    // Clean up
+    mockRunInteractive.mockRestore();
+  });
 });

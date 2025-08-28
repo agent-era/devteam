@@ -1,5 +1,6 @@
 import React, {useState, useEffect} from 'react';
 import {useApp, useStdin, Box, Text} from 'ink';
+import {runInteractive} from './shared/utils/commandExecutor.js';
 import FullScreen from './components/common/FullScreen.js';
 import HelpOverlay from './components/dialogs/HelpOverlay.js';
 import DiffView from './components/views/DiffView.js';
@@ -66,6 +67,11 @@ function AppContent() {
   }, [shouldExit, exit]);
 
   const handleQuit = () => setShouldExit(true);
+
+  const handleAttachToSession = (sessionName: string) => {
+    // Attach to the tmux session interactively
+    runInteractive('tmux', ['attach-session', '-t', sessionName]);
+  };
 
   const handleCreateFeature = () => {
     const projects = gitService.discoverProjects();
@@ -262,7 +268,8 @@ function AppContent() {
           worktreePath: diffWorktree,
           title: diffType === 'uncommitted' ? 'Diff Viewer (Uncommitted Changes)' : 'Diff Viewer',
           diffType,
-          onClose: resetToList
+          onClose: resetToList,
+          onAttachToSession: handleAttachToSession
         })
       )
     );
