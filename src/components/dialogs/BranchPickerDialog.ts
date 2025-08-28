@@ -122,11 +122,14 @@ export default function BranchPickerDialog({branches, onSubmit, onCancel, onRefr
     
     const allRows = [headerRow, ...dataRows];
     
+    // Set appropriate minimum widths per column: [BRANCH, DIFF, CHANGES, DATE, PR, TITLE]
+    const columnMinWidths = [0, 12, 10, 6, 8, 0]; // BRANCH and TITLE calculated separately
+    
     // Calculate content-based widths for all columns except BRANCH and TITLE
     const fixedWidths = [0, 1, 2, 3, 4, 5].map(colIndex => {
       if (colIndex === 0 || colIndex === 5) return 0; // BRANCH and TITLE calculated separately
       const maxContentWidth = Math.max(...allRows.map(row => stringDisplayWidth(row[colIndex] || '')));
-      return Math.max(6, maxContentWidth); // Minimum 6 chars for readability
+      return Math.max(columnMinWidths[colIndex], maxContentWidth);
     });
     
     // Calculate space used by fixed columns + margins (5 spaces between 6 columns)
