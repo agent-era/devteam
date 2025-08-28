@@ -1,4 +1,4 @@
-# Tmux Session Manager - Developer Guide
+# Coding Agent Team - Developer Guide
 
 ## Project Overview
 
@@ -498,3 +498,8 @@ When adding features:
 - [ ] Verify TypeScript types compile
 - [ ] Test error cases and edge conditions
 
+## Feature Checklist
+- [ ] Show the user a well-researched, high-level plan to implement the feature that uses above guidelines, best design practices and values simplicity in the implementation.
+- [ ] Implement, and ensure that the feature logic is tested using the above guidelines
+- [ ] Build and test and do a typecheck
+- [ ] Make a PR
