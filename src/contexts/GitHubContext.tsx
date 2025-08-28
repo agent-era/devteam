@@ -1,16 +1,9 @@
-<<<<<<< HEAD
-import React, {createContext, useContext, useState, useCallback, useEffect, ReactNode} from 'react';
-import {PRStatus, WorktreeInfo} from '../models.js';
-import {GitHubService} from '../services/GitHubService.js';
-import {PR_REFRESH_DURATION} from '../constants.js';
-=======
 import React, {createContext, useContext, useState, useCallback, useEffect, ReactNode, useRef} from 'react';
 import {PRStatus, WorktreeInfo} from '../models.js';
 import {GitHubService} from '../services/GitHubService.js';
 import {PRStatusCacheService} from '../services/PRStatusCacheService.js';
 import {PR_REFRESH_DURATION} from '../constants.js';
 import {logError} from '../shared/utils/logger.js';
->>>>>>> origin/main
 
 const h = React.createElement;
 
@@ -21,28 +14,19 @@ interface GitHubContextType {
   lastUpdated: number;
   
   // Operations
-<<<<<<< HEAD
-  refreshPRStatus: (worktrees: WorktreeInfo[]) => Promise<void>;
-  refreshPRForWorktree: (worktreePath: string) => Promise<PRStatus | null>;
-  getPRStatus: (worktreePath: string) => PRStatus | null;
-=======
   refreshPRStatus: (worktrees: WorktreeInfo[], visibleOnly?: boolean) => Promise<void>;
   refreshPRForWorktree: (worktreePath: string) => Promise<PRStatus | null>;
   getPRStatus: (worktreePath: string) => PRStatus;
   setVisibleWorktrees: (worktreePaths: string[]) => void;
->>>>>>> origin/main
   
   // GitHub operations
   createPR: (worktreePath: string, title: string, body?: string) => Promise<boolean>;
   mergePR: (worktreePath: string, method?: 'merge' | 'squash' | 'rebase') => Promise<boolean>;
   getPRDetails: (worktreePath: string) => any | null;
-<<<<<<< HEAD
-=======
   
   // Cache operations
   clearCache: () => void;
   getCacheStats: () => {total: number; valid: number; expired: number};
->>>>>>> origin/main
 }
 
 const GitHubContext = createContext<GitHubContextType | null>(null);
@@ -55,21 +39,6 @@ export function GitHubProvider({children}: GitHubProviderProps) {
   const [pullRequests, setPullRequests] = useState<Record<string, PRStatus>>({});
   const [loading, setLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(0);
-<<<<<<< HEAD
-
-  // Service instance
-  const gitHubService = new GitHubService();
-
-  const refreshPRStatus = useCallback(async (worktrees: WorktreeInfo[]): Promise<void> => {
-    if (loading || worktrees.length === 0) return;
-    
-    setLoading(true);
-    try {
-      const prStatusMap = await gitHubService.batchGetPRStatusForWorktreesAsync(worktrees, true);
-      setPullRequests(prev => ({...prev, ...prStatusMap}));
-      setLastUpdated(Date.now());
-    } catch (error) {
-=======
   const [visibleWorktrees, setVisibleWorktrees] = useState<string[]>([]);
 
   // Service instances
@@ -204,20 +173,10 @@ export function GitHubProvider({children}: GitHubProviderProps) {
         error: error instanceof Error ? error.message : String(error),
         worktreePaths: worktreesToRefresh.map(wt => wt.path)
       });
->>>>>>> origin/main
       console.error('Failed to refresh PR status:', error);
     } finally {
       setLoading(false);
     }
-<<<<<<< HEAD
-  }, [loading, gitHubService]);
-
-  const refreshPRForWorktree = useCallback(async (worktreePath: string): Promise<PRStatus | null> => {
-    try {
-      // For single worktree refresh, we need to create a minimal worktree object
-      const dummyWorktree = {
-        project: 'dummy',
-=======
   }, [loading, gitHubService, cacheService, visibleWorktrees]);
 
   const refreshPRStatus = useCallback(async (
@@ -239,7 +198,6 @@ export function GitHubProvider({children}: GitHubProviderProps) {
       // For single worktree refresh, we need to create a minimal worktree object
       const dummyWorktree = {
         project: 'single-refresh',
->>>>>>> origin/main
         path: worktreePath,
         is_archived: false
       };
@@ -248,10 +206,7 @@ export function GitHubProvider({children}: GitHubProviderProps) {
       const prStatus = result[worktreePath];
       
       if (prStatus) {
-<<<<<<< HEAD
-=======
         cacheService.set(worktreePath, prStatus);
->>>>>>> origin/main
         setPullRequests(prev => ({
           ...prev,
           [worktreePath]: prStatus
@@ -263,13 +218,6 @@ export function GitHubProvider({children}: GitHubProviderProps) {
       console.error('Failed to refresh PR for worktree:', error);
       return null;
     }
-<<<<<<< HEAD
-  }, [gitHubService]);
-
-  const getPRStatus = useCallback((worktreePath: string): PRStatus | null => {
-    return pullRequests[worktreePath] || null;
-  }, [pullRequests]);
-=======
   }, [gitHubService, cacheService]);
 
   const getPRStatus = useCallback((worktreePath: string): PRStatus => {
@@ -294,18 +242,13 @@ export function GitHubProvider({children}: GitHubProviderProps) {
   const setVisibleWorktreesCallback = useCallback((worktreePaths: string[]) => {
     setVisibleWorktrees(worktreePaths);
   }, []);
->>>>>>> origin/main
 
   const createPR = useCallback(async (worktreePath: string, title: string, body?: string): Promise<boolean> => {
     try {
       const success = gitHubService.createPR(worktreePath, title, body);
       if (success) {
-<<<<<<< HEAD
-        // Refresh PR status for this worktree after creating
-=======
         // Invalidate cache and refresh PR status for this worktree after creating
         cacheService.invalidate(worktreePath);
->>>>>>> origin/main
         await refreshPRForWorktree(worktreePath);
       }
       return success;
@@ -313,22 +256,14 @@ export function GitHubProvider({children}: GitHubProviderProps) {
       console.error('Failed to create PR:', error);
       return false;
     }
-<<<<<<< HEAD
-  }, [gitHubService, refreshPRForWorktree]);
-=======
   }, [gitHubService, cacheService, refreshPRForWorktree]);
->>>>>>> origin/main
 
   const mergePR = useCallback(async (worktreePath: string, method: 'merge' | 'squash' | 'rebase' = 'merge'): Promise<boolean> => {
     try {
       const success = gitHubService.mergePR(worktreePath, method);
       if (success) {
-<<<<<<< HEAD
-        // Refresh PR status for this worktree after merging
-=======
         // Invalidate cache and refresh PR status for this worktree after merging
         cacheService.invalidate(worktreePath);
->>>>>>> origin/main
         await refreshPRForWorktree(worktreePath);
       }
       return success;
@@ -336,18 +271,12 @@ export function GitHubProvider({children}: GitHubProviderProps) {
       console.error('Failed to merge PR:', error);
       return false;
     }
-<<<<<<< HEAD
-  }, [gitHubService, refreshPRForWorktree]);
-=======
   }, [gitHubService, cacheService, refreshPRForWorktree]);
->>>>>>> origin/main
 
   const getPRDetails = useCallback((worktreePath: string) => {
     return gitHubService.getPRForWorktree(worktreePath);
   }, [gitHubService]);
 
-<<<<<<< HEAD
-=======
   const clearCache = useCallback(() => {
     cacheService.clear();
     setPullRequests({});
@@ -357,7 +286,6 @@ export function GitHubProvider({children}: GitHubProviderProps) {
     return cacheService.getStats();
   }, [cacheService]);
 
->>>>>>> origin/main
   const contextValue: GitHubContextType = {
     // State
     pullRequests,
@@ -368,23 +296,16 @@ export function GitHubProvider({children}: GitHubProviderProps) {
     refreshPRStatus,
     refreshPRForWorktree,
     getPRStatus,
-<<<<<<< HEAD
-=======
     setVisibleWorktrees: setVisibleWorktreesCallback,
->>>>>>> origin/main
     
     // GitHub operations
     createPR,
     mergePR,
-<<<<<<< HEAD
-    getPRDetails
-=======
     getPRDetails,
     
     // Cache operations
     clearCache,
     getCacheStats
->>>>>>> origin/main
   };
 
   return h(GitHubContext.Provider, {value: contextValue}, children);

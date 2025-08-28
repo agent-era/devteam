@@ -3,27 +3,17 @@ import {runCommand, runCommandAsync, runCommandQuick, runCommandQuickAsync} from
 
 export class GitHubService {
   
-<<<<<<< HEAD
-  batchFetchPRData(repoPath: string, opts: {includeChecks?: boolean; includeTitle?: boolean} = {}): Record<string, PRStatus> {
-=======
   batchFetchPRData(repoPath: string, opts: {includeChecks?: boolean; includeTitle?: boolean; branches?: string[]} = {}): Record<string, PRStatus> {
->>>>>>> origin/main
     const prByBranch: Record<string, PRStatus> = {};
     const fields = ['number', 'state', 'headRefName', 'mergeable'];
     const includeChecks = opts.includeChecks !== false;
     const includeTitle = opts.includeTitle !== false;
-<<<<<<< HEAD
-=======
     const branches = opts.branches;
->>>>>>> origin/main
     
     if (includeChecks) fields.push('statusCheckRollup');
     if (includeTitle) fields.push('title');
     
     try {
-<<<<<<< HEAD
-      const output = runCommand(['gh', 'pr', 'list', '--state', 'all', '--json', fields.join(','), '--limit', '200'], {cwd: repoPath});
-=======
       let args = ['gh', 'pr', 'list', '--state', 'all', '--json', fields.join(','), '--limit', '200'];
       
       // Add branch filtering if specified
@@ -34,7 +24,6 @@ export class GitHubService {
       }
       
       const output = runCommand(args, {cwd: repoPath});
->>>>>>> origin/main
       if (!output) return prByBranch;
       
       const data = JSON.parse(output);
@@ -42,14 +31,11 @@ export class GitHubService {
         const branch = pr.headRefName;
         if (!branch) continue;
         
-<<<<<<< HEAD
-=======
         // If we're filtering by branches, ensure this PR is for one of the requested branches
         if (branches && branches.length > 0 && !branches.includes(branch)) {
           continue;
         }
         
->>>>>>> origin/main
         const status = new PRStatus();
         status.number = pr.number ?? null;
         status.state = (pr.state || '').toUpperCase();
@@ -68,27 +54,17 @@ export class GitHubService {
     return prByBranch;
   }
 
-<<<<<<< HEAD
-  async batchFetchPRDataAsync(repoPath: string, opts: {includeChecks?: boolean; includeTitle?: boolean} = {}): Promise<Record<string, PRStatus>> {
-=======
   async batchFetchPRDataAsync(repoPath: string, opts: {includeChecks?: boolean; includeTitle?: boolean; branches?: string[]} = {}): Promise<Record<string, PRStatus>> {
->>>>>>> origin/main
     const prByBranch: Record<string, PRStatus> = {};
     const fields = ['number', 'state', 'headRefName', 'mergeable'];
     const includeChecks = opts.includeChecks !== false;
     const includeTitle = opts.includeTitle !== false;
-<<<<<<< HEAD
-=======
     const branches = opts.branches;
->>>>>>> origin/main
     
     if (includeChecks) fields.push('statusCheckRollup');
     if (includeTitle) fields.push('title');
     
     try {
-<<<<<<< HEAD
-      const output = await runCommandAsync(['gh', 'pr', 'list', '--state', 'all', '--json', fields.join(','), '--limit', '200'], {cwd: repoPath});
-=======
       let args = ['gh', 'pr', 'list', '--state', 'all', '--json', fields.join(','), '--limit', '200'];
       
       // Add branch filtering if specified
@@ -99,7 +75,6 @@ export class GitHubService {
       }
       
       const output = await runCommandAsync(args, {cwd: repoPath});
->>>>>>> origin/main
       if (!output) return prByBranch;
       
       const data = JSON.parse(output);
@@ -107,14 +82,11 @@ export class GitHubService {
         const branch = pr.headRefName;
         if (!branch) continue;
         
-<<<<<<< HEAD
-=======
         // If we're filtering by branches, ensure this PR is for one of the requested branches
         if (branches && branches.length > 0 && !branches.includes(branch)) {
           continue;
         }
         
->>>>>>> origin/main
         const status = new PRStatus();
         status.number = pr.number ?? null;
         status.state = (pr.state || '').toUpperCase();
@@ -141,12 +113,6 @@ export class GitHubService {
       if (!group.length) continue;
       
       const repoPath = group[0].path;
-<<<<<<< HEAD
-      for (const wt of group) result[wt.path] = new PRStatus();
-      
-      const prByBranch = this.batchFetchPRData(repoPath, {includeChecks: true, includeTitle: true});
-      const pathToBranch = this.getWorktreeBranchMapping(repoPath);
-=======
       
       // Get branch mapping first to know which branches to filter for
       const pathToBranch = this.getWorktreeBranchMapping(repoPath);
@@ -158,7 +124,6 @@ export class GitHubService {
         includeTitle: true,
         branches: branches.length > 0 ? branches : undefined
       });
->>>>>>> origin/main
       
       for (const wt of group) {
         const branch = pathToBranch[wt.path];
@@ -179,17 +144,6 @@ export class GitHubService {
       if (!group.length) continue;
       
       const repoPath = group[0].path;
-<<<<<<< HEAD
-      for (const wt of group) result[wt.path] = new PRStatus();
-      
-      const prByBranch = await this.batchFetchPRDataAsync(repoPath, {includeChecks: true, includeTitle: true});
-      const pathToBranch = await this.getWorktreeBranchMappingAsync(repoPath);
-      
-      for (const wt of group) {
-        const branch = pathToBranch[wt.path];
-        if (branch && prByBranch[branch]) {
-          result[wt.path] = prByBranch[branch];
-=======
       
       try {
         // Get branch mapping first to know which branches to filter for
@@ -225,7 +179,6 @@ export class GitHubService {
           result[wt.path] = new PRStatus({ 
             loadingStatus: 'error' 
           });
->>>>>>> origin/main
         }
       }
     }
