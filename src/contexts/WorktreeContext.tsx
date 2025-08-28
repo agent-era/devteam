@@ -45,7 +45,7 @@ interface WorktreeContextType {
   getSelectedWorktree: () => WorktreeInfo | null;
   
   // Data operations
-  refresh: () => Promise<void>;
+  refresh: (refreshPRs?: 'all' | 'visible' | 'none') => Promise<void>;
   refreshSelected: () => void;
   refreshPRSelective: () => Promise<void>;
   
@@ -182,7 +182,7 @@ export function WorktreeProvider({
     return result;
   }, [gitService, tmuxService, worktrees]);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (refreshPRs: 'all' | 'visible' | 'none' = 'all') => {
     if (loading) {
       logDebug(`[Refresh.Full] Skipped - already loading`);
       return;
@@ -205,9 +205,10 @@ export function WorktreeProvider({
         setVisibleWorktrees(visiblePaths);
         }
       
-      // Refresh PR status for all worktrees (will use cache if available)
-      if (refreshPRStatus) {
-        await refreshPRStatus(enrichedList, false);
+      // Refresh PR status based on parameter
+      if (refreshPRStatus && refreshPRs !== 'none') {
+        const visibleOnly = refreshPRs === 'visible';
+        await refreshPRStatus(enrichedList, visibleOnly);
         
         // Update worktrees with fresh PR data after refresh completes
         const updatedWorktrees = enrichedList.map(wt => new WorktreeInfo({
