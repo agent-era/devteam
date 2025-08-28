@@ -64,8 +64,8 @@ const CreateFeatureDialog = React.memo(function CreateFeatureDialog({projects, d
         return;
       }
       
-      // Text filtering with simple backspace
-      if (key.backspace) {
+      // Text filtering - check both keys due to terminal key mapping inconsistencies
+      if (key.backspace || key.delete) {
         setFilter((f) => f.slice(0, -1));
         return;
       }
