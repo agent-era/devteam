@@ -583,6 +583,7 @@ export function WorktreeProvider({children}: WorktreeProviderProps) {
     attachShellSession,
     attachRunSession,
     
+    
     // Projects
     discoverProjects,
     getArchivedForProject,
