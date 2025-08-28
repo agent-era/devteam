@@ -16,6 +16,8 @@ export interface KeyboardActions {
   onDiffUncommitted?: () => void;
   onPreviousPage?: () => void;
   onNextPage?: () => void;
+  onJumpToFirst?: () => void;
+  onJumpToLast?: () => void;
   onQuit?: () => void;
   onNumberSelect?: (number: number) => void;
   onExecuteRun?: () => void;
@@ -102,9 +104,16 @@ export function useKeyboardShortcuts(
 
       // Page navigation keys
       else if (input === '\u001b[6~') { // Page Down
-        actions.onMove?.(pageSize);
+        actions.onNextPage?.();
       } else if (input === '\u001b[5~') { // Page Up  
-        actions.onMove?.(-pageSize);
+        actions.onPreviousPage?.();
+      }
+      
+      // Home and End keys for first/last item
+      else if (input === '\u001b[H' || input === '\u001b[1~') { // Home
+        actions.onJumpToFirst?.();
+      } else if (input === '\u001b[F' || input === '\u001b[4~') { // End
+        actions.onJumpToLast?.();
       }
     };
 

@@ -1,6 +1,7 @@
 import React, {useEffect, useMemo, useState} from 'react';
 import {Box, Text, useInput, useStdin} from 'ink';
 import {fitDisplay, padStartDisplay} from '../../utils.js';
+import {useTerminalDimensions} from '../../hooks/useTerminalDimensions.js';
 import {useTextInput} from './TextInput.js';
 const h = React.createElement;
 
@@ -30,18 +31,15 @@ export default function BranchPickerDialog({branches, onSubmit, onCancel, onRefr
   const filterInput = useTextInput();
   const [selected, setSelected] = useState(0);
   const [page, setPage] = useState(0);
-  const [pageSize, setPageSize] = useState(Math.max(1, (process.stdout.rows || 24) - 6));
+  const {rows, columns} = useTerminalDimensions();
+  const pageSize = Math.max(1, rows - 6); // Reserve space for dialog chrome
+  const {isRawModeSupported} = useStdin();
   const filtered = useMemo(() => {
     const f = filterInput.value.toLowerCase();
     const arr = branches.filter(b => (b.name + ' ' + b.local_name + ' ' + (b.pr_title || '')).toLowerCase().includes(f));
     arr.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
     return arr;
   }, [branches, filterInput.value]);
-  useEffect(() => {
-    const onResize = () => setPageSize(Math.max(1, (process.stdout.rows || 24) - 6));
-    process.stdout.on('resize', onResize);
-    return () => { process.stdout.off?.('resize', onResize as any); };
-  }, []);
 
   useInput((input, key) => {
     if (key.escape) return onCancel();
@@ -91,7 +89,7 @@ export default function BranchPickerDialog({branches, onSubmit, onCancel, onRefr
 
   const start = Math.floor(selected / pageSize) * pageSize;
   const pageItems = filtered.slice(start, start + pageSize);
-  const totalCols = process.stdout.columns || 80;
+  const totalCols = columns;
   // Column widths (sum + 6 spaces between cells should be <= totalCols)
   const NAME_WIDTH = 30;
   const LOCAL_WIDTH = 18;

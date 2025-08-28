@@ -8,6 +8,7 @@ import {FakeGitService} from '../fakes/FakeGitService.js';
 import {FakeTmuxService} from '../fakes/FakeTmuxService.js';
 import {FakeGitHubService} from '../fakes/FakeGitHubService.js';
 import {memoryStore} from '../fakes/stores.js';
+import {calculatePageSize, calculatePaginationInfo} from '../../src/utils/pagination.js';
 
 const h = React.createElement;
 
@@ -111,15 +112,29 @@ function generateMainListOutput(): string {
   const projects = Array.from(memoryStore.projects.values());
 
   if (worktrees.length === 0 && projects.length === 0) {
-    return 'No projects found. Press \'n\' to create new feature.';
+    return 'No worktrees found.\nEnsure your projects live under ~/projects and have worktrees in -branches folders.\nPress q to quit.';
   }
 
-  let output = 'PROJECT/FEATURE        AI  DIFF     CHANGES  PUSHED  PR\n';
+  // Use centralized pagination calculation
+  const pageSize = calculatePageSize();
+  const page = 0; // Default to first page for mock
+  const {totalPages, paginationText} = calculatePaginationInfo(worktrees.length, page, pageSize);
+
+  let output = `Enter attach, n new, a archive, x exec, d diff, s shell, q quit${paginationText}\n`;
+  output += '#    PROJECT/FEATURE        AI  DIFF     CHANGES  PUSHED  PR\n';
   
-  for (const worktree of worktrees) {
+  // Show only items for current page
+  const start = page * pageSize;
+  const pageWorktrees = worktrees.slice(start, start + pageSize);
+  
+  pageWorktrees.forEach((worktree, index) => {
     const session = sessions.find(s => s.session_name.includes(worktree.feature));
     const gitStatus = memoryStore.gitStatus.get(worktree.path);
     const prStatus = memoryStore.prStatus.get(worktree.path);
+    
+    // Row number (1-based for display, continuous across pages)
+    const absoluteIndex = start + index;
+    const rowNum = `${absoluteIndex + 1}`.padStart(4);
     
     // Format display name
     const displayName = `${worktree.project}/${worktree.feature}`.padEnd(20);
@@ -161,11 +176,23 @@ function generateMainListOutput(): string {
       if (prStatus.is_merged || prStatus.state === 'MERGED') prStr += '⟫';
     }
     
-    output += `${displayName} ${aiSymbol}   ${diffStr.padEnd(8)} ${changes.padEnd(8)} ${pushed}       ${prStr}\n`;
+    output += `${rowNum} ${displayName} ${aiSymbol}   ${diffStr.padEnd(8)} ${changes.padEnd(8)} ${pushed}       ${prStr}\n`;
+  });
+  
+  // Add pagination footer if multiple pages
+  if (totalPages > 1) {
+    output += `\n${paginationText}\n`;
   }
   
-  output += '\nPress \'n\' for new, \'a\' to archive, \'?\' for help';
   return output;
+}
+
+// Alias for backward compatibility
+export const renderApp = renderTestApp;
+
+// Add delay utility for tests
+export function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 function generateHelpOutput(): string {

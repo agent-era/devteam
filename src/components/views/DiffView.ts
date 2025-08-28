@@ -3,6 +3,7 @@ import {Box, Text, useInput, useStdin} from 'ink';
 const h = React.createElement;
 import {runCommandAsync} from '../../utils.js';
 import {findBaseBranch} from '../../utils.js';
+import {useTerminalDimensions} from '../../hooks/useTerminalDimensions.js';
 import {BASE_BRANCH_CANDIDATES} from '../../constants.js';
 import {CommentStore} from '../../models.js';
 import {commentStoreManager} from '../../services/CommentStoreManager.js';
@@ -71,13 +72,12 @@ async function loadDiff(worktreePath: string, diffType: 'full' | 'uncommitted' =
 type Props = {worktreePath: string; title?: string; onClose: () => void; diffType?: 'full' | 'uncommitted'; onAttachToSession?: (sessionName: string) => void};
 
 export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, diffType = 'full', onAttachToSession}: Props) {
+  const {rows: terminalHeight, columns: terminalWidth} = useTerminalDimensions();
   const [lines, setLines] = useState<DiffLine[]>([]);
   const [pos, setPos] = useState(0);
   const [offset, setOffset] = useState(0);
   const [targetOffset, setTargetOffset] = useState(0);
   const [animationId, setAnimationId] = useState<NodeJS.Timeout | null>(null);
-  const [terminalHeight, setTerminalHeight] = useState<number>(process.stdout.rows || 24);
-  const [terminalWidth, setTerminalWidth] = useState<number>(process.stdout.columns || 80);
   const [currentFileHeader, setCurrentFileHeader] = useState<string>('');
   const [currentHunkHeader, setCurrentHunkHeader] = useState<string>('');
   const commentStore = useMemo(() => commentStoreManager.getStore(worktreePath), [worktreePath]);
@@ -97,14 +97,6 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       setTargetOffset(0);
       setPos(0);
     })();
-    const onResize = () => {
-      const newHeight = process.stdout.rows || 24;
-      const newWidth = process.stdout.columns || 80;
-      setTerminalHeight(newHeight);
-      setTerminalWidth(newWidth);
-    };
-    process.stdout.on('resize', onResize);
-    return () => { process.stdout.off?.('resize', onResize as any); };
   }, [worktreePath, diffType]);
 
   // Calculate page size dynamically - reserve space for title, help, and sticky headers
