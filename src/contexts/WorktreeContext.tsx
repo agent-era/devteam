@@ -157,7 +157,7 @@ export function WorktreeProvider({children}: WorktreeProviderProps) {
       const attached = activeSessions.includes(sessionName);
       const claudeStatus = attached ? tmuxService.getClaudeStatus(sessionName) : 'not_running';
       
-      // Track idle time and restart Claude sessions after 30 minutes
+      // Track idle time and kill Claude sessions after 30 minutes
       let idleStartTime = selected.idleStartTime;
       if (claudeStatus === 'idle') {
         if (!idleStartTime) {
@@ -166,10 +166,8 @@ export function WorktreeProvider({children}: WorktreeProviderProps) {
         const idleMinutes = (Date.now() - idleStartTime) / 60000;
         
         if (idleMinutes > 30) {
-          // Kill and restart with /resume
+          // Just kill the idle session to free memory
           tmuxService.killSession(sessionName);
-          createTmuxSession(selected.project, selected.feature, selected.path);
-          runCommand(['tmux', 'send-keys', '-t', sessionName, 'claude "/resume"', 'C-m']);
           idleStartTime = null;
         }
       } else {
@@ -284,12 +282,20 @@ export function WorktreeProvider({children}: WorktreeProviderProps) {
     const activeSessions = tmuxService.listSessions();
     
     if (!activeSessions.includes(sessionName)) {
-      createTmuxSession(worktree.project, worktree.feature, worktree.path);
+      // Check if this was previously idle - if so, start with /resume
+      const wasIdleForLong = worktree.idleStartTime && 
+        (Date.now() - worktree.idleStartTime) / 60000 > 30;
+      
+      if (wasIdleForLong) {
+        createTmuxSessionWithResume(worktree.project, worktree.feature, worktree.path);
+      } else {
+        createTmuxSession(worktree.project, worktree.feature, worktree.path);
+      }
     }
     
     configureTmuxDisplayTime();
     runInteractive('tmux', ['attach-session', '-t', sessionName]);
-  }, [tmuxService]);
+  }, [tmuxService, createTmuxSession, createTmuxSessionWithResume]);
 
   const attachShellSession = useCallback((worktree: WorktreeInfo) => {
     const sessionName = tmuxService.shellSessionName(worktree.project, worktree.feature);
@@ -434,6 +440,16 @@ export function WorktreeProvider({children}: WorktreeProviderProps) {
     return sessionName;
   }, [tmuxService]);
 
+  const createTmuxSessionWithResume = useCallback((project: string, feature: string, cwd: string): string => {
+    const sessionName = tmuxService.sessionName(project, feature);
+    
+    runCommand(['tmux', 'new-session', '-ds', sessionName, '-c', cwd]);
+    configureTmuxDisplayTime();
+    startClaudeWithResume(sessionName);
+    
+    return sessionName;
+  }, [tmuxService]);
+
   const createShellSession = useCallback((project: string, feature: string, cwd: string): string => {
     const sessionName = tmuxService.shellSessionName(project, feature);
     const shell = process.env.SHELL || '/bin/bash';
@@ -567,6 +583,13 @@ export function WorktreeProvider({children}: WorktreeProviderProps) {
     const hasClaude = !!runCommandQuick(['bash', '-lc', 'command -v claude || true']);
     if (hasClaude) {
       runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 'claude', 'C-m']);
+    }
+  }, []);
+
+  const startClaudeWithResume = useCallback((sessionName: string) => {
+    const hasClaude = !!runCommandQuick(['bash', '-lc', 'command -v claude || true']);
+    if (hasClaude) {
+      runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 'claude "/resume"', 'C-m']);
     }
   }, []);
 
