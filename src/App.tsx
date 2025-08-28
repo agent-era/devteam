@@ -222,9 +222,9 @@ function AppContent() {
           projects: createProjects as any,
           defaultProject,
           onCancel: showList,
-          onSubmit: (project: string) => {
+          onSubmit: async (project: string) => {
             // Load remote branches for the selected project
-            const branches = getRemoteBranches(project);
+            const branches = await getRemoteBranches(project);
             showBranchListForProject(project, branches);
           }
         })
