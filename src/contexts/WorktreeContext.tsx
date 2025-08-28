@@ -190,7 +190,7 @@ export function WorktreeProvider({children}: WorktreeProviderProps) {
     } catch (error) {
       console.error('Failed to refresh selected worktree:', error);
     }
-  }, [worktrees, selectedIndex, gitService, tmuxService, createTmuxSession]);
+  }, [worktrees, selectedIndex, gitService, tmuxService]);
 
   // Operations
   const createFeature = useCallback(async (projectName: string, featureName: string): Promise<WorktreeInfo | null> => {
@@ -287,15 +287,27 @@ export function WorktreeProvider({children}: WorktreeProviderProps) {
         (Date.now() - worktree.idleStartTime) / 60000 > 30;
       
       if (wasIdleForLong) {
-        createTmuxSessionWithResume(worktree.project, worktree.feature, worktree.path);
+        // Create session with resume
+        runCommand(['tmux', 'new-session', '-ds', sessionName, '-c', worktree.path]);
+        configureTmuxDisplayTime();
+        const hasClaude = !!runCommandQuick(['bash', '-lc', 'command -v claude || true']);
+        if (hasClaude) {
+          runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 'claude "/resume"', 'C-m']);
+        }
       } else {
-        createTmuxSession(worktree.project, worktree.feature, worktree.path);
+        // Create normal session
+        runCommand(['tmux', 'new-session', '-ds', sessionName, '-c', worktree.path]);
+        configureTmuxDisplayTime();
+        const hasClaude = !!runCommandQuick(['bash', '-lc', 'command -v claude || true']);
+        if (hasClaude) {
+          runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 'claude', 'C-m']);
+        }
       }
     }
     
     configureTmuxDisplayTime();
     runInteractive('tmux', ['attach-session', '-t', sessionName]);
-  }, [tmuxService, createTmuxSession, createTmuxSessionWithResume]);
+  }, [tmuxService]);
 
   const attachShellSession = useCallback((worktree: WorktreeInfo) => {
     const sessionName = tmuxService.shellSessionName(worktree.project, worktree.feature);
@@ -440,15 +452,6 @@ export function WorktreeProvider({children}: WorktreeProviderProps) {
     return sessionName;
   }, [tmuxService]);
 
-  const createTmuxSessionWithResume = useCallback((project: string, feature: string, cwd: string): string => {
-    const sessionName = tmuxService.sessionName(project, feature);
-    
-    runCommand(['tmux', 'new-session', '-ds', sessionName, '-c', cwd]);
-    configureTmuxDisplayTime();
-    startClaudeWithResume(sessionName);
-    
-    return sessionName;
-  }, [tmuxService]);
 
   const createShellSession = useCallback((project: string, feature: string, cwd: string): string => {
     const sessionName = tmuxService.shellSessionName(project, feature);
@@ -586,12 +589,6 @@ export function WorktreeProvider({children}: WorktreeProviderProps) {
     }
   }, []);
 
-  const startClaudeWithResume = useCallback((sessionName: string) => {
-    const hasClaude = !!runCommandQuick(['bash', '-lc', 'command -v claude || true']);
-    if (hasClaude) {
-      runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 'claude "/resume"', 'C-m']);
-    }
-  }, []);
 
   // Auto-refresh intervals
   useEffect(() => {
