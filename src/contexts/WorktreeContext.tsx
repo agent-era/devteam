@@ -487,12 +487,12 @@ export function WorktreeProvider({
         }
       }
       
-      // Set environment variables if they exist
-      if (config.env && typeof config.env === 'object') {
-        for (const [key, value] of Object.entries(config.env)) {
-          runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, `export ${key}="${value}"`, 'C-m']);
-        }
-      }
+      // // Set environment variables if they exist
+      // if (config.env && typeof config.env === 'object') {
+      //   for (const [key, value] of Object.entries(config.env)) {
+      //     runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, `export ${key}="${value}"`, 'C-m']);
+      //   }
+      // }
       
       // Run the main command
       if (config.command) {
