@@ -299,6 +299,12 @@ function generateArchiveConfirmOutput(viewData: any): string {
 
 function generateProjectPickerOutput(viewData: any): string {
   const projects = viewData.items || viewData.projects || [];
+  
+  // Simulate the App.tsx logic: if no projects or empty projects, return to list view
+  if (!projects || projects.length === 0) {
+    return generateMainListOutput();
+  }
+  
   let output = 'Select Project\n\n';
   
   for (let i = 0; i < projects.length; i++) {
@@ -314,22 +320,42 @@ function generateProjectPickerOutput(viewData: any): string {
 
 function generateBranchPickerOutput(viewData: any): string {
   const branches = viewData.items || viewData.branches || [];
-  let output = 'Select Branch\n\n';
+  let output = 'Create from Remote Branch\n\n';
   
   for (let i = 0; i < branches.length; i++) {
     const branch = branches[i];
-    const name = typeof branch === 'string' ? branch : branch.name;
+    const name = typeof branch === 'string' ? branch : (branch.local_name || branch.name);
     const isSelected = i === (viewData.selectedIndex || 0);
-    const prefix = isSelected ? '>' : ' ';
+    const prefix = isSelected ? '› ' : '  ';
     
-    output += `${prefix} ${name}`;
-    if (branch.prNumber) {
-      output += ` (#${branch.prNumber})`;
+    let line = `${prefix}${name}`;
+    
+    // Add PR information (handle both formats)
+    const prNumber = branch.pr_number || branch.prNumber;
+    const prChecks = branch.pr_checks || branch.prChecks;
+    if (prNumber) {
+      const checksIcon = prChecks === 'passing' ? '✓' : 
+                        prChecks === 'failing' ? '✗' :
+                        prChecks === 'pending' ? '⏳' : '';
+      line += ` #${prNumber}${checksIcon}`;
     }
-    if (branch.prTitle) {
-      output += ` - ${branch.prTitle}`;
+    
+    // Add diff information
+    if (branch.added_lines !== undefined && branch.deleted_lines !== undefined) {
+      line += ` +${branch.added_lines}/-${branch.deleted_lines}`;
     }
-    output += '\n';
+    
+    // Add ahead/behind info
+    if (branch.ahead > 0) line += ` ↑${branch.ahead}`;
+    if (branch.behind > 0) line += ` ↓${branch.behind}`;
+    
+    // Add PR title (handle both formats)
+    const prTitle = branch.pr_title || branch.prTitle;
+    if (prTitle) {
+      line += ` ${prTitle}`;
+    }
+    
+    output += line + '\n';
   }
   
   output += '\nUse j/k to navigate, ENTER to select, ESC to cancel.';

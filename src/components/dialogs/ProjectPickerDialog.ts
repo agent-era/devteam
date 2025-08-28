@@ -13,8 +13,12 @@ type Props = {
 
 export default function ProjectPickerDialog({projects, defaultProject, onSubmit, onCancel}: Props) {
   const filterInput = useTextInput();
-  const [selected, setSelected] = useState(() => Math.max(0, projects.findIndex(p => p.name === defaultProject)));
+  const [selected, setSelected] = useState(() => {
+    if (!projects || projects.length === 0) return 0;
+    return Math.max(0, projects.findIndex(p => p.name === defaultProject));
+  });
   const filtered = useMemo(() => {
+    if (!projects || projects.length === 0) return [];
     const f = filterInput.value.toLowerCase();
     return projects.filter(p => p.name.toLowerCase().includes(f));
   }, [projects, filterInput.value]);
@@ -24,7 +28,7 @@ export default function ProjectPickerDialog({projects, defaultProject, onSubmit,
     
     // Handle control keys first before text input
     if (key.return) {
-      const proj = filtered[selected]?.name || projects[0]?.name;
+      const proj = filtered[selected]?.name || (projects && projects[0]?.name);
       if (proj) onSubmit(proj);
       return;
     }

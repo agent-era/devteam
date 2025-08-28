@@ -64,6 +64,7 @@ interface WorktreeContextType {
   // Projects
   discoverProjects: () => ProjectInfo[];
   getArchivedForProject: (project: ProjectInfo) => Array<any>;
+  getRemoteBranches: (project: string) => Array<Record<string, any>>;
   
   // Run configuration
   getRunConfigPath: (project: string) => string;
@@ -439,6 +440,10 @@ export function WorktreeProvider({
     return gitService.getArchivedForProject(project);
   }, [gitService]);
 
+  const getRemoteBranches = useCallback((project: string) => {
+    return gitService.getRemoteBranches(project);
+  }, [gitService]);
+
   const getRunConfigPath = useCallback((project: string): string => {
     const projectPath = path.join(BASE_PATH, project);
     return path.join(projectPath, RUN_CONFIG_FILE);
@@ -726,6 +731,7 @@ export function WorktreeProvider({
     // Projects
     discoverProjects,
     getArchivedForProject,
+    getRemoteBranches,
     
     // Run configuration
     getRunConfigPath,

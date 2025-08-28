@@ -40,6 +40,7 @@ function AppContent() {
     attachRunSession,
     discoverProjects,
     getArchivedForProject,
+    getRemoteBranches,
     getRunConfigPath,
     createOrFillRunConfig
   } = useWorktreeContext();
@@ -65,6 +66,7 @@ function AppContent() {
     showArchivedView,
     showHelp,
     showBranchPicker,
+    showBranchListForProject,
     showDiffView,
     showRunConfig,
     showRunProgress,
@@ -221,8 +223,9 @@ function AppContent() {
           defaultProject,
           onCancel: showList,
           onSubmit: (project: string) => {
-            // TODO: Load branch list and show branch picker
-            showList();
+            // Load remote branches for the selected project
+            const branches = getRemoteBranches(project);
+            showBranchListForProject(project, branches);
           }
         })
       )
