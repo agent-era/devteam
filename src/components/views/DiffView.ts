@@ -415,8 +415,11 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
           runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 
                      `claude ${JSON.stringify(commentPrompt)}`, 'C-m']);
         } else {
-          // Claude is idle/working/thinking - can accept input via Alt+Enter
+          // Claude is idle/working/active - can accept input via Alt+Enter
           sendCommentsViaAltEnter(sessionName, comments);
+          
+          // Wait a brief moment for tmux to process the input
+          runCommand(['sleep', '0.5']);
           
           // VERIFY: Check if comments were actually received (handle race condition)
           const received = verifyCommentsReceived(sessionName, comments);
