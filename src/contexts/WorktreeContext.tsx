@@ -105,36 +105,13 @@ export function WorktreeProvider({children}: WorktreeProviderProps) {
     path: string; 
     branch: string
   }>): WorktreeInfo[] => {
-    // Get existing worktrees to preserve idle timers
-    const existingWorktrees = new Map(worktrees.map(w => [`${w.project}/${w.feature}`, w]));
-    
     return list.map((w: any) => {
-      const key = `${w.project}/${w.feature}`;
-      const existing = existingWorktrees.get(key);
-      
       const gitStatus = gitService.getGitStatus(w.path);
       const sessionName = tmuxService.sessionName(w.project, w.feature);
       const activeSessions = tmuxService.listSessions();
       const attached = activeSessions.includes(sessionName);
       const claudeStatus = attached ? tmuxService.getClaudeStatus(sessionName) : 'not_running';
       
-      // Track idle time for ALL worktrees
-      let idleStartTime = existing?.idleStartTime;
-      
-      if (claudeStatus === 'idle') {
-        if (!idleStartTime) {
-          idleStartTime = Date.now();
-        }
-        const idleMinutes = (Date.now() - idleStartTime) / 60000;
-        
-        if (idleMinutes > 30) {
-          // Kill idle session to free memory
-          tmuxService.killSession(sessionName);
-          idleStartTime = null;
-        }
-      } else {
-        idleStartTime = null; // Reset when not idle
-      }
       
       const sessionInfo = new SessionInfo({
         session_name: sessionName,
@@ -149,11 +126,10 @@ export function WorktreeProvider({children}: WorktreeProviderProps) {
         branch: w.branch,
         git: gitStatus,
         session: sessionInfo,
-        idleStartTime,
         mtime: w.mtime || 0,
       });
     });
-  }, [gitService, tmuxService, worktrees]);
+  }, [gitService, tmuxService]);
 
   const refresh = useCallback(() => {
     if (loading) return;
@@ -289,26 +265,12 @@ export function WorktreeProvider({children}: WorktreeProviderProps) {
     const activeSessions = tmuxService.listSessions();
     
     if (!activeSessions.includes(sessionName)) {
-      // Check if this was previously idle - if so, start with /resume
-      const wasIdleForLong = worktree.idleStartTime && 
-        (Date.now() - worktree.idleStartTime) / 60000 > 30;
-      
-      if (wasIdleForLong) {
-        // Create session with resume
-        runCommand(['tmux', 'new-session', '-ds', sessionName, '-c', worktree.path]);
-        configureTmuxDisplayTime();
-        const hasClaude = !!runCommandQuick(['bash', '-lc', 'command -v claude || true']);
-        if (hasClaude) {
-          runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 'claude "/resume"', 'C-m']);
-        }
-      } else {
-        // Create normal session
-        runCommand(['tmux', 'new-session', '-ds', sessionName, '-c', worktree.path]);
-        configureTmuxDisplayTime();
-        const hasClaude = !!runCommandQuick(['bash', '-lc', 'command -v claude || true']);
-        if (hasClaude) {
-          runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 'claude', 'C-m']);
-        }
+      // Create session inline - use regular claude command
+      runCommand(['tmux', 'new-session', '-ds', sessionName, '-c', worktree.path]);
+      configureTmuxDisplayTime();
+      const hasClaude = !!runCommandQuick(['bash', '-lc', 'command -v claude || true']);
+      if (hasClaude) {
+        runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 'claude', 'C-m']);
       }
     }
     

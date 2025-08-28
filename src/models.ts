@@ -75,7 +75,6 @@ export class WorktreeInfo {
   is_archived?: boolean;
   mtime?: number;
   last_commit_ts?: number;
-  idleStartTime?: number | null;
   constructor(init: Partial<WorktreeInfo> = {}) {
     this.project = '';
     this.feature = '';
@@ -87,7 +86,6 @@ export class WorktreeInfo {
     this.is_archived = false;
     this.mtime = 0;
     this.last_commit_ts = 0;
-    this.idleStartTime = null;
     Object.assign(this, init);
   }
 
