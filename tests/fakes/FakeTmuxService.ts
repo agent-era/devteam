@@ -18,11 +18,11 @@ export class FakeTmuxService extends TmuxService {
     return memoryStore.sessions.has(session);
   }
 
-  listSessions(): string[] {
+  async listSessions(): Promise<string[]> {
     return Array.from(memoryStore.sessions.keys());
   }
 
-  capturePane(session: string): string {
+  async capturePane(session: string): Promise<string> {
     const sessionInfo = memoryStore.sessions.get(session);
     if (!sessionInfo) return '';
 
@@ -45,7 +45,7 @@ export class FakeTmuxService extends TmuxService {
     }
   }
 
-  getClaudeStatus(session: string): ClaudeStatus {
+  async getClaudeStatus(session: string): Promise<ClaudeStatus> {
     const sessionInfo = memoryStore.sessions.get(session);
     if (!sessionInfo) return 'not_running';
     
@@ -57,8 +57,8 @@ export class FakeTmuxService extends TmuxService {
     return deleted ? 'Session killed' : 'No such session';
   }
 
-  cleanupOrphanedSessions(validWorktrees: string[]): void {
-    const sessions = this.listSessions();
+  async cleanupOrphanedSessions(validWorktrees: string[]): Promise<void> {
+    const sessions = await this.listSessions();
     const devSessions = sessions.filter((s) => s.startsWith(SESSION_PREFIX));
     
     for (const session of devSessions) {

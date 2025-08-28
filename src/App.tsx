@@ -122,11 +122,11 @@ function AppContent() {
     }
   };
 
-  const handleExecuteRun = () => {
+  const handleExecuteRun = async () => {
     const selectedWorktree = getSelectedWorktree();
     if (!selectedWorktree) return;
     
-    const result = attachRunSession(selectedWorktree);
+    const result = await attachRunSession(selectedWorktree);
     
     if (result === 'no_config') {
       showRunConfig(selectedWorktree.project, selectedWorktree.feature, selectedWorktree.path);
@@ -292,7 +292,7 @@ function AppContent() {
             if (runConfigResult.success) {
               try {
                 const worktreeInfo = {project: runProject!, feature: runFeature!, path: runPath!};
-                attachRunSession(worktreeInfo as any);
+                attachRunSession(worktreeInfo as any).catch(() => {});
               } catch {}
             }
           }

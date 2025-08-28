@@ -1,4 +1,4 @@
-import {commandExitCode, runCommandQuick} from '../utils.js';
+import {commandExitCode, runCommandQuick, runCommandQuickAsync} from '../utils.js';
 import {SESSION_PREFIX, CLAUDE_PATTERNS} from '../constants.js';
 import {logInfo, logDebug} from '../shared/utils/logger.js';
 import {Timer} from '../shared/utils/timing.js';
@@ -23,23 +23,23 @@ export class TmuxService {
     return code === 0;
   }
 
-  listSessions(): string[] {
-    const output = runCommandQuick(['tmux', 'list-sessions', '-F', '#S']);
+  async listSessions(): Promise<string[]> {
+    const output = await runCommandQuickAsync(['tmux', 'list-sessions', '-F', '#S']);
     if (!output) return [];
     
     const sessions = output.split('\n').filter(Boolean);
     return sessions;
   }
 
-  capturePane(session: string): string {
-    const target = this.findClaudePaneTarget(session) || `${session}:0.0`;
-    const output = runCommandQuick(['tmux', 'capture-pane', '-p', '-t', target, '-S', '-50']);
+  async capturePane(session: string): Promise<string> {
+    const target = await this.findClaudePaneTarget(session) || `${session}:0.0`;
+    const output = await runCommandQuickAsync(['tmux', 'capture-pane', '-p', '-t', target, '-S', '-50']);
     
     return output || '';
   }
 
-  getClaudeStatus(session: string): ClaudeStatus {
-    const text = this.capturePane(session);
+  async getClaudeStatus(session: string): Promise<ClaudeStatus> {
+    const text = await this.capturePane(session);
     if (!text) return 'not_running';
     
     let status: ClaudeStatus = 'active';
@@ -54,8 +54,8 @@ export class TmuxService {
     return runCommandQuick(['tmux', 'kill-session', '-t', session]);
   }
 
-  cleanupOrphanedSessions(validWorktrees: string[]): void {
-    const sessions = this.listSessions();
+  async cleanupOrphanedSessions(validWorktrees: string[]): Promise<void> {
+    const sessions = await this.listSessions();
     const devSessions = sessions.filter((s) => s.startsWith(SESSION_PREFIX));
     
     for (const session of devSessions) {
@@ -65,8 +65,8 @@ export class TmuxService {
   }
 
   // Private helper methods
-  private findClaudePaneTarget(session: string): string | null {
-    const panes = runCommandQuick(['tmux', 'list-panes', '-t', `=${session}`, '-F', '#{window_index}.#{pane_index} #{pane_current_command}']);
+  private async findClaudePaneTarget(session: string): Promise<string | null> {
+    const panes = await runCommandQuickAsync(['tmux', 'list-panes', '-t', `=${session}`, '-F', '#{window_index}.#{pane_index} #{pane_current_command}']);
     if (!panes) return `${session}:0.0`;
     
     const lines = panes.split('\n').filter(Boolean);

@@ -57,9 +57,9 @@ interface WorktreeContextType {
   deleteArchived: (archivedPath: string) => Promise<boolean>;
   
   // Session operations  
-  attachSession: (worktree: WorktreeInfo) => void;
-  attachShellSession: (worktree: WorktreeInfo) => void;
-  attachRunSession: (worktree: WorktreeInfo) => 'success' | 'no_config';
+  attachSession: (worktree: WorktreeInfo) => Promise<void>;
+  attachShellSession: (worktree: WorktreeInfo) => Promise<void>;
+  attachRunSession: (worktree: WorktreeInfo) => Promise<'success' | 'no_config'>;
   
   // Projects
   discoverProjects: () => ProjectInfo[];
@@ -92,41 +92,56 @@ export function WorktreeProvider({
   const gitService = useMemo(() => new GitService(), []);
   const tmuxService = useMemo(() => new TmuxService(), []);
 
-  const collectWorktrees = useCallback((): Array<{
+  const collectWorktrees = useCallback(async (): Promise<Array<{
     project: string; 
     feature: string; 
     path: string; 
     branch: string; 
     mtime?: number
-  }> => {
+  }>> => {
     const projects = gitService.discoverProjects();
+    
+    // Run worktree collection for all projects in parallel
+    const allWorktreePromises = projects.map(project => 
+      gitService.getWorktreesForProject(project)
+    );
+    
+    const allWorktrees = await Promise.all(allWorktreePromises);
+    
+    // Flatten the results
     const rows = [];
-    for (const project of projects) {
-      const worktrees = gitService.getWorktreesForProject(project);
+    for (const worktrees of allWorktrees) {
       for (const wt of worktrees) rows.push(wt);
     }
     
     return rows;
   }, [gitService]);
 
-  const attachRuntimeData = useCallback((list: Array<{
+  const attachRuntimeData = useCallback(async (list: Array<{
     project: string; 
     feature: string; 
     path: string; 
     branch: string
-  }>, getPRStatus?: (path: string) => any): WorktreeInfo[] => {
+  }>, getPRStatus?: (path: string) => any): Promise<WorktreeInfo[]> => {
     // Get existing worktrees to preserve idle timers and kill flags
     const existingWorktrees = new Map(worktrees.map(w => [`${w.project}/${w.feature}`, w]));
     
-    const result = list.map((w: any) => {
+    // Get tmux sessions once for all worktrees
+    const activeSessions = await tmuxService.listSessions();
+    
+    // Create promises for all git status and claude status checks
+    const promises = list.map(async (w: any) => {
       const key = `${w.project}/${w.feature}`;
       const existing = existingWorktrees.get(key);
       
-      const gitStatus = gitService.getGitStatus(w.path);
+      // Run git status and claude status in parallel
       const sessionName = tmuxService.sessionName(w.project, w.feature);
-      const activeSessions = tmuxService.listSessions();
       const attached = activeSessions.includes(sessionName);
-      const claudeStatus = attached ? tmuxService.getClaudeStatus(sessionName) : 'not_running';
+      
+      const [gitStatus, claudeStatus] = await Promise.all([
+        gitService.getGitStatus(w.path),
+        attached ? tmuxService.getClaudeStatus(sessionName) : Promise.resolve('not_running' as const)
+      ]);
       
       // Track idle time for ALL worktrees and kill after 30 minutes
       let idleStartTime = existing?.idleStartTime;
@@ -177,6 +192,9 @@ export function WorktreeProvider({
       });
     });
     
+    // Wait for all worktree data to be processed in parallel
+    const result = await Promise.all(promises);
+    
     return result;
   }, [gitService, tmuxService, worktrees]);
 
@@ -192,8 +210,8 @@ export function WorktreeProvider({
     try {
       logInfo(`[Refresh.Full] Starting complete refresh`);
       
-      const rawList = collectWorktrees();
-      const enrichedList = attachRuntimeData(rawList, getPRStatus);
+      const rawList = await collectWorktrees();
+      const enrichedList = await attachRuntimeData(rawList, getPRStatus);
       setWorktrees(enrichedList);
       setLastRefreshed(Date.now());
       
@@ -228,16 +246,20 @@ export function WorktreeProvider({
     }
   }, [loading, collectWorktrees, attachRuntimeData, getPRStatus, setVisibleWorktrees, refreshPRStatus]);
 
-  const refreshSelected = useCallback(() => {
+  const refreshSelected = useCallback(async () => {
     const selected = worktrees[selectedIndex];
     if (!selected) return;
     
     try {
-      const gitStatus = gitService.getGitStatus(selected.path);
       const sessionName = tmuxService.sessionName(selected.project, selected.feature);
-      const activeSessions = tmuxService.listSessions();
+      const activeSessions = await tmuxService.listSessions();
       const attached = activeSessions.includes(sessionName);
-      const claudeStatus = attached ? tmuxService.getClaudeStatus(sessionName) : 'not_running';
+      
+      // Run git status and claude status in parallel
+      const [gitStatus, claudeStatus] = await Promise.all([
+        gitService.getGitStatus(selected.path),
+        attached ? tmuxService.getClaudeStatus(sessionName) : Promise.resolve('not_running' as const)
+      ]);
       
       const updatedWorktrees = [...worktrees];
       updatedWorktrees[selectedIndex] = new WorktreeInfo({
@@ -294,7 +316,7 @@ export function WorktreeProvider({
       setupWorktreeEnvironment(projectName, worktreePath);
       createTmuxSession(projectName, featureName, worktreePath);
       
-      refresh();
+      await refresh();
       return new WorktreeInfo({
         project: projectName,
         feature: featureName,
@@ -316,7 +338,7 @@ export function WorktreeProvider({
       setupWorktreeEnvironment(project, worktreePath);
       createTmuxSession(project, localName, worktreePath);
       
-      refresh();
+      await refresh();
       return true;
     } finally {
       setLoading(false);
@@ -340,7 +362,7 @@ export function WorktreeProvider({
         featureName = worktreeOrProject.feature;
       }
       
-      terminateFeatureSessions(project, featureName);
+      await terminateFeatureSessions(project, featureName);
       
       const archivedRoot = path.join(BASE_PATH, `${project}${DIR_ARCHIVED_SUFFIX}`);
       ensureDirectory(archivedRoot);
@@ -351,7 +373,7 @@ export function WorktreeProvider({
       moveWorktreeToArchive(workPath, archivedDest);
       pruneWorktreeReferences(project);
 
-      refresh();
+      await refresh();
       return {archivedPath: archivedDest};
     } finally {
       setLoading(false);
@@ -367,9 +389,9 @@ export function WorktreeProvider({
     }
   }, []);
 
-  const attachSession = useCallback((worktree: WorktreeInfo) => {
+  const attachSession = useCallback(async (worktree: WorktreeInfo) => {
     const sessionName = tmuxService.sessionName(worktree.project, worktree.feature);
-    const activeSessions = tmuxService.listSessions();
+    const activeSessions = await tmuxService.listSessions();
     
     if (!activeSessions.includes(sessionName)) {
       // Create session inline
@@ -391,9 +413,9 @@ export function WorktreeProvider({
     runInteractive('tmux', ['attach-session', '-t', sessionName]);
   }, [tmuxService]);
 
-  const attachShellSession = useCallback((worktree: WorktreeInfo) => {
+  const attachShellSession = useCallback(async (worktree: WorktreeInfo) => {
     const sessionName = tmuxService.shellSessionName(worktree.project, worktree.feature);
-    const activeSessions = tmuxService.listSessions();
+    const activeSessions = await tmuxService.listSessions();
     
     if (!activeSessions.includes(sessionName)) {
       createShellSession(worktree.project, worktree.feature, worktree.path);
@@ -403,7 +425,7 @@ export function WorktreeProvider({
     runInteractive('tmux', ['attach-session', '-t', sessionName]);
   }, [tmuxService]);
 
-  const attachRunSession = useCallback((worktree: WorktreeInfo): 'success' | 'no_config' => {
+  const attachRunSession = useCallback(async (worktree: WorktreeInfo): Promise<'success' | 'no_config'> => {
     const projectPath = path.join(BASE_PATH, worktree.project);
     const configPath = path.join(projectPath, RUN_CONFIG_FILE);
     
@@ -413,7 +435,7 @@ export function WorktreeProvider({
     }
 
     const sessionName = tmuxService.runSessionName(worktree.project, worktree.feature);
-    const activeSessions = tmuxService.listSessions();
+    const activeSessions = await tmuxService.listSessions();
     
     if (!activeSessions.includes(sessionName)) {
       createRunSession(worktree.project, worktree.feature, worktree.path);
@@ -591,11 +613,11 @@ export function WorktreeProvider({
     return sessionName;
   }, [tmuxService]);
 
-  const terminateFeatureSessions = useCallback((projectName: string, featureName: string) => {
+  const terminateFeatureSessions = useCallback(async (projectName: string, featureName: string) => {
     const sessionName = tmuxService.sessionName(projectName, featureName);
     const shellSessionName = tmuxService.shellSessionName(projectName, featureName);
     const runSessionName = tmuxService.runSessionName(projectName, featureName);
-    const activeSessions = tmuxService.listSessions();
+    const activeSessions = await tmuxService.listSessions();
     
     // Kill all three session types
     if (activeSessions.includes(sessionName)) {
@@ -674,7 +696,9 @@ export function WorktreeProvider({
   useEffect(() => {
     const shouldRefresh = Date.now() - lastRefreshed > CACHE_DURATION;
     if (shouldRefresh) {
-      refresh();
+      refresh().catch(error => {
+        console.error('Auto-refresh failed:', error);
+      });
     }
   }, [lastRefreshed, refresh]);
 
@@ -682,7 +706,9 @@ export function WorktreeProvider({
     const interval = setInterval(() => {
       // Skip AI status refresh if any dialog is focused to avoid interrupting typing
       if (!isAnyDialogFocused) {
-        refreshSelected();
+        refreshSelected().catch(error => {
+          console.error('Selected refresh failed:', error);
+        });
       }
     }, AI_STATUS_REFRESH_DURATION);
     return () => clearInterval(interval);
@@ -692,7 +718,9 @@ export function WorktreeProvider({
     const interval = setInterval(() => {
       // Skip diff status refresh if any dialog is focused to avoid interrupting typing
       if (!isAnyDialogFocused) {
-        refresh();
+        refresh().catch(error => {
+          console.error('Diff status refresh failed:', error);
+        });
       }
     }, DIFF_STATUS_REFRESH_DURATION);
     return () => clearInterval(interval);

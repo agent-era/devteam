@@ -13,13 +13,13 @@ export class FakeGitService extends GitService {
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  getWorktreesForProject(project: ProjectInfo): Array<{
+  async getWorktreesForProject(project: ProjectInfo): Promise<Array<{
     project: string; 
     feature: string; 
     path: string; 
     branch: string; 
     mtime: number
-  }> {
+  }>> {
     const worktrees = Array.from(memoryStore.worktrees.values())
       .filter(w => w.project === project.name)
       .map(w => ({
@@ -34,7 +34,7 @@ export class FakeGitService extends GitService {
     return worktrees;
   }
 
-  getGitStatus(worktreePath: string): GitStatus {
+  async getGitStatus(worktreePath: string): Promise<GitStatus> {
     const stored = memoryStore.gitStatus.get(worktreePath);
     if (stored) {
       return stored;
@@ -135,7 +135,7 @@ export class FakeGitService extends GitService {
     return true;
   }
 
-  getRemoteBranches(project: string): Array<Record<string, any>> {
+  async getRemoteBranches(project: string): Promise<Array<Record<string, any>>> {
     const branches = memoryStore.remoteBranches.get(project) || [];
     return branches.map(branch => ({
       local_name: branch.local_name,

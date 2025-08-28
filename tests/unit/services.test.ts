@@ -41,7 +41,7 @@ describe('Fake Services Unit Tests', () => {
       expect(created?.branch).toBe('feature/new-feature');
     });
 
-    test('should get worktrees for project', () => {
+    test('should get worktrees for project', async () => {
       const gitService = new FakeGitService();
       const project = setupTestProject('test-project');
       
@@ -49,7 +49,7 @@ describe('Fake Services Unit Tests', () => {
       gitService.createWorktree('test-project', 'feature-1');
       gitService.createWorktree('test-project', 'feature-2');
       
-      const worktrees = gitService.getWorktreesForProject(project);
+      const worktrees = await gitService.getWorktreesForProject(project);
       
       expect(worktrees).toHaveLength(2);
       expect(worktrees.some(w => w.feature === 'feature-1')).toBe(true);
