@@ -58,6 +58,7 @@ interface WorktreeContextType {
   attachRunSession: (worktree: WorktreeInfo) => 'success' | 'no_config';
   
   
+  
   // Projects
   discoverProjects: () => ProjectInfo[];
   getArchivedForProject: (project: ProjectInfo) => Array<any>;
@@ -347,6 +348,7 @@ export function WorktreeProvider({
   }, [tmuxService]);
 
 
+
   const selectWorktree = useCallback((index: number) => {
     setSelectedIndex(index);
   }, []);
@@ -628,6 +630,7 @@ export function WorktreeProvider({
     attachSession,
     attachShellSession,
     attachRunSession,
+    
     
     // Projects
     discoverProjects,
