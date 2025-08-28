@@ -14,7 +14,7 @@ import {
   setupTestWorktree,
 } from '../utils/testHelpers.js';
 import {commentStoreManager} from '../../src/services/CommentStoreManager.js';
-import {PRStatus} from '../../src/models.js';
+import {PRStatus, WorktreeInfo} from '../../src/models.js';
 import * as commandExecutor from '../../src/shared/utils/commandExecutor.js';
 
 describe('Full Workflow E2E Tests', () => {
@@ -216,7 +216,10 @@ index 1234567..abcdefg 100644
       // Move worktree to archived
       memoryStore.worktrees.delete(worktree.path);
       const archived = memoryStore.archivedWorktrees.get('workflow-project') || [];
-      archived.push({...worktree, is_archived: true});
+      archived.push(new WorktreeInfo({
+        ...worktree,
+        is_archived: true
+      }));
       memoryStore.archivedWorktrees.set('workflow-project', archived);
       
       // Clean up session

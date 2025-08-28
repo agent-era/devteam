@@ -502,7 +502,7 @@ describe('Archive Management E2E', () => {
         path: '/fake/archived/older',
         branch: 'feature/older-feature',
         is_archived: true,
-        archived_at: new Date(Date.now() - 86400000), // 1 day ago
+        mtime: Date.now() - 86400000, // 1 day ago
         git: new GitStatus(),
         pr: new PRStatus(),
         session: new SessionInfo()
@@ -514,7 +514,7 @@ describe('Archive Management E2E', () => {
         path: '/fake/archived/newer',
         branch: 'feature/newer-feature',
         is_archived: true,
-        archived_at: new Date(), // Now
+        mtime: Date.now(), // Now
         git: new GitStatus(),
         pr: new PRStatus(),
         session: new SessionInfo()

@@ -1,5 +1,5 @@
 import {GitService} from '../../src/services/GitService.js';
-import {GitStatus, ProjectInfo, PRStatus} from '../../src/models.js';
+import {GitStatus, ProjectInfo, PRStatus, WorktreeInfo} from '../../src/models.js';
 import {memoryStore} from './stores.js';
 import {BASE_PATH, DIR_BRANCHES_SUFFIX, DIR_ARCHIVED_SUFFIX} from '../../src/constants.js';
 
@@ -235,7 +235,11 @@ export class FakeGitService extends GitService {
     memoryStore.worktrees.delete(worktreePath);
     
     // Add to archived with updated path
-    const archivedWorktree = {...worktree, path: archivedPath, is_archived: true};
+    const archivedWorktree = new WorktreeInfo({
+      ...worktree,
+      path: archivedPath,
+      is_archived: true
+    });
     const archived = memoryStore.archivedWorktrees.get(worktree.project) || [];
     archived.push(archivedWorktree);
     memoryStore.archivedWorktrees.set(worktree.project, archived);
