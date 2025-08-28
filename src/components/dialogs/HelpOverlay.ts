@@ -6,9 +6,7 @@ const h = React.createElement;
 type Props = { onClose: () => void };
 
 export default function HelpOverlay({onClose}: Props) {
-  const {isRawModeSupported} = useStdin();
   useInput((input, key) => {
-    if (!isRawModeSupported) return;
     if (key.escape || input === '?' || input === 'q' || key.return) onClose();
   });
   return h(

@@ -33,7 +33,7 @@ export function useKeyboardShortcuts(
   actions: KeyboardActions,
   options: KeyboardShortcutsOptions = {}
 ) {
-  const {stdin, setRawMode, isRawModeSupported} = useStdin();
+  const {stdin, setRawMode} = useStdin();
   const {
     enabled = true,
     page = 0,
@@ -43,7 +43,7 @@ export function useKeyboardShortcuts(
   } = options;
 
   useEffect(() => {
-    if (!isRawModeSupported || !enabled) return;
+    if (!enabled) return;
 
     setRawMode(true);
 
@@ -103,7 +103,6 @@ export function useKeyboardShortcuts(
       setRawMode(false);
     };
   }, [
-    isRawModeSupported,
     enabled,
     actions,
     page,
@@ -115,7 +114,6 @@ export function useKeyboardShortcuts(
   ]);
 
   return {
-    isRawModeSupported,
-    enabled: enabled && isRawModeSupported
+    enabled
   };
 }

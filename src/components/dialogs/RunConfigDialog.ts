@@ -11,10 +11,7 @@ type Props = {
 };
 
 export default function RunConfigDialog({project, configPath, claudePrompt, onCancel, onCreateConfig}: Props) {
-  const {isRawModeSupported} = useStdin();
-  
   useInput((input, key) => {
-    if (!isRawModeSupported) return;
     if (key.escape || input === 'q') onCancel();
     else if (input === 'y' || input === 'Y' || key.return) onCreateConfig();
     else if (input === 'n' || input === 'N') onCancel();

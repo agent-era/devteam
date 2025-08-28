@@ -12,9 +12,7 @@ type Props = {
 };
 
 export default function ConfirmDialog({title, message, confirmKey = 'y', cancelKey = 'n', onConfirm, onCancel}: Props) {
-  const {isRawModeSupported} = useStdin();
   useInput((input, key) => {
-    if (!isRawModeSupported) return;
     if (key.escape || input === cancelKey) onCancel();
     if (key.return || input === confirmKey) onConfirm();
   });

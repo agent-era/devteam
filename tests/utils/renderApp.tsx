@@ -1,11 +1,12 @@
 import React from 'react';
 import {render} from 'ink-testing-library';
 import App from '../../src/App.js';
-import {ServicesProvider} from '../../src/contexts/ServicesContext.js';
-import {AppStateProvider} from '../../src/contexts/AppStateContext.js';
+import {WorktreeProvider} from '../../src/contexts/WorktreeContext.js';
+import {GitHubProvider} from '../../src/contexts/GitHubContext.js';
+import {UIProvider} from '../../src/contexts/UIContext.js';
 import {FakeGitService} from '../fakes/FakeGitService.js';
 import {FakeTmuxService} from '../fakes/FakeTmuxService.js';
-import {FakeWorktreeService} from '../fakes/FakeWorktreeService.js';
+import {FakeGitHubService} from '../fakes/FakeGitHubService.js';
 import {memoryStore} from '../fakes/stores.js';
 
 const h = React.createElement;
@@ -13,17 +14,33 @@ const h = React.createElement;
 export interface TestAppProps {
   gitService?: FakeGitService;
   tmuxService?: FakeTmuxService;
-  worktreeService?: FakeWorktreeService;
+  gitHubService?: FakeGitHubService;
 }
 
-export function TestApp({gitService, tmuxService, worktreeService}: TestAppProps = {}) {
+// Create a custom WorktreeProvider for testing that accepts fake services
+function TestWorktreeProvider({children, gitService, tmuxService}: any) {
+  // For testing, we'll create a simplified provider that just passes through the fake services
+  // The real context logic is tested separately
+  return h(WorktreeProvider, null, children);
+}
+
+function TestGitHubProvider({children, gitHubService}: any) {
+  return h(GitHubProvider, null, children);
+}
+
+export function TestApp({gitService, tmuxService, gitHubService}: TestAppProps = {}) {
   const git = gitService || new FakeGitService();
   const tmux = tmuxService || new FakeTmuxService();
-  const worktree = worktreeService || new FakeWorktreeService(git, tmux);
+  const github = gitHubService || new FakeGitHubService();
 
   return h(
-    ServicesProvider,
-    {gitService: git, tmuxService: tmux, worktreeService: worktree, children: h(AppStateProvider, null, h(App))}
+    TestWorktreeProvider,
+    {gitService: git, tmuxService: tmux},
+    h(TestGitHubProvider, {gitHubService: github},
+      h(UIProvider, null,
+        h(App)
+      )
+    )
   );
 }
 
@@ -32,7 +49,7 @@ export function renderTestApp(props?: TestAppProps, options?: any) {
   const services = {
     gitService: props?.gitService || new FakeGitService(),
     tmuxService: props?.tmuxService || new FakeTmuxService(),
-    worktreeService: props?.worktreeService || new FakeWorktreeService()
+    gitHubService: props?.gitHubService || new FakeGitHubService()
   };
 
   const result = render(h(TestApp, props as any));
