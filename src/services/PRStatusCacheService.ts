@@ -8,6 +8,7 @@ interface CacheEntry {
   data: any; // Raw data that will be used to reconstruct PRStatus
   timestamp: number;
   commitHash?: string;
+  remoteCommitHash?: string;
   ttl: number; // TTL in milliseconds
 }
 
@@ -40,8 +41,15 @@ export class PRStatusCacheService {
       return null;
     }
 
-    // Check git-aware invalidation
+    // Check git-aware invalidation (local commits)
     if (entry.commitHash && !this.isCommitHashValid(worktreePath, entry.commitHash)) {
+      delete this.cache[worktreePath];
+      this.saveToDisk();
+      return null;
+    }
+
+    // Check remote commit invalidation
+    if (entry.remoteCommitHash && !this.isRemoteCommitHashValid(worktreePath, entry.remoteCommitHash)) {
       delete this.cache[worktreePath];
       this.saveToDisk();
       return null;
@@ -72,11 +80,13 @@ export class PRStatusCacheService {
     }
     
     const commitHash = this.getCurrentCommitHash(worktreePath);
+    const remoteCommitHash = this.getRemoteCommitHash(worktreePath);
 
     this.cache[worktreePath] = {
       data: this.serializePRStatus(prStatus),
       timestamp: Date.now(),
       commitHash,
+      remoteCommitHash,
       ttl
     };
 
@@ -95,8 +105,13 @@ export class PRStatusCacheService {
       return false;
     }
 
-    // Check commit hash if present
+    // Check local commit hash if present
     if (entry.commitHash && !this.isCommitHashValid(worktreePath, entry.commitHash)) {
+      return false;
+    }
+
+    // Check remote commit hash if present
+    if (entry.remoteCommitHash && !this.isRemoteCommitHashValid(worktreePath, entry.remoteCommitHash)) {
       return false;
     }
 
@@ -223,9 +238,28 @@ export class PRStatusCacheService {
     }
   }
 
+  private getRemoteCommitHash(worktreePath: string): string | undefined {
+    try {
+      // Get the remote tracking branch for current branch
+      const currentBranch = runCommandQuick(['git', '-C', worktreePath, 'branch', '--show-current'])?.trim();
+      if (!currentBranch) return undefined;
+      
+      // Get remote commit hash for the tracking branch
+      const remoteRef = `origin/${currentBranch}`;
+      return runCommandQuick(['git', '-C', worktreePath, 'rev-parse', remoteRef])?.trim();
+    } catch {
+      return undefined;
+    }
+  }
+
   private isCommitHashValid(worktreePath: string, cachedHash: string): boolean {
     const currentHash = this.getCurrentCommitHash(worktreePath);
     return currentHash === cachedHash;
+  }
+
+  private isRemoteCommitHashValid(worktreePath: string, cachedRemoteHash: string): boolean {
+    const currentRemoteHash = this.getRemoteCommitHash(worktreePath);
+    return currentRemoteHash === cachedRemoteHash;
   }
 
   private serializePRStatus(prStatus: PRStatus): any {
