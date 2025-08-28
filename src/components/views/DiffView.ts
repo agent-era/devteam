@@ -80,7 +80,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
   const commentStore = useMemo(() => commentStoreManager.getStore(worktreePath), [worktreePath]);
   const [tmuxService] = useState(() => new TmuxService());
   const [showCommentDialog, setShowCommentDialog] = useState(false);
-  const [showAllComments, setShowAllComments] = useState(false);
+  const [showAllComments, setShowAllComments] = useState(true);
   const [showSessionWaitingDialog, setShowSessionWaitingDialog] = useState(false);
   const [sessionWaitingInfo, setSessionWaitingInfo] = useState<{sessionName: string}>({sessionName: ''});
 
