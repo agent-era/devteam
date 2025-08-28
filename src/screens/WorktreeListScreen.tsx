@@ -1,8 +1,9 @@
-import React from 'react';
+import React, {useState} from 'react';
 import {Box} from 'ink';
 import MainView from '../components/views/MainView.js';
 import {useWorktreeContext} from '../contexts/WorktreeContext.js';
 import {useKeyboardShortcuts} from '../hooks/useKeyboardShortcuts.js';
+import {usePageSize} from '../hooks/usePagination.js';
 
 const h = React.createElement;
 
@@ -30,10 +31,40 @@ export default function WorktreeListScreen({
   onConfigureRun
 }: WorktreeListScreenProps) {
   const {worktrees, selectedIndex, selectWorktree, refresh, attachSession, attachShellSession} = useWorktreeContext();
+  const pageSize = usePageSize();
+  const [currentPage, setCurrentPage] = useState(0);
 
   const handleMove = (delta: number) => {
-    const nextIndex = Math.max(0, Math.min(worktrees.length - 1, selectedIndex + delta));
-    selectWorktree(nextIndex);
+    const nextIndex = selectedIndex + delta;
+    
+    // Handle page boundaries
+    if (nextIndex < 0) {
+      // Move to previous page, select last item of that page
+      const totalPages = Math.max(1, Math.ceil(worktrees.length / pageSize));
+      const newPage = currentPage > 0 ? currentPage - 1 : totalPages - 1;
+      const lastItemOnPage = Math.min((newPage + 1) * pageSize - 1, worktrees.length - 1);
+      setCurrentPage(newPage);
+      selectWorktree(lastItemOnPage);
+    } else if (nextIndex >= worktrees.length) {
+      // Wrap to first page, first item
+      setCurrentPage(0);
+      selectWorktree(0);
+    } else if (nextIndex >= (currentPage + 1) * pageSize) {
+      // Move to next page, select first item of that page
+      const totalPages = Math.max(1, Math.ceil(worktrees.length / pageSize));
+      const newPage = (currentPage + 1) % totalPages;
+      setCurrentPage(newPage);
+      selectWorktree(newPage * pageSize);
+    } else if (nextIndex < currentPage * pageSize) {
+      // Move to previous page, select last item of that page
+      const newPage = currentPage > 0 ? currentPage - 1 : Math.max(0, Math.ceil(worktrees.length / pageSize) - 1);
+      const lastItemOnPage = Math.min((newPage + 1) * pageSize - 1, worktrees.length - 1);
+      setCurrentPage(newPage);
+      selectWorktree(lastItemOnPage);
+    } else {
+      // Normal movement within current page
+      selectWorktree(nextIndex);
+    }
   };
 
   const handleSelect = () => {
@@ -44,7 +75,9 @@ export default function WorktreeListScreen({
       attachSession(selectedWorktree);
     } catch {}
     
-    refresh();
+    refresh().catch(error => {
+      console.error('Refresh after attach failed:', error);
+    });
   };
 
   const handleShell = () => {
@@ -55,7 +88,9 @@ export default function WorktreeListScreen({
       attachShellSession(selectedWorktree);
     } catch {}
     
-    refresh();
+    refresh().catch(error => {
+      console.error('Refresh after attach failed:', error);
+    });
   };
 
   const handleDiffFull = () => {
@@ -73,18 +108,32 @@ export default function WorktreeListScreen({
   };
 
   const handlePreviousPage = () => {
-    // Pagination is now handled by the MainView component
-    // This could be extended to support pagination in the future
+    const totalPages = Math.max(1, Math.ceil(worktrees.length / pageSize));
+    const newPage = currentPage > 0 ? currentPage - 1 : totalPages - 1;
+    setCurrentPage(newPage);
+    selectWorktree(newPage * pageSize);
   };
 
   const handleNextPage = () => {
-    // Pagination is now handled by the MainView component  
-    // This could be extended to support pagination in the future
+    const totalPages = Math.max(1, Math.ceil(worktrees.length / pageSize));
+    const newPage = (currentPage + 1) % totalPages;
+    setCurrentPage(newPage);
+    selectWorktree(newPage * pageSize);
   };
 
   const handleRefresh = async () => {
     // Full refresh: worktrees and PR status for visible items only
     await refresh('visible');
+  };
+
+  const handleJumpToFirst = () => {
+    selectWorktree(0);
+  };
+
+  const handleJumpToLast = () => {
+    if (worktrees.length > 0) {
+      selectWorktree(worktrees.length - 1);
+    }
   };
 
   useKeyboardShortcuts({
@@ -101,12 +150,14 @@ export default function WorktreeListScreen({
     onDiffUncommitted: handleDiffUncommitted,
     onPreviousPage: handlePreviousPage,
     onNextPage: handleNextPage,
+    onJumpToFirst: handleJumpToFirst,
+    onJumpToLast: handleJumpToLast,
     onQuit: onQuit,
     onExecuteRun: onExecuteRun,
     onConfigureRun: onConfigureRun
   }, {
-    page: 0,
-    pageSize: 20,
+    page: currentPage,
+    pageSize,
     selectedIndex,
     totalItems: worktrees.length
   });
@@ -117,7 +168,7 @@ export default function WorktreeListScreen({
     onMove: handleMove,
     onSelect: handleSelect,
     onQuit,
-    page: 0,
-    pageSize: 20,
+    page: currentPage,
+    pageSize,
   });
 }

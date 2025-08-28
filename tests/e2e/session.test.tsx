@@ -151,7 +151,7 @@ describe('Session Management E2E', () => {
       memoryStore.archivedWorktrees.set('my-project', archived);
 
       // Trigger cleanup of orphaned sessions
-      services.tmuxService.cleanupOrphanedSessions([]);
+      await services.tmuxService.cleanupOrphanedSessions([]);
 
       // Session should be cleaned up when worktree is archived
       expectSessionNotInMemory(session.session_name);
@@ -173,7 +173,7 @@ describe('Session Management E2E', () => {
       memoryStore.archivedWorktrees.set('my-project', archived);
 
       // Trigger cleanup with no valid worktrees
-      services.tmuxService.cleanupOrphanedSessions([]);
+      await services.tmuxService.cleanupOrphanedSessions([]);
 
       // Regular session should be cleaned up
       expectSessionNotInMemory(session.session_name);

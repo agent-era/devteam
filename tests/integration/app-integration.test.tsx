@@ -96,7 +96,7 @@ describe('App Integration Tests', () => {
       expect(session.session_name).toBe('dev-context-test-context-feature');
     });
 
-    test('should handle multiple operations maintaining consistency', () => {
+    test('should handle multiple operations maintaining consistency', async () => {
       setupTestProject('multi-test');
       
       const gitService = new FakeGitService();
@@ -121,7 +121,7 @@ describe('App Integration Tests', () => {
       expect(projects[0].name).toBe('multi-test');
       
       const project = projects[0];
-      const worktrees = gitService.getWorktreesForProject(project);
+      const worktrees = await gitService.getWorktreesForProject(project);
       expect(worktrees.length).toBe(3);
       
       const features = worktrees.map(w => w.feature).sort();
@@ -143,7 +143,7 @@ describe('App Integration Tests', () => {
       expect(archived?.[0].feature).toBe(firstWorktree.feature);
     });
 
-    test('should maintain git status and PR data correctly', () => {
+    test('should maintain git status and PR data correctly', async () => {
       const project = setupTestProject('status-test');
       
       // Setup worktree with full status data
@@ -168,7 +168,7 @@ describe('App Integration Tests', () => {
       const tmuxService = new FakeTmuxService();
       
       // Verify git status is retrievable
-      const gitStatus = gitService.getGitStatus(worktree.path);
+      const gitStatus = await gitService.getGitStatus(worktree.path);
       expect(gitStatus.has_changes).toBe(true);
       expect(gitStatus.modified_files).toBe(3);
       expect(gitStatus.ahead).toBe(2);
@@ -178,7 +178,7 @@ describe('App Integration Tests', () => {
       // Verify session status
       const sessionName = tmuxService.sessionName('status-test', 'status-feature');
       expect(tmuxService.hasSession(sessionName)).toBe(true);
-      expect(tmuxService.getClaudeStatus(sessionName)).toBe('working');
+      expect(await tmuxService.getClaudeStatus(sessionName)).toBe('working');
       
       // Verify PR data through GitHub service
       const gitHubService = new FakeGitHubService();
@@ -192,30 +192,30 @@ describe('App Integration Tests', () => {
       expect(prData[worktree.path].checks).toBe('passing');
     });
 
-    test('should handle session status updates', () => {
+    test('should handle session status updates', async () => {
       setupTestProject('session-test');
       
       const tmuxService = new FakeTmuxService();
       const sessionName = tmuxService.createSession('session-test', 'test-feature', 'idle')!;
       
       // Test status transitions
-      expect(tmuxService.getClaudeStatus(sessionName)).toBe('idle');
+      expect(await tmuxService.getClaudeStatus(sessionName)).toBe('idle');
       
       tmuxService.updateClaudeStatus(sessionName, 'working');
-      expect(tmuxService.getClaudeStatus(sessionName)).toBe('working');
+      expect(await tmuxService.getClaudeStatus(sessionName)).toBe('working');
       
       tmuxService.updateClaudeStatus(sessionName, 'waiting');
-      expect(tmuxService.getClaudeStatus(sessionName)).toBe('waiting');
+      expect(await tmuxService.getClaudeStatus(sessionName)).toBe('waiting');
       
       tmuxService.updateClaudeStatus(sessionName, 'idle');
-      expect(tmuxService.getClaudeStatus(sessionName)).toBe('idle');
+      expect(await tmuxService.getClaudeStatus(sessionName)).toBe('idle');
       
       // Verify session capture provides appropriate output
-      const output = tmuxService.capturePane(sessionName);
+      const output = await tmuxService.capturePane(sessionName);
       expect(output).toContain('Ready to help');
     });
 
-    test('should handle remote branch operations', () => {
+    test('should handle remote branch operations', async () => {
       setupTestProject('remote-test');
       
       const gitService = new FakeGitService();
@@ -227,7 +227,7 @@ describe('App Integration Tests', () => {
       ]);
       
       // Get remote branches
-      const remoteBranches = gitService.getRemoteBranches('remote-test');
+      const remoteBranches = await gitService.getRemoteBranches('remote-test');
       expect(remoteBranches.length).toBe(2);
       expect(remoteBranches[0].local_name).toBe('feature-from-remote');
       expect(remoteBranches[1].pr_number).toBe(789);
@@ -277,13 +277,13 @@ describe('App Integration Tests', () => {
       expect(memoryStore.worktrees.size).toBe(1);
     });
 
-    test('should handle session operations on non-existent sessions', () => {
+    test('should handle session operations on non-existent sessions', async () => {
       const tmuxService = new FakeTmuxService();
       
       expect(tmuxService.hasSession('non-existent')).toBe(false);
-      expect(tmuxService.getClaudeStatus('non-existent')).toBe('not_running');
+      expect(await tmuxService.getClaudeStatus('non-existent')).toBe('not_running');
       
-      const output = tmuxService.capturePane('non-existent');
+      const output = await tmuxService.capturePane('non-existent');
       expect(output).toBe('');
     });
 

@@ -3,6 +3,7 @@ import {Box, Text, useInput, useStdin} from 'ink';
 const h = React.createElement;
 import {runCommandAsync} from '../../utils.js';
 import {findBaseBranch} from '../../utils.js';
+import {useTerminalDimensions} from '../../hooks/useTerminalDimensions.js';
 import {BASE_BRANCH_CANDIDATES} from '../../constants.js';
 import {CommentStore} from '../../models.js';
 import {commentStoreManager} from '../../services/CommentStoreManager.js';
@@ -71,13 +72,12 @@ async function loadDiff(worktreePath: string, diffType: 'full' | 'uncommitted' =
 type Props = {worktreePath: string; title?: string; onClose: () => void; diffType?: 'full' | 'uncommitted'; onAttachToSession?: (sessionName: string) => void};
 
 export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, diffType = 'full', onAttachToSession}: Props) {
+  const {rows: terminalHeight, columns: terminalWidth} = useTerminalDimensions();
   const [lines, setLines] = useState<DiffLine[]>([]);
   const [pos, setPos] = useState(0);
   const [offset, setOffset] = useState(0);
   const [targetOffset, setTargetOffset] = useState(0);
   const [animationId, setAnimationId] = useState<NodeJS.Timeout | null>(null);
-  const [terminalHeight, setTerminalHeight] = useState<number>(process.stdout.rows || 24);
-  const [terminalWidth, setTerminalWidth] = useState<number>(process.stdout.columns || 80);
   const [currentFileHeader, setCurrentFileHeader] = useState<string>('');
   const [currentHunkHeader, setCurrentHunkHeader] = useState<string>('');
   const commentStore = useMemo(() => commentStoreManager.getStore(worktreePath), [worktreePath]);
@@ -97,14 +97,6 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       setTargetOffset(0);
       setPos(0);
     })();
-    const onResize = () => {
-      const newHeight = process.stdout.rows || 24;
-      const newWidth = process.stdout.columns || 80;
-      setTerminalHeight(newHeight);
-      setTerminalWidth(newWidth);
-    };
-    process.stdout.on('resize', onResize);
-    return () => { process.stdout.off?.('resize', onResize as any); };
   }, [worktreePath, diffType]);
 
   // Calculate page size dynamically - reserve space for title, help, and sticky headers
@@ -223,7 +215,9 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     
     if (input === 'S') {
       if (commentStore.count > 0) {
-        sendCommentsToTmux();
+        sendCommentsToTmux().catch(error => {
+          console.error('Failed to send comments:', error);
+        });
       }
     }
     
@@ -328,12 +322,12 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     return lines.filter(line => line.trim().length > 0);
   };
 
-  const verifyCommentsReceived = (sessionName: string, comments: any[]): boolean => {
+  const verifyCommentsReceived = async (sessionName: string, comments: any[]): Promise<boolean> => {
     // Wait a brief moment for tmux to process the input
     // This is synchronous in our case since runCommand is blocking
     
     // Capture the current pane content
-    const paneContent = tmuxService.capturePane(sessionName);
+    const paneContent = await tmuxService.capturePane(sessionName);
     
     if (!paneContent || paneContent.trim().length === 0) {
       return false; // No content captured
@@ -387,7 +381,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     });
   };
 
-  const sendCommentsToTmux = () => {
+  const sendCommentsToTmux = async () => {
     const comments = commentStore.getAllComments();
     if (comments.length === 0) {
       // No comments to send, just return
@@ -406,11 +400,12 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       const sessionName = tmuxService.sessionName(project, feature);
       
       // Check if session exists
-      const sessionExists = tmuxService.listSessions().includes(sessionName);
+      const sessions = await tmuxService.listSessions();
+      const sessionExists = sessions.includes(sessionName);
       
       if (sessionExists) {
         // IMPORTANT: Refresh status right before checking
-        const claudeStatus = tmuxService.getClaudeStatus(sessionName);
+        const claudeStatus = await tmuxService.getClaudeStatus(sessionName);
         
         if (claudeStatus === 'waiting') {
           // Claude is waiting for a response - can't accept new input
@@ -433,7 +428,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
           runCommand(['sleep', '0.5']);
           
           // VERIFY: Check if comments were actually received (handle race condition)
-          const received = verifyCommentsReceived(sessionName, comments);
+          const received = await verifyCommentsReceived(sessionName, comments);
           
           if (!received) {
             // Race condition detected - Claude probably transitioned to waiting
@@ -500,7 +495,9 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
 
   const handleUnsubmittedCommentsSubmit = () => {
     setShowUnsubmittedCommentsDialog(false);
-    sendCommentsToTmux();
+    sendCommentsToTmux().catch(error => {
+      console.error('Failed to send comments:', error);
+    });
   };
 
   const handleUnsubmittedCommentsExitWithoutSubmitting = () => {
