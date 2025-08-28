@@ -117,12 +117,44 @@ export function WorktreeProvider({
     path: string; 
     branch: string
   }>, getPRStatus?: (path: string) => any): WorktreeInfo[] => {
+    // Get existing worktrees to preserve idle timers and kill flags
+    const existingWorktrees = new Map(worktrees.map(w => [`${w.project}/${w.feature}`, w]));
+    
     const result = list.map((w: any) => {
+      const key = `${w.project}/${w.feature}`;
+      const existing = existingWorktrees.get(key);
+      
       const gitStatus = gitService.getGitStatus(w.path);
       const sessionName = tmuxService.sessionName(w.project, w.feature);
       const activeSessions = tmuxService.listSessions();
       const attached = activeSessions.includes(sessionName);
       const claudeStatus = attached ? tmuxService.getClaudeStatus(sessionName) : 'not_running';
+      
+      // Track idle time for ALL worktrees and kill after 30 minutes
+      let idleStartTime = existing?.idleStartTime;
+      let wasKilledIdle = existing?.wasKilledIdle || false;
+      
+      if (claudeStatus === 'idle') {
+        if (!idleStartTime) {
+          idleStartTime = Date.now();
+        }
+        const idleMinutes = (Date.now() - idleStartTime) / 60000;
+        
+        if (idleMinutes > 30) {
+          // Kill idle session to free memory and mark it as killed
+          tmuxService.killSession(sessionName);
+          idleStartTime = null;
+          wasKilledIdle = true;
+        }
+      } else {
+        idleStartTime = null; // Reset when not idle
+        // Keep wasKilledIdle flag until session is recreated
+      }
+      
+      // Reset wasKilledIdle flag if session is now active (was recreated)
+      if (attached && wasKilledIdle) {
+        wasKilledIdle = false;
+      }
       
       const sessionInfo = new SessionInfo({
         session_name: sessionName,
@@ -140,13 +172,15 @@ export function WorktreeProvider({
         branch: w.branch,
         git: gitStatus,
         session: sessionInfo,
+        idleStartTime,
+        wasKilledIdle,
         pr: prStatus,
         mtime: w.mtime || 0,
       });
     });
     
     return result;
-  }, [gitService, tmuxService]);
+  }, [gitService, tmuxService, worktrees]);
 
   const refresh = useCallback(async () => {
     if (loading) {
@@ -339,7 +373,19 @@ export function WorktreeProvider({
     const activeSessions = tmuxService.listSessions();
     
     if (!activeSessions.includes(sessionName)) {
-      createTmuxSession(worktree.project, worktree.feature, worktree.path);
+      // Create session inline
+      runCommand(['tmux', 'new-session', '-ds', sessionName, '-c', worktree.path]);
+      configureTmuxDisplayTime();
+      const hasClaude = !!runCommandQuick(['bash', '-lc', 'command -v claude || true']);
+      if (hasClaude) {
+        if (worktree.wasKilledIdle) {
+          // Session was killed due to idle timeout - use /resume to restore context
+          runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 'claude "/resume"', 'C-m']);
+        } else {
+          // Fresh session - use regular claude command
+          runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 'claude', 'C-m']);
+        }
+      }
     }
     
     configureTmuxDisplayTime();
@@ -487,6 +533,7 @@ export function WorktreeProvider({
     return sessionName;
   }, [tmuxService]);
 
+
   const createShellSession = useCallback((project: string, feature: string, cwd: string): string => {
     const sessionName = tmuxService.shellSessionName(project, feature);
     const shell = process.env.SHELL || '/bin/bash';
@@ -504,6 +551,8 @@ export function WorktreeProvider({
     
     // Create detached session at cwd
     runCommand(['tmux', 'new-session', '-ds', sessionName, '-c', cwd]);
+    // Auto-destroy session when program exits
+    runCommand(['tmux', 'set-option', '-t', sessionName, 'remain-on-exit', 'off']);
     configureTmuxDisplayTime();
     
     try {
@@ -545,10 +594,19 @@ export function WorktreeProvider({
 
   const terminateFeatureSessions = useCallback((projectName: string, featureName: string) => {
     const sessionName = tmuxService.sessionName(projectName, featureName);
+    const shellSessionName = tmuxService.shellSessionName(projectName, featureName);
+    const runSessionName = tmuxService.runSessionName(projectName, featureName);
     const activeSessions = tmuxService.listSessions();
     
+    // Kill all three session types
     if (activeSessions.includes(sessionName)) {
       runCommand(['tmux', 'kill-session', '-t', sessionName]);
+    }
+    if (activeSessions.includes(shellSessionName)) {
+      runCommand(['tmux', 'kill-session', '-t', shellSessionName]);
+    }
+    if (activeSessions.includes(runSessionName)) {
+      runCommand(['tmux', 'kill-session', '-t', runSessionName]);
     }
   }, [tmuxService]);
 
@@ -611,6 +669,7 @@ export function WorktreeProvider({
       runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 'claude', 'C-m']);
     }
   }, []);
+
 
   // Auto-refresh intervals
   useEffect(() => {
