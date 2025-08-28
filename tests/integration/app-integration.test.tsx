@@ -178,7 +178,7 @@ describe('App Integration Tests', () => {
       // Verify session status
       const sessionName = tmuxService.sessionName('status-test', 'status-feature');
       expect(tmuxService.hasSession(sessionName)).toBe(true);
-      expect(tmuxService.getClaudeStatus(sessionName)).toBe('working');
+      expect(await tmuxService.getClaudeStatus(sessionName)).toBe('working');
       
       // Verify PR data through GitHub service
       const gitHubService = new FakeGitHubService();
@@ -277,13 +277,13 @@ describe('App Integration Tests', () => {
       expect(memoryStore.worktrees.size).toBe(1);
     });
 
-    test('should handle session operations on non-existent sessions', () => {
+    test('should handle session operations on non-existent sessions', async () => {
       const tmuxService = new FakeTmuxService();
       
       expect(tmuxService.hasSession('non-existent')).toBe(false);
-      expect(tmuxService.getClaudeStatus('non-existent')).toBe('not_running');
+      expect(await tmuxService.getClaudeStatus('non-existent')).toBe('not_running');
       
-      const output = tmuxService.capturePane('non-existent');
+      const output = await tmuxService.capturePane('non-existent');
       expect(output).toBe('');
     });
 

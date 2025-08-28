@@ -58,26 +58,26 @@ describe('Fake Services Unit Tests', () => {
   });
 
   describe('FakeTmuxService', () => {
-    test('should create and manage sessions', () => {
+    test('should create and manage sessions', async () => {
       const tmuxService = new FakeTmuxService();
       
       const sessionName = tmuxService.createSession('test-project', 'test-feature', 'idle')!;
       
       expect(sessionName).toBe('dev-test-project-test-feature');
       expect(tmuxService.hasSession(sessionName)).toBe(true);
-      expect(tmuxService.listSessions()).toContain(sessionName);
+      expect(await tmuxService.listSessions()).toContain(sessionName);
     });
 
-    test('should track Claude status', () => {
+    test('should track Claude status', async () => {
       const tmuxService = new FakeTmuxService();
       
       const sessionName = tmuxService.createSession('project', 'feature', 'working')!;
       
-      expect(tmuxService.getClaudeStatus(sessionName)).toBe('working');
+      expect(await tmuxService.getClaudeStatus(sessionName)).toBe('working');
       
       // Update status
       tmuxService.updateClaudeStatus(sessionName, 'idle');
-      expect(tmuxService.getClaudeStatus(sessionName)).toBe('idle');
+      expect(await tmuxService.getClaudeStatus(sessionName)).toBe('idle');
     });
 
     test('should kill sessions', () => {
