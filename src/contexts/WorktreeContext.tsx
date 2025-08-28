@@ -633,7 +633,7 @@ export function WorktreeProvider({
   }, []);
 
   const copyClaudeSettings = useCallback((projectPath: string, worktreePath: string) => {
-    // Create symlink to .claude directory instead of copying
+    // Create hard links to .claude directory files instead of symlink
     const claudeDirSrc = path.join(projectPath, '.claude');
     const claudeDirDst = path.join(worktreePath, '.claude');
     
@@ -642,8 +642,19 @@ export function WorktreeProvider({
       if (fs.existsSync(claudeDirDst)) {
         fs.rmSync(claudeDirDst, { recursive: true, force: true });
       }
-      // Create symlink to the original .claude directory
-      fs.symlinkSync(claudeDirSrc, claudeDirDst, 'dir');
+      
+      // Create destination directory
+      fs.mkdirSync(claudeDirDst, { recursive: true });
+      
+      // Create hard links for each file in the .claude directory
+      const files = fs.readdirSync(claudeDirSrc, { withFileTypes: true });
+      for (const file of files) {
+        if (file.isFile()) {
+          const srcFile = path.join(claudeDirSrc, file.name);
+          const dstFile = path.join(claudeDirDst, file.name);
+          fs.linkSync(srcFile, dstFile);
+        }
+      }
     }
   }, []);
 
