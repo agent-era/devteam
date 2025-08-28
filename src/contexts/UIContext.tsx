@@ -29,10 +29,15 @@ interface UIContextType {
   showArchivedView: () => void;
   showHelp: () => void;
   showBranchPicker: (projects: any[], defaultProject?: string) => void;
+  showBranchListForProject: (project: string, branches: any[]) => void;
   showDiffView: (worktreePath: string, type: 'full' | 'uncommitted') => void;
   showRunConfig: (project: string, feature: string, path: string) => void;
   showRunProgress: () => void;
   showRunResults: (result: any) => void;
+  
+  // Branch management
+  setBranchList: (branches: any[]) => void;
+  setBranchProject: (project: string) => void;
   
   // Application lifecycle
   requestExit: () => void;
@@ -111,6 +116,12 @@ export function UIProvider({children}: UIProviderProps) {
     }
   };
 
+  const showBranchListForProject = (project: string, branches: any[]) => {
+    setMode('pickBranch');
+    setBranchProject(project);
+    setBranchList(branches);
+  };
+
   const showDiffView = (worktreePath: string, type: 'full' | 'uncommitted') => {
     setMode('diff');
     setDiffWorktree(worktreePath);
@@ -160,10 +171,16 @@ export function UIProvider({children}: UIProviderProps) {
     showArchivedView,
     showHelp,
     showBranchPicker,
+    showBranchListForProject,
     showDiffView,
     showRunConfig,
     showRunProgress,
     showRunResults,
+    
+    // Branch management
+    setBranchList,
+    setBranchProject,
+    
     requestExit
   };
 

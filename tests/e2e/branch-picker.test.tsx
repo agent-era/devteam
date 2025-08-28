@@ -286,6 +286,28 @@ describe('Branch Picker E2E', () => {
       expect(lastFrame()).not.toContain('picker-integration/current-feature');
     });
 
+    test('should handle b key press with no projects available (crash prevention)', async () => {
+      // Setup: Empty state that could trigger the crash
+      const {setUIMode, lastFrame} = renderTestApp();
+      await simulateTimeDelay(50);
+      
+      // Simulate 'b' key pressed when no projects are discovered (discoverProjects() returns empty)
+      // This simulates the crash scenario where projects list is null/empty
+      setUIMode('pickProjectForBranch', {
+        projects: null as any, // This is what could cause the crash
+        defaultProject: undefined
+      });
+      await simulateTimeDelay(50);
+      
+      // Should not crash, should return to list view gracefully
+      const output = lastFrame();
+      expect(output).not.toContain('Select Project');
+      expect(() => {
+        // This should not throw an error
+        lastFrame();
+      }).not.toThrow();
+    });
+
     test('should pre-select project when opening branch picker', async () => {
       // Setup: Multiple projects with one selected
       setupProjectWithWorktrees('project-a', ['feature-a']);
@@ -476,6 +498,178 @@ describe('Branch Picker E2E', () => {
       
       // Should now show branch picker for selected project
       expect(lastFrame()).toContain('feature/for-project-1');
+    });
+
+    test('should handle null projects array gracefully (crash fix)', async () => {
+      // Setup: Scenario that could trigger null projects crash
+      setupBasicProject('crash-test-project');
+      setupProjectWithWorktrees('crash-test-project', ['test-feature']);
+      
+      const {setUIMode, lastFrame} = renderTestApp();
+      await simulateTimeDelay(50);
+      
+      // Try to open project picker with null projects (crash scenario)
+      setUIMode('pickProjectForBranch', {
+        projects: null as any,
+        defaultProject: 'crash-test-project'
+      });
+      await simulateTimeDelay(50);
+      
+      // Should not crash and should return to list view
+      const output = lastFrame();
+      expect(output).not.toContain('Select Project'); // Should not show picker dialog
+      expect(output).toContain('crash-test-project/test-feature'); // Should be back to main list
+    });
+
+    test('should handle empty projects array gracefully', async () => {
+      // Setup: Empty projects scenario
+      const {setUIMode, lastFrame} = renderTestApp();
+      await simulateTimeDelay(50);
+      
+      // Try to open project picker with empty projects array
+      setUIMode('pickProjectForBranch', {
+        projects: [],
+        defaultProject: undefined
+      });
+      await simulateTimeDelay(50);
+      
+      // Should not crash and should return to list view
+      const output = lastFrame();
+      expect(output).not.toContain('Select Project'); // Should not show picker dialog
+    });
+
+    test('should complete full b key workflow: project picker → branch picker → branch creation', async () => {
+      // Setup: Multiple projects with branches
+      setupBasicProject('workflow-project-1');
+      setupBasicProject('workflow-project-2');
+      setupRemoteBranches('workflow-project-1', [
+        {
+          local_name: 'feature-branch-1',
+          remote_name: 'origin/feature/feature-branch-1',
+          pr_number: 123,
+          pr_state: 'OPEN',
+          pr_checks: 'passing',
+          pr_title: 'Add new feature'
+        },
+        {
+          local_name: 'feature-branch-2', 
+          remote_name: 'origin/feature/feature-branch-2',
+          pr_number: 124,
+          pr_state: 'DRAFT',
+          pr_checks: 'pending',
+          pr_title: 'WIP: Another feature'
+        }
+      ]);
+      
+      const {setUIMode, lastFrame} = renderTestApp();
+      await simulateTimeDelay(50);
+      
+      // Step 1: Simulate first 'b' key press - should show project picker
+      setUIMode('pickProjectForBranch', {
+        projects: [
+          {name: 'workflow-project-1', path: '/fake/projects/workflow-project-1'},
+          {name: 'workflow-project-2', path: '/fake/projects/workflow-project-2'}
+        ],
+        defaultProject: 'workflow-project-1'
+      });
+      await simulateTimeDelay(50);
+      
+      // Should show project picker
+      let output = lastFrame();
+      expect(output).toContain('Select Project');
+      expect(output).toContain('workflow-project-1');
+      expect(output).toContain('workflow-project-2');
+      
+      // Step 2: Select project - should load branches and show branch picker
+      setUIMode('pickBranch', {
+        project: 'workflow-project-1',
+        branches: [
+          {
+            name: 'origin/feature/feature-branch-1',
+            local_name: 'feature-branch-1',
+            pr_number: 123,
+            pr_title: 'Add new feature',
+            pr_state: 'OPEN',
+            pr_checks: 'passing',
+            ahead: 2,
+            behind: 0,
+            added_lines: 10,
+            deleted_lines: 2
+          },
+          {
+            name: 'origin/feature/feature-branch-2',
+            local_name: 'feature-branch-2',
+            pr_number: 124,
+            pr_title: 'WIP: Another feature', 
+            pr_state: 'DRAFT',
+            pr_checks: 'pending',
+            ahead: 1,
+            behind: 1,
+            added_lines: 5,
+            deleted_lines: 1
+          }
+        ]
+      });
+      await simulateTimeDelay(50);
+      
+      // Should now show branch picker with loaded branches
+      output = lastFrame();
+      expect(output).not.toContain('Select Project'); // No longer project picker
+      expect(output).toContain('Create from Remote Branch'); // Branch picker title
+      expect(output).toContain('feature-branch-1');
+      expect(output).toContain('feature-branch-2');
+      expect(output).toContain('Add new feature');
+      expect(output).toContain('WIP: Another feature');
+      expect(output).toContain('#123'); // PR numbers
+      expect(output).toContain('#124');
+      
+      // Step 3: Verify branches are properly formatted
+      expect(output).toContain('+10/-2'); // Diff info
+      expect(output).toContain('+5/-1'); 
+      expect(output).toContain('↑2'); // Ahead/behind info
+      expect(output).toContain('↑1 ↓1');
+    });
+
+    test('should handle single project case - skip project picker and go directly to branches', async () => {
+      // Setup: Single project with branches 
+      setupBasicProject('single-project');
+      setupRemoteBranches('single-project', [
+        {
+          local_name: 'direct-branch',
+          remote_name: 'origin/feature/direct-branch',
+          pr_number: 999,
+          pr_state: 'OPEN',
+          pr_checks: 'passing',
+          pr_title: 'Direct to branches'
+        }
+      ]);
+      
+      const {setUIMode, lastFrame} = renderTestApp();
+      await simulateTimeDelay(50);
+      
+      // Simulate 'b' key with single project - should go directly to branch picker
+      setUIMode('pickBranch', {
+        project: 'single-project',
+        branches: [
+          {
+            name: 'origin/feature/direct-branch',
+            local_name: 'direct-branch', 
+            pr_number: 999,
+            pr_title: 'Direct to branches',
+            pr_state: 'OPEN',
+            pr_checks: 'passing'
+          }
+        ]
+      });
+      await simulateTimeDelay(50);
+      
+      // Should show branch picker directly, skip project selection
+      const output = lastFrame();
+      expect(output).toContain('Create from Remote Branch');
+      expect(output).toContain('direct-branch');
+      expect(output).toContain('Direct to branches');
+      expect(output).toContain('#999');
+      expect(output).not.toContain('Select Project');
     });
   });
 });

@@ -1,6 +1,6 @@
 import React, {useEffect, useMemo, useState} from 'react';
 import {Box, Text, useInput, useStdin} from 'ink';
-import {fitDisplay, padStartDisplay} from '../../utils.js';
+import {fitDisplay, padStartDisplay, stringDisplayWidth} from '../../shared/utils/formatting.js';
 import {useTerminalDimensions} from '../../hooks/useTerminalDimensions.js';
 import {useTextInput} from './TextInput.js';
 const h = React.createElement;
@@ -89,17 +89,76 @@ export default function BranchPickerDialog({branches, onSubmit, onCancel, onRefr
 
   const start = Math.floor(selected / pageSize) * pageSize;
   const pageItems = filtered.slice(start, start + pageSize);
-  const totalCols = columns;
-  // Column widths (sum + 6 spaces between cells should be <= totalCols)
-  const NAME_WIDTH = 30;
-  const LOCAL_WIDTH = 18;
-  const DIFF_WIDTH = 12;   // +N/-M
-  const CHG_WIDTH = 10;    // ↑N ↓M or synced/clean
-  const DATE_WIDTH = 6;    // 2d, 3h, etc.
-  const PR_WIDTH = 12;     // #N✓ etc
-  const fixedWidth = NAME_WIDTH + LOCAL_WIDTH + DIFF_WIDTH + CHG_WIDTH + DATE_WIDTH + PR_WIDTH;
-  const separators = 6; // spaces between 7 columns
-  const TITLE_WIDTH = Math.max(10, totalCols - fixedWidth - separators);
+  
+  // Dynamic column widths based on terminal size and content (like MainView)
+  const columnWidths = useMemo(() => {
+    // Helper function to format large numbers with k suffix
+    const formatNumber = (num: number) => {
+      if (num >= 1000) {
+        return (num / 1000).toFixed(1) + 'k';
+      }
+      return num.toString();
+    };
+    
+    // Prepare data for width calculation
+    const headerRow = ['BRANCH', 'DIFF', 'CHANGES', 'DATE', 'PR', 'TITLE'];
+    const dataRows = pageItems.map((b) => {
+      const diffStr = `+${formatNumber(b.added_lines)}/-${formatNumber(b.deleted_lines)}`;
+      let chgRaw = '';
+      if (b.ahead > 0) chgRaw += `↑${b.ahead} `;
+      if (b.behind > 0) chgRaw += `↓${b.behind}`;
+      if (!chgRaw) chgRaw = 'synced';
+      const prBadge = b.pr_number ? `#${b.pr_number}${b.pr_checks === 'passing' ? '✓' : b.pr_checks === 'failing' ? '✗' : b.pr_checks === 'pending' ? '⏳' : ''}` : '';
+      
+      return [
+        b.local_name || '',
+        diffStr,
+        chgRaw,
+        b.last_commit_date || '',
+        prBadge,
+        b.pr_title || ''
+      ];
+    });
+    
+    const allRows = [headerRow, ...dataRows];
+    
+    // Set appropriate minimum widths per column: [BRANCH, DIFF, CHANGES, DATE, PR, TITLE]
+    const columnMinWidths = [0, 12, 10, 6, 8, 0]; // BRANCH and TITLE calculated separately
+    
+    // Calculate content-based widths for all columns except BRANCH and TITLE
+    const fixedWidths = [0, 1, 2, 3, 4, 5].map(colIndex => {
+      if (colIndex === 0 || colIndex === 5) return 0; // BRANCH and TITLE calculated separately
+      const maxContentWidth = Math.max(...allRows.map(row => stringDisplayWidth(row[colIndex] || '')));
+      return Math.max(columnMinWidths[colIndex], maxContentWidth);
+    });
+    
+    // Calculate space used by fixed columns + margins (5 spaces between 6 columns)
+    const fixedColumnsWidth = fixedWidths.reduce((sum, width, index) => (index === 0 || index === 5) ? sum : sum + width, 0);
+    const marginsWidth = 5; // 5 spaces between columns
+    const usedWidth = fixedColumnsWidth + marginsWidth;
+    
+    // Calculate available width for BRANCH column (give it priority)
+    const availableForBranch = Math.max(15, Math.floor((columns - usedWidth) * 0.4)); // 40% of remaining space, min 15
+    const availableForTitle = Math.max(10, columns - usedWidth - availableForBranch); // Rest goes to title
+    
+    fixedWidths[0] = availableForBranch;
+    fixedWidths[5] = availableForTitle;
+    
+    return fixedWidths;
+  }, [pageItems, columns]);
+  // Add header row for column labels
+  const header = h(
+    Box,
+    {marginBottom: 0, flexDirection: 'row'},
+    h(Text, {color: 'gray'}, '  '), // Space for selection indicator
+    h(Box, {width: columnWidths[0], marginRight: 1}, h(Text, {color: 'gray', bold: true}, 'BRANCH')),
+    h(Box, {width: columnWidths[1], justifyContent: 'flex-end', marginRight: 1}, h(Text, {color: 'gray', bold: true}, 'DIFF')),
+    h(Box, {width: columnWidths[2], justifyContent: 'flex-end', marginRight: 1}, h(Text, {color: 'gray', bold: true}, 'CHANGES')),
+    h(Box, {width: columnWidths[3], justifyContent: 'center', marginRight: 1}, h(Text, {color: 'gray', bold: true}, 'DATE')),
+    h(Box, {width: columnWidths[4], justifyContent: 'center', marginRight: 1}, h(Text, {color: 'gray', bold: true}, 'PR')),
+    h(Box, {width: columnWidths[5]}, h(Text, {color: 'gray', bold: true}, 'TITLE'))
+  );
+
   return h(
     Box, {flexDirection: 'column'},
     h(Text, {color: 'cyan'}, 'Create from Remote Branch'),
@@ -108,23 +167,50 @@ export default function BranchPickerDialog({branches, onSubmit, onCancel, onRefr
       h(Text, {color: 'gray'}, 'Filter: '),
       filterInput.renderText(' ')
     ),
+    header,
     ...pageItems.map((b, i) => {
       const idx = start + i;
       const sel = idx === selected;
-      const nameCol = fitDisplay(b.name || '', NAME_WIDTH);
-      const localCol = fitDisplay(b.local_name || '', LOCAL_WIDTH);
-      const diffCol = fitDisplay(`+${b.added_lines}/-${b.deleted_lines}`, DIFF_WIDTH);
+      
+      // Format data
+      const formatNumber = (num: number) => {
+        if (num >= 1000) {
+          return (num / 1000).toFixed(1) + 'k';
+        }
+        return num.toString();
+      };
+      
+      const diffStr = `+${formatNumber(b.added_lines)}/-${formatNumber(b.deleted_lines)}`;
       let chgRaw = '';
       if (b.ahead > 0) chgRaw += `↑${b.ahead} `;
       if (b.behind > 0) chgRaw += `↓${b.behind}`;
       if (!chgRaw) chgRaw = 'synced';
-      const chgCol = fitDisplay(chgRaw, CHG_WIDTH);
-      const dateCol = fitDisplay(b.last_commit_date || '', DATE_WIDTH);
+      
       const prBadge = b.pr_number ? `#${b.pr_number}${b.pr_checks === 'passing' ? '✓' : b.pr_checks === 'failing' ? '✗' : b.pr_checks === 'pending' ? '⏳' : ''}` : '';
-      const prCol = fitDisplay(prBadge, PR_WIDTH);
-      const titleCol = fitDisplay(b.pr_title || '', TITLE_WIDTH);
-      const row = `${padStartDisplay(sel ? '›' : ' ', 1)} ${nameCol} ${localCol} ${diffCol} ${chgCol} ${dateCol} ${prCol} ${titleCol}`;
-      return h(Text, {key: b.name, color: sel ? 'green' : undefined}, row);
+      
+      // Truncate branch name and title if too long
+      const branchName = stringDisplayWidth(b.local_name || '') > columnWidths[0] 
+        ? (b.local_name || '').slice(0, Math.max(0, columnWidths[0] - 3)) + '...'
+        : b.local_name || '';
+      const titleText = stringDisplayWidth(b.pr_title || '') > columnWidths[5] 
+        ? (b.pr_title || '').slice(0, Math.max(0, columnWidths[5] - 3)) + '...'
+        : b.pr_title || '';
+      
+      const common = {backgroundColor: sel ? 'blue' : undefined, bold: sel} as any;
+      const color = sel ? 'green' : undefined;
+      
+      // Use Box-based layout for precise alignment (like MainView)
+      return h(
+        Box,
+        {key: b.name, flexDirection: 'row'},
+        h(Text, {...common, color}, sel ? '› ' : '  '),
+        h(Box, {width: columnWidths[0], marginRight: 1}, h(Text, {...common, color}, branchName)),
+        h(Box, {width: columnWidths[1], justifyContent: 'flex-end', marginRight: 1}, h(Text, {...common, color}, diffStr)),
+        h(Box, {width: columnWidths[2], justifyContent: 'flex-end', marginRight: 1}, h(Text, {...common, color}, chgRaw)),
+        h(Box, {width: columnWidths[3], justifyContent: 'center', marginRight: 1}, h(Text, {...common, color}, b.last_commit_date || '')),
+        h(Box, {width: columnWidths[4], justifyContent: 'center', marginRight: 1}, h(Text, {...common, color}, prBadge)),
+        h(Box, {width: columnWidths[5]}, h(Text, {...common, color}, titleText))
+      );
     })
   );
 }
