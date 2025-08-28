@@ -173,7 +173,14 @@ export function getWorktreesFromMemory(project: string): WorktreeInfo[] {
 
 // Simulate time passing for refresh intervals
 export function simulateTimeDelay(ms: number = 0): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  if (jest.isMockFunction(setTimeout)) {
+    // Using fake timers - advance time and resolve immediately
+    jest.advanceTimersByTime(ms);
+    return Promise.resolve();
+  } else {
+    // Using real timers - actual delay
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
 }
 
 // Mock stdin input helper
