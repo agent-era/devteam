@@ -141,7 +141,7 @@ describe('Archive Management E2E', () => {
       await services.gitService.archiveWorktree(worktree.path);
       
       // Simulate session cleanup
-      services.tmuxService.cleanupOrphanedSessions([]);
+      await services.tmuxService.cleanupOrphanedSessions([]);
       
       // Sessions should be cleaned up (except shell sessions which are preserved)
       expect(memoryStore.sessions.has(mainSession)).toBe(false);

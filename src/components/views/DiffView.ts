@@ -215,7 +215,9 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     
     if (input === 'S') {
       if (commentStore.count > 0) {
-        sendCommentsToTmux();
+        sendCommentsToTmux().catch(error => {
+          console.error('Failed to send comments:', error);
+        });
       }
     }
     
@@ -320,12 +322,12 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     return lines.filter(line => line.trim().length > 0);
   };
 
-  const verifyCommentsReceived = (sessionName: string, comments: any[]): boolean => {
+  const verifyCommentsReceived = async (sessionName: string, comments: any[]): Promise<boolean> => {
     // Wait a brief moment for tmux to process the input
     // This is synchronous in our case since runCommand is blocking
     
     // Capture the current pane content
-    const paneContent = tmuxService.capturePane(sessionName);
+    const paneContent = await tmuxService.capturePane(sessionName);
     
     if (!paneContent || paneContent.trim().length === 0) {
       return false; // No content captured
@@ -379,7 +381,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     });
   };
 
-  const sendCommentsToTmux = () => {
+  const sendCommentsToTmux = async () => {
     const comments = commentStore.getAllComments();
     if (comments.length === 0) {
       // No comments to send, just return
@@ -398,11 +400,12 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       const sessionName = tmuxService.sessionName(project, feature);
       
       // Check if session exists
-      const sessionExists = tmuxService.listSessions().includes(sessionName);
+      const sessions = await tmuxService.listSessions();
+      const sessionExists = sessions.includes(sessionName);
       
       if (sessionExists) {
         // IMPORTANT: Refresh status right before checking
-        const claudeStatus = tmuxService.getClaudeStatus(sessionName);
+        const claudeStatus = await tmuxService.getClaudeStatus(sessionName);
         
         if (claudeStatus === 'waiting') {
           // Claude is waiting for a response - can't accept new input
@@ -425,7 +428,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
           runCommand(['sleep', '0.5']);
           
           // VERIFY: Check if comments were actually received (handle race condition)
-          const received = verifyCommentsReceived(sessionName, comments);
+          const received = await verifyCommentsReceived(sessionName, comments);
           
           if (!received) {
             // Race condition detected - Claude probably transitioned to waiting
@@ -492,7 +495,9 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
 
   const handleUnsubmittedCommentsSubmit = () => {
     setShowUnsubmittedCommentsDialog(false);
-    sendCommentsToTmux();
+    sendCommentsToTmux().catch(error => {
+      console.error('Failed to send comments:', error);
+    });
   };
 
   const handleUnsubmittedCommentsExitWithoutSubmitting = () => {

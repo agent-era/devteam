@@ -51,6 +51,16 @@ export function logDebug(message: string, data?: any): void {
 
 // Initialize memory logging by overriding console methods
 export function initializeMemoryLogging(): void {
+  applyConsoleOverrides();
+}
+
+// Re-initialize logging after other libraries may have overridden console methods
+export function reinitializeMemoryLogging(): void {
+  applyConsoleOverrides();
+}
+
+// Apply console method overrides to capture logs in memory
+function applyConsoleOverrides(): void {
   console.log = (...args: any[]) => {
     const message = args.map(arg => 
       typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)

@@ -44,7 +44,9 @@ export default function WorktreeListScreen({
       attachSession(selectedWorktree);
     } catch {}
     
-    refresh();
+    refresh().catch(error => {
+      console.error('Refresh after attach failed:', error);
+    });
   };
 
   const handleShell = () => {
@@ -55,7 +57,9 @@ export default function WorktreeListScreen({
       attachShellSession(selectedWorktree);
     } catch {}
     
-    refresh();
+    refresh().catch(error => {
+      console.error('Refresh after attach failed:', error);
+    });
   };
 
   const handleDiffFull = () => {
