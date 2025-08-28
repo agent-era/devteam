@@ -1,6 +1,7 @@
-import React, {useState} from 'react';
+import React, {useState, useEffect} from 'react';
 import {Box, Text, useInput} from 'ink';
 import {useTextInput} from './TextInput.js';
+import {useInputFocus} from '../../contexts/InputFocusContext.js';
 const h = React.createElement;
 
 type Props = {
@@ -11,8 +12,17 @@ type Props = {
   onCancel: () => void;
 };
 
-export default function CommentInputDialog({fileName, lineText, initialComment = '', onSave, onCancel}: Props) {
+const CommentInputDialog = React.memo(function CommentInputDialog({fileName, lineText, initialComment = '', onSave, onCancel}: Props) {
   const commentInput = useTextInput(initialComment);
+  const {requestFocus, releaseFocus} = useInputFocus();
+
+  // Request focus when dialog mounts
+  useEffect(() => {
+    requestFocus('comment-input-dialog');
+    return () => {
+      releaseFocus('comment-input-dialog');
+    };
+  }, [requestFocus, releaseFocus]);
 
   useInput((input, key) => {
     if (key.escape) {
@@ -73,4 +83,6 @@ export default function CommentInputDialog({fileName, lineText, initialComment =
       'Enter: Save  Shift+Enter: New Line  Esc: Cancel'
     )
   );
-}
+});
+
+export default CommentInputDialog;

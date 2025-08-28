@@ -17,6 +17,7 @@ import ArchivedScreen from './screens/ArchivedScreen.js';
 import {WorktreeProvider, useWorktreeContext} from './contexts/WorktreeContext.js';
 import {GitHubProvider, useGitHubContext} from './contexts/GitHubContext.js';
 import {UIProvider, useUIContext} from './contexts/UIContext.js';
+import {InputFocusProvider} from './contexts/InputFocusContext.js';
 
 const h = React.createElement;
 
@@ -310,10 +311,12 @@ function AppContent() {
 }
 
 export default function App() {
-  return h(WorktreeProvider, null,
-    h(GitHubProvider, null,
-      h(UIProvider, null,
-        h(AppContent)
+  return h(InputFocusProvider, null,
+    h(WorktreeProvider, null,
+      h(GitHubProvider, null,
+        h(UIProvider, null,
+          h(AppContent)
+        )
       )
     )
   );
