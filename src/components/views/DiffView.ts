@@ -77,6 +77,8 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
   const [animationId, setAnimationId] = useState<NodeJS.Timeout | null>(null);
   const [terminalHeight, setTerminalHeight] = useState<number>(process.stdout.rows || 24);
   const [terminalWidth, setTerminalWidth] = useState<number>(process.stdout.columns || 80);
+  const [currentFileHeader, setCurrentFileHeader] = useState<string>('');
+  const [currentHunkHeader, setCurrentHunkHeader] = useState<string>('');
   const commentStore = useMemo(() => commentStoreManager.getStore(worktreePath), [worktreePath]);
   const [tmuxService] = useState(() => new TmuxService());
   const [showCommentDialog, setShowCommentDialog] = useState(false);
@@ -103,8 +105,8 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     return () => { process.stdout.off?.('resize', onResize as any); };
   }, [worktreePath, diffType]);
 
-  // Calculate page size dynamically - reserve space for debug, title, and help
-  const pageSize = Math.max(1, terminalHeight - 3);
+  // Calculate page size dynamically - reserve space for title, help, and sticky headers
+  const pageSize = Math.max(1, terminalHeight - 4); // -1 title, -2 sticky headers, -1 help
 
   // Smooth scrolling animation
   useEffect(() => {
@@ -493,11 +495,51 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     return text.substring(0, maxWidth - 3) + '...';
   };
 
+  // Update sticky headers based on scroll offset
+  useEffect(() => {
+    if (lines.length === 0) return;
+
+    let fileHeader = '';
+    let hunkHeader = '';
+    let fileHeaderIndex = -1;
+    let hunkHeaderIndex = -1;
+
+    // Search backwards from offset-1 to find headers that have scrolled off screen
+    for (let i = offset - 1; i >= 0; i--) {
+      const line = lines[i];
+      if (!line) continue;
+
+      // Find hunk header first (only if we haven't found the file yet)
+      if (hunkHeaderIndex === -1 && fileHeaderIndex === -1 && line.type === 'header' && line.text.includes('▼')) {
+        hunkHeader = line.text;
+        hunkHeaderIndex = i;
+      }
+
+      // Find file header
+      if (fileHeaderIndex === -1 && line.type === 'header' && line.text.startsWith('📁')) {
+        fileHeader = line.text;
+        fileHeaderIndex = i;
+        
+        // Clear hunk if it belongs to a different file
+        if (hunkHeaderIndex !== -1 && hunkHeaderIndex < fileHeaderIndex) {
+          hunkHeader = '';
+          hunkHeaderIndex = -1;
+        }
+        break; // Found file, we're done
+      }
+    }
+
+    // Only show headers that have actually scrolled off screen
+    const shouldShowFileHeader = fileHeaderIndex >= 0 && fileHeaderIndex < offset;
+    const shouldShowHunkHeader = hunkHeaderIndex >= 0 && hunkHeaderIndex < offset;
+
+    setCurrentFileHeader(shouldShowFileHeader ? fileHeader : '');
+    setCurrentHunkHeader(shouldShowHunkHeader ? hunkHeader : '');
+  }, [lines, offset]);
+
   const visible = useMemo(() => {
     return lines.slice(offset, offset + pageSize);
   }, [lines, offset, pageSize]);
-
-  const statusText = `Terminal: ${terminalHeight}x${terminalWidth} | PageSize: ${pageSize} | Pos: ${pos}/${lines.length} | Offset: ${offset} | Visible: ${visible.length} | Comments: ${commentStore.count}`;
 
   // Create session waiting dialog if needed - render it instead of the main view when active
   if (showSessionWaitingDialog) {
@@ -530,8 +572,18 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
   return h(
     Box,
     {flexDirection: 'column'},
-    h(Text, {color: 'yellow'}, statusText),
     h(Text, {bold: true}, title),
+    // Sticky headers
+    h(Text, {
+      color: 'cyan',
+      bold: true,
+      backgroundColor: 'gray'
+    }, currentFileHeader || ''),
+    h(Text, {
+      color: 'cyan',
+      bold: true,
+      backgroundColor: 'gray'
+    }, currentHunkHeader || ''),
     ...visible.map((l, idx) => {
       const actualLineIndex = offset + idx;
       const isCurrentLine = actualLineIndex === pos;
