@@ -74,15 +74,13 @@ interface WorktreeProviderProps {
   getPRStatus?: (path: string) => PRStatus;
   setVisibleWorktrees?: (paths: string[]) => void;
   refreshPRStatus?: (worktrees: any[], visibleOnly?: boolean) => Promise<void>;
-  invalidateCache?: (worktreePath: string) => void;
 }
 
 export function WorktreeProvider({
   children, 
   getPRStatus, 
   setVisibleWorktrees, 
-  refreshPRStatus,
-  invalidateCache
+  refreshPRStatus
 }: WorktreeProviderProps) {
   const [worktrees, setWorktrees] = useState<WorktreeInfo[]>([]);
   const [loading, setLoading] = useState(false);
@@ -319,14 +317,9 @@ export function WorktreeProvider({
       createTmuxSession(worktree.project, worktree.feature, worktree.path);
     }
     
-    // Invalidate PR cache when entering a session to force refresh
-    if (invalidateCache) {
-      invalidateCache(worktree.path);
-    }
-    
     configureTmuxDisplayTime();
     runInteractive('tmux', ['attach-session', '-t', sessionName]);
-  }, [tmuxService, invalidateCache]);
+  }, [tmuxService]);
 
   const attachShellSession = useCallback((worktree: WorktreeInfo) => {
     const sessionName = tmuxService.shellSessionName(worktree.project, worktree.feature);

@@ -326,13 +326,12 @@ export default function App() {
 }
 
 function AppWithGitHub() {
-  const {getPRStatus, setVisibleWorktrees, refreshPRStatus, invalidateCache} = useGitHubContext();
+  const {getPRStatus, setVisibleWorktrees, refreshPRStatus} = useGitHubContext();
   
   return h(WorktreeProvider, {
     getPRStatus,
     setVisibleWorktrees,
     refreshPRStatus,
-    invalidateCache,
     children: h(UIProvider, null,
       h(AppContent)
     )

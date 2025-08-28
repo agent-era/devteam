@@ -26,7 +26,6 @@ interface GitHubContextType {
   
   // Cache operations
   clearCache: () => void;
-  invalidateCache: (worktreePath: string) => void;
   getCacheStats: () => {total: number; valid: number; expired: number};
 }
 
@@ -283,12 +282,6 @@ export function GitHubProvider({children}: GitHubProviderProps) {
     setPullRequests({});
   }, [cacheService]);
 
-  const invalidateCache = useCallback((worktreePath: string) => {
-    // Just invalidate the cache - keep current status visible 
-    // The next refresh cycle will pick it up due to shorter TTL
-    cacheService.invalidate(worktreePath);
-  }, [cacheService]);
-
   const getCacheStats = useCallback(() => {
     return cacheService.getStats();
   }, [cacheService]);
@@ -312,7 +305,6 @@ export function GitHubProvider({children}: GitHubProviderProps) {
     
     // Cache operations
     clearCache,
-    invalidateCache,
     getCacheStats
   };
 
