@@ -27,6 +27,7 @@ import {
   runInteractive,
   runClaudeSync
 } from '../utils.js';
+import {useInputFocus} from './InputFocusContext.js';
 
 const h = React.createElement;
 
@@ -76,6 +77,7 @@ export function WorktreeProvider({children}: WorktreeProviderProps) {
   const [loading, setLoading] = useState(false);
   const [lastRefreshed, setLastRefreshed] = useState(0);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const {isAnyDialogFocused} = useInputFocus();
 
   // Service instances - stable across re-renders
   const gitService = useMemo(() => new GitService(), []);
@@ -545,17 +547,23 @@ export function WorktreeProvider({children}: WorktreeProviderProps) {
 
   useEffect(() => {
     const interval = setInterval(() => {
-      refreshSelected();
+      // Skip AI status refresh if any dialog is focused to avoid interrupting typing
+      if (!isAnyDialogFocused) {
+        refreshSelected();
+      }
     }, AI_STATUS_REFRESH_DURATION);
     return () => clearInterval(interval);
-  }, [refreshSelected]);
+  }, [refreshSelected, isAnyDialogFocused]);
 
   useEffect(() => {
     const interval = setInterval(() => {
-      refresh();
+      // Skip diff status refresh if any dialog is focused to avoid interrupting typing
+      if (!isAnyDialogFocused) {
+        refresh();
+      }
     }, DIFF_STATUS_REFRESH_DURATION);
     return () => clearInterval(interval);
-  }, [refresh]);
+  }, [refresh, isAnyDialogFocused]);
 
   const contextValue: WorktreeContextType = {
     // State
