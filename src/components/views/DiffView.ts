@@ -1,5 +1,6 @@
 import React, {useEffect, useMemo, useState} from 'react';
 import {Box, Text, useInput, useStdin} from 'ink';
+import SyntaxHighlight from 'ink-syntax-highlight';
 const h = React.createElement;
 import {runCommandAsync} from '../../utils.js';
 import {findBaseBranch} from '../../utils.js';
@@ -14,6 +15,113 @@ import SessionWaitingDialog from '../dialogs/SessionWaitingDialog.js';
 import UnsubmittedCommentsDialog from '../dialogs/UnsubmittedCommentsDialog.js';
 
 type DiffLine = {type: 'added'|'removed'|'context'|'header'; text: string; fileName?: string};
+
+// Map file extensions to language identifiers for syntax highlighting
+function getLanguageFromFileName(fileName: string | undefined): string {
+  if (!fileName) return 'plaintext';
+  
+  const ext = fileName.split('.').pop()?.toLowerCase();
+  const languageMap: {[key: string]: string} = {
+    'js': 'javascript',
+    'jsx': 'javascript',
+    'ts': 'typescript',
+    'tsx': 'typescript',
+    'py': 'python',
+    'rb': 'ruby',
+    'go': 'go',
+    'rs': 'rust',
+    'java': 'java',
+    'cpp': 'cpp',
+    'c': 'c',
+    'h': 'c',
+    'hpp': 'cpp',
+    'cs': 'csharp',
+    'php': 'php',
+    'swift': 'swift',
+    'kt': 'kotlin',
+    'scala': 'scala',
+    'sh': 'bash',
+    'bash': 'bash',
+    'zsh': 'bash',
+    'fish': 'bash',
+    'ps1': 'powershell',
+    'json': 'json',
+    'xml': 'xml',
+    'html': 'html',
+    'htm': 'html',
+    'css': 'css',
+    'scss': 'scss',
+    'sass': 'scss',
+    'less': 'less',
+    'sql': 'sql',
+    'md': 'markdown',
+    'markdown': 'markdown',
+    'yml': 'yaml',
+    'yaml': 'yaml',
+    'toml': 'toml',
+    'dockerfile': 'dockerfile',
+    'makefile': 'makefile',
+    'cmake': 'cmake',
+    'vim': 'vim',
+    'lua': 'lua',
+    'r': 'r',
+    'R': 'r',
+    'dart': 'dart',
+    'ex': 'elixir',
+    'exs': 'elixir',
+    'erl': 'erlang',
+    'hrl': 'erlang',
+    'fs': 'fsharp',
+    'fsx': 'fsharp',
+    'ml': 'ocaml',
+    'mli': 'ocaml',
+    'clj': 'clojure',
+    'cljs': 'clojure',
+    'elm': 'elm',
+    'jl': 'julia',
+    'nim': 'nim',
+    'nix': 'nix',
+    'hs': 'haskell',
+    'pl': 'perl',
+    'pm': 'perl',
+    'tcl': 'tcl',
+    'vb': 'vbnet',
+    'pas': 'pascal',
+    'pp': 'pascal',
+    'proto': 'protobuf',
+    'tf': 'hcl',
+    'tfvars': 'hcl',
+    'hcl': 'hcl',
+    'zig': 'zig',
+    'v': 'v',
+    'vala': 'vala',
+    'ada': 'ada',
+    'adb': 'ada',
+    'ads': 'ada',
+    'asm': 'x86asm',
+    's': 'x86asm',
+  };
+  
+  // Special case for files without extensions or with specific names
+  const baseName = fileName.split('/').pop()?.toLowerCase();
+  if (baseName === 'dockerfile' || baseName === 'containerfile') return 'dockerfile';
+  if (baseName === 'makefile' || baseName === 'gnumakefile') return 'makefile';
+  if (baseName === 'cmakelists.txt') return 'cmake';
+  if (baseName === 'rakefile') return 'ruby';
+  if (baseName === 'gemfile') return 'ruby';
+  if (baseName === 'podfile') return 'ruby';
+  if (baseName === 'vagrantfile') return 'ruby';
+  if (baseName === 'brewfile') return 'ruby';
+  if (baseName === 'guardfile') return 'ruby';
+  if (baseName === 'capfile') return 'ruby';
+  if (baseName === 'thorfile') return 'ruby';
+  if (baseName === 'berksfile') return 'ruby';
+  if (baseName === 'pryrc') return 'ruby';
+  if (baseName === '.gitignore' || baseName === '.dockerignore') return 'properties';
+  if (baseName === '.env' || baseName?.startsWith('.env.')) return 'properties';
+  
+  return languageMap[ext || ''] || 'plaintext';
+}
 
 async function loadDiff(worktreePath: string, diffType: 'full' | 'uncommitted' = 'full'): Promise<DiffLine[]> {
   const lines: DiffLine[] = [];
@@ -623,13 +731,67 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       const isCurrentLine = actualLineIndex === pos;
       const hasComment = l.fileName && commentStore.hasComment(actualLineIndex, l.fileName);
       const commentIndicator = hasComment ? '[C] ' : '';
-      const displayText = truncateText(commentIndicator + (l.text || ' '), terminalWidth - 2); // -2 for padding
-      return h(Text, {
+      
+      // For headers or when syntax highlighting should be disabled, use regular Text
+      if (l.type === 'header') {
+        const displayText = truncateText(commentIndicator + (l.text || ' '), terminalWidth - 2);
+        return h(Text, {
+          key: idx,
+          color: 'cyan',
+          backgroundColor: isCurrentLine ? 'blue' : undefined,
+          bold: isCurrentLine
+        }, displayText);
+      }
+      
+      // For code lines, apply syntax highlighting
+      const language = getLanguageFromFileName(l.fileName);
+      const codeText = l.text || ' ';
+      // Apply truncation to code text
+      const truncatedCodeText = truncateText(codeText, terminalWidth - 6); // -6 for comment indicator and padding
+      
+      // Determine the base color for diff lines
+      let diffColor: string | undefined = undefined;
+      if (l.type === 'added') diffColor = 'green';
+      else if (l.type === 'removed') diffColor = 'red';
+      
+      // Apply syntax highlighting with proper styling  
+      const finalCodeText = hasComment ? truncatedCodeText : truncateText(codeText, terminalWidth - 2);
+      const commentPrefix = hasComment ? '[C] ' : '';
+      
+      // Create the syntax highlighted element
+      const syntaxHighlightedElement = h(SyntaxHighlight, {
+        code: finalCodeText,
+        language: language
+      });
+      
+      // If there's a comment indicator, combine it with the highlighted code
+      if (hasComment) {
+        return h(Box, {
+          key: idx
+        },
+          h(Text, {
+            color: diffColor,
+            backgroundColor: isCurrentLine ? 'blue' : undefined,
+            bold: isCurrentLine
+          }, '[C] '),
+          // For now, use regular Text for syntax highlighted content when selected
+          isCurrentLine ? h(Text, {
+            backgroundColor: 'blue',
+            bold: true,
+            color: diffColor
+          }, finalCodeText) : syntaxHighlightedElement
+        );
+      }
+      
+      // For lines without comments, handle selection highlighting
+      return isCurrentLine ? h(Text, {
         key: idx,
-        color: l.type === 'added' ? 'green' : l.type === 'removed' ? 'red' : l.type === 'header' ? 'cyan' : undefined,
-        backgroundColor: isCurrentLine ? 'blue' : undefined,
-        bold: isCurrentLine
-      }, displayText);
+        backgroundColor: 'blue',
+        bold: true,
+        color: diffColor
+      }, finalCodeText) : h(Box, {
+        key: idx
+      }, syntaxHighlightedElement);
     }),
     showAllComments && commentStore.count > 0 ? h(
       Box,
