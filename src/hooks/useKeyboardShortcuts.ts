@@ -1,5 +1,6 @@
 import {useEffect} from 'react';
 import {useStdin} from 'ink';
+import {useInputFocus} from '../contexts/InputFocusContext.js';
 
 export interface KeyboardActions {
   onMove?: (delta: number) => void;
@@ -34,6 +35,7 @@ export function useKeyboardShortcuts(
   options: KeyboardShortcutsOptions = {}
 ) {
   const {stdin, setRawMode} = useStdin();
+  const {hasFocus, requestFocus, isAnyDialogFocused} = useInputFocus();
   const {
     enabled = true,
     page = 0,
@@ -45,9 +47,19 @@ export function useKeyboardShortcuts(
   useEffect(() => {
     if (!enabled) return;
 
+    // Request focus for main shortcuts if no dialog is focused
+    if (!isAnyDialogFocused) {
+      requestFocus('main');
+    }
+
     setRawMode(true);
 
     const handler = (buf: Buffer) => {
+      // Only process input if we have focus and no dialog is focused
+      if (isAnyDialogFocused || !hasFocus('main')) {
+        return;
+      }
+
       const input = buf.toString('utf8');
 
       // Navigation
@@ -110,7 +122,10 @@ export function useKeyboardShortcuts(
     selectedIndex,
     totalItems,
     stdin,
-    setRawMode
+    setRawMode,
+    hasFocus,
+    requestFocus,
+    isAnyDialogFocused
   ]);
 
   return {
