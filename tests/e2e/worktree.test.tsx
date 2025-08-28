@@ -35,7 +35,7 @@ describe('Worktree Management E2E', () => {
       expect(lastFrame()).toContain('Press \'n\' for new');
 
       // Simulate creating a worktree using service layer (since UI simulation is mocked)
-      services.worktreeService.createFeature('my-project', 'new-feature');
+      services.gitService.createWorktree('my-project', 'new-feature');
       
       await simulateTimeDelay(50);
 

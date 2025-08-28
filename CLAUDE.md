@@ -47,9 +47,10 @@ src/
 │   ├── common/            # Shared components
 │   ├── dialogs/           # Modal dialogs
 │   └── views/             # Main views
-├── contexts/              # React contexts
-│   ├── AppStateContext.tsx    # Global app state
-│   └── ServicesContext.tsx    # Service DI container
+├── contexts/              # React contexts (State + Operations)
+│   ├── WorktreeContext.tsx    # Worktree state and operations
+│   ├── GitHubContext.tsx      # PR status and GitHub operations
+│   └── UIContext.tsx          # UI navigation and dialog state
 ├── hooks/                 # React hooks
 │   ├── useKeyboardShortcuts.ts  # Keyboard handling
 │   ├── usePRStatus.ts          # PR status fetching
@@ -59,10 +60,11 @@ src/
 │   ├── CreateFeatureScreen.tsx  # Feature creation
 │   ├── ArchiveConfirmScreen.tsx # Archive confirmation
 │   └── ArchivedScreen.tsx       # Archived items view
-├── services/              # Business logic layer
-│   ├── GitService.ts           # Git operations
-│   ├── TmuxService.ts          # Tmux management
-│   └── WorktreeService.ts      # Worktree orchestration
+├── services/              # Stateless data operations
+│   ├── GitService.ts           # Local git operations
+│   ├── GitHubService.ts        # GitHub API operations
+│   ├── TmuxService.ts          # Tmux session management
+│   └── WorktreeService.ts      # Git + Tmux orchestration
 ├── shared/utils/          # Utility functions
 │   ├── commandExecutor.ts      # Process execution
 │   ├── fileSystem.ts           # File operations
@@ -129,14 +131,21 @@ tests/
    }
    ```
 
-5. **Context Providers**: Use React Context for dependency injection
+5. **Context Providers**: Use React Context for state + operations
    ```typescript
-   export function ServicesProvider({children, gitService, tmuxService}) {
-     const services = {
-       gitService: gitService || new GitService(),
-       tmuxService: tmuxService || new TmuxService()
+   export function WorktreeProvider({children}) {
+     const [worktrees, setWorktrees] = useState([]);
+     const gitService = new GitService();
+     const tmuxService = new TmuxService();
+     
+     const createFeature = async (project, name) => {
+       await gitService.createWorktree(project, name);
+       await tmuxService.createSession(project, name);
+       refresh();
      };
-     return h(ServicesContext.Provider, {value: services}, children);
+     
+     const value = { worktrees, createFeature, refresh };
+     return h(WorktreeContext.Provider, {value}, children);
    }
    ```
 
@@ -149,17 +158,22 @@ tests/
 - **Constants**: UPPER_SNAKE_CASE
 - **Interfaces**: PascalCase, often with `Info` or `State` suffix
 
-### State Management
+### Architecture Layers
 
-1. **App State**: Centralized in `AppStateContext`
-   ```typescript
-   const {state, setState, updateState} = useAppState();
-   updateState({selectedIndex: 5});
-   ```
+1. **Service Layer** (Stateless Data Operations):
+   - **GitService**: Local git operations (worktrees, branches, status, diff)
+   - **GitHubService**: GitHub API operations (PRs, checks, issues)
+   - **TmuxService**: Tmux session management
+   - **WorktreeService**: Orchestrates git + tmux operations
+   - Services are stateless and only fetch/transform data
 
-2. **Service State**: Services maintain their own state (e.g., memory stores in fakes)
+2. **Context Layer** (State Management + Operations):
+   - **WorktreeContext**: Manages worktree state and operations
+   - **GitHubContext**: Manages PR status cache and GitHub operations
+   - **UIContext**: Manages UI navigation and dialog state
+   - Contexts combine state management with operation methods
 
-3. **UI State**: Local component state for UI-only concerns
+3. **Component Layer**: Thin components that use contexts
 
 ## Testing Approach
 
@@ -232,65 +246,67 @@ export default function MyDialog({title, onClose}: MyDialogProps) {
 }
 ```
 
-### 2. New Service
+### 2. New Service (Stateless)
 
 Create in `src/services/`:
 ```typescript
 export class MyService {
-  private dependency: OtherService;
-  
-  constructor(dependency?: OtherService) {
-    this.dependency = dependency || new OtherService();
+  fetchData(params: any): Promise<DataType[]> {
+    // Fetch and transform data only - no state
+    return runCommand(['some-command', params]);
   }
   
-  doSomething(): void {
-    // Implementation
+  transformData(raw: any): DataType {
+    // Pure transformation functions
+    return new DataType(raw);
   }
 }
 ```
 
-Add to `ServicesContext`:
+### 3. New Context (State + Operations)
+
+Create in `src/contexts/`:
 ```typescript
-interface Services {
-  // ... existing services
-  myService: MyService;
+export function MyContextProvider({children}) {
+  const [data, setData] = useState([]);
+  const [loading, setLoading] = useState(false);
+  
+  const myService = new MyService();
+  
+  const loadData = async () => {
+    setLoading(true);
+    const result = await myService.fetchData();
+    setData(result);
+    setLoading(false);
+  };
+  
+  const createItem = async (item) => {
+    await myService.createItem(item);
+    loadData(); // Refresh state
+  };
+  
+  const value = { data, loading, loadData, createItem };
+  return h(MyContext.Provider, {value}, children);
 }
 ```
 
-### 3. New Hook
-
-Create in `src/hooks/`:
-```typescript
-import {useState, useEffect} from 'react';
-import {useServices} from '../contexts/ServicesContext.js';
-
-export function useMyFeature() {
-  const {myService} = useServices();
-  const [data, setData] = useState(null);
-  
-  useEffect(() => {
-    // Setup logic
-  }, []);
-  
-  return {data};
-}
-```
-
-### 4. New Screen
+### 4. New Screen (Using Contexts)
 
 Create in `src/screens/`:
 ```typescript
 import React from 'react';
 import {Box} from 'ink';
-import {useAppState} from '../contexts/AppStateContext.js';
+import {useMyContext} from '../contexts/MyContext.js';
+import {useUIContext} from '../contexts/UIContext.js';
 
 const h = React.createElement;
 
 export default function MyScreen() {
-  const {state} = useAppState();
+  const {data, loading, createItem} = useMyContext();
+  const {showList} = useUIContext();
   
   return h(Box, null, 
-    // Screen content
+    // Screen content that uses context state and operations
   );
 }
 ```
@@ -457,14 +473,20 @@ npm link            # Install globally as 'dev-sessions'
 
 ## Best Practices
 
-1. **Always use absolute paths** in file operations
-2. **Check for existence** before file operations
-3. **Silent fail** for UI operations to prevent crashes
-4. **Use memory stores** in tests for isolation
-5. **Follow existing patterns** when adding features
-6. **Test through UI interactions** not implementation details
-7. **Keep services stateless** when possible
-8. **Use TypeScript strict mode** for safety
+### Architecture
+1. **Services are stateless** - only fetch and transform data
+2. **Contexts manage state** - combine state with operation methods
+3. **Clear separation** - GitService (local) vs GitHubService (API)
+4. **No dependency injection** - services instantiated directly in contexts
+
+### Implementation  
+5. **Always use absolute paths** in file operations
+6. **Check for existence** before file operations
+7. **Silent fail** for UI operations to prevent crashes
+8. **Use memory stores** in tests for isolation
+9. **Follow existing patterns** when adding features
+10. **Test through UI interactions** not implementation details
+11. **Use TypeScript strict mode** for safety
 
 ## Testing Checklist
 

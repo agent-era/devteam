@@ -164,3 +164,19 @@ export const UI_SLEEP_RATE = 0.05;
 export const PAGE_SIZE = 10;
 export const MIN_TERMINAL_WIDTH = 40;
 export const MIN_TERMINAL_HEIGHT = 10;
+
+// Claude prompt for generating run configurations
+export const RUN_CONFIG_CLAUDE_PROMPT = `Analyze this project directory and generate a run-session.config.json file.
+
+CRITICAL: Your response must be ONLY the JSON object. Do NOT use markdown code blocks or any formatting.
+
+Example of what to output:
+{"command": "npm start", "env": {}, "setup": [], "watch": true}
+
+Fill in values based on the project files you see:
+- "command": main run command (e.g. "npm run dev", "python app.py")
+- "env": object with environment variables (usually empty {})
+- "setup": array of setup commands (e.g. ["npm install"])
+- "watch": true for servers/long-running, false for build/test commands
+
+Your response must start with { and end with } - nothing else.`;

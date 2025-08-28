@@ -2,8 +2,11 @@ import {describe, beforeEach, test, expect} from '@jest/globals';
 import React from 'react';
 import {FakeGitService} from '../fakes/FakeGitService.js';
 import {FakeTmuxService} from '../fakes/FakeTmuxService.js';
-import {FakeWorktreeService} from '../fakes/FakeWorktreeService.js';
-import {ServicesProvider, useServices} from '../../src/contexts/ServicesContext.js';
+import {FakeGitHubService} from '../fakes/FakeGitHubService.js';
+import {useWorktreeContext} from '../../src/contexts/WorktreeContext.js';
+import {WorktreeProvider} from '../../src/contexts/WorktreeContext.js';
+import {GitHubProvider} from '../../src/contexts/GitHubContext.js';
+import {UIProvider} from '../../src/contexts/UIContext.js';
 import {
   resetTestData,
   setupTestProject,
@@ -14,21 +17,17 @@ import {
 
 const h = React.createElement;
 
-// Test component that uses services
+// Test component that uses new contexts
 function TestServicesComponent() {
-  const {gitService, tmuxService, worktreeService} = useServices();
+  const {worktrees, createFeature} = useWorktreeContext();
   
   React.useEffect(() => {
     // Create a worktree when component mounts
-    worktreeService.createFeature('test-project', 'auto-feature');
-  }, [worktreeService]);
-  
-  const projects = gitService.discoverProjects();
-  const sessions = tmuxService.listSessions();
+    createFeature('test-project', 'auto-feature');
+  }, [createFeature]);
   
   return h('div', {}, 
-    h('p', {}, `Projects: ${projects.length}`),
-    h('p', {}, `Sessions: ${sessions.length}`)
+    h('p', {}, `Worktrees: ${worktrees.length}`)
   );
 }
 
@@ -38,42 +37,50 @@ describe('App Integration Tests', () => {
   });
 
   describe('Services Integration', () => {
-    test('should provide fake services through context', () => {
+    test('should provide contexts for worktree operations', () => {
       setupTestProject('test-project');
       
       const gitService = new FakeGitService();
       const tmuxService = new FakeTmuxService();
-      const worktreeService = new FakeWorktreeService(gitService, tmuxService);
+      const gitHubService = new FakeGitHubService();
       
-      // Create React element with services provider
+      // Create React element with context providers
       const testApp = h(
-        ServicesProvider,
-        {gitService, tmuxService, worktreeService, children: h(TestServicesComponent)}
+        WorktreeProvider,
+        null,
+        h(GitHubProvider, null,
+          h(UIProvider, null,
+            h(TestServicesComponent)
+          )
+        )
       );
       
-      // Test that services can be accessed through context
+      // Test that context providers can be created
       expect(testApp).toBeDefined();
       
-      // Verify services are the correct instances
+      // Verify service instances are correct types
       expect(gitService).toBeInstanceOf(FakeGitService);
       expect(tmuxService).toBeInstanceOf(FakeTmuxService);
-      expect(worktreeService).toBeInstanceOf(FakeWorktreeService);
+      expect(gitHubService).toBeInstanceOf(FakeGitHubService);
     });
 
-    test('should handle service operations through context', () => {
+    test('should handle worktree operations through services', () => {
       setupTestProject('context-test');
-      
-      const gitService = new FakeGitService();
-      const tmuxService = new FakeTmuxService();
-      const worktreeService = new FakeWorktreeService(gitService, tmuxService);
       
       // Verify initial state
       expect(memoryStore.worktrees.size).toBe(0);
       expect(memoryStore.sessions.size).toBe(0);
       
-      // Simulate service operations that would happen in real app
-      const result = worktreeService.createFeature('context-test', 'context-feature');
-      expect(result).not.toBeNull();
+      // Test services directly (context uses these internally)
+      const gitService = new FakeGitService();
+      const tmuxService = new FakeTmuxService();
+      
+      // Create worktree and session
+      const worktreeCreated = gitService.createWorktree('context-test', 'context-feature');
+      expect(worktreeCreated).toBe(true);
+      
+      const sessionName = tmuxService.createSession('context-test', 'context-feature', 'idle');
+      expect(sessionName).toBe('dev-context-test-context-feature');
       
       // Verify operations affected memory store
       expect(memoryStore.worktrees.size).toBe(1);
@@ -92,12 +99,15 @@ describe('App Integration Tests', () => {
       
       const gitService = new FakeGitService();
       const tmuxService = new FakeTmuxService();
-      const worktreeService = new FakeWorktreeService(gitService, tmuxService);
       
       // Create multiple features
-      worktreeService.createFeature('multi-test', 'feature-1');
-      worktreeService.createFeature('multi-test', 'feature-2');
-      worktreeService.createFeature('multi-test', 'feature-3');
+      gitService.createWorktree('multi-test', 'feature-1');
+      gitService.createWorktree('multi-test', 'feature-2');
+      gitService.createWorktree('multi-test', 'feature-3');
+      
+      tmuxService.createSession('multi-test', 'feature-1', 'idle');
+      tmuxService.createSession('multi-test', 'feature-2', 'idle');
+      tmuxService.createSession('multi-test', 'feature-3', 'idle');
       
       // Verify all created
       expect(memoryStore.worktrees.size).toBe(3);
@@ -115,9 +125,12 @@ describe('App Integration Tests', () => {
       const features = worktrees.map(w => w.feature).sort();
       expect(features).toEqual(['feature-1', 'feature-2', 'feature-3']);
       
-      // Archive one feature
+      // Archive one feature (simulate archive operation)
       const firstWorktree = worktrees[0];
-      worktreeService.archiveFeature('multi-test', firstWorktree.path, firstWorktree.feature);
+      const archiveResult = gitService.archiveWorktree('multi-test', firstWorktree.path, firstWorktree.feature);
+      expect(archiveResult).toBe(true);
+      
+      tmuxService.killSession(`dev-multi-test-${firstWorktree.feature}`);
       
       // Verify state after archive
       expect(memoryStore.worktrees.size).toBe(2);
@@ -165,8 +178,9 @@ describe('App Integration Tests', () => {
       expect(tmuxService.hasSession(sessionName)).toBe(true);
       expect(tmuxService.getClaudeStatus(sessionName)).toBe('working');
       
-      // Verify PR data through batch fetch
-      const prData = gitService.batchGetPRStatusForWorktrees([
+      // Verify PR data through GitHub service
+      const gitHubService = new FakeGitHubService();
+      const prData = gitHubService.batchGetPRStatusForWorktrees([
         {project: 'status-test', path: worktree.path}
       ]);
       
