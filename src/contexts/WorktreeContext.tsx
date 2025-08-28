@@ -28,6 +28,7 @@ import {
   runClaudeSync
 } from '../utils.js';
 import {useInputFocus} from './InputFocusContext.js';
+import {useGitHubContext} from './GitHubContext.js';
 
 const h = React.createElement;
 
@@ -71,22 +72,19 @@ const WorktreeContext = createContext<WorktreeContextType | null>(null);
 
 interface WorktreeProviderProps {
   children: ReactNode;
-  getPRStatus?: (path: string) => PRStatus;
-  setVisibleWorktrees?: (paths: string[]) => void;
-  refreshPRStatus?: (worktrees: any[], visibleOnly?: boolean) => Promise<void>;
 }
 
 export function WorktreeProvider({
-  children, 
-  getPRStatus, 
-  setVisibleWorktrees, 
-  refreshPRStatus
+  children
 }: WorktreeProviderProps) {
   const [worktrees, setWorktrees] = useState<WorktreeInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [lastRefreshed, setLastRefreshed] = useState(0);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const {isAnyDialogFocused} = useInputFocus();
+  
+  // Access GitHub context directly instead of through props
+  const {getPRStatus, setVisibleWorktrees, refreshPRStatus} = useGitHubContext();
 
   // Service instances - stable across re-renders
   const gitService = useMemo(() => new GitService(), []);
@@ -166,7 +164,7 @@ export function WorktreeProvider({
         // Update worktrees with fresh PR data after refresh completes
         const updatedWorktrees = enrichedList.map(wt => new WorktreeInfo({
           ...wt,
-          pr: getPRStatus ? getPRStatus(wt.path) : wt.pr
+          pr: getPRStatus(wt.path)
         }));
         setWorktrees(updatedWorktrees);
       }
@@ -215,7 +213,7 @@ export function WorktreeProvider({
       // Update worktrees with fresh PR data
       const updatedWorktrees = worktrees.map(wt => new WorktreeInfo({
         ...wt,
-        pr: getPRStatus ? getPRStatus(wt.path) : wt.pr
+        pr: getPRStatus(wt.path)
       }));
       
       setWorktrees(updatedWorktrees);

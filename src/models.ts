@@ -38,7 +38,6 @@ export class PRStatus {
   number?: number | null;
   state?: string | null; // OPEN, MERGED, CLOSED
   checks?: string | null; // passing, failing, pending
-  loading?: boolean;
   url?: string | null;
   head?: string | null;
   title?: string | null;
@@ -48,17 +47,34 @@ export class PRStatus {
     this.number = null;
     this.state = null;
     this.checks = null;
-    this.loading = false;
     this.url = null;
     this.title = null;
     this.mergeable = null;
     Object.assign(this, init);
   }
+  
+  // Loading state helpers
+  get isLoading(): boolean { return this.loadingStatus === 'loading'; }
+  get hasError(): boolean { return this.loadingStatus === 'error'; }
+  get isNotChecked(): boolean { return this.loadingStatus === 'not_checked'; }
+  get exists(): boolean { return this.loadingStatus === 'exists'; }
+  get noPR(): boolean { return this.loadingStatus === 'no_pr'; }
+  
+  // PR state helpers
   get is_merged(): boolean { return this.state === 'MERGED'; }
   get is_open(): boolean { return this.state === 'OPEN'; }
+  get is_closed(): boolean { return this.state === 'CLOSED'; }
   get has_conflicts(): boolean { return this.mergeable === 'CONFLICTING'; }
+  get is_mergeable(): boolean { return this.mergeable === 'MERGEABLE'; }
+  
+  // Status aggregation helpers
   get needs_attention(): boolean { return this.checks === 'failing' || this.has_conflicts; }
-  get is_ready_to_merge(): boolean { return this.state === 'OPEN' && this.checks === 'passing' && this.mergeable === 'MERGEABLE' && !this.loading; }
+  get is_ready_to_merge(): boolean { 
+    return this.state === 'OPEN' && 
+           this.checks === 'passing' && 
+           this.mergeable === 'MERGEABLE' && 
+           !this.isLoading; 
+  }
 }
 
 export class SessionInfo {

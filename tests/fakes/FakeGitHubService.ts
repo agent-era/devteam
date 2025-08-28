@@ -42,6 +42,8 @@ export class FakeGitHubService {
     return this.batchGetPRStatusForWorktrees(worktrees, includeChecks);
   }
 
+  // getPRForWorktree method removed - use batch methods instead
+  // Legacy method for backward compatibility during transition
   getPRForWorktree(worktreePath: string): any | null {
     const pr = memoryStore.prStatus.get(worktreePath);
     if (pr) {

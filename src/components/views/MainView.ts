@@ -185,15 +185,15 @@ export default function MainView(props: Props) {
       const pr = w.pr;
       let prStr = '';
       
-      if (!pr || pr.loadingStatus === 'not_checked') {
+      if (!pr || pr.isNotChecked) {
         prStr = '';  // Blank - not checked yet
-      } else if (pr.loadingStatus === 'loading') {
+      } else if (pr.isLoading) {
         prStr = '⏳';  // Loading indicator
-      } else if (pr.loadingStatus === 'no_pr') {
+      } else if (pr.noPR) {
         prStr = '-';  // No PR exists
-      } else if (pr.loadingStatus === 'error') {
+      } else if (pr.hasError) {
         prStr = '!';  // Error indicator
-      } else if (pr.loadingStatus === 'exists' && pr.number) {
+      } else if (pr.exists && pr.number) {
         // PR exists, show details
         const badge = pr.has_conflicts ? '⚠️' 
           : pr.is_merged ? '⟫' 

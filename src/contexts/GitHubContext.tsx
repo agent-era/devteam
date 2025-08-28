@@ -22,7 +22,7 @@ interface GitHubContextType {
   // GitHub operations
   createPR: (worktreePath: string, title: string, body?: string) => Promise<boolean>;
   mergePR: (worktreePath: string, method?: 'merge' | 'squash' | 'rebase') => Promise<boolean>;
-  getPRDetails: (worktreePath: string) => any | null;
+  // getPRDetails removed - use getPRStatus for consistent PR data
   
   // Cache operations
   clearCache: () => void;
@@ -273,9 +273,7 @@ export function GitHubProvider({children}: GitHubProviderProps) {
     }
   }, [gitHubService, cacheService, refreshPRForWorktree]);
 
-  const getPRDetails = useCallback((worktreePath: string) => {
-    return gitHubService.getPRForWorktree(worktreePath);
-  }, [gitHubService]);
+  // getPRDetails method removed - use getPRStatus for consistent PR data
 
   const clearCache = useCallback(() => {
     cacheService.clear();
@@ -301,7 +299,7 @@ export function GitHubProvider({children}: GitHubProviderProps) {
     // GitHub operations
     createPR,
     mergePR,
-    getPRDetails,
+    // getPRDetails removed
     
     // Cache operations
     clearCache,
