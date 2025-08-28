@@ -1,6 +1,7 @@
 import React, {createContext, useContext, useState, useCallback, useEffect, ReactNode, useRef} from 'react';
 import {PRStatus, WorktreeInfo} from '../models.js';
 import {GitHubService} from '../services/GitHubService.js';
+import {GitService} from '../services/GitService.js';
 import {PRStatusCacheService} from '../services/PRStatusCacheService.js';
 import {PR_REFRESH_DURATION} from '../constants.js';
 import {logError, logInfo} from '../shared/utils/logger.js';
@@ -43,6 +44,7 @@ export function GitHubProvider({children}: GitHubProviderProps) {
 
   // Service instances
   const gitHubService = new GitHubService();
+  const gitService = new GitService();
   const cacheService = useRef(new PRStatusCacheService()).current;
   const refreshIntervalRef = useRef<NodeJS.Timeout>();
 
@@ -143,6 +145,9 @@ export function GitHubProvider({children}: GitHubProviderProps) {
     
     setLoading(true);
     try {
+      // Check for recently merged PRs via git history before API refresh
+      await checkForMergedPRsViaGit(worktreesToRefresh);
+      
       const prStatusMap = await gitHubService.batchGetPRStatusForWorktreesAsync(worktreesToRefresh, true);
       
       // Only cache and update state for successful responses
@@ -190,6 +195,52 @@ export function GitHubProvider({children}: GitHubProviderProps) {
   ): Promise<void> => {
     return refreshPRStatusInternal(worktrees, visibleOnly);
   }, [refreshPRStatusInternal]);
+
+  const checkForMergedPRsViaGit = useCallback(async (
+    worktrees: Array<{project: string; path: string; is_archived?: boolean}>
+  ): Promise<void> => {
+    // Group worktrees by project to batch git operations
+    const projectGroups: Record<string, Array<{project: string; path: string}>> = {};
+    
+    for (const wt of worktrees) {
+      if (!wt.is_archived) {
+        if (!projectGroups[wt.project]) projectGroups[wt.project] = [];
+        projectGroups[wt.project].push({project: wt.project, path: wt.path});
+      }
+    }
+    
+    for (const [project, group] of Object.entries(projectGroups)) {
+      if (!group.length) continue;
+      
+      const repoPath = group[0].path;
+      
+      try {
+        // Only check for open PRs with passing checks (likely to be merged)
+        const openPassingPRs = group
+          .map(wt => ({...wt, pr: pullRequests[wt.path]}))
+          .filter(wt => wt.pr && wt.pr.state === 'OPEN' && wt.pr.checks === 'passing');
+        
+        if (openPassingPRs.length === 0) continue;
+        
+        // Fetch latest main/master branch
+        await gitService.fetchMainBranch(repoPath);
+        
+        // Look for merged PRs in recent history
+        const mergedPRNumbers = await gitService.findMergedPRsInHistory(repoPath, 20);
+        
+        // Invalidate cache for any PRs found to be merged
+        for (const wt of openPassingPRs) {
+          if (wt.pr?.number && mergedPRNumbers.includes(wt.pr.number)) {
+            logInfo(`Found merged PR #${wt.pr.number} via git history, invalidating cache`);
+            cacheService.invalidateByPRNumber(wt.pr.number);
+          }
+        }
+      } catch (error) {
+        // Silent failure - git operations are not critical
+        logError('Failed to check for merged PRs via git', {project, error});
+      }
+    }
+  }, [gitService, pullRequests, cacheService]);
 
   const refreshPRForWorktree = useCallback(async (worktreePath: string): Promise<PRStatus | null> => {
     try {

@@ -86,7 +86,7 @@ export function WorktreeProvider({
   const {isAnyDialogFocused} = useInputFocus();
   
   // Access GitHub context directly instead of through props
-  const {getPRStatus, setVisibleWorktrees, refreshPRStatus} = useGitHubContext();
+  const {getPRStatus, setVisibleWorktrees, refreshPRStatus, refreshPRForWorktree} = useGitHubContext();
 
   // Service instances - stable across re-renders
   const gitService = useMemo(() => new GitService(), []);
@@ -261,6 +261,20 @@ export function WorktreeProvider({
         attached ? tmuxService.getClaudeStatus(sessionName) : Promise.resolve('not_running' as const)
       ]);
       
+      // Detect push (ahead count went from >0 to 0) and invalidate PR cache
+      const previousAhead = selected.git?.ahead || 0;
+      const currentAhead = gitStatus.ahead || 0;
+      
+      if (previousAhead > 0 && currentAhead === 0) {
+        // A push occurred - invalidate PR cache and refresh
+        const pr = getPRStatus(selected.path);
+        if (pr && pr.state === 'OPEN' && refreshPRForWorktree) {
+          logInfo(`Detected push for ${selected.feature}, invalidating PR cache and refreshing`);
+          // The GitHubContext will handle cache invalidation in refreshPRForWorktree
+          await refreshPRForWorktree(selected.path);
+        }
+      }
+      
       const updatedWorktrees = [...worktrees];
       updatedWorktrees[selectedIndex] = new WorktreeInfo({
         ...selected,
@@ -269,7 +283,8 @@ export function WorktreeProvider({
           session_name: sessionName,
           attached,
           claude_status: claudeStatus
-        })
+        }),
+        pr: getPRStatus(selected.path) // Update with possibly refreshed PR status
       });
       
       setWorktrees(updatedWorktrees);
@@ -282,7 +297,7 @@ export function WorktreeProvider({
     } catch (error) {
       console.error('Failed to refresh selected worktree:', error);
     }
-  }, [worktrees, selectedIndex, gitService, tmuxService]);
+  }, [worktrees, selectedIndex, gitService, tmuxService, getPRStatus, refreshPRForWorktree]);
 
   const refreshPRSelective = useCallback(async () => {
     if (!refreshPRStatus) return;

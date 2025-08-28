@@ -414,4 +414,60 @@ export class GitService {
     
     return pathToBranch;
   }
+
+  async fetchMainBranch(repoPath: string): Promise<void> {
+    try {
+      await runCommandQuickAsync(['git', '-C', repoPath, 'fetch', 'origin', 'main']);
+    } catch {
+      // Silent failure - might not have main branch, try master
+      try {
+        await runCommandQuickAsync(['git', '-C', repoPath, 'fetch', 'origin', 'master']);
+      } catch {
+        // Silent failure - can't fetch
+      }
+    }
+  }
+
+  async findMergedPRsInHistory(repoPath: string, limit: number = 20): Promise<number[]> {
+    try {
+      const log = await runCommandQuickAsync([
+        'git', '-C', repoPath, 
+        'log', 'origin/main', 
+        '--format=%s', 
+        `-n`, `${limit}`
+      ]);
+      
+      if (!log) return [];
+      
+      const prNumbers: number[] = [];
+      const matches = log.matchAll(/\(#(\d+)\)/g);
+      for (const match of matches) {
+        prNumbers.push(parseInt(match[1]));
+      }
+      
+      return prNumbers;
+    } catch {
+      // Try master if main doesn't exist
+      try {
+        const log = await runCommandQuickAsync([
+          'git', '-C', repoPath, 
+          'log', 'origin/master', 
+          '--format=%s', 
+          `-n`, `${limit}`
+        ]);
+        
+        if (!log) return [];
+        
+        const prNumbers: number[] = [];
+        const matches = log.matchAll(/\(#(\d+)\)/g);
+        for (const match of matches) {
+          prNumbers.push(parseInt(match[1]));
+        }
+        
+        return prNumbers;
+      } catch {
+        return [];
+      }
+    }
+  }
 }

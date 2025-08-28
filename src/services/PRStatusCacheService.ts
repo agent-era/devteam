@@ -127,6 +127,27 @@ export class PRStatusCacheService {
   }
 
   /**
+   * Invalidate cache entries by PR number
+   */
+  invalidateByPRNumber(prNumber: number): void {
+    const toDelete: string[] = [];
+    
+    for (const [path, entry] of Object.entries(this.cache)) {
+      if (entry.data.number === prNumber) {
+        toDelete.push(path);
+      }
+    }
+    
+    for (const path of toDelete) {
+      delete this.cache[path];
+    }
+    
+    if (toDelete.length > 0) {
+      this.saveToDisk();
+    }
+  }
+
+  /**
    * Clear all cache entries
    */
   clear(): void {
@@ -209,6 +230,11 @@ export class PRStatusCacheService {
         if (prStatus.checks === 'pending') {
           // Pending checks should be refreshed quickly to catch completion
           return 20 * 1000; // 20 seconds
+        }
+
+        if (prStatus.checks === 'passing' && prStatus.state === 'OPEN') {
+          // Passing PRs might be merged soon - refresh more frequently
+          return 30 * 1000; // 30 seconds
         }
 
         if (prStatus.state === 'OPEN') {
