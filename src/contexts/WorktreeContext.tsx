@@ -105,13 +105,44 @@ export function WorktreeProvider({children}: WorktreeProviderProps) {
     path: string; 
     branch: string
   }>): WorktreeInfo[] => {
+    // Get existing worktrees to preserve idle timers and kill flags
+    const existingWorktrees = new Map(worktrees.map(w => [`${w.project}/${w.feature}`, w]));
+    
     return list.map((w: any) => {
+      const key = `${w.project}/${w.feature}`;
+      const existing = existingWorktrees.get(key);
+      
       const gitStatus = gitService.getGitStatus(w.path);
       const sessionName = tmuxService.sessionName(w.project, w.feature);
       const activeSessions = tmuxService.listSessions();
       const attached = activeSessions.includes(sessionName);
       const claudeStatus = attached ? tmuxService.getClaudeStatus(sessionName) : 'not_running';
       
+      // Track idle time for ALL worktrees and kill after 30 minutes
+      let idleStartTime = existing?.idleStartTime;
+      let wasKilledIdle = existing?.wasKilledIdle || false;
+      
+      if (claudeStatus === 'idle') {
+        if (!idleStartTime) {
+          idleStartTime = Date.now();
+        }
+        const idleMinutes = (Date.now() - idleStartTime) / 60000;
+        
+        if (idleMinutes > 30) {
+          // Kill idle session to free memory and mark it as killed
+          tmuxService.killSession(sessionName);
+          idleStartTime = null;
+          wasKilledIdle = true;
+        }
+      } else {
+        idleStartTime = null; // Reset when not idle
+        // Keep wasKilledIdle flag until session is recreated
+      }
+      
+      // Reset wasKilledIdle flag if session is now active (was recreated)
+      if (attached && wasKilledIdle) {
+        wasKilledIdle = false;
+      }
       
       const sessionInfo = new SessionInfo({
         session_name: sessionName,
@@ -126,10 +157,12 @@ export function WorktreeProvider({children}: WorktreeProviderProps) {
         branch: w.branch,
         git: gitStatus,
         session: sessionInfo,
+        idleStartTime,
+        wasKilledIdle,
         mtime: w.mtime || 0,
       });
     });
-  }, [gitService, tmuxService]);
+  }, [gitService, tmuxService, worktrees]);
 
   const refresh = useCallback(() => {
     if (loading) return;
@@ -265,12 +298,18 @@ export function WorktreeProvider({children}: WorktreeProviderProps) {
     const activeSessions = tmuxService.listSessions();
     
     if (!activeSessions.includes(sessionName)) {
-      // Create session inline - use regular claude command
+      // Create session inline
       runCommand(['tmux', 'new-session', '-ds', sessionName, '-c', worktree.path]);
       configureTmuxDisplayTime();
       const hasClaude = !!runCommandQuick(['bash', '-lc', 'command -v claude || true']);
       if (hasClaude) {
-        runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 'claude', 'C-m']);
+        if (worktree.wasKilledIdle) {
+          // Session was killed due to idle timeout - use /resume to restore context
+          runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 'claude "/resume"', 'C-m']);
+        } else {
+          // Fresh session - use regular claude command
+          runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 'claude', 'C-m']);
+        }
       }
     }
     
