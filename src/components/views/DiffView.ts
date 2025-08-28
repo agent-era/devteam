@@ -298,6 +298,56 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     return prompt;
   };
 
+  const getLastTwoCommentLines = (comments: any[]): string[] => {
+    const lines: string[] = [];
+    
+    // Get the last comment's text and file info
+    if (comments.length > 0) {
+      const lastComment = comments[comments.length - 1];
+      lines.push(`  Line ${lastComment.lineIndex + 1}: ${lastComment.commentText}`);
+      lines.push(`File: ${lastComment.fileName}`);
+    }
+    
+    // If we have multiple comments, also include the second-to-last one
+    if (comments.length > 1) {
+      const secondLastComment = comments[comments.length - 2];
+      lines.push(`  Line ${secondLastComment.lineIndex + 1}: ${secondLastComment.commentText}`);
+    }
+    
+    return lines.filter(line => line.trim().length > 0);
+  };
+
+  const verifyCommentsReceived = (sessionName: string, comments: any[]): boolean => {
+    // Wait a brief moment for tmux to process the input
+    // This is synchronous in our case since runCommand is blocking
+    
+    // Capture the current pane content
+    const paneContent = tmuxService.capturePane(sessionName);
+    
+    if (!paneContent || paneContent.trim().length === 0) {
+      return false; // No content captured
+    }
+    
+    // Check if at least the last 2 lines we sent are visible
+    // (checking last 2 ensures we're not just seeing partial input)
+    const lastTwoLines = getLastTwoCommentLines(comments);
+    
+    if (lastTwoLines.length === 0) {
+      return false; // No lines to verify
+    }
+    
+    // At least one of the last two lines should be visible
+    let foundLines = 0;
+    for (const line of lastTwoLines) {
+      if (paneContent.includes(line.trim())) {
+        foundLines++;
+      }
+    }
+    
+    // Require at least one line to be found (being lenient for race conditions)
+    return foundLines > 0;
+  };
+
   const sendCommentsViaAltEnter = (sessionName: string, comments: any[]) => {
     // Format as lines and send with Alt+Enter (existing logic)
     const messageLines: string[] = [];
@@ -367,6 +417,17 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
         } else {
           // Claude is idle/working/thinking - can accept input via Alt+Enter
           sendCommentsViaAltEnter(sessionName, comments);
+          
+          // VERIFY: Check if comments were actually received (handle race condition)
+          const received = verifyCommentsReceived(sessionName, comments);
+          
+          if (!received) {
+            // Race condition detected - Claude probably transitioned to waiting
+            // Keep comments and show dialog
+            setSessionWaitingInfo({sessionName});
+            setShowSessionWaitingDialog(true);
+            return; // Don't clear comments or attach
+          }
         }
       } else {
         // No session - create and start Claude with pre-filled prompt
@@ -377,10 +438,13 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
           const commentPrompt = formatCommentsAsPrompt(comments);
           runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 
                      `claude ${JSON.stringify(commentPrompt)}`, 'C-m']);
+          
+          // For new sessions, we can assume the prompt was received
+          // since we're starting fresh with the prompt
         }
       }
       
-      // Clear comments after sending
+      // Clear comments only after successful sending/verification
       commentStore.clear();
       
       // Close DiffView and attach to session

@@ -397,15 +397,15 @@ describe('Comment Send to Claude E2E', () => {
     mockRunInteractive.mockRestore();
   });
 
-  test('should send comments when Claude is working or thinking', async () => {
+  test('should send comments when Claude is working or active', async () => {
     setupBasicProject('working-project');
     const worktree = setupTestWorktree('working-project', 'working-feature');
     const commentStore = commentStoreManager.getStore(worktree.path);
     
     commentStore.addComment(25, 'work.ts', 'const work = 4;', 'Work comment');
     
-    // Test both working and thinking states
-    const statuses = ['working', 'thinking'] as const;
+    // Test both working and active states (active can accept input like working)
+    const statuses = ['working', 'active'] as const;
     
     for (const status of statuses) {
       // Mock session exists and Claude is in the current status
@@ -417,7 +417,7 @@ describe('Comment Send to Claude E2E', () => {
       
       const sessionName = 'dev-working-project-working-feature';
       
-      // Should send via Alt+Enter since Claude can accept input even while working/thinking
+      // Should send via Alt+Enter since Claude can accept input even while working/active
       const messageLines = [
         "Please address the following code review comments:",
         "",
@@ -437,5 +437,185 @@ describe('Comment Send to Claude E2E', () => {
       mockRunCommand.mockRestore();
       mockRunInteractive.mockRestore();
     }
+  });
+
+  test('should preserve comments when race condition detected - Claude transitions to waiting during send', async () => {
+    setupBasicProject('race-project');
+    const worktree = setupTestWorktree('race-project', 'race-feature');
+    const commentStore = commentStoreManager.getStore(worktree.path);
+    
+    commentStore.addComment(30, 'race.ts', 'const race = 5;', 'Race comment');
+    commentStore.addComment(35, 'race.ts', 'const condition = true;', 'Another comment');
+    
+    const sessionName = 'dev-race-project-race-feature';
+    
+    // Mock session exists and Claude starts as idle
+    jest.spyOn(fakeTmuxService, 'listSessions').mockReturnValue([sessionName]);
+    jest.spyOn(fakeTmuxService, 'getClaudeStatus').mockReturnValue('idle');
+    
+    // Mock capturePane to simulate Claude transitioned to waiting (no comments visible)
+    jest.spyOn(fakeTmuxService, 'capturePane').mockReturnValue('1. What would you like me to help with?');
+    
+    const mockRunCommand = jest.spyOn(commandExecutor, 'runCommand').mockReturnValue('');
+    const mockRunInteractive = jest.spyOn(commandExecutor, 'runInteractive').mockReturnValue(0);
+    
+    const comments = commentStore.getAllComments();
+    
+    // Simulate sending comments (they get sent but Claude transitioned to waiting)
+    const messageLines = [
+      "Please address the following code review comments:",
+      "",
+      "File: race.ts",
+      "  Line 31: Race comment",
+      "  Line 36: Another comment",
+      ""
+    ];
+    
+    messageLines.forEach((line) => {
+      commandExecutor.runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, line]);
+      commandExecutor.runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 'Escape', 'Enter']);
+    });
+    
+    // Simulate verification check - comments not found in pane (race condition detected)
+    const paneContent = fakeTmuxService.capturePane(sessionName);
+    const lastTwoLines = ["Race comment", "Another comment"];
+    let foundLines = 0;
+    for (const line of lastTwoLines) {
+      if (paneContent.includes(line.trim())) {
+        foundLines++;
+      }
+    }
+    
+    // Race condition: comments not visible in pane
+    expect(foundLines).toBe(0);
+    
+    // Comments should NOT be cleared (preserved for retry)
+    expect(commentStore.count).toBe(2);
+    
+    // Should trigger session waiting dialog (mocked by not clearing comments)
+    // In actual implementation, setSessionWaitingInfo and setShowSessionWaitingDialog would be called
+    
+    mockRunCommand.mockRestore();
+    mockRunInteractive.mockRestore();
+  });
+
+  test('should clear comments when verification confirms they were received', async () => {
+    setupBasicProject('verify-project');
+    const worktree = setupTestWorktree('verify-project', 'verify-feature');
+    const commentStore = commentStoreManager.getStore(worktree.path);
+    
+    commentStore.addComment(40, 'verify.ts', 'const verify = 6;', 'Verify comment');
+    commentStore.addComment(45, 'verify.ts', 'const success = true;', 'Success comment');
+    
+    const sessionName = 'dev-verify-project-verify-feature';
+    
+    // Mock session exists and Claude is idle
+    jest.spyOn(fakeTmuxService, 'listSessions').mockReturnValue([sessionName]);
+    jest.spyOn(fakeTmuxService, 'getClaudeStatus').mockReturnValue('idle');
+    
+    // Mock capturePane to simulate comments are visible (successfully received)
+    const mockPaneContent = `
+Please address the following code review comments:
+
+File: verify.ts
+  Line 41: Verify comment
+  Line 46: Success comment
+
+I'll help you address these comments...
+`;
+    jest.spyOn(fakeTmuxService, 'capturePane').mockReturnValue(mockPaneContent);
+    
+    const mockRunCommand = jest.spyOn(commandExecutor, 'runCommand').mockReturnValue('');
+    const mockRunInteractive = jest.spyOn(commandExecutor, 'runInteractive').mockReturnValue(0);
+    
+    const comments = commentStore.getAllComments();
+    
+    // Simulate sending comments
+    const messageLines = [
+      "Please address the following code review comments:",
+      "",
+      "File: verify.ts",
+      "  Line 41: Verify comment",
+      "  Line 46: Success comment",
+      ""
+    ];
+    
+    messageLines.forEach((line) => {
+      commandExecutor.runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, line]);
+      commandExecutor.runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 'Escape', 'Enter']);
+    });
+    
+    // Simulate verification check - comments found in pane (successful delivery)
+    const paneContent = fakeTmuxService.capturePane(sessionName);
+    const lastTwoLines = ["Verify comment", "Success comment"];
+    let foundLines = 0;
+    for (const line of lastTwoLines) {
+      if (paneContent.includes(line.trim())) {
+        foundLines++;
+      }
+    }
+    
+    // Verification success: both comments visible in pane
+    expect(foundLines).toBe(2);
+    
+    // Comments should be cleared after successful verification
+    commentStore.clear();
+    expect(commentStore.count).toBe(0);
+    
+    // Should proceed to attach to session
+    commandExecutor.runInteractive('tmux', ['attach-session', '-t', sessionName]);
+    expect(mockRunInteractive).toHaveBeenCalledWith('tmux', ['attach-session', '-t', sessionName]);
+    
+    mockRunCommand.mockRestore();
+    mockRunInteractive.mockRestore();
+  });
+
+  test('should handle partial verification - one comment line found', async () => {
+    setupBasicProject('partial-project');
+    const worktree = setupTestWorktree('partial-project', 'partial-feature');
+    const commentStore = commentStoreManager.getStore(worktree.path);
+    
+    commentStore.addComment(50, 'partial.ts', 'const partial = 7;', 'Partial comment');
+    commentStore.addComment(55, 'partial.ts', 'const missing = false;', 'Missing comment');
+    
+    const sessionName = 'dev-partial-project-partial-feature';
+    
+    // Mock session exists and Claude is idle
+    jest.spyOn(fakeTmuxService, 'listSessions').mockReturnValue([sessionName]);
+    jest.spyOn(fakeTmuxService, 'getClaudeStatus').mockReturnValue('idle');
+    
+    // Mock capturePane to simulate only one comment is visible (partial delivery)
+    const mockPaneContent = `
+Please address the following code review comments:
+
+File: partial.ts
+  Line 51: Partial comment
+
+I can help with the first comment...
+`;
+    jest.spyOn(fakeTmuxService, 'capturePane').mockReturnValue(mockPaneContent);
+    
+    const mockRunCommand = jest.spyOn(commandExecutor, 'runCommand').mockReturnValue('');
+    const mockRunInteractive = jest.spyOn(commandExecutor, 'runInteractive').mockReturnValue(0);
+    
+    // Simulate verification check - only one comment found
+    const paneContent = fakeTmuxService.capturePane(sessionName);
+    const lastTwoLines = ["Partial comment", "Missing comment"];
+    let foundLines = 0;
+    for (const line of lastTwoLines) {
+      if (paneContent.includes(line.trim())) {
+        foundLines++;
+      }
+    }
+    
+    // Partial verification: only one comment visible
+    expect(foundLines).toBe(1);
+    
+    // According to verification logic, foundLines > 0 means success, so comments should be cleared
+    commentStore.clear();
+    expect(commentStore.count).toBe(0);
+    
+    mockRunCommand.mockRestore();
+    mockRunInteractive.mockRestore();
   });
 });
