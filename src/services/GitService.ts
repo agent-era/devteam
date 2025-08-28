@@ -130,7 +130,15 @@ export class GitService {
     if (fs.existsSync(worktreePath)) return false;
     
     const branch = branchName || `feature/${featureName}`;
-    runCommand(['git', '-C', mainRepo, 'worktree', 'add', worktreePath, '-b', branch], {timeout: 30000});
+    const baseBranch = findBaseBranch(mainRepo, BASE_BRANCH_CANDIDATES);
+    
+    if (baseBranch) {
+      runCommand(['git', '-C', mainRepo, 'worktree', 'add', worktreePath, '-b', branch, baseBranch], {timeout: 30000});
+    } else {
+      // Fallback to current behavior if no base branch found
+      runCommand(['git', '-C', mainRepo, 'worktree', 'add', worktreePath, '-b', branch], {timeout: 30000});
+    }
+    
     return fs.existsSync(worktreePath);
   }
 
