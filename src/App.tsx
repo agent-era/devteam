@@ -1,5 +1,6 @@
 import React, {useEffect} from 'react';
 import {useApp, useStdin, Box} from 'ink';
+import {runInteractive} from './shared/utils/commandExecutor.js';
 import FullScreen from './components/common/FullScreen.js';
 import HelpOverlay from './components/dialogs/HelpOverlay.js';
 import DiffView from './components/views/DiffView.js';
@@ -86,6 +87,11 @@ function AppContent() {
       setTimeout(() => process.exit(0), 100);
     }
   }, [shouldExit, exit]);
+
+  const handleAttachToSession = (sessionName: string) => {
+    // Attach to the tmux session interactively
+    runInteractive('tmux', ['attach-session', '-t', sessionName]);
+  };
 
   // Operations simplified to use contexts
   const handleCreateFeature = () => {
@@ -200,7 +206,8 @@ function AppContent() {
           worktreePath: diffWorktree,
           title: diffType === 'uncommitted' ? 'Diff Viewer (Uncommitted Changes)' : 'Diff Viewer',
           diffType: diffType,
-          onClose: showList
+          onClose: showList,
+          onAttachToSession: handleAttachToSession
         })
       )
     );
