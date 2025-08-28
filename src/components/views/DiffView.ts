@@ -10,6 +10,7 @@ import {TmuxService} from '../../services/TmuxService.js';
 import {runCommand} from '../../utils.js';
 import CommentInputDialog from '../dialogs/CommentInputDialog.js';
 import SessionWaitingDialog from '../dialogs/SessionWaitingDialog.js';
+import UnsubmittedCommentsDialog from '../dialogs/UnsubmittedCommentsDialog.js';
 
 type DiffLine = {type: 'added'|'removed'|'context'|'header'; text: string; fileName?: string};
 
@@ -83,6 +84,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
   const [showAllComments, setShowAllComments] = useState(false);
   const [showSessionWaitingDialog, setShowSessionWaitingDialog] = useState(false);
   const [sessionWaitingInfo, setSessionWaitingInfo] = useState<{sessionName: string}>({sessionName: ''});
+  const [showUnsubmittedCommentsDialog, setShowUnsubmittedCommentsDialog] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -181,9 +183,16 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
 
   useInput((input, key) => {
     // Don't handle inputs when any dialog is open
-    if (showCommentDialog || showSessionWaitingDialog) return;
+    if (showCommentDialog || showSessionWaitingDialog || showUnsubmittedCommentsDialog) return;
     
-    if (key.escape || input === 'q') return onClose();
+    if (key.escape || input === 'q') {
+      // Check if there are unsaved comments
+      if (commentStore.count > 0) {
+        setShowUnsubmittedCommentsDialog(true);
+        return;
+      }
+      return onClose();
+    }
     if (key.upArrow || input === 'k') setPos((p) => Math.max(0, p - 1));
     if (key.downArrow || input === 'j') setPos((p) => Math.min(lines.length - 1, p + 1));
     if (key.pageUp || input === 'b') setPos((p) => Math.max(0, p - pageSize));
@@ -487,6 +496,20 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     setShowSessionWaitingDialog(false);
   };
 
+  const handleUnsubmittedCommentsSubmit = () => {
+    setShowUnsubmittedCommentsDialog(false);
+    sendCommentsToTmux();
+  };
+
+  const handleUnsubmittedCommentsExitWithoutSubmitting = () => {
+    setShowUnsubmittedCommentsDialog(false);
+    onClose();
+  };
+
+  const handleUnsubmittedCommentsCancel = () => {
+    setShowUnsubmittedCommentsDialog(false);
+  };
+
   // Truncate text to fit terminal width
   const truncateText = (text: string, maxWidth: number): string => {
     if (text.length <= maxWidth) return text;
@@ -498,6 +521,20 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
   }, [lines, offset, pageSize]);
 
   const statusText = `Terminal: ${terminalHeight}x${terminalWidth} | PageSize: ${pageSize} | Pos: ${pos}/${lines.length} | Offset: ${offset} | Visible: ${visible.length} | Comments: ${commentStore.count}`;
+
+  // Create unsubmitted comments dialog if needed - render it instead of the main view when active
+  if (showUnsubmittedCommentsDialog) {
+    return h(
+      Box,
+      {flexDirection: 'column', height: terminalHeight, justifyContent: 'center', alignItems: 'center'},
+      h(UnsubmittedCommentsDialog, {
+        commentCount: commentStore.count,
+        onSubmit: handleUnsubmittedCommentsSubmit,
+        onExitWithoutSubmitting: handleUnsubmittedCommentsExitWithoutSubmitting,
+        onCancel: handleUnsubmittedCommentsCancel
+      })
+    );
+  }
 
   // Create session waiting dialog if needed - render it instead of the main view when active
   if (showSessionWaitingDialog) {
