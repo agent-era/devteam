@@ -105,12 +105,36 @@ export function WorktreeProvider({children}: WorktreeProviderProps) {
     path: string; 
     branch: string
   }>): WorktreeInfo[] => {
+    // Get existing worktrees to preserve idle timers
+    const existingWorktrees = new Map(worktrees.map(w => [`${w.project}/${w.feature}`, w]));
+    
     return list.map((w: any) => {
+      const key = `${w.project}/${w.feature}`;
+      const existing = existingWorktrees.get(key);
+      
       const gitStatus = gitService.getGitStatus(w.path);
       const sessionName = tmuxService.sessionName(w.project, w.feature);
       const activeSessions = tmuxService.listSessions();
       const attached = activeSessions.includes(sessionName);
       const claudeStatus = attached ? tmuxService.getClaudeStatus(sessionName) : 'not_running';
+      
+      // Track idle time for ALL worktrees
+      let idleStartTime = existing?.idleStartTime;
+      
+      if (claudeStatus === 'idle') {
+        if (!idleStartTime) {
+          idleStartTime = Date.now();
+        }
+        const idleMinutes = (Date.now() - idleStartTime) / 60000;
+        
+        if (idleMinutes > 30) {
+          // Kill idle session to free memory
+          tmuxService.killSession(sessionName);
+          idleStartTime = null;
+        }
+      } else {
+        idleStartTime = null; // Reset when not idle
+      }
       
       const sessionInfo = new SessionInfo({
         session_name: sessionName,
@@ -125,10 +149,11 @@ export function WorktreeProvider({children}: WorktreeProviderProps) {
         branch: w.branch,
         git: gitStatus,
         session: sessionInfo,
+        idleStartTime,
         mtime: w.mtime || 0,
       });
     });
-  }, [gitService, tmuxService]);
+  }, [gitService, tmuxService, worktrees]);
 
   const refresh = useCallback(() => {
     if (loading) return;
@@ -157,28 +182,10 @@ export function WorktreeProvider({children}: WorktreeProviderProps) {
       const attached = activeSessions.includes(sessionName);
       const claudeStatus = attached ? tmuxService.getClaudeStatus(sessionName) : 'not_running';
       
-      // Track idle time and kill Claude sessions after 30 minutes
-      let idleStartTime = selected.idleStartTime;
-      if (claudeStatus === 'idle') {
-        if (!idleStartTime) {
-          idleStartTime = Date.now();
-        }
-        const idleMinutes = (Date.now() - idleStartTime) / 60000;
-        
-        if (idleMinutes > 30) {
-          // Just kill the idle session to free memory
-          tmuxService.killSession(sessionName);
-          idleStartTime = null;
-        }
-      } else {
-        idleStartTime = null; // Reset when not idle
-      }
-      
       const updatedWorktrees = [...worktrees];
       updatedWorktrees[selectedIndex] = new WorktreeInfo({
         ...selected,
         git: gitStatus,
-        idleStartTime,
         session: new SessionInfo({
           session_name: sessionName,
           attached,
