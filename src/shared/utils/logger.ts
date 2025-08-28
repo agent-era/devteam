@@ -29,28 +29,24 @@ const originalConsoleDebug = console.debug;
 export function logError(message: string, error?: any): void {
   const entry = formatLogEntry('ERROR', message, error);
   storeLogEntry(true, entry);
-  originalConsoleError(message, error);
 }
 
 // Log info function
 export function logInfo(message: string, data?: any): void {
   const entry = formatLogEntry('INFO', message, data);
   storeLogEntry(false, entry);
-  originalConsoleLog(message, data);
 }
 
 // Log warning function
 export function logWarn(message: string, data?: any): void {
   const entry = formatLogEntry('WARN', message, data);
   storeLogEntry(false, entry);
-  originalConsoleWarn(message, data);
 }
 
 // Log debug function
 export function logDebug(message: string, data?: any): void {
   const entry = formatLogEntry('DEBUG', message, data);
   storeLogEntry(false, entry);
-  originalConsoleDebug(message, data);
 }
 
 // Initialize memory logging by overriding console methods
@@ -61,7 +57,6 @@ export function initializeMemoryLogging(): void {
     ).join(' ');
     const entry = formatLogEntry('LOG', message);
     storeLogEntry(false, entry);
-    originalConsoleLog(...args);
   };
 
   console.error = (...args: any[]) => {
@@ -70,7 +65,6 @@ export function initializeMemoryLogging(): void {
     ).join(' ');
     const entry = formatLogEntry('ERROR', message);
     storeLogEntry(true, entry);
-    originalConsoleError(...args);
   };
 
   console.warn = (...args: any[]) => {
@@ -79,7 +73,6 @@ export function initializeMemoryLogging(): void {
     ).join(' ');
     const entry = formatLogEntry('WARN', message);
     storeLogEntry(false, entry);
-    originalConsoleWarn(...args);
   };
 
   console.info = (...args: any[]) => {
@@ -88,7 +81,6 @@ export function initializeMemoryLogging(): void {
     ).join(' ');
     const entry = formatLogEntry('INFO', message);
     storeLogEntry(false, entry);
-    originalConsoleInfo(...args);
   };
 
   console.debug = (...args: any[]) => {
@@ -97,7 +89,6 @@ export function initializeMemoryLogging(): void {
     ).join(' ');
     const entry = formatLogEntry('DEBUG', message);
     storeLogEntry(false, entry);
-    originalConsoleDebug(...args);
   };
 }
 

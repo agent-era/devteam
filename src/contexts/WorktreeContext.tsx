@@ -28,6 +28,8 @@ import {
   runClaudeSync
 } from '../utils.js';
 import {useInputFocus} from './InputFocusContext.js';
+import {logInfo, logDebug} from '../shared/utils/logger.js';
+import {Timer} from '../shared/utils/timing.js';
 
 const h = React.createElement;
 
@@ -105,6 +107,7 @@ export function WorktreeProvider({
       const worktrees = gitService.getWorktreesForProject(project);
       for (const wt of worktrees) rows.push(wt);
     }
+    
     return rows;
   }, [gitService]);
 
@@ -114,7 +117,7 @@ export function WorktreeProvider({
     path: string; 
     branch: string
   }>, getPRStatus?: (path: string) => any): WorktreeInfo[] => {
-    return list.map((w: any) => {
+    const result = list.map((w: any) => {
       const gitStatus = gitService.getGitStatus(w.path);
       const sessionName = tmuxService.sessionName(w.project, w.feature);
       const activeSessions = tmuxService.listSessions();
@@ -141,13 +144,22 @@ export function WorktreeProvider({
         mtime: w.mtime || 0,
       });
     });
+    
+    return result;
   }, [gitService, tmuxService]);
 
   const refresh = useCallback(async () => {
-    if (loading) return;
+    if (loading) {
+      logDebug(`[Refresh.Full] Skipped - already loading`);
+      return;
+    }
+    
+    const timer = new Timer();
     setLoading(true);
     
     try {
+      logInfo(`[Refresh.Full] Starting complete refresh`);
+      
       const rawList = collectWorktrees();
       const enrichedList = attachRuntimeData(rawList, getPRStatus);
       setWorktrees(enrichedList);
@@ -157,7 +169,7 @@ export function WorktreeProvider({
       if (setVisibleWorktrees) {
         const visiblePaths = enrichedList.map(wt => wt.path);
         setVisibleWorktrees(visiblePaths);
-      }
+        }
       
       // Refresh PR status for all worktrees (will use cache if available)
       if (refreshPRStatus) {
@@ -170,7 +182,13 @@ export function WorktreeProvider({
         }));
         setWorktrees(updatedWorktrees);
       }
+      
+      const timing = timer.elapsed();
+      logInfo(`[Refresh.Full] Complete: ${enrichedList.length} worktrees in ${timing.formatted}`);
+      
     } catch (error) {
+      const timing = timer.elapsed();
+      logInfo(`[Refresh.Full] Failed in ${timing.formatted}: ${error instanceof Error ? error.message : String(error)}`);
       console.error('Failed to refresh worktrees:', error);
     } finally {
       setLoading(false);
@@ -200,6 +218,12 @@ export function WorktreeProvider({
       });
       
       setWorktrees(updatedWorktrees);
+      
+      // Only log if status changed to working or waiting (interesting states)
+      if (claudeStatus === 'working' || claudeStatus === 'waiting') {
+        logDebug(`[Refresh.Selected] ${selected.feature}: ${claudeStatus}`);
+      }
+      
     } catch (error) {
       console.error('Failed to refresh selected worktree:', error);
     }
@@ -219,6 +243,7 @@ export function WorktreeProvider({
       }));
       
       setWorktrees(updatedWorktrees);
+      
     } catch (error) {
       console.error('Failed to refresh PR status:', error);
     }
