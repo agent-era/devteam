@@ -268,4 +268,174 @@ describe('Comment Send to Claude E2E', () => {
     // Clean up
     mockRunInteractive.mockRestore();
   });
+
+  test('should send comments when Claude is idle', async () => {
+    setupBasicProject('idle-project');
+    const worktree = setupTestWorktree('idle-project', 'idle-feature');
+    const commentStore = commentStoreManager.getStore(worktree.path);
+    
+    commentStore.addComment(10, 'test.ts', 'const test = true;', 'Test comment');
+    
+    // Mock session exists and Claude is idle
+    jest.spyOn(fakeTmuxService, 'listSessions').mockReturnValue(['dev-idle-project-idle-feature']);
+    jest.spyOn(fakeTmuxService, 'getClaudeStatus').mockReturnValue('idle');
+    
+    const mockRunCommand = jest.spyOn(commandExecutor, 'runCommand').mockReturnValue('');
+    const mockRunInteractive = jest.spyOn(commandExecutor, 'runInteractive').mockReturnValue(0);
+    
+    // Simulate sending comments
+    const comments = commentStore.getAllComments();
+    const sessionName = 'dev-idle-project-idle-feature';
+    
+    // Should send via Alt+Enter since Claude is idle
+    const messageLines = [
+      "Please address the following code review comments:",
+      "",
+      "File: test.ts",
+      "  Line 11: Test comment",
+      ""
+    ];
+    
+    messageLines.forEach((line) => {
+      commandExecutor.runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, line]);
+      commandExecutor.runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 'Escape', 'Enter']);
+    });
+    
+    expect(mockRunCommand).toHaveBeenCalledWith(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, "Please address the following code review comments:"]);
+    expect(mockRunCommand).toHaveBeenCalledWith(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 'Escape', 'Enter']);
+    
+    mockRunCommand.mockRestore();
+    mockRunInteractive.mockRestore();
+  });
+
+  test('should launch Claude with pre-filled prompt when no session exists', async () => {
+    setupBasicProject('no-session-project');
+    const worktree = setupTestWorktree('no-session-project', 'no-session-feature');
+    const commentStore = commentStoreManager.getStore(worktree.path);
+    
+    commentStore.addComment(5, 'main.ts', 'const main = 1;', 'Main comment');
+    
+    // Mock no session exists
+    jest.spyOn(fakeTmuxService, 'listSessions').mockReturnValue([]);
+    
+    const mockRunCommand = jest.spyOn(commandExecutor, 'runCommand').mockImplementation((args) => {
+      if (args.includes('command') && args.includes('claude')) {
+        return 'claude'; // Claude is available
+      }
+      return '';
+    });
+    const mockRunInteractive = jest.spyOn(commandExecutor, 'runInteractive').mockReturnValue(0);
+    
+    const sessionName = 'dev-no-session-project-no-session-feature';
+    
+    // Should create session
+    commandExecutor.runCommand(['tmux', 'new-session', '-ds', sessionName, '-c', worktree.path]);
+    
+    // Should launch Claude with pre-filled prompt
+    const expectedPrompt = "Please address the following code review comments:\\n\\nFile: main.ts\\n  Line 6: Main comment\\n\\n";
+    commandExecutor.runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, `claude "${expectedPrompt}"`, 'C-m']);
+    
+    expect(mockRunCommand).toHaveBeenCalledWith(['tmux', 'new-session', '-ds', sessionName, '-c', worktree.path]);
+    expect(mockRunCommand).toHaveBeenCalledWith(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, `claude "${expectedPrompt}"`, 'C-m']);
+    
+    mockRunCommand.mockRestore();
+    mockRunInteractive.mockRestore();
+  });
+
+  test('should launch Claude with pre-filled prompt when Claude is not running', async () => {
+    setupBasicProject('not-running-project');
+    const worktree = setupTestWorktree('not-running-project', 'not-running-feature');
+    const commentStore = commentStoreManager.getStore(worktree.path);
+    
+    commentStore.addComment(15, 'app.ts', 'const app = 2;', 'App comment');
+    
+    // Mock session exists but Claude is not running
+    jest.spyOn(fakeTmuxService, 'listSessions').mockReturnValue(['dev-not-running-project-not-running-feature']);
+    jest.spyOn(fakeTmuxService, 'getClaudeStatus').mockReturnValue('not_running');
+    
+    const mockRunCommand = jest.spyOn(commandExecutor, 'runCommand').mockReturnValue('');
+    const mockRunInteractive = jest.spyOn(commandExecutor, 'runInteractive').mockReturnValue(0);
+    
+    const sessionName = 'dev-not-running-project-not-running-feature';
+    
+    // Should launch Claude with pre-filled prompt
+    const expectedPrompt = "Please address the following code review comments:\\n\\nFile: app.ts\\n  Line 16: App comment\\n\\n";
+    commandExecutor.runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, `claude "${expectedPrompt}"`, 'C-m']);
+    
+    expect(mockRunCommand).toHaveBeenCalledWith(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, `claude "${expectedPrompt}"`, 'C-m']);
+    
+    mockRunCommand.mockRestore();
+    mockRunInteractive.mockRestore();
+  });
+
+  test('should not send comments when Claude is waiting and allow user to go to session', async () => {
+    setupBasicProject('waiting-project');
+    const worktree = setupTestWorktree('waiting-project', 'waiting-feature');
+    const commentStore = commentStoreManager.getStore(worktree.path);
+    
+    commentStore.addComment(20, 'wait.ts', 'const wait = 3;', 'Wait comment');
+    
+    // Mock session exists and Claude is waiting
+    jest.spyOn(fakeTmuxService, 'listSessions').mockReturnValue(['dev-waiting-project-waiting-feature']);
+    jest.spyOn(fakeTmuxService, 'getClaudeStatus').mockReturnValue('waiting');
+    
+    const mockRunCommand = jest.spyOn(commandExecutor, 'runCommand').mockReturnValue('');
+    const mockRunInteractive = jest.spyOn(commandExecutor, 'runInteractive').mockReturnValue(0);
+    
+    // Should NOT send any commands
+    expect(mockRunCommand).not.toHaveBeenCalledWith(expect.arrayContaining(['send-keys']));
+    
+    // Comments should still be available (not cleared)
+    expect(commentStore.count).toBe(1);
+    
+    // Should be able to attach to session (simulating user choosing "Go to Session")
+    const sessionName = 'dev-waiting-project-waiting-feature';
+    commandExecutor.runInteractive('tmux', ['attach-session', '-t', sessionName]);
+    expect(mockRunInteractive).toHaveBeenCalledWith('tmux', ['attach-session', '-t', sessionName]);
+    
+    mockRunCommand.mockRestore();
+    mockRunInteractive.mockRestore();
+  });
+
+  test('should send comments when Claude is working or thinking', async () => {
+    setupBasicProject('working-project');
+    const worktree = setupTestWorktree('working-project', 'working-feature');
+    const commentStore = commentStoreManager.getStore(worktree.path);
+    
+    commentStore.addComment(25, 'work.ts', 'const work = 4;', 'Work comment');
+    
+    // Test both working and thinking states
+    const statuses = ['working', 'thinking'] as const;
+    
+    for (const status of statuses) {
+      // Mock session exists and Claude is in the current status
+      jest.spyOn(fakeTmuxService, 'listSessions').mockReturnValue(['dev-working-project-working-feature']);
+      jest.spyOn(fakeTmuxService, 'getClaudeStatus').mockReturnValue(status);
+      
+      const mockRunCommand = jest.spyOn(commandExecutor, 'runCommand').mockReturnValue('');
+      const mockRunInteractive = jest.spyOn(commandExecutor, 'runInteractive').mockReturnValue(0);
+      
+      const sessionName = 'dev-working-project-working-feature';
+      
+      // Should send via Alt+Enter since Claude can accept input even while working/thinking
+      const messageLines = [
+        "Please address the following code review comments:",
+        "",
+        "File: work.ts",
+        "  Line 26: Work comment",
+        ""
+      ];
+      
+      messageLines.forEach((line) => {
+        commandExecutor.runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, line]);
+        commandExecutor.runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 'Escape', 'Enter']);
+      });
+      
+      expect(mockRunCommand).toHaveBeenCalledWith(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, "Please address the following code review comments:"]);
+      expect(mockRunCommand).toHaveBeenCalledWith(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 'Escape', 'Enter']);
+      
+      mockRunCommand.mockRestore();
+      mockRunInteractive.mockRestore();
+    }
+  });
 });
