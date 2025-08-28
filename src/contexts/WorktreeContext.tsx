@@ -157,10 +157,30 @@ export function WorktreeProvider({children}: WorktreeProviderProps) {
       const attached = activeSessions.includes(sessionName);
       const claudeStatus = attached ? tmuxService.getClaudeStatus(sessionName) : 'not_running';
       
+      // Track idle time and restart Claude sessions after 30 minutes
+      let idleStartTime = selected.idleStartTime;
+      if (claudeStatus === 'idle') {
+        if (!idleStartTime) {
+          idleStartTime = Date.now();
+        }
+        const idleMinutes = (Date.now() - idleStartTime) / 60000;
+        
+        if (idleMinutes > 30) {
+          // Kill and restart with /resume
+          tmuxService.killSession(sessionName);
+          createTmuxSession(selected.project, selected.feature, selected.path);
+          runCommand(['tmux', 'send-keys', '-t', sessionName, 'claude "/resume"', 'C-m']);
+          idleStartTime = null;
+        }
+      } else {
+        idleStartTime = null; // Reset when not idle
+      }
+      
       const updatedWorktrees = [...worktrees];
       updatedWorktrees[selectedIndex] = new WorktreeInfo({
         ...selected,
         git: gitStatus,
+        idleStartTime,
         session: new SessionInfo({
           session_name: sessionName,
           attached,
@@ -172,7 +192,7 @@ export function WorktreeProvider({children}: WorktreeProviderProps) {
     } catch (error) {
       console.error('Failed to refresh selected worktree:', error);
     }
-  }, [worktrees, selectedIndex, gitService, tmuxService]);
+  }, [worktrees, selectedIndex, gitService, tmuxService, createTmuxSession]);
 
   // Operations
   const createFeature = useCallback(async (projectName: string, featureName: string): Promise<WorktreeInfo | null> => {
@@ -431,6 +451,8 @@ export function WorktreeProvider({children}: WorktreeProviderProps) {
     
     // Create detached session at cwd
     runCommand(['tmux', 'new-session', '-ds', sessionName, '-c', cwd]);
+    // Auto-destroy session when program exits
+    runCommand(['tmux', 'set-option', '-t', sessionName, 'remain-on-exit', 'off']);
     configureTmuxDisplayTime();
     
     try {
@@ -472,10 +494,19 @@ export function WorktreeProvider({children}: WorktreeProviderProps) {
 
   const terminateFeatureSessions = useCallback((projectName: string, featureName: string) => {
     const sessionName = tmuxService.sessionName(projectName, featureName);
+    const shellSessionName = tmuxService.shellSessionName(projectName, featureName);
+    const runSessionName = tmuxService.runSessionName(projectName, featureName);
     const activeSessions = tmuxService.listSessions();
     
+    // Kill all three session types
     if (activeSessions.includes(sessionName)) {
       runCommand(['tmux', 'kill-session', '-t', sessionName]);
+    }
+    if (activeSessions.includes(shellSessionName)) {
+      runCommand(['tmux', 'kill-session', '-t', shellSessionName]);
+    }
+    if (activeSessions.includes(runSessionName)) {
+      runCommand(['tmux', 'kill-session', '-t', runSessionName]);
     }
   }, [tmuxService]);
 
