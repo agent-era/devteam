@@ -4,7 +4,7 @@ import {PRStatus} from '../../src/models.js';
 
 // Mock the runCommandQuick at the module level
 jest.mock('../../src/utils.js', () => ({
-  ...jest.requireActual('../../src/utils.js'),
+  ...(jest.requireActual('../../src/utils.js') as any),
   runCommandQuick: jest.fn()
 }));
 
