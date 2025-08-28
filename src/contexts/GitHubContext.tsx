@@ -284,12 +284,9 @@ export function GitHubProvider({children}: GitHubProviderProps) {
   }, [cacheService]);
 
   const invalidateCache = useCallback((worktreePath: string) => {
+    // Just invalidate the cache - keep current status visible 
+    // The next refresh cycle will pick it up due to shorter TTL
     cacheService.invalidate(worktreePath);
-    setPullRequests(prev => {
-      const newPRs = {...prev};
-      delete newPRs[worktreePath];
-      return newPRs;
-    });
   }, [cacheService]);
 
   const getCacheStats = useCallback(() => {
