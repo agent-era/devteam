@@ -2,6 +2,7 @@ import React, {useMemo} from 'react';
 import {Box, Text} from 'ink';
 const h = React.createElement;
 import type {WorktreeInfo} from '../../models.js';
+import {calculatePaginationInfo} from '../../utils/pagination.js';
 import {
     COL_NUMBER_WIDTH,
     COL_AI_WIDTH,
@@ -100,7 +101,7 @@ export default function MainView(props: Props) {
       }
       
       return [
-        String(i0 + 1),
+        String(start + i0 + 1),
         `${w.project}/${w.feature}`,
         'AI', // placeholder, actual symbol set later
         diffStr,
@@ -145,7 +146,7 @@ export default function MainView(props: Props) {
           : aiSymbol; // default fallback
       }
 
-      const num = String(i0 + 1);
+      const num = String(i + 1);
       const pf = `${w.project}/${w.feature}`;
       // AI symbol without padding - let Ink handle the fixed width of 2
       const ai = aiSymbol;
@@ -339,7 +340,11 @@ export default function MainView(props: Props) {
     );
   }
 
-  const totalPages = Math.max(1, Math.ceil(worktrees.length / pageSize));
+  const {totalPages, paginationText} = calculatePaginationInfo(
+    worktrees.length,
+    page,
+    pageSize
+  );
   
   const header = h(
     Box,
@@ -352,6 +357,12 @@ export default function MainView(props: Props) {
     h(Box, {width: columnWidths[5], justifyContent: 'center', marginRight: 1}, h(Text, {color: 'gray', bold: true}, 'PUSHED')),
     h(Box, {width: columnWidths[6]}, h(Text, {color: 'gray', bold: true}, 'PR'))
   );
+
+  const footer = totalPages > 1 ? h(
+    Box,
+    {marginTop: 1},
+    h(Text, {color: 'gray'}, paginationText)
+  ) : null;
   
   return h(
     Box,
@@ -359,9 +370,10 @@ export default function MainView(props: Props) {
     h(
       Box,
       {marginBottom: 1},
-      h(Text, {color: 'magenta'}, `Tmux Session Manager — j/k navigate, Enter attach, n new, a archive, s shell, d diff, D uncommitted, r refresh, v archived, ? help, q quit  [${page + 1}/${totalPages}]`)
+      h(Text, {color: 'magenta'}, `Enter attach, n new, a archive, \u001b[4mx\u001b[0m exec, \u001b[4md\u001b[0m diff, \u001b[4ms\u001b[0m shell, q quit${paginationText}`)
     ),
     header,
-    ...rows
+    ...rows,
+    footer
   );
 }

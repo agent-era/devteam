@@ -26,7 +26,7 @@ class MockRenderResult {
     this.stdout = '';
     this.unmount = jest.fn();
     this.rerender = jest.fn((newApp) => {
-      this.app = newApp;
+      if (newApp) this.app = newApp;
     });
     
     // Simulate app rendering
@@ -69,7 +69,12 @@ Press 'n' to create new feature, 'a' to archive, '?' for help`;
 
 // Mock render function
 function render(app, options = {}) {
-  return new MockRenderResult(app);
+  const result = new MockRenderResult(app);
+  // Ensure app is properly set
+  if (app) {
+    result.app = app;
+  }
+  return result;
 }
 
 // Export additional utilities that tests might use

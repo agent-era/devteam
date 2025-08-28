@@ -3,6 +3,7 @@ import {Box, Text, useInput, useStdin, Static} from 'ink';
 const h = React.createElement;
 import {runCommandAsync} from '../../utils.js';
 import {findBaseBranch} from '../../utils.js';
+import {useTerminalDimensions} from '../../hooks/useTerminalDimensions.js';
 import {BASE_BRANCH_CANDIDATES} from '../../constants.js';
 
 type DiffLine = {type: 'added'|'removed'|'context'|'header'; text: string};
@@ -63,13 +64,12 @@ type Props = {worktreePath: string; title?: string; onClose: () => void; diffTyp
 
 export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, diffType = 'full'}: Props) {
   const {isRawModeSupported} = useStdin();
+  const {rows: terminalHeight, columns: terminalWidth} = useTerminalDimensions();
   const [lines, setLines] = useState<DiffLine[]>([]);
   const [pos, setPos] = useState(0);
   const [offset, setOffset] = useState(0);
   const [targetOffset, setTargetOffset] = useState(0);
   const [animationId, setAnimationId] = useState<NodeJS.Timeout | null>(null);
-  const [terminalHeight, setTerminalHeight] = useState<number>(process.stdout.rows || 24);
-  const [terminalWidth, setTerminalWidth] = useState<number>(process.stdout.columns || 80);
 
   useEffect(() => {
     (async () => {
@@ -80,14 +80,6 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       setTargetOffset(0);
       setPos(0);
     })();
-    const onResize = () => {
-      const newHeight = process.stdout.rows || 24;
-      const newWidth = process.stdout.columns || 80;
-      setTerminalHeight(newHeight);
-      setTerminalWidth(newWidth);
-    };
-    process.stdout.on('resize', onResize);
-    return () => { process.stdout.off?.('resize', onResize as any); };
   }, [worktreePath, diffType]);
 
   // Calculate page size dynamically - reserve space for debug, title, and help

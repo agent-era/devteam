@@ -32,7 +32,7 @@ describe('Worktree Management E2E', () => {
       const {stdin, lastFrame, services} = renderTestApp();
 
       // Initial state should show empty worktree list
-      expect(lastFrame()).toContain('Press \'n\' for new');
+      expect(lastFrame()).toContain('n new');
 
       // Simulate creating a worktree using service layer (since UI simulation is mocked)
       services.worktreeService.createFeature('my-project', 'new-feature');

@@ -37,8 +37,22 @@ export default function WorktreeListScreen({
 
   const handleMove = (delta: number) => {
     setState(s => {
-      const nextIndex = Math.max(0, Math.min(s.worktrees.length - 1, s.selectedIndex + delta));
-      return {...s, selectedIndex: nextIndex};
+      if (!s.worktrees.length) return s;
+      
+      let nextIndex = s.selectedIndex + delta;
+      const totalItems = s.worktrees.length;
+      
+      // Clamp to valid range
+      nextIndex = Math.max(0, Math.min(totalItems - 1, nextIndex));
+      
+      // Calculate which page this index belongs to
+      const targetPage = Math.floor(nextIndex / s.pageSize);
+      
+      return {
+        ...s, 
+        selectedIndex: nextIndex,
+        page: targetPage
+      };
     });
   };
 
@@ -88,19 +102,54 @@ export default function WorktreeListScreen({
 
   const handlePreviousPage = () => {
     setState(st => {
-      const total = Math.max(1, Math.ceil(st.worktrees.length / st.pageSize));
-      const prevPage = (st.page - 1 + total) % total;
-      const newIndex = Math.min(prevPage * st.pageSize, st.worktrees.length - 1);
+      if (!st.worktrees.length) return st;
+      
+      const totalPages = Math.ceil(st.worktrees.length / st.pageSize);
+      if (totalPages <= 1) return st;
+      
+      const prevPage = st.page === 0 ? totalPages - 1 : st.page - 1;
+      const startIndex = prevPage * st.pageSize;
+      const newIndex = Math.min(startIndex, st.worktrees.length - 1);
+      
       return {...st, page: prevPage, selectedIndex: newIndex};
     });
   };
 
   const handleNextPage = () => {
     setState(st => {
-      const total = Math.max(1, Math.ceil(st.worktrees.length / st.pageSize));
-      const nextPage = (st.page + 1) % total;
-      const newIndex = Math.min(nextPage * st.pageSize, st.worktrees.length - 1);
+      if (!st.worktrees.length) return st;
+      
+      const totalPages = Math.ceil(st.worktrees.length / st.pageSize);
+      if (totalPages <= 1) return st;
+      
+      const nextPage = (st.page + 1) % totalPages;
+      const startIndex = nextPage * st.pageSize;
+      const newIndex = Math.min(startIndex, st.worktrees.length - 1);
+      
       return {...st, page: nextPage, selectedIndex: newIndex};
+    });
+  };
+
+  const handleJumpToFirst = () => {
+    setState(st => ({
+      ...st,
+      selectedIndex: 0,
+      page: 0
+    }));
+  };
+
+  const handleJumpToLast = () => {
+    setState(st => {
+      if (!st.worktrees.length) return st;
+      
+      const lastIndex = st.worktrees.length - 1;
+      const lastPage = Math.floor(lastIndex / st.pageSize);
+      
+      return {
+        ...st,
+        selectedIndex: lastIndex,
+        page: lastPage
+      };
     });
   };
 
@@ -118,6 +167,8 @@ export default function WorktreeListScreen({
     onDiffUncommitted: handleDiffUncommitted,
     onPreviousPage: handlePreviousPage,
     onNextPage: handleNextPage,
+    onJumpToFirst: handleJumpToFirst,
+    onJumpToLast: handleJumpToLast,
     onQuit: onQuit,
     onExecuteRun: onExecuteRun,
     onConfigureRun: onConfigureRun

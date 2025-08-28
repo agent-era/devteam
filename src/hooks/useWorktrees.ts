@@ -3,6 +3,7 @@ import {WorktreeInfo} from '../models.js';
 import {useServices} from '../contexts/ServicesContext.js';
 import {useAppState} from '../contexts/AppStateContext.js';
 import {runCommandQuick} from '../utils.js';
+import {usePageSize} from './usePagination.js';
 import {
   CACHE_DURATION,
   AI_STATUS_REFRESH_DURATION,
@@ -20,6 +21,7 @@ function useInterval(callback: () => void, delay: number) {
 export function useWorktrees() {
   const {gitService, tmuxService} = useServices();
   const {state, setState} = useAppState();
+  const pageSize = usePageSize(); // Get dynamic page size from terminal dimensions
 
   const collectWorktrees = useCallback((): Array<{
     project: string; 
@@ -128,8 +130,6 @@ export function useWorktrees() {
   const refreshWorktrees = useCallback(() => {
     const worktreeList = collectWorktrees();
     const wtInfos = sortWorktrees(attachRuntimeData(worktreeList));
-    const rows = process.stdout.rows || 24;
-    const pageSize = Math.max(1, rows - 3);
     
     setState(s => ({
       ...s, 
@@ -151,7 +151,7 @@ export function useWorktrees() {
         setState(s => ({...s, worktrees: withPr}));
       } catch {}
     });
-  }, [collectWorktrees, sortWorktrees, attachRuntimeData, setState, gitService]);
+  }, [collectWorktrees, sortWorktrees, attachRuntimeData, setState, gitService, pageSize]);
 
   // Initial load
   useEffect(() => {
