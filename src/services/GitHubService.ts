@@ -1,9 +1,11 @@
 import {PRStatus} from '../models.js';
 import {runCommand, runCommandAsync, runCommandQuick, runCommandQuickAsync} from '../utils.js';
+import {logInfo, logDebug} from '../shared/utils/logger.js';
+import {Timer} from '../shared/utils/timing.js';
 
 export class GitHubService {
   
-  private processPRData(output: string, opts: {includeChecks?: boolean; includeTitle?: boolean; branches?: string[]} = {}): Record<string, PRStatus> {
+  private processPRData(output: string, opts: {includeChecks?: boolean; includeTitle?: boolean; branches?: string[]}, timer: Timer): Record<string, PRStatus> {
     const prByBranch: Record<string, PRStatus> = {};
     const {includeChecks = true, includeTitle = true, branches} = opts;
     
@@ -11,6 +13,10 @@ export class GitHubService {
     
     try {
       const data = JSON.parse(output);
+      
+      // Count PRs by state for logging
+      const stateCounts = {open: 0, closed: 0, merged: 0};
+      
       for (const pr of data) {
         const branch = pr.headRefName;
         if (!branch) continue;
@@ -31,8 +37,21 @@ export class GitHubService {
         if (includeTitle && pr.title) (status as any).title = pr.title;
         (status as any).mergeable = pr.mergeable ?? null;
         
+        // Count by state for logging
+        const state = (pr.state || '').toUpperCase();
+        if (state === 'OPEN') stateCounts.open++;
+        else if (state === 'CLOSED') stateCounts.closed++;
+        else if (state === 'MERGED') stateCounts.merged++;
+        
         prByBranch[branch] = status;
       }
+      
+      // Log fetch results
+      const timing = timer.elapsed();
+      const branchCount = branches?.length || 'all';
+      const totalPRs = Object.keys(prByBranch).length;
+      logInfo(`[GitHub.PR.Fetch] ${branchCount} branches -> ${totalPRs} PRs (Open: ${stateCounts.open}, Closed: ${stateCounts.closed}, Merged: ${stateCounts.merged}) in ${timing.formatted}`);
+      
     } catch {}
     
     return prByBranch;
@@ -58,20 +77,22 @@ export class GitHubService {
   }
 
   batchFetchPRData(repoPath: string, opts: {includeChecks?: boolean; includeTitle?: boolean; branches?: string[]} = {}): Record<string, PRStatus> {
+    const timer = new Timer();
     try {
       const args = this.buildPRListArgs(opts);
       const output = runCommand(args, {cwd: repoPath});
-      return this.processPRData(output, opts);
+      return this.processPRData(output, opts, timer);
     } catch {
       return {};
     }
   }
 
   async batchFetchPRDataAsync(repoPath: string, opts: {includeChecks?: boolean; includeTitle?: boolean; branches?: string[]} = {}): Promise<Record<string, PRStatus>> {
+    const timer = new Timer();
     try {
       const args = this.buildPRListArgs(opts);
       const output = await runCommandAsync(args, {cwd: repoPath});
-      return this.processPRData(output, opts);
+      return this.processPRData(output, opts, timer);
     } catch {
       return {};
     }

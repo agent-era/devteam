@@ -3,7 +3,7 @@ import {PRStatus, WorktreeInfo} from '../models.js';
 import {GitHubService} from '../services/GitHubService.js';
 import {PRStatusCacheService} from '../services/PRStatusCacheService.js';
 import {PR_REFRESH_DURATION} from '../constants.js';
-import {logError} from '../shared/utils/logger.js';
+import {logError, logInfo} from '../shared/utils/logger.js';
 
 const h = React.createElement;
 
@@ -129,12 +129,17 @@ export function GitHubProvider({children}: GitHubProviderProps) {
         }
       }
       
+      logInfo(`PR refresh: ${worktrees.length} worktrees requested, 0 need refresh (${worktrees.length} cached)`);
+      
       if (Object.keys(cached).length > 0) {
         setPullRequests(prev => ({...prev, ...cached}));
         setLastUpdated(Date.now());
       }
       return;
     }
+    
+    const cachedCount = worktrees.length - worktreesToRefresh.length;
+    logInfo(`PR refresh: ${worktrees.length} worktrees requested, ${worktreesToRefresh.length} need refresh (${cachedCount} cached)`);
     
     setLoading(true);
     try {

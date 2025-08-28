@@ -1,5 +1,7 @@
 import {commandExitCode, runCommandQuick} from '../utils.js';
 import {SESSION_PREFIX, CLAUDE_PATTERNS} from '../constants.js';
+import {logInfo, logDebug} from '../shared/utils/logger.js';
+import {Timer} from '../shared/utils/timing.js';
 
 export type ClaudeStatus = 'not_running' | 'working' | 'waiting' | 'idle' | 'active';
 
@@ -24,12 +26,15 @@ export class TmuxService {
   listSessions(): string[] {
     const output = runCommandQuick(['tmux', 'list-sessions', '-F', '#S']);
     if (!output) return [];
-    return output.split('\n').filter(Boolean);
+    
+    const sessions = output.split('\n').filter(Boolean);
+    return sessions;
   }
 
   capturePane(session: string): string {
     const target = this.findClaudePaneTarget(session) || `${session}:0.0`;
     const output = runCommandQuick(['tmux', 'capture-pane', '-p', '-t', target, '-S', '-50']);
+    
     return output || '';
   }
 
@@ -37,11 +42,12 @@ export class TmuxService {
     const text = this.capturePane(session);
     if (!text) return 'not_running';
     
-    if (this.isClaudeWorking(text)) return 'working';
-    if (this.isClaudeWaiting(text)) return 'waiting';
-    if (this.isClaudeIdle(text)) return 'idle';
+    let status: ClaudeStatus = 'active';
+    if (this.isClaudeWorking(text)) status = 'working';
+    else if (this.isClaudeWaiting(text)) status = 'waiting';
+    else if (this.isClaudeIdle(text)) status = 'idle';
     
-    return 'active';
+    return status;
   }
 
   killSession(session: string): string {

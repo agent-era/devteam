@@ -29,7 +29,7 @@ export default function WorktreeListScreen({
   onExecuteRun,
   onConfigureRun
 }: WorktreeListScreenProps) {
-  const {worktrees, selectedIndex, selectWorktree, refresh, refreshPRSelective, attachSession, attachShellSession} = useWorktreeContext();
+  const {worktrees, selectedIndex, selectWorktree, refresh, attachSession, attachShellSession} = useWorktreeContext();
 
   const handleMove = (delta: number) => {
     const nextIndex = Math.max(0, Math.min(worktrees.length - 1, selectedIndex + delta));
@@ -83,10 +83,8 @@ export default function WorktreeListScreen({
   };
 
   const handleRefresh = async () => {
-    // Full refresh: both worktrees and PR status
-    await refresh();
-    // Then selective PR refresh for visible items
-    await refreshPRSelective();
+    // Full refresh: worktrees and PR status for visible items only
+    await refresh('visible');
   };
 
   useKeyboardShortcuts({
