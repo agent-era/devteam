@@ -1,5 +1,6 @@
 import {describe, test, expect, beforeEach} from '@jest/globals';
 import {AppState, WorktreeInfo} from '../../src/models.js';
+import {calculatePageSize} from '../../src/utils/pagination.js';
 
 describe('Pagination Logic', () => {
   let mockWorktrees: WorktreeInfo[];
@@ -229,7 +230,7 @@ describe('Pagination Logic', () => {
       const state = new AppState();
       
       expect(state.page).toBe(0);
-      expect(state.pageSize).toBe(20);
+      expect(state.pageSize).toBe(calculatePageSize()); // Dynamic page size based on terminal dimensions
       expect(state.selectedIndex).toBe(0);
       expect(state.worktrees).toEqual([]);
     });

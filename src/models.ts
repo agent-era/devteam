@@ -1,3 +1,5 @@
+import {calculatePageSize} from './utils/pagination.js';
+
 export class GitStatus {
   has_changes: boolean;
   modified_files: number;
@@ -232,7 +234,7 @@ export class AppState {
     this.worktrees = [];
     this.selectedIndex = 0;
     this.page = 0;
-    this.pageSize = 20;
+    this.pageSize = calculatePageSize();
     this.lastRefreshedAt = 0;
     Object.assign(this, init);
   }

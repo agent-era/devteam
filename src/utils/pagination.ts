@@ -5,7 +5,7 @@ export function calculatePageSize(
   terminalRows = process.stdout.rows || 24,
   terminalCols = process.stdout.columns || 80
 ): number {
-  // Compact header text using single-letter shortcuts (52 chars)
+  // Compact header text using single-letter shortcuts (64 chars)
   const headerText = 'Enter attach, n new, a archive, x exec, d diff, s shell, q quit';
   
   // Calculate how many lines the header will take
@@ -20,7 +20,7 @@ export function calculatePageSize(
   } else {
     // Normal terminal - full UI
     // Reserve space for UI elements:
-    // - Header: estimatedHeaderLines (usually 1 with 63 char header)
+    // - Header: estimatedHeaderLines (usually 1 with 64 char header)
     // - Header margin: 1 line (marginBottom: 1)
     // - Column header: 1 line  
     // - Footer (pagination): 1 line when multiple pages exist
