@@ -127,8 +127,8 @@ describe('App Integration Tests', () => {
       
       // Archive one feature (simulate archive operation)
       const firstWorktree = worktrees[0];
-      const archiveResult = gitService.archiveWorktree('multi-test', firstWorktree.path, firstWorktree.feature);
-      expect(archiveResult).toBe(true);
+      const archiveResult = gitService.archiveWorktree(firstWorktree.path);
+      expect(typeof archiveResult).toBe('string'); // Returns archived path, not boolean
       
       tmuxService.killSession(`dev-multi-test-${firstWorktree.feature}`);
       
@@ -288,8 +288,9 @@ describe('App Integration Tests', () => {
     test('should handle archival of non-existent worktree', () => {
       const gitService = new FakeGitService();
       
-      const result = gitService.archiveWorktree('non-existent', '/fake/path', 'feature');
-      expect(result).toBe(false);
+      expect(() => {
+        gitService.archiveWorktree('/fake/path');
+      }).toThrow('Worktree not found');
     });
   });
 });
