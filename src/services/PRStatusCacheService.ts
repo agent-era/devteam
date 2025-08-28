@@ -230,7 +230,7 @@ export class PRStatusCacheService {
       number: prStatus.number,
       state: prStatus.state,
       checks: prStatus.checks,
-      loading: prStatus.loading,
+      // Note: loading field removed, use loadingStatus instead
       url: prStatus.url,
       head: prStatus.head,
       title: prStatus.title,
