@@ -440,7 +440,7 @@ export function WorktreeProvider({
     return gitService.getArchivedForProject(project);
   }, [gitService]);
 
-  const getRemoteBranches = useCallback((project: string) => {
+  const getRemoteBranches = useCallback((project: string): Array<Record<string, any>> => {
     return gitService.getRemoteBranches(project);
   }, [gitService]);
 
