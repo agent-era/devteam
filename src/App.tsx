@@ -321,10 +321,9 @@ function AppWithGitHub() {
   return h(WorktreeProvider, {
     getPRStatus,
     setVisibleWorktrees,
-    refreshPRStatus
-  },
-    h(UIProvider, null,
+    refreshPRStatus,
+    children: h(UIProvider, null,
       h(AppContent)
     )
-  );
+  });
 }

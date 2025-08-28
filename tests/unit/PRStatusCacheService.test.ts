@@ -20,6 +20,9 @@ describe('PRStatusCacheService', () => {
     
     // Override the cache file path for testing
     (cacheService as any).cacheFilePath = tempCacheFile;
+    
+    // Clear any existing cache data
+    cacheService.clear();
   });
 
   afterEach(() => {
@@ -34,6 +37,7 @@ describe('PRStatusCacheService', () => {
   test('should store and retrieve PR status', () => {
     const worktreePath = '/test/path';
     const prStatus = new PRStatus({
+      loadingStatus: 'exists',
       number: 123,
       state: 'OPEN',
       checks: 'passing',
@@ -59,24 +63,24 @@ describe('PRStatusCacheService', () => {
     const worktreePath = '/test/path';
     
     // Test merged PR (should have very long TTL)
-    const mergedPR = new PRStatus({state: 'MERGED'});
+    const mergedPR = new PRStatus({loadingStatus: 'exists', state: 'MERGED'});
     cacheService.set(worktreePath + '-merged', mergedPR);
     expect(cacheService.isValid(worktreePath + '-merged')).toBe(true);
 
     // Test failing PR (short TTL)
-    const failingPR = new PRStatus({state: 'OPEN', checks: 'failing'});
+    const failingPR = new PRStatus({loadingStatus: 'exists', state: 'OPEN', checks: 'failing'});
     cacheService.set(worktreePath + '-failing', failingPR);
     expect(cacheService.isValid(worktreePath + '-failing')).toBe(true);
 
     // Test open PR (medium TTL)
-    const openPR = new PRStatus({state: 'OPEN', checks: 'passing'});
+    const openPR = new PRStatus({loadingStatus: 'exists', state: 'OPEN', checks: 'passing'});
     cacheService.set(worktreePath + '-open', openPR);
     expect(cacheService.isValid(worktreePath + '-open')).toBe(true);
   });
 
   test('should invalidate specific cache entry', () => {
     const worktreePath = '/test/path';
-    const prStatus = new PRStatus({number: 123});
+    const prStatus = new PRStatus({loadingStatus: 'exists', number: 123});
 
     cacheService.set(worktreePath, prStatus);
     expect(cacheService.get(worktreePath)).toBeTruthy();
@@ -88,7 +92,7 @@ describe('PRStatusCacheService', () => {
   test('should clear all cache entries', () => {
     const path1 = '/test/path1';
     const path2 = '/test/path2';
-    const prStatus = new PRStatus({number: 123});
+    const prStatus = new PRStatus({loadingStatus: 'exists', number: 123});
 
     cacheService.set(path1, prStatus);
     cacheService.set(path2, prStatus);
@@ -106,6 +110,7 @@ describe('PRStatusCacheService', () => {
   test('should preserve PRStatus methods after JSON serialization', () => {
     const worktreePath = '/test/path';
     const prStatus = new PRStatus({
+      loadingStatus: 'exists',
       state: 'MERGED',
       checks: 'passing',
       mergeable: 'MERGEABLE'
@@ -124,7 +129,7 @@ describe('PRStatusCacheService', () => {
   test('should provide cache statistics', () => {
     const path1 = '/test/path1';
     const path2 = '/test/path2';
-    const prStatus = new PRStatus({number: 123});
+    const prStatus = new PRStatus({loadingStatus: 'exists', number: 123});
 
     cacheService.set(path1, prStatus);
     cacheService.set(path2, prStatus);
@@ -137,7 +142,7 @@ describe('PRStatusCacheService', () => {
 
   test('should cleanup expired entries', () => {
     const worktreePath = '/test/path';
-    const prStatus = new PRStatus({number: 123});
+    const prStatus = new PRStatus({loadingStatus: 'exists', number: 123});
 
     cacheService.set(worktreePath, prStatus);
     expect(cacheService.getCachedPaths()).toContain(worktreePath);
