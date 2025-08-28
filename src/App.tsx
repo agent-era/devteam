@@ -92,7 +92,6 @@ function AppContent() {
     // Attach to the tmux session interactively
     runInteractive('tmux', ['attach-session', '-t', sessionName]);
   };
-
   // Operations simplified to use contexts
   const handleCreateFeature = () => {
     const projects = discoverProjects();

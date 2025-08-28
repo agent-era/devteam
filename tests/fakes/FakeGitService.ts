@@ -1,5 +1,5 @@
 import {GitService} from '../../src/services/GitService.js';
-import {GitStatus, ProjectInfo, PRStatus} from '../../src/models.js';
+import {GitStatus, ProjectInfo, PRStatus, WorktreeInfo} from '../../src/models.js';
 import {memoryStore} from './stores.js';
 import {BASE_PATH, DIR_BRANCHES_SUFFIX, DIR_ARCHIVED_SUFFIX} from '../../src/constants.js';
 
@@ -54,6 +54,11 @@ export class FakeGitService extends GitService {
   }
 
   createWorktree(project: string, featureName: string, branchName?: string): boolean {
+    // Check if this operation should fail (for error testing)
+    if ((global as any).__mockGitShouldFail) {
+      return false;
+    }
+
     const projectInfo = memoryStore.projects.get(project);
     if (!projectInfo) return false;
 
@@ -95,6 +100,11 @@ export class FakeGitService extends GitService {
   }
 
   createWorktreeFromRemote(project: string, remoteBranch: string, localName: string): boolean {
+    // Check for error simulation flag
+    if ((global as any).__mockGitShouldFail) {
+      return false;
+    }
+
     const projectInfo = memoryStore.projects.get(project);
     if (!projectInfo) return false;
 
@@ -213,26 +223,40 @@ export class FakeGitService extends GitService {
   }
 
   // Archive a worktree (move from worktrees to archived)
-  archiveWorktree(projectName: string, worktreePath: string, featureName: string): boolean {
+  archiveWorktree(worktreePath: string): string {
     const worktree = memoryStore.worktrees.get(worktreePath);
-    if (!worktree) return false;
+    if (!worktree) throw new Error('Worktree not found');
 
+    // Generate archived path
+    const timestamp = Date.now();
+    const archivedPath = worktreePath.replace(DIR_BRANCHES_SUFFIX, DIR_ARCHIVED_SUFFIX).replace(worktree.feature, `archived-${timestamp}_${worktree.feature}`);
+    
     // Remove from worktrees
     memoryStore.worktrees.delete(worktreePath);
     
-    // Add to archived
-    const archived = memoryStore.archivedWorktrees.get(projectName) || [];
-    archived.push(worktree);
-    memoryStore.archivedWorktrees.set(projectName, archived);
+    // Add to archived with updated path
+    const archivedWorktree = new WorktreeInfo({
+      ...worktree,
+      path: archivedPath,
+      is_archived: true
+    });
+    const archived = memoryStore.archivedWorktrees.get(worktree.project) || [];
+    archived.push(archivedWorktree);
+    memoryStore.archivedWorktrees.set(worktree.project, archived);
 
-    return true;
+    return archivedPath;
   }
 
   // Delete an archived worktree permanently
   deleteArchived(archivedPath: string): boolean {
+    // Check if deletion should fail (for error testing)
+    if ((global as any).__mockGitShouldFail || (global as any).__mockDeleteShouldFail) {
+      return false;
+    }
+
     // Find and remove from archived worktrees
     for (const [project, archivedList] of memoryStore.archivedWorktrees.entries()) {
-      const index = archivedList.findIndex(w => w.path.replace(DIR_BRANCHES_SUFFIX, DIR_ARCHIVED_SUFFIX) === archivedPath);
+      const index = archivedList.findIndex(w => w.path === archivedPath || w.path.replace(DIR_BRANCHES_SUFFIX, DIR_ARCHIVED_SUFFIX) === archivedPath);
       if (index >= 0) {
         archivedList.splice(index, 1);
         memoryStore.archivedWorktrees.set(project, archivedList);

@@ -68,7 +68,12 @@ export class FakeTmuxService extends TmuxService {
   }
 
   // Test helpers
-  createSession(project: string, feature: string, claudeStatus: ClaudeStatus = 'not_running'): string {
+  createSession(project: string, feature: string, claudeStatus: ClaudeStatus = 'not_running'): string | null {
+    // Check if session creation should fail (for error testing)
+    if ((global as any).__mockTmuxShouldFail) {
+      return null;
+    }
+
     const sessionName = this.sessionName(project, feature);
     const sessionInfo = new SessionInfo({
       session_name: sessionName,
@@ -86,6 +91,30 @@ export class FakeTmuxService extends TmuxService {
       session_name: sessionName,
       attached: true,
       claude_status: 'active', // Shell sessions are always active
+    });
+    
+    memoryStore.sessions.set(sessionName, sessionInfo);
+    return sessionName;
+  }
+
+  createRunSession(project: string, feature: string): string | null {
+    // Check if run config exists (in real implementation)
+    // For tests, we'll assume it exists if fs.existsSync returns true
+    const configPath = `/fake/projects/${project}/.claude/run.json`;
+    try {
+      const fs = require('fs');
+      if (!fs.existsSync(configPath)) {
+        return null; // No config, can't create run session
+      }
+    } catch {
+      return null;
+    }
+
+    const sessionName = `${this.sessionName(project, feature)}-run`;
+    const sessionInfo = new SessionInfo({
+      session_name: sessionName,
+      attached: true,
+      claude_status: 'active', // Run sessions are active when executing
     });
     
     memoryStore.sessions.set(sessionName, sessionInfo);

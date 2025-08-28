@@ -248,7 +248,7 @@ describe('Navigation E2E', () => {
 
       // Should show project picker with multiple projects
       const dialogOutput = lastFrame();
-      expect(dialogOutput).toContain('Create Feature');
+      expect(dialogOutput).toContain('Select Project');
       expect(dialogOutput).toContain('project-1');
       expect(dialogOutput).toContain('project-2');
       expect(dialogOutput).toContain('project-3');
