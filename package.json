@@ -11,7 +11,7 @@
   },
   "scripts": {
     "build": "tsc -p .",
-    "typecheck": "tsc -p tsconfig.test.json",
+    "typecheck": "npm install && tsc -p tsconfig.test.json",
     "start": "node dist/index.js",
     "cli": "node dist/bin/dev-sessions.js",
     "test": "jest",

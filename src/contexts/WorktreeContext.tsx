@@ -1,7 +1,7 @@
 import React, {createContext, useContext, useState, useCallback, useEffect, ReactNode, useMemo} from 'react';
 import path from 'node:path';
 import fs from 'node:fs';
-import {WorktreeInfo, GitStatus, SessionInfo, ProjectInfo} from '../models.js';
+import {WorktreeInfo, GitStatus, SessionInfo, ProjectInfo, PRStatus} from '../models.js';
 import {GitService} from '../services/GitService.js';
 import {TmuxService} from '../services/TmuxService.js';
 import {
@@ -27,6 +27,7 @@ import {
   runInteractive,
   runClaudeSync
 } from '../utils.js';
+import {useInputFocus} from './InputFocusContext.js';
 
 const h = React.createElement;
 
@@ -42,21 +43,20 @@ interface WorktreeContextType {
   getSelectedWorktree: () => WorktreeInfo | null;
   
   // Data operations
-  refresh: () => void;
+  refresh: (refreshPRs?: 'all' | 'visible' | 'none') => Promise<void>;
   refreshSelected: () => void;
+  refreshPRSelective: () => Promise<void>;
   
   // Worktree operations
   createFeature: (projectName: string, featureName: string) => Promise<WorktreeInfo | null>;
   createFromBranch: (project: string, remoteBranch: string, localName: string) => Promise<boolean>;
-  archiveFeature: (worktreeOrProject: WorktreeInfo | string, worktreePath?: string, feature?: string) => Promise<{archivedPath: string}>;
+  archiveFeature: (worktreeOrProject: WorktreeInfo | string, path?: string, feature?: string) => Promise<{archivedPath: string}>;
   deleteArchived: (archivedPath: string) => Promise<boolean>;
   
   // Session operations  
   attachSession: (worktree: WorktreeInfo) => void;
   attachShellSession: (worktree: WorktreeInfo) => void;
   attachRunSession: (worktree: WorktreeInfo) => 'success' | 'no_config';
-  
-  
   
   // Projects
   discoverProjects: () => ProjectInfo[];
@@ -71,13 +71,22 @@ const WorktreeContext = createContext<WorktreeContextType | null>(null);
 
 interface WorktreeProviderProps {
   children: ReactNode;
+  getPRStatus?: (path: string) => PRStatus;
+  setVisibleWorktrees?: (paths: string[]) => void;
+  refreshPRStatus?: (worktrees: any[], visibleOnly?: boolean) => Promise<void>;
 }
 
-export function WorktreeProvider({children}: WorktreeProviderProps) {
+export function WorktreeProvider({
+  children, 
+  getPRStatus, 
+  setVisibleWorktrees, 
+  refreshPRStatus
+}: WorktreeProviderProps) {
   const [worktrees, setWorktrees] = useState<WorktreeInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [lastRefreshed, setLastRefreshed] = useState(0);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const {isAnyDialogFocused} = useInputFocus();
 
   // Service instances - stable across re-renders
   const gitService = useMemo(() => new GitService(), []);
@@ -104,19 +113,54 @@ export function WorktreeProvider({children}: WorktreeProviderProps) {
     feature: string; 
     path: string; 
     branch: string
-  }>): WorktreeInfo[] => {
+  }>, getPRStatus?: (path: string) => any): WorktreeInfo[] => {
+    // Get existing worktrees to preserve idle timers and kill flags
+    const existingWorktrees = new Map(worktrees.map(w => [`${w.project}/${w.feature}`, w]));
+    
     return list.map((w: any) => {
+      const key = `${w.project}/${w.feature}`;
+      const existing = existingWorktrees.get(key);
+      
       const gitStatus = gitService.getGitStatus(w.path);
       const sessionName = tmuxService.sessionName(w.project, w.feature);
       const activeSessions = tmuxService.listSessions();
       const attached = activeSessions.includes(sessionName);
       const claudeStatus = attached ? tmuxService.getClaudeStatus(sessionName) : 'not_running';
       
+      // Track idle time for ALL worktrees and kill after 30 minutes
+      let idleStartTime = existing?.idleStartTime;
+      let wasKilledIdle = existing?.wasKilledIdle || false;
+      
+      if (claudeStatus === 'idle') {
+        if (!idleStartTime) {
+          idleStartTime = Date.now();
+        }
+        const idleMinutes = (Date.now() - idleStartTime) / 60000;
+        
+        if (idleMinutes > 30) {
+          // Kill idle session to free memory and mark it as killed
+          tmuxService.killSession(sessionName);
+          idleStartTime = null;
+          wasKilledIdle = true;
+        }
+      } else {
+        idleStartTime = null; // Reset when not idle
+        // Keep wasKilledIdle flag until session is recreated
+      }
+      
+      // Reset wasKilledIdle flag if session is now active (was recreated)
+      if (attached && wasKilledIdle) {
+        wasKilledIdle = false;
+      }
+      
       const sessionInfo = new SessionInfo({
         session_name: sessionName,
         attached,
         claude_status: claudeStatus
       });
+
+      // Get PR status if available, otherwise create with 'not_checked' status
+      const prStatus = getPRStatus ? getPRStatus(w.path) : new PRStatus({ loadingStatus: 'not_checked' });
       
       return new WorktreeInfo({
         project: w.project,
@@ -125,26 +169,48 @@ export function WorktreeProvider({children}: WorktreeProviderProps) {
         branch: w.branch,
         git: gitStatus,
         session: sessionInfo,
+        idleStartTime,
+        wasKilledIdle,
+        pr: prStatus,
         mtime: w.mtime || 0,
       });
     });
-  }, [gitService, tmuxService]);
+  }, [gitService, tmuxService, worktrees]);
 
-  const refresh = useCallback(() => {
+  const refresh = useCallback(async (refreshPRs: 'all' | 'visible' | 'none' = 'all') => {
     if (loading) return;
     setLoading(true);
     
     try {
       const rawList = collectWorktrees();
-      const enrichedList = attachRuntimeData(rawList);
+      const enrichedList = attachRuntimeData(rawList, getPRStatus);
       setWorktrees(enrichedList);
       setLastRefreshed(Date.now());
+      
+      // Signal visible worktrees to GitHub context for selective refresh
+      if (setVisibleWorktrees) {
+        const visiblePaths = enrichedList.map(wt => wt.path);
+        setVisibleWorktrees(visiblePaths);
+      }
+      
+      // Refresh PR status based on parameter
+      if (refreshPRStatus && refreshPRs !== 'none') {
+        const visibleOnly = refreshPRs === 'visible';
+        await refreshPRStatus(enrichedList, visibleOnly);
+        
+        // Update worktrees with fresh PR data after refresh completes
+        const updatedWorktrees = enrichedList.map(wt => new WorktreeInfo({
+          ...wt,
+          pr: getPRStatus ? getPRStatus(wt.path) : wt.pr
+        }));
+        setWorktrees(updatedWorktrees);
+      }
     } catch (error) {
       console.error('Failed to refresh worktrees:', error);
     } finally {
       setLoading(false);
     }
-  }, [loading, collectWorktrees, attachRuntimeData]);
+  }, [loading, collectWorktrees, attachRuntimeData, getPRStatus, setVisibleWorktrees, refreshPRStatus]);
 
   const refreshSelected = useCallback(() => {
     const selected = worktrees[selectedIndex];
@@ -174,6 +240,24 @@ export function WorktreeProvider({children}: WorktreeProviderProps) {
     }
   }, [worktrees, selectedIndex, gitService, tmuxService]);
 
+  const refreshPRSelective = useCallback(async () => {
+    if (!refreshPRStatus) return;
+    
+    try {
+      // Refresh PR status for visible worktrees only
+      await refreshPRStatus(worktrees, true);
+      
+      // Update worktrees with fresh PR data
+      const updatedWorktrees = worktrees.map(wt => new WorktreeInfo({
+        ...wt,
+        pr: getPRStatus ? getPRStatus(wt.path) : wt.pr
+      }));
+      
+      setWorktrees(updatedWorktrees);
+    } catch (error) {
+      console.error('Failed to refresh PR status:', error);
+    }
+  }, [worktrees, refreshPRStatus, getPRStatus]);
   // Operations
   const createFeature = useCallback(async (projectName: string, featureName: string): Promise<WorktreeInfo | null> => {
     setLoading(true);
@@ -264,7 +348,19 @@ export function WorktreeProvider({children}: WorktreeProviderProps) {
     const activeSessions = tmuxService.listSessions();
     
     if (!activeSessions.includes(sessionName)) {
-      createTmuxSession(worktree.project, worktree.feature, worktree.path);
+      // Create session inline
+      runCommand(['tmux', 'new-session', '-ds', sessionName, '-c', worktree.path]);
+      configureTmuxDisplayTime();
+      const hasClaude = !!runCommandQuick(['bash', '-lc', 'command -v claude || true']);
+      if (hasClaude) {
+        if (worktree.wasKilledIdle) {
+          // Session was killed due to idle timeout - use /resume to restore context
+          runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 'claude "/resume"', 'C-m']);
+        } else {
+          // Fresh session - use regular claude command
+          runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 'claude', 'C-m']);
+        }
+      }
     }
     
     configureTmuxDisplayTime();
@@ -303,8 +399,6 @@ export function WorktreeProvider({children}: WorktreeProviderProps) {
     runInteractive('tmux', ['attach-session', '-t', sessionName]);
     return 'success';
   }, [tmuxService]);
-
-
 
   const selectWorktree = useCallback((index: number) => {
     setSelectedIndex(index);
@@ -431,6 +525,8 @@ export function WorktreeProvider({children}: WorktreeProviderProps) {
     
     // Create detached session at cwd
     runCommand(['tmux', 'new-session', '-ds', sessionName, '-c', cwd]);
+    // Auto-destroy session when program exits
+    runCommand(['tmux', 'set-option', '-t', sessionName, 'remain-on-exit', 'off']);
     configureTmuxDisplayTime();
     
     try {
@@ -444,12 +540,12 @@ export function WorktreeProvider({children}: WorktreeProviderProps) {
         }
       }
       
-      // Set environment variables if they exist
-      if (config.env && typeof config.env === 'object') {
-        for (const [key, value] of Object.entries(config.env)) {
-          runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, `export ${key}="${value}"`, 'C-m']);
-        }
-      }
+      // // Set environment variables if they exist
+      // if (config.env && typeof config.env === 'object') {
+      //   for (const [key, value] of Object.entries(config.env)) {
+      //     runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, `export ${key}="${value}"`, 'C-m']);
+      //   }
+      // }
       
       // Run the main command
       if (config.command) {
@@ -472,10 +568,19 @@ export function WorktreeProvider({children}: WorktreeProviderProps) {
 
   const terminateFeatureSessions = useCallback((projectName: string, featureName: string) => {
     const sessionName = tmuxService.sessionName(projectName, featureName);
+    const shellSessionName = tmuxService.shellSessionName(projectName, featureName);
+    const runSessionName = tmuxService.runSessionName(projectName, featureName);
     const activeSessions = tmuxService.listSessions();
     
+    // Kill all three session types
     if (activeSessions.includes(sessionName)) {
       runCommand(['tmux', 'kill-session', '-t', sessionName]);
+    }
+    if (activeSessions.includes(shellSessionName)) {
+      runCommand(['tmux', 'kill-session', '-t', shellSessionName]);
+    }
+    if (activeSessions.includes(runSessionName)) {
+      runCommand(['tmux', 'kill-session', '-t', runSessionName]);
     }
   }, [tmuxService]);
 
@@ -542,24 +647,30 @@ export function WorktreeProvider({children}: WorktreeProviderProps) {
   // Auto-refresh intervals
   useEffect(() => {
     const shouldRefresh = Date.now() - lastRefreshed > CACHE_DURATION;
-    if (shouldRefresh && worktrees.length === 0) {
+    if (shouldRefresh) {
       refresh();
     }
-  }, [lastRefreshed, worktrees.length, refresh]);
+  }, [lastRefreshed, refresh]);
 
   useEffect(() => {
     const interval = setInterval(() => {
-      refreshSelected();
+      // Skip AI status refresh if any dialog is focused to avoid interrupting typing
+      if (!isAnyDialogFocused) {
+        refreshSelected();
+      }
     }, AI_STATUS_REFRESH_DURATION);
     return () => clearInterval(interval);
-  }, [refreshSelected]);
+  }, [refreshSelected, isAnyDialogFocused]);
 
   useEffect(() => {
     const interval = setInterval(() => {
-      refresh();
+      // Skip diff status refresh if any dialog is focused to avoid interrupting typing
+      if (!isAnyDialogFocused) {
+        refresh();
+      }
     }, DIFF_STATUS_REFRESH_DURATION);
     return () => clearInterval(interval);
-  }, [refresh]);
+  }, [refresh, isAnyDialogFocused]);
 
   const contextValue: WorktreeContextType = {
     // State
@@ -575,6 +686,7 @@ export function WorktreeProvider({children}: WorktreeProviderProps) {
     // Data operations
     refresh,
     refreshSelected,
+    refreshPRSelective,
     
     // Worktree operations
     createFeature,

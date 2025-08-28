@@ -82,12 +82,17 @@ export default function WorktreeListScreen({
     // This could be extended to support pagination in the future
   };
 
+  const handleRefresh = async () => {
+    // Full refresh: worktrees and PR status for visible items only
+    await refresh('visible');
+  };
+
   useKeyboardShortcuts({
     onMove: handleMove,
     onSelect: handleSelect,
     onCreate: onCreateFeature,
     onArchive: onArchiveFeature,
-    onRefresh: refresh,
+    onRefresh: handleRefresh,
     onViewArchived: onViewArchived,
     onHelp: onHelp,
     onBranch: onBranch,
