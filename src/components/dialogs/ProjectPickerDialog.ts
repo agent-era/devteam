@@ -14,14 +14,12 @@ type Props = {
 export default function ProjectPickerDialog({projects, defaultProject, onSubmit, onCancel}: Props) {
   const filterInput = useTextInput();
   const [selected, setSelected] = useState(() => Math.max(0, projects.findIndex(p => p.name === defaultProject)));
-  const {isRawModeSupported} = useStdin();
   const filtered = useMemo(() => {
     const f = filterInput.value.toLowerCase();
     return projects.filter(p => p.name.toLowerCase().includes(f));
   }, [projects, filterInput.value]);
 
   useInput((input, key) => {
-    if (!isRawModeSupported) return;
     if (key.escape) return onCancel();
     
     // Handle control keys first before text input

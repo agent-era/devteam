@@ -71,11 +71,10 @@ function AppContent() {
   } = useUIContext();
 
 
-  // Auto-exit for non-interactive environments
+  // Exit immediately if raw mode isn't supported
   useEffect(() => {
     if (!isRawModeSupported) {
-      const id = setTimeout(() => exit(), 800);
-      return () => clearTimeout(id);
+      exit();
     }
   }, [isRawModeSupported, exit]);
 
