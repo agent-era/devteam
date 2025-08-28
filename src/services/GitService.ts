@@ -15,6 +15,8 @@ import {
   ensureDirectory,
   formatTimeAgo,
 } from '../utils.js';
+import {logInfo, logDebug} from '../shared/utils/logger.js';
+import {Timer} from '../shared/utils/timing.js';
 
 export class GitService {
   basePath: string;
@@ -24,7 +26,12 @@ export class GitService {
   }
 
   discoverProjects(): ProjectInfo[] {
-    if (!fs.existsSync(this.basePath)) return [];
+    const timer = new Timer();
+    
+    if (!fs.existsSync(this.basePath)) {
+      logDebug(`[Project.Discovery] Base path does not exist: ${this.basePath}`);
+      return [];
+    }
     
     const entries = fs.readdirSync(this.basePath, {withFileTypes: true});
     const projects = entries
@@ -38,6 +45,9 @@ export class GitService {
       .map((e) => new ProjectInfo({name: e.name, path: path.join(this.basePath, e.name)}))
       .sort((a, b) => a.name.localeCompare(b.name));
     
+    const timing = timer.elapsed();
+    logInfo(`[Project.Discovery] Found ${projects.length} projects in ${timing.formatted}`);
+    
     return projects;
   }
 
@@ -48,10 +58,14 @@ export class GitService {
     branch: string; 
     mtime: number
   }> {
+    const timer = new Timer();
     const worktrees: Array<{project: string; feature: string; path: string; branch: string; mtime: number}> = [];
     const branchesDirName = `${project.name}${DIR_BRANCHES_SUFFIX}`;
     const output = runCommand(['git', '-C', project.path, 'worktree', 'list', '--porcelain']);
-    if (!output) return worktrees;
+    if (!output) {
+      logDebug(`[Worktree.Collection] ${project.name}: no worktrees found`);
+      return worktrees;
+    }
 
     let current: {path?: string; branch?: string} = {};
     for (const line of output.split('\n')) {
@@ -89,11 +103,17 @@ export class GitService {
     }
     
     worktrees.sort((a, b) => b.mtime - a.mtime);
+    
+    const timing = timer.elapsed();
+    logInfo(`[Worktree.Collection] ${project.name}: ${worktrees.length} worktrees in ${timing.formatted}`);
+    
     return worktrees;
   }
 
   getGitStatus(worktreePath: string): GitStatus {
+    const timer = new Timer();
     const status = new GitStatus();
+    const worktreeName = path.basename(worktreePath);
     
     const porcelainStatus = runCommandQuick(['git', '-C', worktreePath, 'status', '--porcelain']);
     if (porcelainStatus) {
@@ -114,6 +134,13 @@ export class GitService {
     
     this.addBaseBranchComparison(worktreePath, status);
     this.addRemoteTrackingInfo(worktreePath, status);
+    
+    // Only log if there are significant changes
+    if (status.modified_files > 5 || status.added_lines + status.deleted_lines > 50) {
+      const timing = timer.elapsed();
+      const changesDesc = `${status.modified_files} modified files, +${status.added_lines}/-${status.deleted_lines} lines`;
+      logDebug(`[Git.Status] ${worktreeName}: ${changesDesc} in ${timing.formatted}`);
+    }
     
     return status;
   }

@@ -1,9 +1,12 @@
 import {PRStatus} from '../models.js';
 import {runCommand, runCommandAsync, runCommandQuick, runCommandQuickAsync} from '../utils.js';
+import {logInfo, logDebug} from '../shared/utils/logger.js';
+import {Timer} from '../shared/utils/timing.js';
 
 export class GitHubService {
   
   batchFetchPRData(repoPath: string, opts: {includeChecks?: boolean; includeTitle?: boolean; branches?: string[]} = {}): Record<string, PRStatus> {
+    const timer = new Timer();
     const prByBranch: Record<string, PRStatus> = {};
     const fields = ['number', 'state', 'headRefName', 'mergeable'];
     const includeChecks = opts.includeChecks !== false;
@@ -27,6 +30,10 @@ export class GitHubService {
       if (!output) return prByBranch;
       
       const data = JSON.parse(output);
+      
+      // Count PRs by state for logging
+      const stateCounts = {open: 0, closed: 0, merged: 0};
+      
       for (const pr of data) {
         const branch = pr.headRefName;
         if (!branch) continue;
@@ -47,14 +54,28 @@ export class GitHubService {
         if (includeTitle && pr.title) (status as any).title = pr.title;
         (status as any).mergeable = pr.mergeable ?? null;
         
+        // Count by state for logging
+        const state = (pr.state || '').toUpperCase();
+        if (state === 'OPEN') stateCounts.open++;
+        else if (state === 'CLOSED') stateCounts.closed++;
+        else if (state === 'MERGED') stateCounts.merged++;
+        
         prByBranch[branch] = status;
       }
+      
+      // Log fetch results
+      const timing = timer.elapsed();
+      const branchCount = branches?.length || 'all';
+      const totalPRs = Object.keys(prByBranch).length;
+      logInfo(`[GitHub.PR.Fetch] ${branchCount} branches -> ${totalPRs} PRs (Open: ${stateCounts.open}, Closed: ${stateCounts.closed}, Merged: ${stateCounts.merged}) in ${timing.formatted}`);
+      
     } catch {}
     
     return prByBranch;
   }
 
   async batchFetchPRDataAsync(repoPath: string, opts: {includeChecks?: boolean; includeTitle?: boolean; branches?: string[]} = {}): Promise<Record<string, PRStatus>> {
+    const timer = new Timer();
     const prByBranch: Record<string, PRStatus> = {};
     const fields = ['number', 'state', 'headRefName', 'mergeable'];
     const includeChecks = opts.includeChecks !== false;
@@ -78,6 +99,10 @@ export class GitHubService {
       if (!output) return prByBranch;
       
       const data = JSON.parse(output);
+      
+      // Count PRs by state for logging
+      const stateCounts = {open: 0, closed: 0, merged: 0};
+      
       for (const pr of data) {
         const branch = pr.headRefName;
         if (!branch) continue;
@@ -98,8 +123,21 @@ export class GitHubService {
         if (includeTitle && pr.title) (status as any).title = pr.title;
         (status as any).mergeable = pr.mergeable ?? null;
         
+        // Count by state for logging
+        const state = (pr.state || '').toUpperCase();
+        if (state === 'OPEN') stateCounts.open++;
+        else if (state === 'CLOSED') stateCounts.closed++;
+        else if (state === 'MERGED') stateCounts.merged++;
+        
         prByBranch[branch] = status;
       }
+      
+      // Log fetch results
+      const timing = timer.elapsed();
+      const branchCount = branches?.length || 'all';
+      const totalPRs = Object.keys(prByBranch).length;
+      logInfo(`[GitHub.PR.FetchAsync] ${branchCount} branches -> ${totalPRs} PRs (Open: ${stateCounts.open}, Closed: ${stateCounts.closed}, Merged: ${stateCounts.merged}) in ${timing.formatted}`);
+      
     } catch {}
     
     return prByBranch;
