@@ -12,6 +12,9 @@ import {runCommand} from '../../utils.js';
 import CommentInputDialog from '../dialogs/CommentInputDialog.js';
 import SessionWaitingDialog from '../dialogs/SessionWaitingDialog.js';
 import UnsubmittedCommentsDialog from '../dialogs/UnsubmittedCommentsDialog.js';
+import {truncateDisplay, padEndDisplay} from '../../shared/utils/formatting.js';
+import {LineWrapper} from '../../shared/utils/lineWrapper.js';
+import {ViewportCalculator} from '../../shared/utils/viewport.js';
 
 type DiffLine = {type: 'added'|'removed'|'context'|'header'; text: string; fileName?: string};
 
@@ -143,21 +146,24 @@ function convertToSideBySide(unifiedLines: DiffLine[]): SideBySideLine[] {
   return sideBySideLines;
 }
 
+
 type Props = {worktreePath: string; title?: string; onClose: () => void; diffType?: 'full' | 'uncommitted'; onAttachToSession?: (sessionName: string) => void};
 
 type ViewMode = 'unified' | 'sidebyside';
+type WrapMode = 'truncate' | 'wrap';
 
 export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, diffType = 'full', onAttachToSession}: Props) {
   const {rows: terminalHeight, columns: terminalWidth} = useTerminalDimensions();
   const [lines, setLines] = useState<DiffLine[]>([]);
   const [sideBySideLines, setSideBySideLines] = useState<SideBySideLine[]>([]);
-  const [pos, setPos] = useState(0);
-  const [offset, setOffset] = useState(0);
-  const [targetOffset, setTargetOffset] = useState(0);
+  const [selectedLine, setSelectedLine] = useState(0);
+  const [scrollRow, setScrollRow] = useState(0);
+  const [targetScrollRow, setTargetScrollRow] = useState(0);
   const [animationId, setAnimationId] = useState<NodeJS.Timeout | null>(null);
   const [currentFileHeader, setCurrentFileHeader] = useState<string>('');
   const [currentHunkHeader, setCurrentHunkHeader] = useState<string>('');
   const [viewMode, setViewMode] = useState<ViewMode>('unified');
+  const [wrapMode, setWrapMode] = useState<WrapMode>('truncate');
   const commentStore = useMemo(() => commentStoreManager.getStore(worktreePath), [worktreePath]);
   const [tmuxService] = useState(() => new TmuxService());
   const [showCommentDialog, setShowCommentDialog] = useState(false);
@@ -172,43 +178,51 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       setLines(lns);
       setSideBySideLines(convertToSideBySide(lns));
       // Reset scroll position when loading new diff
-      setOffset(0);
-      setTargetOffset(0);
-      setPos(0);
+      setScrollRow(0);
+      setTargetScrollRow(0);
+      setSelectedLine(0);
     })();
   }, [worktreePath, diffType]);
 
-  // Calculate page size dynamically - reserve space for title, help, and sticky headers
-  const pageSize = Math.max(1, terminalHeight - 4); // -1 title, -2 sticky headers, -1 help
+  // Calculate dynamic sticky header count (0, 1, or 2 headers displayed)
+  const stickyHeaderCount = useMemo(() => {
+    let count = 0;
+    if (currentFileHeader) count++;
+    if (currentHunkHeader) count++;
+    return count;
+  }, [currentFileHeader, currentHunkHeader]);
+
+  // Calculate page size dynamically - reserve space for title, help, and actual sticky headers
+  const pageSize = Math.max(1, terminalHeight - 2 - stickyHeaderCount - 1); // -1 title, -N sticky headers, -1 help
 
   // Smooth scrolling animation
   useEffect(() => {
-    if (offset === targetOffset) return;
+    if (scrollRow === targetScrollRow) return;
 
     // Clear any existing animation
     if (animationId) {
       clearTimeout(animationId);
     }
 
-    const distance = Math.abs(targetOffset - offset);
+    const distance = Math.abs(targetScrollRow - scrollRow);
     
-    // Skip animation only for very small movements (1-2 lines)
+    // Skip animation for small movements
     if (distance <= 2) {
-      setOffset(targetOffset);
+      setScrollRow(targetScrollRow);
       setAnimationId(null);
       return;
     }
 
-    // Animation parameters - scale duration with distance for better feel
+    // Animation parameters
     const baseDuration = 200;
     const maxDuration = 400;
     const duration = Math.min(maxDuration, baseDuration + distance * 2);
-    const fps = 30; // Reduced for better performance in terminals
+    const fps = 30;
     const frameTime = 1000 / fps;
     const totalFrames = Math.ceil(duration / frameTime);
     let currentFrame = 0;
-    const startOffset = offset;
-    const deltaOffset = targetOffset - startOffset;
+    const startRow = scrollRow;
+    const deltaRow = targetScrollRow - startRow;
 
     // Easing function (ease-out cubic)
     const easeOutCubic = (t: number): number => {
@@ -223,9 +237,9 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       currentFrame++;
       const progress = Math.min(currentFrame / totalFrames, 1);
       const easedProgress = easeOutCubic(progress);
-      const newOffset = Math.round(startOffset + deltaOffset * easedProgress);
+      const newRow = Math.round(startRow + deltaRow * easedProgress);
       
-      setOffset(newOffset);
+      setScrollRow(newRow);
 
       if (progress < 1 && !cancelled) {
         const id = setTimeout(animate, frameTime);
@@ -238,12 +252,11 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     const initialId = setTimeout(animate, frameTime);
     setAnimationId(initialId);
 
-    // Cleanup function
     return () => {
       cancelled = true;
       if (initialId) clearTimeout(initialId);
     };
-  }, [targetOffset, pageSize]); // Removed offset and animationId from deps to prevent infinite loops
+  }, [targetScrollRow]);
 
   // Cleanup animation on unmount
   useEffect(() => {
@@ -266,28 +279,47 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       }
       return onClose();
     }
-    const maxLines = viewMode === 'unified' ? lines.length - 1 : sideBySideLines.length - 1;
-    if (key.upArrow || input === 'k') setPos((p) => Math.max(0, p - 1));
-    if (key.downArrow || input === 'j') setPos((p) => Math.min(maxLines, p + 1));
-    if (key.pageUp || input === 'b') setPos((p) => Math.max(0, p - pageSize));
-    if (key.pageDown || input === 'f' || input === ' ') setPos((p) => Math.min(maxLines, p + pageSize));
-    if (input === 'g') setPos(0);
-    if (input === 'G') setPos(Math.max(0, maxLines));
+    const currentLines = viewMode === 'unified' ? lines : sideBySideLines;
+    const maxLineIndex = Math.max(0, currentLines.length - 1);
+    
+    if (key.upArrow || input === 'k') {
+      setSelectedLine(prev => Math.max(0, prev - 1));
+    }
+    if (key.downArrow || input === 'j') {
+      setSelectedLine(prev => Math.min(maxLineIndex, prev + 1));
+    }
+    if (key.pageUp || input === 'b') {
+      setSelectedLine(prev => Math.max(0, prev - pageSize));
+    }
+    if (key.pageDown || input === 'f' || input === ' ') {
+      setSelectedLine(prev => Math.min(maxLineIndex, prev + pageSize));
+    }
+    if (input === 'g') {
+      setSelectedLine(0);
+    }
+    if (input === 'G') {
+      setSelectedLine(maxLineIndex);
+    }
     
     // View mode toggle
     if (input === 'v') {
       setViewMode(current => current === 'unified' ? 'sidebyside' : 'unified');
     }
     
+    // Wrap mode toggle
+    if (input === 'w') {
+      setWrapMode(current => current === 'truncate' ? 'wrap' : 'truncate');
+    }
+    
     // Comment functionality
     if (input === 'c') {
       if (viewMode === 'unified') {
-        const currentLine = lines[pos];
+        const currentLine = lines[selectedLine];
         if (currentLine && currentLine.fileName && currentLine.type !== 'header') {
           setShowCommentDialog(true);
         }
       } else {
-        const currentLine = sideBySideLines[pos];
+        const currentLine = sideBySideLines[selectedLine];
         if (currentLine && (currentLine.left?.fileName || currentLine.right?.fileName) && 
             currentLine.left?.type !== 'header') {
           setShowCommentDialog(true);
@@ -301,12 +333,12 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     
     if (input === 'd') {
       if (viewMode === 'unified') {
-        const currentLine = lines[pos];
+        const currentLine = lines[selectedLine];
         if (currentLine && currentLine.fileName) {
-          commentStore.removeComment(pos, currentLine.fileName);
+          commentStore.removeComment(selectedLine, currentLine.fileName);
         }
       } else {
-        const currentLine = sideBySideLines[pos];
+        const currentLine = sideBySideLines[selectedLine];
         const fileName = currentLine.left?.fileName || currentLine.right?.fileName;
         if (currentLine && fileName) {
           commentStore.removeComment(currentLine.lineIndex, fileName);
@@ -344,10 +376,9 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     
     // Left arrow: jump to previous chunk (▼ header)
     if (key.leftArrow) {
-      for (let i = pos - 1; i >= 0; i--) {
+      for (let i = selectedLine - 1; i >= 0; i--) {
         if (isChunkHeader(i)) {
-          setPos(i);
-          setTargetOffset(i); // Position chunk at top of screen with smooth scrolling
+          setSelectedLine(i);
           break;
         }
       }
@@ -356,10 +387,9 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     // Right arrow: jump to next chunk (▼ header)
     if (key.rightArrow) {
       const maxIndex = viewMode === 'unified' ? lines.length : sideBySideLines.length;
-      for (let i = pos + 1; i < maxIndex; i++) {
+      for (let i = selectedLine + 1; i < maxIndex; i++) {
         if (isChunkHeader(i)) {
-          setPos(i);
-          setTargetOffset(i); // Position chunk at top of screen with smooth scrolling
+          setSelectedLine(i);
           break;
         }
       }
@@ -367,10 +397,9 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     
     // Previous file: Shift+Left
     if (key.leftArrow && key.shift) {
-      for (let i = pos - 1; i >= 0; i--) {
+      for (let i = selectedLine - 1; i >= 0; i--) {
         if (isFileHeader(i)) {
-          setPos(i);
-          setTargetOffset(i); // Position file at top of screen with smooth scrolling
+          setSelectedLine(i);
           break;
         }
       }
@@ -379,32 +408,47 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     // Next file: Shift+Right
     if (key.rightArrow && key.shift) {
       const maxIndex = viewMode === 'unified' ? lines.length : sideBySideLines.length;
-      for (let i = pos + 1; i < maxIndex; i++) {
+      for (let i = selectedLine + 1; i < maxIndex; i++) {
         if (isFileHeader(i)) {
-          setPos(i);
-          setTargetOffset(i); // Position file at top of screen with smooth scrolling
+          setSelectedLine(i);
           break;
         }
       }
     }
   });
 
-  // ensure pos visible with smooth scrolling
+  // Auto-scroll to keep selected line visible
   useEffect(() => {
-    let newTargetOffset = targetOffset;
+    const currentLines = viewMode === 'unified' ? lines : sideBySideLines;
+    const maxWidth = viewMode === 'unified' ? terminalWidth - 2 : Math.floor((terminalWidth - 1) / 2) - 2;
     
-    if (pos < targetOffset) {
-      newTargetOffset = pos;
-    } else if (pos >= targetOffset + pageSize) {
-      newTargetOffset = pos - pageSize + 1;
+    // Convert diff lines to simple text for viewport calculation
+    const textLines = currentLines.map(line => {
+      if (viewMode === 'unified') {
+        return (line as DiffLine).text || ' ';
+      } else {
+        const sbsLine = line as SideBySideLine;
+        // For side-by-side, use the longer of left/right text for height calculation
+        const leftText = sbsLine.left?.text || '';
+        const rightText = sbsLine.right?.text || '';
+        return leftText.length > rightText.length ? leftText : rightText;
+      }
+    });
+    
+    const newScrollRow = ViewportCalculator.calculateScrollToShowLine(
+      textLines,
+      selectedLine,
+      targetScrollRow,
+      pageSize,
+      maxWidth,
+      wrapMode
+    );
+    
+    if (newScrollRow !== targetScrollRow) {
+      const maxScrollRow = ViewportCalculator.getMaxScrollRow(textLines, pageSize, maxWidth, wrapMode);
+      setTargetScrollRow(Math.max(0, Math.min(maxScrollRow, newScrollRow)));
     }
-    
-    const maxScrollOffset = viewMode === 'unified' ? lines.length - pageSize : sideBySideLines.length - pageSize;
-    
-    if (newTargetOffset !== targetOffset) {
-      setTargetOffset(Math.max(0, Math.min(maxScrollOffset, newTargetOffset)));
-    }
-  }, [pos, targetOffset, pageSize, lines.length, sideBySideLines.length, viewMode]);
+  }, [selectedLine, viewMode, wrapMode, terminalWidth, lines, sideBySideLines, pageSize]);
 
   const formatCommentsAsPrompt = (comments: any[]): string => {
     let prompt = "Please address the following code review comments:\\n\\n";
@@ -590,12 +634,12 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
 
   const handleCommentSave = (commentText: string) => {
     if (viewMode === 'unified') {
-      const currentLine = lines[pos];
+      const currentLine = lines[selectedLine];
       if (currentLine && currentLine.fileName) {
-        commentStore.addComment(pos, currentLine.fileName, currentLine.text, commentText);
+        commentStore.addComment(selectedLine, currentLine.fileName, currentLine.text, commentText);
       }
     } else {
-      const currentLine = sideBySideLines[pos];
+      const currentLine = sideBySideLines[selectedLine];
       const fileName = currentLine.left?.fileName || currentLine.right?.fileName;
       const lineText = currentLine.left?.text || currentLine.right?.text;
       if (currentLine && fileName && lineText) {
@@ -638,87 +682,76 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     setShowUnsubmittedCommentsDialog(false);
   };
 
-  // Truncate text to fit terminal width
-  const truncateText = (text: string, maxWidth: number): string => {
-    if (text.length <= maxWidth) return text;
-    return text.substring(0, maxWidth - 3) + '...';
-  };
 
-  // Update sticky headers based on scroll offset
+  // Update sticky headers - simplified using viewport info
+  const viewport = useMemo(() => {
+    const currentLines = viewMode === 'unified' ? lines : sideBySideLines;
+    const maxWidth = viewMode === 'unified' ? terminalWidth - 2 : Math.floor((terminalWidth - 1) / 2) - 2;
+    
+    const textLines = currentLines.map(line => {
+      if (viewMode === 'unified') {
+        return (line as DiffLine).text || ' ';
+      } else {
+        const sbsLine = line as SideBySideLine;
+        const leftText = sbsLine.left?.text || '';
+        const rightText = sbsLine.right?.text || '';
+        return leftText.length > rightText.length ? leftText : rightText;
+      }
+    });
+    
+    return ViewportCalculator.calculate(
+      textLines,
+      selectedLine,
+      scrollRow,
+      pageSize,
+      maxWidth,
+      wrapMode
+    );
+  }, [lines, sideBySideLines, selectedLine, scrollRow, pageSize, viewMode, wrapMode, terminalWidth]);
+  
   useEffect(() => {
-    const dataLength = viewMode === 'unified' ? lines.length : sideBySideLines.length;
-    if (dataLength === 0) return;
+    const currentLines = viewMode === 'unified' ? lines : sideBySideLines;
+    if (currentLines.length === 0) {
+      setCurrentFileHeader('');
+      setCurrentHunkHeader('');
+      return;
+    }
 
     let fileHeader = '';
     let hunkHeader = '';
-    let fileHeaderIndex = -1;
-    let hunkHeaderIndex = -1;
-
-    // Search backwards from offset-1 to find headers that have scrolled off screen
-    for (let i = offset - 1; i >= 0; i--) {
-      let lineData;
+    
+    // Find the most recent headers before the viewport
+    for (let i = viewport.firstVisibleLine - 1; i >= 0; i--) {
       if (viewMode === 'unified') {
-        lineData = lines[i];
-        if (!lineData) continue;
-
-        // Find hunk header first (only if we haven't found the file yet)
-        if (hunkHeaderIndex === -1 && fileHeaderIndex === -1 && lineData.type === 'header' && lineData.text.includes('▼')) {
-          hunkHeader = lineData.text;
-          hunkHeaderIndex = i;
+        const line = lines[i];
+        if (line.type === 'header' && line.text.startsWith('📁')) {
+          fileHeader = line.text;
+          break;
         }
-
-        // Find file header
-        if (fileHeaderIndex === -1 && lineData.type === 'header' && lineData.text.startsWith('📁')) {
-          fileHeader = lineData.text;
-          fileHeaderIndex = i;
-          
-          // Clear hunk if it belongs to a different file
-          if (hunkHeaderIndex !== -1 && hunkHeaderIndex < fileHeaderIndex) {
-            hunkHeader = '';
-            hunkHeaderIndex = -1;
-          }
-          break; // Found file, we're done
+        if (!fileHeader && line.type === 'header' && line.text.includes('▼')) {
+          hunkHeader = line.text;
         }
       } else {
-        lineData = sideBySideLines[i];
-        if (!lineData || !lineData.left) continue;
-
-        // Find hunk header first (only if we haven't found the file yet)
-        if (hunkHeaderIndex === -1 && fileHeaderIndex === -1 && lineData.left.type === 'header' && lineData.left.text.includes('▼')) {
-          hunkHeader = lineData.left.text;
-          hunkHeaderIndex = i;
+        const line = sideBySideLines[i];
+        if (line.left?.type === 'header' && line.left.text.startsWith('📁')) {
+          fileHeader = line.left.text;
+          break;
         }
-
-        // Find file header
-        if (fileHeaderIndex === -1 && lineData.left.type === 'header' && lineData.left.text.startsWith('📁')) {
-          fileHeader = lineData.left.text;
-          fileHeaderIndex = i;
-          
-          // Clear hunk if it belongs to a different file
-          if (hunkHeaderIndex !== -1 && hunkHeaderIndex < fileHeaderIndex) {
-            hunkHeader = '';
-            hunkHeaderIndex = -1;
-          }
-          break; // Found file, we're done
+        if (!fileHeader && line.left?.type === 'header' && line.left.text.includes('▼')) {
+          hunkHeader = line.left.text;
         }
       }
     }
 
-    // Only show headers that have actually scrolled off screen
-    const shouldShowFileHeader = fileHeaderIndex >= 0 && fileHeaderIndex < offset;
-    const shouldShowHunkHeader = hunkHeaderIndex >= 0 && hunkHeaderIndex < offset;
+    setCurrentFileHeader(fileHeader);
+    setCurrentHunkHeader(hunkHeader);
+  }, [viewport, lines, sideBySideLines, viewMode]);
 
-    setCurrentFileHeader(shouldShowFileHeader ? fileHeader : '');
-    setCurrentHunkHeader(shouldShowHunkHeader ? hunkHeader : '');
-  }, [lines, sideBySideLines, offset, viewMode]);
-
-  const visible = useMemo(() => {
-    if (viewMode === 'unified') {
-      return lines.slice(offset, offset + pageSize);
-    } else {
-      return sideBySideLines.slice(offset, offset + pageSize);
-    }
-  }, [lines, sideBySideLines, offset, pageSize, viewMode]);
+  // Get visible lines using our viewport calculator
+  const visibleLines = useMemo(() => {
+    const currentLines = viewMode === 'unified' ? lines : sideBySideLines;
+    return viewport.visibleLines.map(lineIndex => currentLines[lineIndex]).filter(Boolean);
+  }, [viewport, lines, sideBySideLines, viewMode]);
 
   // Create unsubmitted comments dialog if needed - render it instead of the main view when active
   if (showUnsubmittedCommentsDialog) {
@@ -754,17 +787,17 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       {flexDirection: 'column', height: terminalHeight, justifyContent: 'center', alignItems: 'center'},
       h(CommentInputDialog, {
         fileName: viewMode === 'unified' ? 
-          (lines[pos]?.fileName || '') : 
-          (sideBySideLines[pos]?.left?.fileName || sideBySideLines[pos]?.right?.fileName || ''),
+          (lines[selectedLine]?.fileName || '') : 
+          (sideBySideLines[selectedLine]?.left?.fileName || sideBySideLines[selectedLine]?.right?.fileName || ''),
         lineText: viewMode === 'unified' ? 
-          (lines[pos]?.text || '') : 
-          (sideBySideLines[pos]?.left?.text || sideBySideLines[pos]?.right?.text || ''),
+          (lines[selectedLine]?.text || '') : 
+          (sideBySideLines[selectedLine]?.left?.text || sideBySideLines[selectedLine]?.right?.text || ''),
         initialComment: (() => {
           if (viewMode === 'unified') {
-            return lines[pos]?.fileName ? commentStore.getComment(pos, lines[pos].fileName)?.commentText || '' : '';
+            return lines[selectedLine]?.fileName ? commentStore.getComment(selectedLine, lines[selectedLine].fileName)?.commentText || '' : '';
           } else {
-            const fileName = sideBySideLines[pos]?.left?.fileName || sideBySideLines[pos]?.right?.fileName;
-            return fileName ? commentStore.getComment(sideBySideLines[pos].lineIndex, fileName)?.commentText || '' : '';
+            const fileName = sideBySideLines[selectedLine]?.left?.fileName || sideBySideLines[selectedLine]?.right?.fileName;
+            return fileName ? commentStore.getComment(sideBySideLines[selectedLine].lineIndex, fileName)?.commentText || '' : '';
           }
         })(),
         onSave: handleCommentSave,
@@ -777,104 +810,140 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     Box,
     {flexDirection: 'column'},
     h(Text, {bold: true}, title),
-    // Sticky headers
-    h(Text, {
+    // Sticky headers - only render when content exists
+    ...(currentFileHeader ? [h(Text, {
       color: 'cyan',
       bold: true,
       backgroundColor: 'gray'
-    }, currentFileHeader || ''),
-    h(Text, {
+    }, currentFileHeader)] : []),
+    ...(currentHunkHeader ? [h(Text, {
       color: 'cyan',
       bold: true,
       backgroundColor: 'gray'
-    }, currentHunkHeader || ''),
-    ...visible.map((l, idx) => {
-      const actualLineIndex = offset + idx;
-      const isCurrentLine = actualLineIndex === pos;
+    }, currentHunkHeader)] : []),
+    ...(() => {
+      const renderedElements: React.ReactNode[] = [];
+      let visibleLineIndex = 0;
       
-      if (viewMode === 'unified') {
-        // Original unified diff rendering
-        const unifiedLine = l as DiffLine;
-        const hasComment = unifiedLine.fileName && commentStore.hasComment(actualLineIndex, unifiedLine.fileName);
-        const commentIndicator = hasComment ? '[C] ' : '';
-        const displayText = truncateText(commentIndicator + (unifiedLine.text || ' '), terminalWidth - 2);
-        return h(Text, {
-          key: idx,
-          color: unifiedLine.type === 'added' ? 'green' : unifiedLine.type === 'removed' ? 'red' : unifiedLine.type === 'header' ? 'cyan' : undefined,
-          backgroundColor: isCurrentLine ? 'blue' : undefined,
-          bold: isCurrentLine
-        }, displayText);
-      } else {
-        // Side-by-side diff rendering
-        const sideBySideLine = l as SideBySideLine;
-        const paneWidth = Math.floor((terminalWidth - 1) / 2); // -1 for separator
+      for (const l of visibleLines) {
+        const actualLineIndex = viewport.visibleLines[visibleLineIndex];
+        const isCurrentLine = actualLineIndex === selectedLine;
         
-        // Get comment info based on the original line index
-        const hasComment = (sideBySideLine.left?.fileName || sideBySideLine.right?.fileName) && 
-                          commentStore.hasComment(sideBySideLine.lineIndex, sideBySideLine.left?.fileName || sideBySideLine.right?.fileName || '');
-        const commentIndicator = hasComment ? '[C] ' : '';
-        
-        // Format left pane
-        let leftText = '';
-        let leftColor = undefined;
-        let leftDimColor = false;
-        
-        if (sideBySideLine.left) {
-          if (sideBySideLine.left.type === 'header') {
-            leftColor = 'cyan';
-          } else if (sideBySideLine.left.type === 'context' || sideBySideLine.left.type === 'empty') {
-            leftDimColor = true;
+        if (viewMode === 'unified') {
+          const unifiedLine = l as DiffLine;
+          const hasComment = unifiedLine.fileName && commentStore.hasComment(actualLineIndex, unifiedLine.fileName);
+          const commentIndicator = hasComment ? '[C] ' : '';
+          const fullText = commentIndicator + (unifiedLine.text || ' ');
+          
+          if (wrapMode === 'truncate') {
+            // Original truncate logic
+            const displayText = truncateDisplay(fullText, terminalWidth - 2);
+            renderedElements.push(h(Text, {
+              key: `line-${visibleLineIndex}`,
+              color: unifiedLine.type === 'added' ? 'green' : unifiedLine.type === 'removed' ? 'red' : unifiedLine.type === 'header' ? 'cyan' : undefined,
+              backgroundColor: isCurrentLine ? 'blue' : undefined,
+              bold: isCurrentLine
+            }, displayText));
+          } else {
+            // Wrap mode: split line into segments
+            const maxWidth = terminalWidth - 2;
+            const segments = LineWrapper.wrapLine(fullText, maxWidth);
+            
+            segments.forEach((segment, segIdx) => {
+              renderedElements.push(h(Text, {
+                key: `line-${visibleLineIndex}-seg-${segIdx}`,
+                color: unifiedLine.type === 'added' ? 'green' : unifiedLine.type === 'removed' ? 'red' : unifiedLine.type === 'header' ? 'cyan' : undefined,
+                backgroundColor: isCurrentLine ? 'blue' : undefined,
+                bold: isCurrentLine
+              }, segment));
+            });
           }
-          // removed lines and other types stay normal (no dim, no color)
-          leftText = truncateText(commentIndicator + (sideBySideLine.left.text || ' '), paneWidth - 2); // -2 for padding
         } else {
-          leftDimColor = true; // empty space is dimmed
+          // Side-by-side diff rendering
+          const sideBySideLine = l as SideBySideLine;
+          const paneWidth = Math.floor((terminalWidth - 1) / 2); // -1 for separator
+          
+          // Get comment info based on the original line index
+          const hasComment = (sideBySideLine.left?.fileName || sideBySideLine.right?.fileName) && 
+                            commentStore.hasComment(sideBySideLine.lineIndex, sideBySideLine.left?.fileName || sideBySideLine.right?.fileName || '');
+          const commentIndicator = hasComment ? '[C] ' : '';
+          
+          // Prepare left and right content
+          const leftFullText = sideBySideLine.left ? (commentIndicator + (sideBySideLine.left.text || ' ')) : '';
+          const rightFullText = sideBySideLine.right ? (sideBySideLine.right.text || ' ') : '';
+          
+          const leftColor = sideBySideLine.left?.type === 'header' ? 'cyan' : undefined;
+          const rightColor = sideBySideLine.right?.type === 'header' ? 'cyan' : undefined;
+          const leftDimColor = !sideBySideLine.left || sideBySideLine.left.type === 'context' || sideBySideLine.left.type === 'empty';
+          const rightDimColor = !sideBySideLine.right || sideBySideLine.right.type === 'context' || sideBySideLine.right.type === 'empty';
+          
+          if (wrapMode === 'truncate') {
+            // Original truncate logic for side-by-side
+            const leftText = leftFullText ? truncateDisplay(leftFullText, paneWidth - 2) : '';
+            const rightText = rightFullText ? truncateDisplay(rightFullText, paneWidth - 2) : '';
+            
+            renderedElements.push(h(Box, {
+              key: `line-${visibleLineIndex}`,
+              flexDirection: 'row'
+            }, 
+              h(Text, {
+                bold: isCurrentLine,
+                color: leftColor,
+                dimColor: leftDimColor,
+                backgroundColor: isCurrentLine ? 'blue' : undefined
+              }, padEndDisplay(' ' + leftText, paneWidth)),
+              h(Text, {
+                bold: isCurrentLine,
+                backgroundColor: isCurrentLine ? 'blue' : undefined
+              }, '│'),
+              h(Text, {
+                bold: isCurrentLine,
+                color: rightColor,
+                dimColor: rightDimColor,
+                backgroundColor: isCurrentLine ? 'blue' : undefined
+              }, padEndDisplay(' ' + rightText, paneWidth))
+            ));
+          } else {
+            // Wrap mode: handle wrapped side-by-side content
+            const maxPaneWidth = paneWidth - 2;
+            const leftSegments = leftFullText ? LineWrapper.wrapLine(leftFullText, maxPaneWidth) : [''];
+            const rightSegments = rightFullText ? LineWrapper.wrapLine(rightFullText, maxPaneWidth) : [''];
+            const maxSegments = Math.max(leftSegments.length, rightSegments.length);
+            
+            for (let segIdx = 0; segIdx < maxSegments; segIdx++) {
+              const leftSegment = leftSegments[segIdx] || '';
+              const rightSegment = rightSegments[segIdx] || '';
+              
+              renderedElements.push(h(Box, {
+                key: `line-${visibleLineIndex}-seg-${segIdx}`,
+                flexDirection: 'row'
+              },
+                h(Text, {
+                  bold: isCurrentLine,
+                  color: leftColor,
+                  dimColor: leftDimColor,
+                  backgroundColor: isCurrentLine ? 'blue' : undefined
+                }, padEndDisplay(' ' + leftSegment, paneWidth)),
+                h(Text, {
+                  bold: isCurrentLine,
+                  backgroundColor: isCurrentLine ? 'blue' : undefined
+                }, '│'),
+                h(Text, {
+                  bold: isCurrentLine,
+                  color: rightColor,
+                  dimColor: rightDimColor,
+                  backgroundColor: isCurrentLine ? 'blue' : undefined
+                }, padEndDisplay(' ' + rightSegment, paneWidth))
+              ));
+            }
+          }
         }
         
-        // Format right pane
-        let rightText = '';
-        let rightColor = undefined;
-        let rightDimColor = false;
-        
-        if (sideBySideLine.right) {
-          if (sideBySideLine.right.type === 'header') {
-            rightColor = 'cyan';
-          } else if (sideBySideLine.right.type === 'context' || sideBySideLine.right.type === 'empty') {
-            rightDimColor = true;
-          }
-          // added lines and other types stay normal (no dim, no color)
-          rightText = truncateText((sideBySideLine.right.text || ' '), paneWidth - 2); // -2 for padding
-        } else {
-          rightDimColor = true; // empty space is dimmed
-        }
-        
-        // Create independent Text components for each pane with dimmed context
-        return h(Box, {
-          key: idx,
-          flexDirection: 'row'
-        }, 
-          // Left pane with dimmed context lines
-          h(Text, {
-            bold: isCurrentLine,
-            color: leftColor,
-            dimColor: leftDimColor,
-            backgroundColor: isCurrentLine ? 'blue' : undefined
-          }, (' ' + leftText).padEnd(paneWidth)),
-          // Separator
-          h(Text, {
-            bold: isCurrentLine,
-            backgroundColor: isCurrentLine ? 'blue' : undefined
-          }, '│'),
-          // Right pane with dimmed context lines
-          h(Text, {
-            bold: isCurrentLine,
-            color: rightColor,
-            dimColor: rightDimColor,
-            backgroundColor: isCurrentLine ? 'blue' : undefined
-          }, (' ' + rightText).padEnd(paneWidth))
-        );
+        visibleLineIndex++;
       }
-    }),
+      
+      return renderedElements;
+    })(),
     showAllComments && commentStore.count > 0 ? h(
       Box,
       {flexDirection: 'column', borderStyle: 'single', borderColor: 'blue', padding: 1, marginTop: 1},
@@ -883,7 +952,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
         h(Text, {key: idx, color: 'gray'}, `${comment.fileName}:${comment.lineIndex} - ${comment.commentText}`)
       )
     ) : null,
-    h(Text, {color: 'gray'}, `j/k move  v toggle view (${viewMode})  c comment  C show all  d delete  S send to Claude  q close`)
+    h(Text, {color: 'gray'}, `j/k move  v toggle view (${viewMode})  w toggle wrap (${wrapMode})  c comment  C show all  d delete  S send to Claude  q close`)
   );
 }
 

@@ -59,10 +59,18 @@ export function renderTestApp(props?: TestAppProps, options?: any) {
   const originalLastFrame = result.lastFrame;
   let currentUIMode: string = 'list';
   let currentViewData: any = {};
+  let diffState = {
+    wrapMode: 'truncate',
+    viewMode: 'unified'
+  };
   
   result.lastFrame = () => {
     // Generate output based on current memory store state and UI mode
-    return generateMockOutput(currentUIMode, currentViewData);
+    return generateMockOutput(currentUIMode, {
+      ...currentViewData,
+      wrapMode: diffState.wrapMode,
+      viewMode: diffState.viewMode
+    });
   };
 
   // Store services for access in tests and add type assertion
@@ -71,6 +79,41 @@ export function renderTestApp(props?: TestAppProps, options?: any) {
     currentUIMode = mode;
     currentViewData = data || {};
   };
+  
+  // Enhanced stdin to track diff state changes
+  const originalStdin = result.stdin;
+  result.stdin = {
+    ...originalStdin,
+    write: (input: string) => {
+      // Track state changes for diff view
+      if (currentUIMode === 'diff') {
+        if (input === 'w') {
+          diffState.wrapMode = diffState.wrapMode === 'truncate' ? 'wrap' : 'truncate';
+        } else if (input === 'v') {
+          diffState.viewMode = diffState.viewMode === 'unified' ? 'sidebyside' : 'unified';
+        }
+      }
+      
+      // Call original write
+      return originalStdin.write(input);
+    },
+    // Add missing Stdin methods for TypeScript compliance
+    setEncoding: ((encoding?: BufferEncoding) => {
+      (originalStdin as any).setEncoding?.(encoding);
+      return result.stdin;
+    }) as any,
+    setRawMode: ((mode?: boolean) => {
+      (originalStdin as any).setRawMode?.(mode);
+    }) as any,
+    resume: (() => {
+      (originalStdin as any).resume?.();
+      return result.stdin;
+    }) as any,
+    pause: (() => {
+      (originalStdin as any).pause?.();
+      return result.stdin;
+    }) as any
+  } as any;
   
   return result as any;
 }
@@ -251,6 +294,68 @@ function generateArchivedOutput(): string {
 
 function generateDiffOutput(viewData: any): string {
   const title = viewData.title || 'Diff Viewer';
+  const wrapMode = viewData.wrapMode || 'truncate';
+  const viewMode = viewData.viewMode || 'unified';
+  
+  // Handle wrap mode testing scenarios
+  if (title.includes('Wrap') || title.includes('Scroll') || title.includes('Page') || title.includes('Nav') || title.includes('SBS') || title.includes('Help') || title.includes('Unicode')) {
+    const wrapIndicator = `w toggle wrap (${wrapMode})`;
+    const viewIndicator = `v toggle view (${viewMode})`;
+    
+    // Generate content with long lines for wrap testing
+    if (viewMode === 'sidebyside') {
+      return `${title}
+
+📁 src/example.ts
+  ▼ 
+- veryLongFunctionNameThatWillDefinitelyWrap... │ + anotherVeryLongFunctionNameWithDifferentCon...
+- This is a very long string that continues... │ + Different long content here to see how...
+
+📁 src/another.ts  
+  ▼ 
+- const shortOld = 'value';                     │ + const shortNew = 'value';
+- // Medium comment that might wrap            │ + // Different medium comment with different
+
+j/k move  ${viewIndicator}  ${wrapIndicator}  c comment  C show all  d delete  S send to Claude  q close`;
+    } else {
+      return `${title}
+
+📁 src/example.ts
+  ▼ 
+- veryLongFunctionNameThatWillDefinitelyWrapInMostTerminalWidthsAndCauseMultipleRowsToBeUsedForTestingTheWrappingFunctionalityProperly() { return 'This is a very long string...'; }
++ anotherVeryLongFunctionNameWithDifferentContentToTestSideBySideWrappingBehaviorAndEnsureProperRowCalculations() { return 'Different long content here...'; }
+
+- const shortOld = 'value';
++ const shortNew = 'value';
+
+- // This is a medium length comment that might wrap on narrower terminals
++ // This is a different medium length comment with different content
+
+const finalLongLineAtTheEndOfTheFileToTestScrollingToTheBottomWithWrappedContentAndVerifyThatAllContentRemainsAccessible = 'test content';
+
+j/k move  ${viewIndicator}  ${wrapIndicator}  c comment  C show all  d delete  S send to Claude  q close`;
+    }
+  }
+
+  // Handle Unicode testing scenarios  
+  if (title.includes('Unicode')) {
+    const wrapIndicator = `w toggle wrap (${wrapMode})`;
+    const viewIndicator = `v toggle view (${viewMode})`;
+    
+    return `${title}
+
+📁 src/unicode.ts
+  ▼ 
+- const emoji = '🚀 This line contains emojis 🎉 and should wrap properly 👨‍💻';
++ const emoji = '🚀 Different emoji content 🎉 with wide characters 中文测试 👨‍💻 🔬';
+
+- const chinese = '这是一行包含中文字符的长文本内容用于测试文本换行功能';
++ const chinese = '这是一行不同的中文内容用于测试侧边对比模式下的文本换行功能';
+
+const mixed = 'Start with ASCII, then 中文字符 mixed with emojis 🌟 and back to ASCII 🎪';
+
+j/k move  ${viewIndicator}  ${wrapIndicator}  c comment  C show all  d delete  S send to Claude  q close`;
+  }
   
   // Handle large diffs with navigation
   if (title.includes('Large')) {
