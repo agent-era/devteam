@@ -17,7 +17,7 @@ import {
   ensureDirectory,
   formatTimeAgo,
 } from '../utils.js';
-import {logInfo, logDebug} from '../shared/utils/logger.js';
+import {logDebug} from '../shared/utils/logger.js';
 import {Timer} from '../shared/utils/timing.js';
 
 export class GitService {
@@ -48,7 +48,7 @@ export class GitService {
       .sort((a, b) => a.name.localeCompare(b.name));
     
     const timing = timer.elapsed();
-    logInfo(`[Project.Discovery] Found ${projects.length} projects in ${timing.formatted}`);
+    logDebug(`[Project.Discovery] Found ${projects.length} projects in ${timing.formatted}`);
     
     return projects;
   }
@@ -107,7 +107,7 @@ export class GitService {
     worktrees.sort((a, b) => b.mtime - a.mtime);
     
     const timing = timer.elapsed();
-    logInfo(`[Worktree.Collection] ${project.name}: ${worktrees.length} worktrees in ${timing.formatted}`);
+    logDebug(`[Worktree.Collection] ${project.name}: ${worktrees.length} worktrees in ${timing.formatted}`);
     
     return worktrees;
   }
