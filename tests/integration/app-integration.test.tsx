@@ -81,7 +81,7 @@ describe('App Integration Tests', () => {
       const worktreeCreated = gitService.createWorktree('context-test', 'context-feature');
       expect(worktreeCreated).toBe(true);
       
-      const sessionName = tmuxService.createSession('context-test', 'context-feature', 'idle')!;
+      const sessionName = tmuxService.createTestSession('context-test', 'context-feature', 'idle')!;
       expect(sessionName).toBe('dev-context-test-context-feature');
       
       // Verify operations affected memory store
@@ -107,9 +107,9 @@ describe('App Integration Tests', () => {
       gitService.createWorktree('multi-test', 'feature-2');
       gitService.createWorktree('multi-test', 'feature-3');
       
-      tmuxService.createSession('multi-test', 'feature-1', 'idle')!;
-      tmuxService.createSession('multi-test', 'feature-2', 'idle')!;
-      tmuxService.createSession('multi-test', 'feature-3', 'idle')!;
+      tmuxService.createTestSession('multi-test', 'feature-1', 'idle')!;
+      tmuxService.createTestSession('multi-test', 'feature-2', 'idle')!;
+      tmuxService.createTestSession('multi-test', 'feature-3', 'idle')!;
       
       // Verify all created
       expect(memoryStore.worktrees.size).toBe(3);
@@ -196,7 +196,7 @@ describe('App Integration Tests', () => {
       setupTestProject('session-test');
       
       const tmuxService = new FakeTmuxService();
-      const sessionName = tmuxService.createSession('session-test', 'test-feature', 'idle')!;
+      const sessionName = tmuxService.createTestSession('session-test', 'test-feature', 'idle')!;
       
       // Test status transitions
       expect(await tmuxService.getClaudeStatus(sessionName)).toBe('idle');
