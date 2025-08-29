@@ -635,7 +635,7 @@ export function WorktreeProvider({
           runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, `exec ${config.command}`, 'C-m']);
         } else {
           // For watch commands (servers, dev), keep session alive after command exits
-          runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, `${config.command}; exec bash`, 'C-m']);
+          runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, config.command, 'C-m']);
         }
       }
     } catch (error) {
