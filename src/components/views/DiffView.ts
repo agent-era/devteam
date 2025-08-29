@@ -500,10 +500,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       messageLines.push("");
     });
     
-    messageLines.forEach((line) => {
-      tmuxService.sendKeys(sessionName, line);
-      tmuxService.sendKeysRaw(sessionName, 'Escape', 'Enter');
-    });
+    tmuxService.sendMultilineText(sessionName, messageLines, { endWithAltEnter: true });
   };
 
   const sendCommentsToTmux = async () => {
@@ -543,7 +540,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
         if (claudeStatus === 'not_running') {
           // Start Claude with the prompt pre-filled!
           const commentPrompt = formatCommentsAsPrompt(comments);
-          tmuxService.sendKeysWithEnter(sessionName, `claude ${JSON.stringify(commentPrompt)}`);
+          tmuxService.sendText(sessionName, `claude ${JSON.stringify(commentPrompt)}`, { executeCommand: true });
         } else {
           // Claude is idle/working/active - can accept input via Alt+Enter
           sendCommentsViaAltEnter(sessionName, comments);
@@ -569,7 +566,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
         if (hasClaude) {
           // Launch Claude with the comments as the initial prompt!
           const commentPrompt = formatCommentsAsPrompt(comments);
-          tmuxService.sendKeysWithEnter(sessionName, `claude ${JSON.stringify(commentPrompt)}`);
+          tmuxService.sendText(sessionName, `claude ${JSON.stringify(commentPrompt)}`, { executeCommand: true });
           
           // For new sessions, we can assume the prompt was received
           // since we're starting fresh with the prompt

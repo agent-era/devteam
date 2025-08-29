@@ -408,19 +408,18 @@ export function WorktreeProvider({
     const activeSessions = await tmuxService.listSessions();
     
     if (!activeSessions.includes(sessionName)) {
-      // Create session inline
-      tmuxService.createSession(sessionName, worktree.path);
-      configureTmuxDisplayTime();
       const hasClaude = !!runCommandQuick(['bash', '-lc', 'command -v claude || true']);
+      
       if (hasClaude) {
-        if (worktree.wasKilledIdle) {
-          // Session was killed due to idle timeout - use /resume to restore context
-          tmuxService.sendKeysWithEnter(sessionName, 'claude "/resume"');
-        } else {
-          // Fresh session - use regular claude command
-          tmuxService.sendKeysWithEnter(sessionName, 'claude');
-        }
+        // Create session with Claude directly as the command
+        const claudeCmd = worktree.wasKilledIdle ? 'claude "/resume"' : 'claude';
+        tmuxService.createSessionWithCommand(sessionName, worktree.path, claudeCmd, true);
+      } else {
+        // No Claude available, create regular bash session with auto-exit
+        tmuxService.createSession(sessionName, worktree.path, true);
       }
+      
+      configureTmuxDisplayTime();
     }
     
     configureTmuxDisplayTime();
@@ -562,12 +561,23 @@ export function WorktreeProvider({
     copyClaudeDocumentation(projectPath, worktreePath);
   }, []);
 
-  const createTmuxSession = useCallback((project: string, feature: string, cwd: string): string => {
+  const createTmuxSession = useCallback((project: string, feature: string, cwd: string, command?: string): string => {
     const sessionName = tmuxService.sessionName(project, feature);
     
-    tmuxService.createSession(sessionName, cwd);
+    if (command) {
+      // Create session with specific command and auto-exit
+      tmuxService.createSessionWithCommand(sessionName, cwd, command, true);
+    } else {
+      // Create session and start Claude if available
+      const hasClaude = !!runCommandQuick(['bash', '-lc', 'command -v claude || true']);
+      if (hasClaude) {
+        tmuxService.createSessionWithCommand(sessionName, cwd, 'claude', true);
+      } else {
+        tmuxService.createSession(sessionName, cwd, true);
+      }
+    }
+    
     configureTmuxDisplayTime();
-    startClaudeIfAvailable(sessionName);
     
     return sessionName;
   }, [tmuxService]);
@@ -576,7 +586,7 @@ export function WorktreeProvider({
     const sessionName = tmuxService.shellSessionName(project, feature);
     const shell = process.env.SHELL || '/bin/bash';
     
-    tmuxService.createSessionWithCommand(sessionName, cwd, shell);
+    tmuxService.createSessionWithCommand(sessionName, cwd, shell, true);
     configureTmuxDisplayTime();
     
     return sessionName;
@@ -600,31 +610,31 @@ export function WorktreeProvider({
       // Run setup commands if they exist
       if (config.setup && Array.isArray(config.setup)) {
         for (const setupCmd of config.setup) {
-          tmuxService.sendKeysWithEnter(sessionName, setupCmd);
+          tmuxService.sendText(sessionName, setupCmd, { executeCommand: true });
         }
       }
       
       // // Set environment variables if they exist
       // if (config.env && typeof config.env === 'object') {
       //   for (const [key, value] of Object.entries(config.env)) {
-      //     tmuxService.sendKeysWithEnter(sessionName, `export ${key}="${value}"`);
+      //     tmuxService.sendText(sessionName, `export ${key}="${value}"`, { executeCommand: true });
       //   }
       // }
       
       // Run the main command
       if (config.command) {
         if (config.watch === false) {
-          // For non-watch commands (builds, tests), let session exit when command finishes
-          tmuxService.sendKeysWithEnter(sessionName, config.command);
+          // For non-watch commands (builds, tests), use exec to replace bash and exit when command finishes
+          tmuxService.sendText(sessionName, `exec ${config.command}`, { executeCommand: true });
         } else {
           // For watch commands (servers, dev), keep session alive after command exits
-          tmuxService.sendKeysWithEnter(sessionName, `${config.command}; exec bash`);
+          tmuxService.sendText(sessionName, `${config.command}; exec bash`, { executeCommand: true });
         }
       }
     } catch (error) {
       // Config file exists but is invalid, show error
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      tmuxService.sendKeysWithEnter(sessionName, `echo "Invalid run config at ${configPath}: ${errorMessage}"`);
+      tmuxService.sendText(sessionName, `echo "Invalid run config at ${configPath}: ${errorMessage}"`, { executeCommand: true });
     }
     
     return sessionName;
@@ -699,13 +709,6 @@ export function WorktreeProvider({
 
   const configureTmuxDisplayTime = useCallback(() => {
     tmuxService.setOption('display-time', String(TMUX_DISPLAY_TIME));
-  }, [tmuxService]);
-
-  const startClaudeIfAvailable = useCallback((sessionName: string) => {
-    const hasClaude = !!runCommandQuick(['bash', '-lc', 'command -v claude || true']);
-    if (hasClaude) {
-      tmuxService.sendKeysWithEnter(sessionName, 'claude');
-    }
   }, [tmuxService]);
 
   // Auto-refresh intervals

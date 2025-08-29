@@ -54,24 +54,77 @@ export class TmuxService {
     return runCommandQuick(['tmux', 'kill-session', '-t', session]);
   }
 
-  createSession(sessionName: string, cwd: string): void {
+  createSession(sessionName: string, cwd: string, autoExit: boolean = false): void {
     runCommand(['tmux', 'new-session', '-ds', sessionName, '-c', cwd]);
+    if (autoExit) {
+      this.setSessionOption(sessionName, 'remain-on-exit', 'off');
+    }
   }
 
-  createSessionWithCommand(sessionName: string, cwd: string, command: string): void {
+  createSessionWithCommand(sessionName: string, cwd: string, command: string, autoExit: boolean = true): void {
     const shell = process.env.SHELL || '/bin/bash';
     runCommand(['tmux', 'new-session', '-ds', sessionName, '-c', cwd, command || shell]);
+    if (autoExit) {
+      this.setSessionOption(sessionName, 'remain-on-exit', 'off');
+    }
   }
 
-  sendKeys(session: string, keys: string): void {
-    runCommand(['tmux', 'send-keys', '-t', `${session}:0.0`, keys]);
+  /**
+   * Send text input to a tmux session
+   * @param session Session name
+   * @param text Text to send
+   * @param options Options for handling newlines and completion
+   */
+  sendText(session: string, text: string, options: {
+    addNewline?: boolean;
+    executeCommand?: boolean;
+  } = {}): void {
+    const { addNewline = false, executeCommand = false } = options;
+    
+    if (executeCommand) {
+      // Send as command and execute with Enter
+      runCommand(['tmux', 'send-keys', '-t', `${session}:0.0`, text, 'C-m']);
+    } else if (addNewline) {
+      // Send text with newline character
+      runCommand(['tmux', 'send-keys', '-t', `${session}:0.0`, text + '\n']);
+    } else {
+      // Send text as-is
+      runCommand(['tmux', 'send-keys', '-t', `${session}:0.0`, text]);
+    }
   }
 
-  sendKeysWithEnter(session: string, keys: string): void {
-    runCommand(['tmux', 'send-keys', '-t', `${session}:0.0`, keys, 'C-m']);
+  /**
+   * Send multiple lines of text, useful for multi-line input
+   * @param session Session name
+   * @param lines Array of text lines
+   * @param options Options for handling each line
+   */
+  sendMultilineText(session: string, lines: string[], options: {
+    endWithAltEnter?: boolean;
+    endWithExecute?: boolean;
+  } = {}): void {
+    const { endWithAltEnter = false, endWithExecute = false } = options;
+    
+    lines.forEach((line) => {
+      this.sendText(session, line);
+      if (endWithAltEnter) {
+        // Use Alt+Enter for multi-line input (like Claude input)
+        runCommand(['tmux', 'send-keys', '-t', `${session}:0.0`, 'Escape', 'Enter']);
+      }
+    });
+    
+    if (endWithExecute) {
+      // Final execute command
+      runCommand(['tmux', 'send-keys', '-t', `${session}:0.0`, 'C-m']);
+    }
   }
 
-  sendKeysRaw(session: string, ...keys: string[]): void {
+  /**
+   * Send special key combinations
+   * @param session Session name
+   * @param keys Key combination (e.g., 'Escape', 'Enter', 'C-m')
+   */
+  sendSpecialKeys(session: string, ...keys: string[]): void {
     runCommand(['tmux', 'send-keys', '-t', `${session}:0.0`, ...keys]);
   }
 

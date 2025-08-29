@@ -68,33 +68,67 @@ export class FakeTmuxService extends TmuxService {
   }
 
   // New methods from TmuxService refactor
-  createSession(sessionName: string, cwd: string): void {
+  createSession(sessionName: string, cwd: string, autoExit: boolean = false): void {
     const sessionInfo = new SessionInfo({
       session_name: sessionName,
       attached: true,
       claude_status: 'active'
     });
     memoryStore.sessions.set(sessionName, sessionInfo);
+    if (autoExit) {
+      // Mock setting remain-on-exit off
+      this.recordSentKeys(sessionName, ['remain-on-exit', 'off']);
+    }
   }
 
-  createSessionWithCommand(sessionName: string, cwd: string, command: string): void {
+  createSessionWithCommand(sessionName: string, cwd: string, command: string, autoExit: boolean = true): void {
     const sessionInfo = new SessionInfo({
       session_name: sessionName,
       attached: true,
-      claude_status: 'active'
+      claude_status: command.includes('claude') ? 'idle' : 'active'
     });
     memoryStore.sessions.set(sessionName, sessionInfo);
+    if (autoExit) {
+      // Mock setting remain-on-exit off
+      this.recordSentKeys(sessionName, ['remain-on-exit', 'off']);
+    }
+    this.recordSentKeys(sessionName, ['command', command]);
   }
 
-  sendKeys(session: string, keys: string): void {
-    this.recordSentKeys(session, [keys]);
+  sendText(session: string, text: string, options: {
+    addNewline?: boolean;
+    executeCommand?: boolean;
+  } = {}): void {
+    const { addNewline = false, executeCommand = false } = options;
+    
+    if (executeCommand) {
+      this.recordSentKeys(session, [text, 'C-m']);
+    } else if (addNewline) {
+      this.recordSentKeys(session, [text + '\n']);
+    } else {
+      this.recordSentKeys(session, [text]);
+    }
   }
 
-  sendKeysWithEnter(session: string, keys: string): void {
-    this.recordSentKeys(session, [keys, 'C-m']);
+  sendMultilineText(session: string, lines: string[], options: {
+    endWithAltEnter?: boolean;
+    endWithExecute?: boolean;
+  } = {}): void {
+    const { endWithAltEnter = false, endWithExecute = false } = options;
+    
+    lines.forEach((line) => {
+      this.recordSentKeys(session, [line]);
+      if (endWithAltEnter) {
+        this.recordSentKeys(session, ['Escape', 'Enter']);
+      }
+    });
+    
+    if (endWithExecute) {
+      this.recordSentKeys(session, ['C-m']);
+    }
   }
 
-  sendKeysRaw(session: string, ...keys: string[]): void {
+  sendSpecialKeys(session: string, ...keys: string[]): void {
     this.recordSentKeys(session, keys);
   }
 
