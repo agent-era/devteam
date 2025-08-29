@@ -628,7 +628,7 @@ export function WorktreeProvider({
           tmuxService.sendText(sessionName, `exec ${config.command}`, { executeCommand: true });
         } else {
           // For watch commands (servers, dev), keep session alive after command exits
-          tmuxService.sendText(sessionName, `${config.command}; exec bash`, { executeCommand: true });
+          tmuxService.sendText(sessionName, config.command, { executeCommand: true });
         }
       }
     } catch (error) {
