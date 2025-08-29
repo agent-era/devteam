@@ -137,12 +137,16 @@ export default function WorktreeListScreen({
   };
 
   const handleJumpToFirst = () => {
+    setCurrentPage(0);  // First item is always on page 0
     selectWorktree(0);
   };
 
   const handleJumpToLast = () => {
     if (worktrees.length > 0) {
-      selectWorktree(worktrees.length - 1);
+      const lastIndex = worktrees.length - 1;
+      const lastPage = Math.floor(lastIndex / pageSize);
+      setCurrentPage(lastPage);  // Navigate to the page containing the last item
+      selectWorktree(lastIndex);
     }
   };
 

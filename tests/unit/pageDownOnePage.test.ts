@@ -98,4 +98,69 @@ describe('Page Navigation Behavior', () => {
       expect(output).toContain('test-project/feature-');
     }
   });
+
+  test('should handle Home/End keys with page navigation on multiple pages', async () => {
+    // Setup: Create enough features to have multiple pages (assuming page size of 20)
+    const manyFeatures = Array.from({length: 45}, (_, i) => `feature-${String(i + 1).padStart(2, '0')}`);
+    createProjectWithFeatures('multi-project', manyFeatures);
+
+    const {stdin, lastFrame} = renderTestApp();
+    await simulateTimeDelay(100);
+
+    // Initial render should show first page features
+    let output = lastFrame();
+    expect(output).toContain('multi-project/feature-01');
+    
+    // Move to middle of first page
+    for (let i = 0; i < 10; i++) {
+      stdin.write('j');
+      await simulateTimeDelay(10);
+    }
+
+    // Press End key (should jump to last item on last page)
+    stdin.write('\u001b[F'); // End key
+    await simulateTimeDelay(50);
+    
+    // Should render without errors and be on a page showing the last item
+    output = lastFrame();
+    expect(output).toBeDefined();
+    expect(output).toContain('multi-project/feature-'); // Should still contain project features
+
+    // Press Home key (should jump to first item on first page)  
+    stdin.write('\u001b[H'); // Home key
+    await simulateTimeDelay(50);
+    
+    // Should render without errors and be on first page
+    output = lastFrame();
+    expect(output).toBeDefined();
+    expect(output).toContain('multi-project/feature-01'); // Should show first item
+  });
+
+  test('should handle Home/End keys on single page without errors', async () => {
+    // Setup: Single page scenario
+    createProjectWithFeatures('single-project', ['alpha', 'beta', 'gamma']);
+
+    const {stdin, lastFrame} = renderTestApp();
+    await simulateTimeDelay(100);
+
+    // Move to middle item
+    stdin.write('j');
+    await simulateTimeDelay(50);
+
+    // Press End key (should jump to last item)
+    stdin.write('\u001b[F'); // End key
+    await simulateTimeDelay(50);
+    
+    let output = lastFrame();
+    expect(output).toBeDefined();
+    expect(output).toContain('single-project/gamma');
+
+    // Press Home key (should jump to first item)
+    stdin.write('\u001b[H'); // Home key
+    await simulateTimeDelay(50);
+    
+    output = lastFrame();
+    expect(output).toBeDefined();
+    expect(output).toContain('single-project/alpha');
+  });
 });
