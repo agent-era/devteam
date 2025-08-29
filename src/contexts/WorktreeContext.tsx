@@ -47,6 +47,7 @@ interface WorktreeContextType {
   
   // Data operations
   refresh: (refreshPRs?: 'all' | 'visible' | 'none') => Promise<void>;
+  forceRefreshVisible: (currentPage: number, pageSize: number) => Promise<void>;
   refreshSelected: () => void;
   refreshPRSelective: () => Promise<void>;
   
@@ -87,7 +88,7 @@ export function WorktreeProvider({
   const {isAnyDialogFocused} = useInputFocus();
   
   // Access GitHub context directly instead of through props
-  const {getPRStatus, setVisibleWorktrees, refreshPRStatus, refreshPRForWorktree} = useGitHubContext();
+  const {getPRStatus, setVisibleWorktrees, refreshPRStatus, refreshPRForWorktree, forceRefreshVisiblePRs} = useGitHubContext();
 
   // Service instances - stable across re-renders
   const gitService = useMemo(() => new GitService(), []);
@@ -246,6 +247,39 @@ export function WorktreeProvider({
       setLoading(false);
     }
   }, [loading, collectWorktrees, attachRuntimeData, getPRStatus, setVisibleWorktrees, refreshPRStatus]);
+
+  const forceRefreshVisible = useCallback(async (currentPage: number, pageSize: number) => {
+    if (loading || worktrees.length === 0) return;
+    
+    // Calculate visible worktrees based on pagination
+    const startIndex = currentPage * pageSize;
+    const endIndex = Math.min(startIndex + pageSize, worktrees.length);
+    const visibleWorktrees = worktrees.slice(startIndex, endIndex);
+    
+    if (visibleWorktrees.length === 0) return;
+    
+    logInfo(`[Force Refresh] Refreshing ${visibleWorktrees.length} visible PRs on page ${currentPage + 1}`);
+    
+    try {
+      // Force refresh visible PRs by invalidating their cache first
+      await forceRefreshVisiblePRs(visibleWorktrees);
+      
+      // Update worktrees with fresh PR data
+      const updatedWorktrees = [...worktrees];
+      for (let i = startIndex; i < endIndex; i++) {
+        if (updatedWorktrees[i]) {
+          updatedWorktrees[i] = new WorktreeInfo({
+            ...updatedWorktrees[i],
+            pr: getPRStatus(updatedWorktrees[i].path)
+          });
+        }
+      }
+      setWorktrees(updatedWorktrees);
+      setLastRefreshed(Date.now());
+    } catch (error) {
+      console.error('Failed to force refresh visible PRs:', error);
+    }
+  }, [loading, worktrees, forceRefreshVisiblePRs, getPRStatus]);
 
   const refreshSelected = useCallback(async () => {
     const selected = worktrees[selectedIndex];
@@ -766,6 +800,7 @@ export function WorktreeProvider({
     
     // Data operations
     refresh,
+    forceRefreshVisible,
     refreshSelected,
     refreshPRSelective,
     
