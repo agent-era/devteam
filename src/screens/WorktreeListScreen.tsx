@@ -30,7 +30,7 @@ export default function WorktreeListScreen({
   onExecuteRun,
   onConfigureRun
 }: WorktreeListScreenProps) {
-  const {worktrees, selectedIndex, selectWorktree, refresh, attachSession, attachShellSession} = useWorktreeContext();
+  const {worktrees, selectedIndex, selectWorktree, refresh, forceRefreshVisible, attachSession, attachShellSession} = useWorktreeContext();
   const pageSize = usePageSize();
   const [currentPage, setCurrentPage] = useState(0);
 
@@ -132,8 +132,8 @@ export default function WorktreeListScreen({
   };
 
   const handleRefresh = async () => {
-    // Full refresh: worktrees and PR status for visible items only
-    await refresh('visible');
+    // Force refresh visible PRs, ignoring cache TTLs
+    await forceRefreshVisible(currentPage, pageSize);
   };
 
   const handleJumpToFirst = () => {

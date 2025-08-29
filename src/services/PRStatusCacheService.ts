@@ -127,6 +127,23 @@ export class PRStatusCacheService {
   }
 
   /**
+   * Invalidate multiple worktree cache entries
+   */
+  invalidateMultiple(worktreePaths: string[]): void {
+    let invalidated = 0;
+    for (const path of worktreePaths) {
+      if (this.cache[path]) {
+        delete this.cache[path];
+        invalidated++;
+      }
+    }
+    
+    if (invalidated > 0) {
+      this.saveToDisk();
+    }
+  }
+
+  /**
    * Invalidate cache entries by PR number
    */
   invalidateByPRNumber(prNumber: number): void {

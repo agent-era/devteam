@@ -17,6 +17,7 @@ interface GitHubContextType {
   // Operations
   refreshPRStatus: (worktrees: WorktreeInfo[], visibleOnly?: boolean) => Promise<void>;
   refreshPRForWorktree: (worktreePath: string) => Promise<PRStatus | null>;
+  forceRefreshVisiblePRs: (worktrees: WorktreeInfo[]) => Promise<void>;
   getPRStatus: (worktreePath: string) => PRStatus;
   setVisibleWorktrees: (worktreePaths: string[]) => void;
   
@@ -276,6 +277,26 @@ export function GitHubProvider({children}: GitHubProviderProps) {
     }
   }, [gitHubService, cacheService]);
 
+  const forceRefreshVisiblePRs = useCallback(async (worktrees: WorktreeInfo[]): Promise<void> => {
+    if (loading || worktrees.length === 0) return;
+    
+    // Extract worktree paths
+    const worktreePaths = worktrees.map(wt => wt.path);
+    
+    // Invalidate cache for these specific worktrees
+    cacheService.invalidateMultiple(worktreePaths);
+    
+    // Force refresh by calling the internal refresh method
+    // Convert WorktreeInfo to the minimal format expected by refreshPRStatusInternal
+    const minimalWorktrees = worktrees.map(wt => ({
+      project: wt.project,
+      path: wt.path,
+      is_archived: wt.is_archived || false
+    }));
+    
+    await refreshPRStatusInternal(minimalWorktrees, false);
+  }, [loading, cacheService, refreshPRStatusInternal]);
+
   const getPRStatus = useCallback((worktreePath: string): PRStatus => {
     // Always return a PRStatus object, never null/undefined
     let prStatus = pullRequests[worktreePath];
@@ -349,6 +370,7 @@ export function GitHubProvider({children}: GitHubProviderProps) {
     // Operations
     refreshPRStatus,
     refreshPRForWorktree,
+    forceRefreshVisiblePRs,
     getPRStatus,
     setVisibleWorktrees: setVisibleWorktreesCallback,
     

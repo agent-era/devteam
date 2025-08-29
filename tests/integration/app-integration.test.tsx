@@ -441,4 +441,5 @@ describe('App Integration Tests', () => {
       expect(restoredPR?.title).toBe('Merged PR');
     });
   });
+
 });
