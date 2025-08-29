@@ -257,7 +257,7 @@ export function WorktreeProvider({
     
     if (visibleWorktrees.length === 0) return;
     
-    logInfo(`[Force Refresh] Refreshing ${visibleWorktrees.length} visible PRs on page ${currentPage + 1}`);
+    logDebug(`[Force Refresh] Refreshing ${visibleWorktrees.length} visible PRs on page ${currentPage + 1}`);
     
     try {
       // Force refresh visible PRs by invalidating their cache first
