@@ -853,7 +853,14 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       }, text);
     }
     
-    // For other lines, use syntax highlighting
+    // For context lines in unified view, use dimmed text without syntax highlighting
+    if (lineType === 'context') {
+      return h(Text, {
+        dimColor: true
+      }, text);
+    }
+    
+    // For added lines and side-by-side view, use syntax highlighting
     return h(SyntaxHighlight, {
       code: text,
       language: language
