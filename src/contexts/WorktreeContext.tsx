@@ -24,7 +24,6 @@ import {
   runCommandQuick,
   copyWithIgnore,
   generateTimestamp,
-  runInteractive,
   runClaudeSync
 } from '../utils.js';
 import {useInputFocus} from './InputFocusContext.js';
@@ -414,19 +413,17 @@ export function WorktreeProvider({
       if (hasClaude) {
         // Create session with Claude directly as the command
         const claudeCmd = worktree.wasKilledIdle ? 'claude "/resume"' : 'claude';
-        runCommand(['tmux', 'new-session', '-ds', sessionName, '-c', worktree.path, claudeCmd]);
+        tmuxService.createSessionWithCommand(sessionName, worktree.path, claudeCmd, true);
       } else {
-        // No Claude available, create regular bash session
-        runCommand(['tmux', 'new-session', '-ds', sessionName, '-c', worktree.path]);
+        // No Claude available, create regular bash session with auto-exit
+        tmuxService.createSession(sessionName, worktree.path, true);
       }
       
-      // Auto-destroy session when program exits
-      runCommand(['tmux', 'set-option', '-t', sessionName, 'remain-on-exit', 'off']);
       configureTmuxDisplayTime();
     }
     
     configureTmuxDisplayTime();
-    runInteractive('tmux', ['attach-session', '-t', sessionName]);
+    tmuxService.attachSessionInteractive(sessionName);
   }, [tmuxService]);
 
   const attachShellSession = useCallback(async (worktree: WorktreeInfo) => {
@@ -438,7 +435,7 @@ export function WorktreeProvider({
     }
     
     configureTmuxDisplayTime();
-    runInteractive('tmux', ['attach-session', '-t', sessionName]);
+    tmuxService.attachSessionInteractive(sessionName);
   }, [tmuxService]);
 
   const attachRunSession = useCallback(async (worktree: WorktreeInfo): Promise<'success' | 'no_config'> => {
@@ -458,7 +455,7 @@ export function WorktreeProvider({
     }
     
     configureTmuxDisplayTime();
-    runInteractive('tmux', ['attach-session', '-t', sessionName]);
+    tmuxService.attachSessionInteractive(sessionName);
     return 'success';
   }, [tmuxService]);
 
@@ -568,20 +565,18 @@ export function WorktreeProvider({
     const sessionName = tmuxService.sessionName(project, feature);
     
     if (command) {
-      // Create session with specific command
-      runCommand(['tmux', 'new-session', '-ds', sessionName, '-c', cwd, command]);
+      // Create session with specific command and auto-exit
+      tmuxService.createSessionWithCommand(sessionName, cwd, command, true);
     } else {
       // Create session and start Claude if available
       const hasClaude = !!runCommandQuick(['bash', '-lc', 'command -v claude || true']);
       if (hasClaude) {
-        runCommand(['tmux', 'new-session', '-ds', sessionName, '-c', cwd, 'claude']);
+        tmuxService.createSessionWithCommand(sessionName, cwd, 'claude', true);
       } else {
-        runCommand(['tmux', 'new-session', '-ds', sessionName, '-c', cwd]);
+        tmuxService.createSession(sessionName, cwd, true);
       }
     }
     
-    // Auto-destroy session when program exits
-    runCommand(['tmux', 'set-option', '-t', sessionName, 'remain-on-exit', 'off']);
     configureTmuxDisplayTime();
     
     return sessionName;
@@ -591,9 +586,7 @@ export function WorktreeProvider({
     const sessionName = tmuxService.shellSessionName(project, feature);
     const shell = process.env.SHELL || '/bin/bash';
     
-    runCommand(['tmux', 'new-session', '-ds', sessionName, '-c', cwd, shell]);
-    // Auto-destroy session when shell exits
-    runCommand(['tmux', 'set-option', '-t', sessionName, 'remain-on-exit', 'off']);
+    tmuxService.createSessionWithCommand(sessionName, cwd, shell, true);
     configureTmuxDisplayTime();
     
     return sessionName;
@@ -605,9 +598,9 @@ export function WorktreeProvider({
     const configPath = path.join(projectPath, RUN_CONFIG_FILE);
     
     // Create detached session at cwd
-    runCommand(['tmux', 'new-session', '-ds', sessionName, '-c', cwd]);
+    tmuxService.createSession(sessionName, cwd);
     // Auto-destroy session when program exits
-    runCommand(['tmux', 'set-option', '-t', sessionName, 'remain-on-exit', 'off']);
+    tmuxService.setSessionOption(sessionName, 'remain-on-exit', 'off');
     configureTmuxDisplayTime();
     
     try {
@@ -617,14 +610,14 @@ export function WorktreeProvider({
       // Run setup commands if they exist
       if (config.setup && Array.isArray(config.setup)) {
         for (const setupCmd of config.setup) {
-          runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, setupCmd, 'C-m']);
+          tmuxService.sendText(sessionName, setupCmd, { executeCommand: true });
         }
       }
       
       // // Set environment variables if they exist
       // if (config.env && typeof config.env === 'object') {
       //   for (const [key, value] of Object.entries(config.env)) {
-      //     runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, `export ${key}="${value}"`, 'C-m']);
+      //     tmuxService.sendText(sessionName, `export ${key}="${value}"`, { executeCommand: true });
       //   }
       // }
       
@@ -632,16 +625,16 @@ export function WorktreeProvider({
       if (config.command) {
         if (config.watch === false) {
           // For non-watch commands (builds, tests), use exec to replace bash and exit when command finishes
-          runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, `exec ${config.command}`, 'C-m']);
+          tmuxService.sendText(sessionName, `exec ${config.command}`, { executeCommand: true });
         } else {
           // For watch commands (servers, dev), keep session alive after command exits
-          runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, config.command, 'C-m']);
+          tmuxService.sendText(sessionName, config.command, { executeCommand: true });
         }
       }
     } catch (error) {
       // Config file exists but is invalid, show error
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, `echo "Invalid run config at ${configPath}: ${errorMessage}"`, 'C-m']);
+      tmuxService.sendText(sessionName, `echo "Invalid run config at ${configPath}: ${errorMessage}"`, { executeCommand: true });
     }
     
     return sessionName;
@@ -655,13 +648,13 @@ export function WorktreeProvider({
     
     // Kill all three session types
     if (activeSessions.includes(sessionName)) {
-      runCommand(['tmux', 'kill-session', '-t', sessionName]);
+      tmuxService.killSession(sessionName);
     }
     if (activeSessions.includes(shellSessionName)) {
-      runCommand(['tmux', 'kill-session', '-t', shellSessionName]);
+      tmuxService.killSession(shellSessionName);
     }
     if (activeSessions.includes(runSessionName)) {
-      runCommand(['tmux', 'kill-session', '-t', runSessionName]);
+      tmuxService.killSession(runSessionName);
     }
   }, [tmuxService]);
 
@@ -715,9 +708,8 @@ export function WorktreeProvider({
   }, []);
 
   const configureTmuxDisplayTime = useCallback(() => {
-    runCommand(['tmux', 'set-option', '-g', 'display-time', String(TMUX_DISPLAY_TIME)]);
-  }, []);
-
+    tmuxService.setOption('display-time', String(TMUX_DISPLAY_TIME));
+  }, [tmuxService]);
 
   // Auto-refresh intervals
   useEffect(() => {

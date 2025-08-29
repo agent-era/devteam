@@ -285,7 +285,7 @@ describe('Worktree Management E2E', () => {
       expect(lastFrame()).toContain('my-project/feature-1');
       
       // Create and attach session through service
-      const sessionName = services.tmuxService.createSession('my-project', 'feature-1', 'working');
+      const sessionName = services.tmuxService.createTestSession('my-project', 'feature-1', 'working');
 
       // Should create and attach session
       expectSessionInMemory(sessionName);

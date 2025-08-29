@@ -67,8 +67,95 @@ export class FakeTmuxService extends TmuxService {
     }
   }
 
+  // New methods from TmuxService refactor
+  createSession(sessionName: string, cwd: string, autoExit: boolean = false): void {
+    const sessionInfo = new SessionInfo({
+      session_name: sessionName,
+      attached: true,
+      claude_status: 'active'
+    });
+    memoryStore.sessions.set(sessionName, sessionInfo);
+    if (autoExit) {
+      // Mock setting remain-on-exit off
+      this.recordSentKeys(sessionName, ['remain-on-exit', 'off']);
+    }
+  }
+
+  createSessionWithCommand(sessionName: string, cwd: string, command: string, autoExit: boolean = true): void {
+    const sessionInfo = new SessionInfo({
+      session_name: sessionName,
+      attached: true,
+      claude_status: command.includes('claude') ? 'idle' : 'active'
+    });
+    memoryStore.sessions.set(sessionName, sessionInfo);
+    if (autoExit) {
+      // Mock setting remain-on-exit off
+      this.recordSentKeys(sessionName, ['remain-on-exit', 'off']);
+    }
+    this.recordSentKeys(sessionName, ['command', command]);
+  }
+
+  sendText(session: string, text: string, options: {
+    addNewline?: boolean;
+    executeCommand?: boolean;
+  } = {}): void {
+    const { addNewline = false, executeCommand = false } = options;
+    
+    if (executeCommand) {
+      this.recordSentKeys(session, [text, 'C-m']);
+    } else if (addNewline) {
+      this.recordSentKeys(session, [text + '\n']);
+    } else {
+      this.recordSentKeys(session, [text]);
+    }
+  }
+
+  sendMultilineText(session: string, lines: string[], options: {
+    endWithAltEnter?: boolean;
+    endWithExecute?: boolean;
+  } = {}): void {
+    const { endWithAltEnter = false, endWithExecute = false } = options;
+    
+    lines.forEach((line) => {
+      this.recordSentKeys(session, [line]);
+      if (endWithAltEnter) {
+        this.recordSentKeys(session, ['Escape', 'Enter']);
+      }
+    });
+    
+    if (endWithExecute) {
+      this.recordSentKeys(session, ['C-m']);
+    }
+  }
+
+  sendSpecialKeys(session: string, ...keys: string[]): void {
+    this.recordSentKeys(session, keys);
+  }
+
+  attachSessionInteractive(sessionName: string): void {
+    // In tests, just mark as attached
+    const sessionInfo = memoryStore.sessions.get(sessionName);
+    if (sessionInfo) {
+      sessionInfo.attached = true;
+    }
+  }
+
+  setOption(option: string, value: string): void {
+    // Mock implementation - just store for testing if needed
+  }
+
+  setSessionOption(session: string, option: string, value: string): void {
+    // Mock implementation - just store for testing if needed
+  }
+
+  async listPanes(session: string): Promise<string> {
+    const sessionInfo = memoryStore.sessions.get(session);
+    if (!sessionInfo) return '';
+    return '0.0 bash\n1.0 claude'; // Mock pane list
+  }
+
   // Test helpers
-  createSession(project: string, feature: string, claudeStatus: ClaudeStatus = 'not_running'): string | null {
+  createTestSession(project: string, feature: string, claudeStatus: ClaudeStatus = 'not_running'): string | null {
     // Check if session creation should fail (for error testing)
     if ((global as any).__mockTmuxShouldFail) {
       return null;
