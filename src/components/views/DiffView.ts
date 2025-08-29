@@ -1126,7 +1126,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                 }, padEndDisplay(' ' + leftText, paneWidth));
               } else {
                 // For removed lines, apply syntax highlighting
-                const actualLeftText = hasComment ? sideBySideLine.left.text || ' ' : leftText;
+                const actualLeftText = hasComment ? sideBySideLine.left.text || ' ' : leftText.replace('[C] ', '');
                 const leftSyntaxElement = renderSyntaxHighlighted(
                   actualLeftText, 
                   sideBySideLine.left.fileName, 
@@ -1134,15 +1134,14 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                   'red',
                   sideBySideLine.left.type
                 );
-                leftElement = h(Box, {
-                  width: paneWidth
-                },
-                  hasComment && h(Text, {
-                    backgroundColor: isCurrentLine ? 'blue' : undefined,
-                    bold: isCurrentLine
-                  }, ' [C] '),
-                  leftSyntaxElement
-                );
+                
+                // Use truncateDisplay to ensure proper width, then wrap in Text with padding
+                const truncatedText = truncateDisplay(actualLeftText, paneWidth - (hasComment ? 5 : 1));
+                leftElement = h(Text, {
+                  bold: isCurrentLine,
+                  backgroundColor: isCurrentLine ? 'blue' : undefined,
+                  color: 'red'
+                }, padEndDisplay((hasComment ? ' [C] ' : ' ') + truncatedText, paneWidth));
               }
             } else {
               leftElement = h(Text, {
@@ -1168,20 +1167,16 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                   backgroundColor: isCurrentLine ? 'blue' : undefined
                 }, padEndDisplay(' ' + rightText, paneWidth));
               } else {
-                // For added lines, apply syntax highlighting
-                const rightSyntaxElement = renderSyntaxHighlighted(
-                  sideBySideLine.right.text || ' ',
-                  sideBySideLine.right.fileName,
-                  isCurrentLine,
-                  'green',
-                  sideBySideLine.right.type
-                );
-                rightElement = h(Box, {
-                  width: paneWidth
-                },
-                  h(Text, null, ' '), // Space padding
-                  rightSyntaxElement
-                );
+                // For added lines, apply syntax highlighting with proper truncation
+                const actualRightText = sideBySideLine.right.text || ' ';
+                const truncatedText = truncateDisplay(actualRightText, paneWidth - 1);
+                
+                // For now, fall back to plain green text for side-by-side truncated view
+                rightElement = h(Text, {
+                  bold: isCurrentLine,
+                  backgroundColor: isCurrentLine ? 'blue' : undefined,
+                  color: 'green'
+                }, padEndDisplay(' ' + truncatedText, paneWidth));
               }
             } else {
               rightElement = h(Text, {
@@ -1230,16 +1225,12 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                     backgroundColor: isCurrentLine ? 'blue' : undefined
                   }, padEndDisplay(' ' + leftSegment, paneWidth));
                 } else {
-                  const leftSyntaxElement = renderSyntaxHighlighted(
-                    leftSegment,
-                    sideBySideLine.left.fileName,
-                    isCurrentLine,
-                    'red',
-                    sideBySideLine.left.type
-                  );
-                  leftElement = h(Box, {
-                    width: paneWidth
-                  }, leftSyntaxElement);
+                  // For wrapped removed lines, use plain red text with proper padding
+                  leftElement = h(Text, {
+                    bold: isCurrentLine,
+                    color: 'red',
+                    backgroundColor: isCurrentLine ? 'blue' : undefined
+                  }, padEndDisplay(' ' + leftSegment, paneWidth));
                 }
               } else {
                 leftElement = h(Text, {
@@ -1263,16 +1254,12 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                     backgroundColor: isCurrentLine ? 'blue' : undefined
                   }, padEndDisplay(' ' + rightSegment, paneWidth));
                 } else {
-                  const rightSyntaxElement = renderSyntaxHighlighted(
-                    rightSegment,
-                    sideBySideLine.right.fileName,
-                    isCurrentLine,
-                    'green',
-                    sideBySideLine.right.type
-                  );
-                  rightElement = h(Box, {
-                    width: paneWidth
-                  }, rightSyntaxElement);
+                  // For wrapped added lines, use plain green text with proper padding
+                  rightElement = h(Text, {
+                    bold: isCurrentLine,
+                    color: 'green',
+                    backgroundColor: isCurrentLine ? 'blue' : undefined
+                  }, padEndDisplay(' ' + rightSegment, paneWidth));
                 }
               } else {
                 rightElement = h(Text, {
