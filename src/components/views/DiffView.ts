@@ -834,7 +834,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
   }, [lines, sideBySideLines, offset, pageSize, viewMode]);
 
   // Helper function to render syntax highlighted content
-  const renderSyntaxHighlighted = (text: string, fileName: string | undefined, isSelected: boolean, diffColor?: string) => {
+  const renderSyntaxHighlighted = (text: string, fileName: string | undefined, isSelected: boolean, diffColor?: string, lineType?: 'added'|'removed'|'context'|'header') => {
     const language = getLanguageFromFileName(fileName);
     
     // If the line is selected, use regular Text to ensure blue background is visible
@@ -846,7 +846,14 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       }, text);
     }
     
-    // Otherwise use syntax highlighting
+    // For removed lines in unified view, use plain red text without syntax highlighting
+    if (lineType === 'removed') {
+      return h(Text, {
+        color: 'red'
+      }, text);
+    }
+    
+    // For other lines, use syntax highlighting
     return h(SyntaxHighlight, {
       code: text,
       language: language
@@ -926,43 +933,69 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       const isCurrentLine = actualLineIndex === pos;
       
       if (viewMode === 'unified') {
-        // Original unified diff rendering with syntax highlighting
+        // Unified diff rendering with gutter and improved coloring
         const unifiedLine = l as DiffLine;
         const hasComment = unifiedLine.fileName && commentStore.hasComment(actualLineIndex, unifiedLine.fileName);
         const commentIndicator = hasComment ? '[C] ' : '';
         
-        // For headers, use regular Text
+        // Determine gutter symbol
+        let gutterSymbol = '  '; // default for context and headers
+        if (unifiedLine.type === 'added') gutterSymbol = '+ ';
+        else if (unifiedLine.type === 'removed') gutterSymbol = '- ';
+        
+        // For headers, use regular Text with gutter
         if (unifiedLine.type === 'header') {
-          const displayText = truncateText(commentIndicator + (unifiedLine.text || ' '), terminalWidth - 2);
-          return h(Text, {
-            key: idx,
-            color: 'cyan',
-            backgroundColor: isCurrentLine ? 'blue' : undefined,
-            bold: isCurrentLine
-          }, displayText);
-        }
-        
-        // For code lines, apply syntax highlighting
-        const finalCodeText = truncateText(unifiedLine.text || ' ', terminalWidth - (hasComment ? 6 : 2));
-        let diffColor: string | undefined = undefined;
-        if (unifiedLine.type === 'added') diffColor = 'green';
-        else if (unifiedLine.type === 'removed') diffColor = 'red';
-        
-        // If there's a comment indicator, combine it with the highlighted code
-        if (hasComment) {
+          const displayText = truncateText(commentIndicator + (unifiedLine.text || ' '), terminalWidth - 4); // -4 for gutter (2) + padding (2)
           return h(Box, {
-            key: idx
+            key: idx,
+            flexDirection: 'row'
           },
             h(Text, {
-              color: diffColor,
+              color: 'gray',
               backgroundColor: isCurrentLine ? 'blue' : undefined,
               bold: isCurrentLine
-            }, '[C] '),
-            renderSyntaxHighlighted(finalCodeText, unifiedLine.fileName, isCurrentLine, diffColor)
+            }, gutterSymbol),
+            h(Text, {
+              color: 'cyan',
+              backgroundColor: isCurrentLine ? 'blue' : undefined,
+              bold: isCurrentLine
+            }, displayText)
           );
         }
         
-        return renderSyntaxHighlighted(finalCodeText, unifiedLine.fileName, isCurrentLine, diffColor);
+        // For code lines, apply new coloring strategy with gutter
+        const finalCodeText = truncateText(unifiedLine.text || ' ', terminalWidth - (hasComment ? 8 : 4)); // Account for gutter + comment indicator
+        
+        // Create gutter element
+        const gutterElement = h(Text, {
+          color: unifiedLine.type === 'added' ? 'green' : unifiedLine.type === 'removed' ? 'red' : 'gray',
+          backgroundColor: isCurrentLine ? 'blue' : undefined,
+          bold: isCurrentLine
+        }, gutterSymbol);
+        
+        // Create content elements
+        if (hasComment) {
+          const commentElement = h(Text, {
+            color: unifiedLine.type === 'added' ? 'green' : unifiedLine.type === 'removed' ? 'red' : undefined,
+            backgroundColor: isCurrentLine ? 'blue' : undefined,
+            bold: isCurrentLine
+          }, '[C] ');
+          
+          const codeElement = renderSyntaxHighlighted(finalCodeText, unifiedLine.fileName, isCurrentLine, undefined, unifiedLine.type);
+          
+          return h(Box, {
+            key: idx,
+            flexDirection: 'row'
+          }, gutterElement, commentElement, codeElement);
+        }
+        
+        // No comment, just gutter + code
+        const codeElement = renderSyntaxHighlighted(finalCodeText, unifiedLine.fileName, isCurrentLine, undefined, unifiedLine.type);
+        
+        return h(Box, {
+          key: idx,
+          flexDirection: 'row'
+        }, gutterElement, codeElement);
       } else {
         // Side-by-side diff rendering with syntax highlighting
         const sideBySideLine = l as SideBySideLine;
@@ -996,7 +1029,8 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
               sideBySideLine.left.text || ' ', 
               sideBySideLine.left.fileName, 
               isCurrentLine, 
-              'red'
+              'red',
+              sideBySideLine.left.type
             );
             leftElement = h(Box, {
               width: paneWidth
@@ -1039,7 +1073,8 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
               sideBySideLine.right.text || ' ',
               sideBySideLine.right.fileName,
               isCurrentLine,
-              'green'
+              'green',
+              sideBySideLine.right.type
             );
             rightElement = h(Box, {
               width: paneWidth
