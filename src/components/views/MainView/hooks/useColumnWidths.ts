@@ -13,9 +13,6 @@ export interface ColumnWidths {
   pr: number;
 }
 
-/**
- * Calculate optimal column widths based on terminal width and content
- */
 export function useColumnWidths(
   worktrees: WorktreeInfo[],
   terminalWidth: number,
@@ -26,10 +23,7 @@ export function useColumnWidths(
     const start = page * pageSize;
     const pageItems = worktrees.slice(start, start + pageSize);
     
-    // Header row for width calculation
     const headerRow = ['#', 'PROJECT/FEATURE', 'AI', 'DIFF', 'CHANGES', 'PUSHED', 'PR'];
-    
-    // Format data rows for width calculation
     const dataRows = pageItems.map((w, i0) => {
       const added = w.git?.base_added_lines || 0;
       const deleted = w.git?.base_deleted_lines || 0;
@@ -39,7 +33,6 @@ export function useColumnWidths(
       const behind = w.git?.behind || 0;
       const changes = formatGitChanges(ahead, behind);
       
-      // PUSHED column: show push status to remote
       let pushed = '-';
       if (w.git?.has_remote) {
         pushed = (w.git.ahead === 0 && !w.git.has_changes) ? '✓' : '↗';
@@ -50,7 +43,7 @@ export function useColumnWidths(
       return [
         String(start + i0 + 1),
         `${w.project}/${w.feature}`,
-        'AI', // placeholder for AI symbol
+        'AI',
         diffStr,
         changes,
         pushed,
@@ -60,20 +53,17 @@ export function useColumnWidths(
     
     const allRows = [headerRow, ...dataRows];
     
-    // Calculate content-based widths for all columns except PROJECT/FEATURE (index 1)
     const fixedWidths = [0, 1, 2, 3, 4, 5, 6].map(colIndex => {
-      if (colIndex === 1) return 0; // PROJECT/FEATURE will be calculated separately
+      if (colIndex === 1) return 0;
       const maxContentWidth = Math.max(...allRows.map(row => stringDisplayWidth(row[colIndex] || '')));
-      return Math.max(4, maxContentWidth); // Minimum 4 chars for readability
+      return Math.max(4, maxContentWidth);
     });
     
-    // Calculate space used by fixed columns + margins (6 spaces between 7 columns)
     const fixedColumnsWidth = fixedWidths.reduce((sum, width, index) => index === 1 ? sum : sum + width, 0);
-    const marginsWidth = 6; // 6 spaces between columns
+    const marginsWidth = 6;
     const usedWidth = fixedColumnsWidth + marginsWidth;
     
-    // Calculate available width for PROJECT/FEATURE column
-    const availableWidth = Math.max(15, terminalWidth - usedWidth); // Minimum 15 chars for readability  
+    const availableWidth = Math.max(15, terminalWidth - usedWidth);
     fixedWidths[1] = Math.min(availableWidth, terminalWidth - usedWidth);
     
     return {

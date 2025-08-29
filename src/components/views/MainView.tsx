@@ -38,34 +38,26 @@ export default function MainView({
 }: Props) {
   const {columns: terminalWidth} = useTerminalDimensions();
   
-  // Calculate column widths (memoized based on data and terminal size)
-  // Always call this hook to maintain consistent hook order
   const columnWidths = useColumnWidths(worktrees, terminalWidth, page, pageSize);
   
-  // Calculate pagination info
   const paginationInfo = useMemo(() => 
     calculatePaginationInfo(worktrees.length, page, pageSize),
     [worktrees.length, page, pageSize]
   );
   
-  // Get current page items
   const pageItems = useMemo(() => {
     const start = page * pageSize;
     return worktrees.slice(start, start + pageSize);
   }, [worktrees, page, pageSize]);
   
-  // Render header with pagination info
   const headerText = useMemo(() => {
     const base = 'Enter attach, n new, a archive, x exec, d diff, s shell, q quit';
     return `${base}${paginationInfo.paginationText}`;
   }, [paginationInfo.paginationText]);
   
-  // Stable key generation for rows
   const getRowKey = useCallback((worktree: WorktreeInfo, index: number) => 
     getWorktreeKey(worktree, index), []
   );
-  
-  // Early returns AFTER all hooks to maintain consistent hook order
   if (mode === 'message') {
     return <MessageView message={message} />;
   }
@@ -80,15 +72,12 @@ export default function MainView({
   
   return (
     <Box flexDirection="column">
-      {/* Header */}
       <Box marginBottom={1}>
         <Text color="magenta">{headerText}</Text>
       </Box>
       
-      {/* Table Header */}
       <TableHeader columnWidths={columnWidths} />
       
-      {/* Table Rows */}
       {pageItems.map((worktree, index) => {
         const globalIndex = page * pageSize + index;
         const isSelected = globalIndex === selectedIndex;
@@ -105,7 +94,6 @@ export default function MainView({
         );
       })}
       
-      {/* Pagination Footer */}
       <PaginationFooter
         totalPages={paginationInfo.totalPages}
         paginationText={paginationInfo.paginationText}

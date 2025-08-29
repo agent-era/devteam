@@ -23,10 +23,6 @@ const COLORS = {
   GREEN: 'green'     // Ready/good state
 } as const;
 
-/**
- * Calculate highlighting priority for a worktree row
- * Returns the column to highlight and its color based on priority rules
- */
 export function useHighlightPriority(worktree: WorktreeInfo): HighlightInfo | null {
   return useMemo(() => {
     const cs = (worktree.session?.claude_status || '').toLowerCase();
