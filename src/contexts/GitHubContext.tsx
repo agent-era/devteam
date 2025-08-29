@@ -4,7 +4,7 @@ import {GitHubService} from '../services/GitHubService.js';
 import {GitService} from '../services/GitService.js';
 import {PRStatusCacheService} from '../services/PRStatusCacheService.js';
 import {PR_REFRESH_DURATION} from '../constants.js';
-import {logError, logInfo} from '../shared/utils/logger.js';
+import {logError, logDebug} from '../shared/utils/logger.js';
 
 const h = React.createElement;
 
@@ -131,7 +131,7 @@ export function GitHubProvider({children}: GitHubProviderProps) {
         }
       }
       
-      logInfo(`PR refresh: ${worktrees.length} worktrees requested, 0 need refresh (${worktrees.length} cached)`);
+      logDebug(`PR refresh: ${worktrees.length} worktrees requested, 0 need refresh (${worktrees.length} cached)`);
       
       if (Object.keys(cached).length > 0) {
         setPullRequests(prev => ({...prev, ...cached}));
@@ -141,7 +141,7 @@ export function GitHubProvider({children}: GitHubProviderProps) {
     }
     
     const cachedCount = worktrees.length - worktreesToRefresh.length;
-    logInfo(`PR refresh: ${worktrees.length} worktrees requested, ${worktreesToRefresh.length} need refresh (${cachedCount} cached)`);
+    logDebug(`PR refresh: ${worktrees.length} worktrees requested, ${worktreesToRefresh.length} need refresh (${cachedCount} cached)`);
     
     setLoading(true);
     try {
@@ -231,7 +231,7 @@ export function GitHubProvider({children}: GitHubProviderProps) {
         // Invalidate cache for any PRs found to be merged
         for (const wt of openPassingPRs) {
           if (wt.pr?.number && mergedPRNumbers.includes(wt.pr.number)) {
-            logInfo(`Found merged PR #${wt.pr.number} via git history, invalidating cache`);
+            logDebug(`Found merged PR #${wt.pr.number} via git history, invalidating cache`);
             cacheService.invalidateByPRNumber(wt.pr.number);
           }
         }
