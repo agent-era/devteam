@@ -409,19 +409,20 @@ export function WorktreeProvider({
     const activeSessions = await tmuxService.listSessions();
     
     if (!activeSessions.includes(sessionName)) {
-      // Create session inline
-      runCommand(['tmux', 'new-session', '-ds', sessionName, '-c', worktree.path]);
-      configureTmuxDisplayTime();
       const hasClaude = !!runCommandQuick(['bash', '-lc', 'command -v claude || true']);
+      
       if (hasClaude) {
-        if (worktree.wasKilledIdle) {
-          // Session was killed due to idle timeout - use /resume to restore context
-          runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 'claude "/resume"', 'C-m']);
-        } else {
-          // Fresh session - use regular claude command
-          runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 'claude', 'C-m']);
-        }
+        // Create session with Claude directly as the command
+        const claudeCmd = worktree.wasKilledIdle ? 'claude "/resume"' : 'claude';
+        runCommand(['tmux', 'new-session', '-ds', sessionName, '-c', worktree.path, claudeCmd]);
+      } else {
+        // No Claude available, create regular bash session
+        runCommand(['tmux', 'new-session', '-ds', sessionName, '-c', worktree.path]);
       }
+      
+      // Auto-destroy session when program exits
+      runCommand(['tmux', 'set-option', '-t', sessionName, 'remain-on-exit', 'off']);
+      configureTmuxDisplayTime();
     }
     
     configureTmuxDisplayTime();
@@ -563,12 +564,25 @@ export function WorktreeProvider({
     copyClaudeDocumentation(projectPath, worktreePath);
   }, []);
 
-  const createTmuxSession = useCallback((project: string, feature: string, cwd: string): string => {
+  const createTmuxSession = useCallback((project: string, feature: string, cwd: string, command?: string): string => {
     const sessionName = tmuxService.sessionName(project, feature);
     
-    runCommand(['tmux', 'new-session', '-ds', sessionName, '-c', cwd]);
+    if (command) {
+      // Create session with specific command
+      runCommand(['tmux', 'new-session', '-ds', sessionName, '-c', cwd, command]);
+    } else {
+      // Create session and start Claude if available
+      const hasClaude = !!runCommandQuick(['bash', '-lc', 'command -v claude || true']);
+      if (hasClaude) {
+        runCommand(['tmux', 'new-session', '-ds', sessionName, '-c', cwd, 'claude']);
+      } else {
+        runCommand(['tmux', 'new-session', '-ds', sessionName, '-c', cwd]);
+      }
+    }
+    
+    // Auto-destroy session when program exits
+    runCommand(['tmux', 'set-option', '-t', sessionName, 'remain-on-exit', 'off']);
     configureTmuxDisplayTime();
-    startClaudeIfAvailable(sessionName);
     
     return sessionName;
   }, [tmuxService]);
@@ -578,6 +592,8 @@ export function WorktreeProvider({
     const shell = process.env.SHELL || '/bin/bash';
     
     runCommand(['tmux', 'new-session', '-ds', sessionName, '-c', cwd, shell]);
+    // Auto-destroy session when shell exits
+    runCommand(['tmux', 'set-option', '-t', sessionName, 'remain-on-exit', 'off']);
     configureTmuxDisplayTime();
     
     return sessionName;
@@ -615,8 +631,8 @@ export function WorktreeProvider({
       // Run the main command
       if (config.command) {
         if (config.watch === false) {
-          // For non-watch commands (builds, tests), let session exit when command finishes
-          runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, config.command, 'C-m']);
+          // For non-watch commands (builds, tests), use exec to replace bash and exit when command finishes
+          runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, `exec ${config.command}`, 'C-m']);
         } else {
           // For watch commands (servers, dev), keep session alive after command exits
           runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, `${config.command}; exec bash`, 'C-m']);
@@ -702,12 +718,6 @@ export function WorktreeProvider({
     runCommand(['tmux', 'set-option', '-g', 'display-time', String(TMUX_DISPLAY_TIME)]);
   }, []);
 
-  const startClaudeIfAvailable = useCallback((sessionName: string) => {
-    const hasClaude = !!runCommandQuick(['bash', '-lc', 'command -v claude || true']);
-    if (hasClaude) {
-      runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 'claude', 'C-m']);
-    }
-  }, []);
 
   // Auto-refresh intervals
   useEffect(() => {
