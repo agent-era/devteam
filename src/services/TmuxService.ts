@@ -1,4 +1,4 @@
-import {commandExitCode, runCommandQuick, runCommandQuickAsync} from '../utils.js';
+import {commandExitCode, runCommandQuick, runCommandQuickAsync, runCommand, runInteractive} from '../utils.js';
 import {SESSION_PREFIX, CLAUDE_PATTERNS} from '../constants.js';
 import {logInfo, logDebug} from '../shared/utils/logger.js';
 import {Timer} from '../shared/utils/timing.js';
@@ -54,6 +54,96 @@ export class TmuxService {
     return runCommandQuick(['tmux', 'kill-session', '-t', session]);
   }
 
+  createSession(sessionName: string, cwd: string, autoExit: boolean = false): void {
+    runCommand(['tmux', 'new-session', '-ds', sessionName, '-c', cwd]);
+    if (autoExit) {
+      this.setSessionOption(sessionName, 'remain-on-exit', 'off');
+    }
+  }
+
+  createSessionWithCommand(sessionName: string, cwd: string, command: string, autoExit: boolean = true): void {
+    const shell = process.env.SHELL || '/bin/bash';
+    runCommand(['tmux', 'new-session', '-ds', sessionName, '-c', cwd, command || shell]);
+    if (autoExit) {
+      this.setSessionOption(sessionName, 'remain-on-exit', 'off');
+    }
+  }
+
+  /**
+   * Send text input to a tmux session
+   * @param session Session name
+   * @param text Text to send
+   * @param options Options for handling newlines and completion
+   */
+  sendText(session: string, text: string, options: {
+    addNewline?: boolean;
+    executeCommand?: boolean;
+  } = {}): void {
+    const { addNewline = false, executeCommand = false } = options;
+    
+    if (executeCommand) {
+      // Send as command and execute with Enter
+      runCommand(['tmux', 'send-keys', '-t', `${session}:0.0`, text, 'C-m']);
+    } else if (addNewline) {
+      // Send text with newline character
+      runCommand(['tmux', 'send-keys', '-t', `${session}:0.0`, text + '\n']);
+    } else {
+      // Send text as-is
+      runCommand(['tmux', 'send-keys', '-t', `${session}:0.0`, text]);
+    }
+  }
+
+  /**
+   * Send multiple lines of text, useful for multi-line input
+   * @param session Session name
+   * @param lines Array of text lines
+   * @param options Options for handling each line
+   */
+  sendMultilineText(session: string, lines: string[], options: {
+    endWithAltEnter?: boolean;
+    endWithExecute?: boolean;
+  } = {}): void {
+    const { endWithAltEnter = false, endWithExecute = false } = options;
+    
+    lines.forEach((line) => {
+      this.sendText(session, line);
+      if (endWithAltEnter) {
+        // Use Alt+Enter for multi-line input (like Claude input)
+        runCommand(['tmux', 'send-keys', '-t', `${session}:0.0`, 'Escape', 'Enter']);
+      }
+    });
+    
+    if (endWithExecute) {
+      // Final execute command
+      runCommand(['tmux', 'send-keys', '-t', `${session}:0.0`, 'C-m']);
+    }
+  }
+
+  /**
+   * Send special key combinations
+   * @param session Session name
+   * @param keys Key combination (e.g., 'Escape', 'Enter', 'C-m')
+   */
+  sendSpecialKeys(session: string, ...keys: string[]): void {
+    runCommand(['tmux', 'send-keys', '-t', `${session}:0.0`, ...keys]);
+  }
+
+  attachSessionInteractive(sessionName: string): void {
+    runInteractive('tmux', ['attach-session', '-t', sessionName]);
+  }
+
+  setOption(option: string, value: string): void {
+    runCommand(['tmux', 'set-option', '-g', option, value]);
+  }
+
+  setSessionOption(session: string, option: string, value: string): void {
+    runCommand(['tmux', 'set-option', '-t', session, option, value]);
+  }
+
+  async listPanes(session: string): Promise<string> {
+    return await runCommandQuickAsync(['tmux', 'list-panes', '-t', `=${session}`, '-F', '#{window_index}.#{pane_index} #{pane_current_command}']) || '';
+  }
+
   async cleanupOrphanedSessions(validWorktrees: string[]): Promise<void> {
     const sessions = await this.listSessions();
     const devSessions = sessions.filter((s) => s.startsWith(SESSION_PREFIX));
@@ -66,7 +156,7 @@ export class TmuxService {
 
   // Private helper methods
   private async findClaudePaneTarget(session: string): Promise<string | null> {
-    const panes = await runCommandQuickAsync(['tmux', 'list-panes', '-t', `=${session}`, '-F', '#{window_index}.#{pane_index} #{pane_current_command}']);
+    const panes = await this.listPanes(session);
     if (!panes) return `${session}:0.0`;
     
     const lines = panes.split('\n').filter(Boolean);

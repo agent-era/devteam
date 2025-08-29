@@ -15,6 +15,12 @@ import UnsubmittedCommentsDialog from '../dialogs/UnsubmittedCommentsDialog.js';
 
 type DiffLine = {type: 'added'|'removed'|'context'|'header'; text: string; fileName?: string};
 
+type SideBySideLine = {
+  left: {type: 'removed'|'context'|'header'|'empty'; text: string; fileName?: string} | null;
+  right: {type: 'added'|'context'|'header'|'empty'; text: string; fileName?: string} | null;
+  lineIndex: number; // Original line index for comments and navigation
+};
+
 async function loadDiff(worktreePath: string, diffType: 'full' | 'uncommitted' = 'full'): Promise<DiffLine[]> {
   const lines: DiffLine[] = [];
   let diff: string | null = null;
@@ -69,17 +75,89 @@ async function loadDiff(worktreePath: string, diffType: 'full' | 'uncommitted' =
   return lines;
 }
 
+function convertToSideBySide(unifiedLines: DiffLine[]): SideBySideLine[] {
+  const sideBySideLines: SideBySideLine[] = [];
+  let lineIndex = 0;
+  let i = 0;
+
+  while (i < unifiedLines.length) {
+    const line = unifiedLines[i];
+    
+    if (line.type === 'header') {
+      // Headers appear on both sides
+      sideBySideLines.push({
+        left: {type: 'header', text: line.text, fileName: line.fileName},
+        right: {type: 'header', text: line.text, fileName: line.fileName},
+        lineIndex: lineIndex++
+      });
+      i++;
+    } else if (line.type === 'context') {
+      // Context lines appear on both sides
+      sideBySideLines.push({
+        left: {type: 'context', text: line.text, fileName: line.fileName},
+        right: {type: 'context', text: line.text, fileName: line.fileName},
+        lineIndex: lineIndex++
+      });
+      i++;
+    } else if (line.type === 'removed') {
+      // Collect all consecutive removed lines
+      const removedLines: DiffLine[] = [];
+      while (i < unifiedLines.length && unifiedLines[i].type === 'removed') {
+        removedLines.push(unifiedLines[i]);
+        i++;
+      }
+      
+      // Collect all consecutive added lines that follow
+      const addedLines: DiffLine[] = [];
+      while (i < unifiedLines.length && unifiedLines[i].type === 'added') {
+        addedLines.push(unifiedLines[i]);
+        i++;
+      }
+      
+      // Pair them up, filling with empty lines as needed
+      const maxLines = Math.max(removedLines.length, addedLines.length);
+      
+      for (let j = 0; j < maxLines; j++) {
+        const removedLine = removedLines[j] || null;
+        const addedLine = addedLines[j] || null;
+        
+        sideBySideLines.push({
+          left: removedLine ? {type: 'removed', text: removedLine.text, fileName: removedLine.fileName} : {type: 'empty', text: '', fileName: line.fileName},
+          right: addedLine ? {type: 'added', text: addedLine.text, fileName: addedLine.fileName} : {type: 'empty', text: '', fileName: line.fileName},
+          lineIndex: lineIndex++
+        });
+      }
+    } else if (line.type === 'added') {
+      // Added lines without preceding removed lines
+      sideBySideLines.push({
+        left: {type: 'empty', text: '', fileName: line.fileName},
+        right: {type: 'added', text: line.text, fileName: line.fileName},
+        lineIndex: lineIndex++
+      });
+      i++;
+    } else {
+      i++;
+    }
+  }
+
+  return sideBySideLines;
+}
+
 type Props = {worktreePath: string; title?: string; onClose: () => void; diffType?: 'full' | 'uncommitted'; onAttachToSession?: (sessionName: string) => void};
+
+type ViewMode = 'unified' | 'sidebyside';
 
 export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, diffType = 'full', onAttachToSession}: Props) {
   const {rows: terminalHeight, columns: terminalWidth} = useTerminalDimensions();
   const [lines, setLines] = useState<DiffLine[]>([]);
+  const [sideBySideLines, setSideBySideLines] = useState<SideBySideLine[]>([]);
   const [pos, setPos] = useState(0);
   const [offset, setOffset] = useState(0);
   const [targetOffset, setTargetOffset] = useState(0);
   const [animationId, setAnimationId] = useState<NodeJS.Timeout | null>(null);
   const [currentFileHeader, setCurrentFileHeader] = useState<string>('');
   const [currentHunkHeader, setCurrentHunkHeader] = useState<string>('');
+  const [viewMode, setViewMode] = useState<ViewMode>('unified');
   const commentStore = useMemo(() => commentStoreManager.getStore(worktreePath), [worktreePath]);
   const [tmuxService] = useState(() => new TmuxService());
   const [showCommentDialog, setShowCommentDialog] = useState(false);
@@ -92,6 +170,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     (async () => {
       const lns = await loadDiff(worktreePath, diffType);
       setLines(lns);
+      setSideBySideLines(convertToSideBySide(lns));
       // Reset scroll position when loading new diff
       setOffset(0);
       setTargetOffset(0);
@@ -187,18 +266,32 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       }
       return onClose();
     }
+    const maxLines = viewMode === 'unified' ? lines.length - 1 : sideBySideLines.length - 1;
     if (key.upArrow || input === 'k') setPos((p) => Math.max(0, p - 1));
-    if (key.downArrow || input === 'j') setPos((p) => Math.min(lines.length - 1, p + 1));
+    if (key.downArrow || input === 'j') setPos((p) => Math.min(maxLines, p + 1));
     if (key.pageUp || input === 'b') setPos((p) => Math.max(0, p - pageSize));
-    if (key.pageDown || input === 'f' || input === ' ') setPos((p) => Math.min(lines.length - 1, p + pageSize));
+    if (key.pageDown || input === 'f' || input === ' ') setPos((p) => Math.min(maxLines, p + pageSize));
     if (input === 'g') setPos(0);
-    if (input === 'G') setPos(Math.max(0, lines.length - 1));
+    if (input === 'G') setPos(Math.max(0, maxLines));
+    
+    // View mode toggle
+    if (input === 'v') {
+      setViewMode(current => current === 'unified' ? 'sidebyside' : 'unified');
+    }
     
     // Comment functionality
     if (input === 'c') {
-      const currentLine = lines[pos];
-      if (currentLine && currentLine.fileName && currentLine.type !== 'header') {
-        setShowCommentDialog(true);
+      if (viewMode === 'unified') {
+        const currentLine = lines[pos];
+        if (currentLine && currentLine.fileName && currentLine.type !== 'header') {
+          setShowCommentDialog(true);
+        }
+      } else {
+        const currentLine = sideBySideLines[pos];
+        if (currentLine && (currentLine.left?.fileName || currentLine.right?.fileName) && 
+            currentLine.left?.type !== 'header') {
+          setShowCommentDialog(true);
+        }
       }
     }
     
@@ -207,9 +300,17 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     }
     
     if (input === 'd') {
-      const currentLine = lines[pos];
-      if (currentLine && currentLine.fileName) {
-        commentStore.removeComment(pos, currentLine.fileName);
+      if (viewMode === 'unified') {
+        const currentLine = lines[pos];
+        if (currentLine && currentLine.fileName) {
+          commentStore.removeComment(pos, currentLine.fileName);
+        }
+      } else {
+        const currentLine = sideBySideLines[pos];
+        const fileName = currentLine.left?.fileName || currentLine.right?.fileName;
+        if (currentLine && fileName) {
+          commentStore.removeComment(currentLine.lineIndex, fileName);
+        }
       }
     }
     
@@ -221,10 +322,30 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       }
     }
     
+    // Helper function to check if a line is a chunk header
+    const isChunkHeader = (index: number): boolean => {
+      if (viewMode === 'unified') {
+        return lines[index]?.type === 'header' && lines[index]?.text.includes('▼');
+      } else {
+        const line = sideBySideLines[index];
+        return line?.left?.type === 'header' && line.left.text.includes('▼');
+      }
+    };
+    
+    // Helper function to check if a line is a file header
+    const isFileHeader = (index: number): boolean => {
+      if (viewMode === 'unified') {
+        return lines[index]?.type === 'header' && lines[index]?.text.startsWith('📁');
+      } else {
+        const line = sideBySideLines[index];
+        return line?.left?.type === 'header' && line.left.text.startsWith('📁');
+      }
+    };
+    
     // Left arrow: jump to previous chunk (▼ header)
     if (key.leftArrow) {
       for (let i = pos - 1; i >= 0; i--) {
-        if (lines[i]?.type === 'header' && lines[i]?.text.includes('▼')) {
+        if (isChunkHeader(i)) {
           setPos(i);
           setTargetOffset(i); // Position chunk at top of screen with smooth scrolling
           break;
@@ -234,8 +355,9 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     
     // Right arrow: jump to next chunk (▼ header)
     if (key.rightArrow) {
-      for (let i = pos + 1; i < lines.length; i++) {
-        if (lines[i]?.type === 'header' && lines[i]?.text.includes('▼')) {
+      const maxIndex = viewMode === 'unified' ? lines.length : sideBySideLines.length;
+      for (let i = pos + 1; i < maxIndex; i++) {
+        if (isChunkHeader(i)) {
           setPos(i);
           setTargetOffset(i); // Position chunk at top of screen with smooth scrolling
           break;
@@ -246,7 +368,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     // Previous file: Shift+Left
     if (key.leftArrow && key.shift) {
       for (let i = pos - 1; i >= 0; i--) {
-        if (lines[i]?.type === 'header' && lines[i]?.text.startsWith('📁')) {
+        if (isFileHeader(i)) {
           setPos(i);
           setTargetOffset(i); // Position file at top of screen with smooth scrolling
           break;
@@ -256,8 +378,9 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     
     // Next file: Shift+Right
     if (key.rightArrow && key.shift) {
-      for (let i = pos + 1; i < lines.length; i++) {
-        if (lines[i]?.type === 'header' && lines[i]?.text.startsWith('📁')) {
+      const maxIndex = viewMode === 'unified' ? lines.length : sideBySideLines.length;
+      for (let i = pos + 1; i < maxIndex; i++) {
+        if (isFileHeader(i)) {
           setPos(i);
           setTargetOffset(i); // Position file at top of screen with smooth scrolling
           break;
@@ -276,10 +399,12 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       newTargetOffset = pos - pageSize + 1;
     }
     
+    const maxScrollOffset = viewMode === 'unified' ? lines.length - pageSize : sideBySideLines.length - pageSize;
+    
     if (newTargetOffset !== targetOffset) {
-      setTargetOffset(Math.max(0, Math.min(lines.length - pageSize, newTargetOffset)));
+      setTargetOffset(Math.max(0, Math.min(maxScrollOffset, newTargetOffset)));
     }
-  }, [pos, targetOffset, pageSize, lines.length]);
+  }, [pos, targetOffset, pageSize, lines.length, sideBySideLines.length, viewMode]);
 
   const formatCommentsAsPrompt = (comments: any[]): string => {
     let prompt = "Please address the following code review comments:\\n\\n";
@@ -375,10 +500,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       messageLines.push("");
     });
     
-    messageLines.forEach((line) => {
-      runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, line]);
-      runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 'Escape', 'Enter']);
-    });
+    tmuxService.sendMultilineText(sessionName, messageLines, { endWithAltEnter: true });
   };
 
   const sendCommentsToTmux = async () => {
@@ -418,8 +540,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
         if (claudeStatus === 'not_running') {
           // Start Claude with the prompt pre-filled!
           const commentPrompt = formatCommentsAsPrompt(comments);
-          runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 
-                     `claude ${JSON.stringify(commentPrompt)}`, 'C-m']);
+          tmuxService.sendText(sessionName, `claude ${JSON.stringify(commentPrompt)}`, { executeCommand: true });
         } else {
           // Claude is idle/working/active - can accept input via Alt+Enter
           sendCommentsViaAltEnter(sessionName, comments);
@@ -440,13 +561,12 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
         }
       } else {
         // No session - create and start Claude with pre-filled prompt
-        runCommand(['tmux', 'new-session', '-ds', sessionName, '-c', worktreePath]);
+        tmuxService.createSession(sessionName, worktreePath);
         const hasClaude = runCommand(['bash', '-lc', 'command -v claude || true']).trim();
         if (hasClaude) {
           // Launch Claude with the comments as the initial prompt!
           const commentPrompt = formatCommentsAsPrompt(comments);
-          runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 
-                     `claude ${JSON.stringify(commentPrompt)}`, 'C-m']);
+          tmuxService.sendText(sessionName, `claude ${JSON.stringify(commentPrompt)}`, { executeCommand: true });
           
           // For new sessions, we can assume the prompt was received
           // since we're starting fresh with the prompt
@@ -469,9 +589,18 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
   };
 
   const handleCommentSave = (commentText: string) => {
-    const currentLine = lines[pos];
-    if (currentLine && currentLine.fileName) {
-      commentStore.addComment(pos, currentLine.fileName, currentLine.text, commentText);
+    if (viewMode === 'unified') {
+      const currentLine = lines[pos];
+      if (currentLine && currentLine.fileName) {
+        commentStore.addComment(pos, currentLine.fileName, currentLine.text, commentText);
+      }
+    } else {
+      const currentLine = sideBySideLines[pos];
+      const fileName = currentLine.left?.fileName || currentLine.right?.fileName;
+      const lineText = currentLine.left?.text || currentLine.right?.text;
+      if (currentLine && fileName && lineText) {
+        commentStore.addComment(currentLine.lineIndex, fileName, lineText, commentText);
+      }
     }
     setShowCommentDialog(false);
   };
@@ -517,7 +646,8 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
 
   // Update sticky headers based on scroll offset
   useEffect(() => {
-    if (lines.length === 0) return;
+    const dataLength = viewMode === 'unified' ? lines.length : sideBySideLines.length;
+    if (dataLength === 0) return;
 
     let fileHeader = '';
     let hunkHeader = '';
@@ -526,26 +656,51 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
 
     // Search backwards from offset-1 to find headers that have scrolled off screen
     for (let i = offset - 1; i >= 0; i--) {
-      const line = lines[i];
-      if (!line) continue;
+      let lineData;
+      if (viewMode === 'unified') {
+        lineData = lines[i];
+        if (!lineData) continue;
 
-      // Find hunk header first (only if we haven't found the file yet)
-      if (hunkHeaderIndex === -1 && fileHeaderIndex === -1 && line.type === 'header' && line.text.includes('▼')) {
-        hunkHeader = line.text;
-        hunkHeaderIndex = i;
-      }
-
-      // Find file header
-      if (fileHeaderIndex === -1 && line.type === 'header' && line.text.startsWith('📁')) {
-        fileHeader = line.text;
-        fileHeaderIndex = i;
-        
-        // Clear hunk if it belongs to a different file
-        if (hunkHeaderIndex !== -1 && hunkHeaderIndex < fileHeaderIndex) {
-          hunkHeader = '';
-          hunkHeaderIndex = -1;
+        // Find hunk header first (only if we haven't found the file yet)
+        if (hunkHeaderIndex === -1 && fileHeaderIndex === -1 && lineData.type === 'header' && lineData.text.includes('▼')) {
+          hunkHeader = lineData.text;
+          hunkHeaderIndex = i;
         }
-        break; // Found file, we're done
+
+        // Find file header
+        if (fileHeaderIndex === -1 && lineData.type === 'header' && lineData.text.startsWith('📁')) {
+          fileHeader = lineData.text;
+          fileHeaderIndex = i;
+          
+          // Clear hunk if it belongs to a different file
+          if (hunkHeaderIndex !== -1 && hunkHeaderIndex < fileHeaderIndex) {
+            hunkHeader = '';
+            hunkHeaderIndex = -1;
+          }
+          break; // Found file, we're done
+        }
+      } else {
+        lineData = sideBySideLines[i];
+        if (!lineData || !lineData.left) continue;
+
+        // Find hunk header first (only if we haven't found the file yet)
+        if (hunkHeaderIndex === -1 && fileHeaderIndex === -1 && lineData.left.type === 'header' && lineData.left.text.includes('▼')) {
+          hunkHeader = lineData.left.text;
+          hunkHeaderIndex = i;
+        }
+
+        // Find file header
+        if (fileHeaderIndex === -1 && lineData.left.type === 'header' && lineData.left.text.startsWith('📁')) {
+          fileHeader = lineData.left.text;
+          fileHeaderIndex = i;
+          
+          // Clear hunk if it belongs to a different file
+          if (hunkHeaderIndex !== -1 && hunkHeaderIndex < fileHeaderIndex) {
+            hunkHeader = '';
+            hunkHeaderIndex = -1;
+          }
+          break; // Found file, we're done
+        }
       }
     }
 
@@ -555,11 +710,15 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
 
     setCurrentFileHeader(shouldShowFileHeader ? fileHeader : '');
     setCurrentHunkHeader(shouldShowHunkHeader ? hunkHeader : '');
-  }, [lines, offset]);
+  }, [lines, sideBySideLines, offset, viewMode]);
 
   const visible = useMemo(() => {
-    return lines.slice(offset, offset + pageSize);
-  }, [lines, offset, pageSize]);
+    if (viewMode === 'unified') {
+      return lines.slice(offset, offset + pageSize);
+    } else {
+      return sideBySideLines.slice(offset, offset + pageSize);
+    }
+  }, [lines, sideBySideLines, offset, pageSize, viewMode]);
 
   // Create unsubmitted comments dialog if needed - render it instead of the main view when active
   if (showUnsubmittedCommentsDialog) {
@@ -594,9 +753,20 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       Box,
       {flexDirection: 'column', height: terminalHeight, justifyContent: 'center', alignItems: 'center'},
       h(CommentInputDialog, {
-        fileName: lines[pos]?.fileName || '',
-        lineText: lines[pos]?.text || '',
-        initialComment: lines[pos]?.fileName ? commentStore.getComment(pos, lines[pos].fileName)?.commentText || '' : '',
+        fileName: viewMode === 'unified' ? 
+          (lines[pos]?.fileName || '') : 
+          (sideBySideLines[pos]?.left?.fileName || sideBySideLines[pos]?.right?.fileName || ''),
+        lineText: viewMode === 'unified' ? 
+          (lines[pos]?.text || '') : 
+          (sideBySideLines[pos]?.left?.text || sideBySideLines[pos]?.right?.text || ''),
+        initialComment: (() => {
+          if (viewMode === 'unified') {
+            return lines[pos]?.fileName ? commentStore.getComment(pos, lines[pos].fileName)?.commentText || '' : '';
+          } else {
+            const fileName = sideBySideLines[pos]?.left?.fileName || sideBySideLines[pos]?.right?.fileName;
+            return fileName ? commentStore.getComment(sideBySideLines[pos].lineIndex, fileName)?.commentText || '' : '';
+          }
+        })(),
         onSave: handleCommentSave,
         onCancel: handleCommentCancel
       })
@@ -621,15 +791,89 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     ...visible.map((l, idx) => {
       const actualLineIndex = offset + idx;
       const isCurrentLine = actualLineIndex === pos;
-      const hasComment = l.fileName && commentStore.hasComment(actualLineIndex, l.fileName);
-      const commentIndicator = hasComment ? '[C] ' : '';
-      const displayText = truncateText(commentIndicator + (l.text || ' '), terminalWidth - 2); // -2 for padding
-      return h(Text, {
-        key: idx,
-        color: l.type === 'added' ? 'green' : l.type === 'removed' ? 'red' : l.type === 'header' ? 'cyan' : undefined,
-        backgroundColor: isCurrentLine ? 'blue' : undefined,
-        bold: isCurrentLine
-      }, displayText);
+      
+      if (viewMode === 'unified') {
+        // Original unified diff rendering
+        const unifiedLine = l as DiffLine;
+        const hasComment = unifiedLine.fileName && commentStore.hasComment(actualLineIndex, unifiedLine.fileName);
+        const commentIndicator = hasComment ? '[C] ' : '';
+        const displayText = truncateText(commentIndicator + (unifiedLine.text || ' '), terminalWidth - 2);
+        return h(Text, {
+          key: idx,
+          color: unifiedLine.type === 'added' ? 'green' : unifiedLine.type === 'removed' ? 'red' : unifiedLine.type === 'header' ? 'cyan' : undefined,
+          backgroundColor: isCurrentLine ? 'blue' : undefined,
+          bold: isCurrentLine
+        }, displayText);
+      } else {
+        // Side-by-side diff rendering
+        const sideBySideLine = l as SideBySideLine;
+        const paneWidth = Math.floor((terminalWidth - 1) / 2); // -1 for separator
+        
+        // Get comment info based on the original line index
+        const hasComment = (sideBySideLine.left?.fileName || sideBySideLine.right?.fileName) && 
+                          commentStore.hasComment(sideBySideLine.lineIndex, sideBySideLine.left?.fileName || sideBySideLine.right?.fileName || '');
+        const commentIndicator = hasComment ? '[C] ' : '';
+        
+        // Format left pane
+        let leftText = '';
+        let leftColor = undefined;
+        let leftDimColor = false;
+        
+        if (sideBySideLine.left) {
+          if (sideBySideLine.left.type === 'header') {
+            leftColor = 'cyan';
+          } else if (sideBySideLine.left.type === 'context' || sideBySideLine.left.type === 'empty') {
+            leftDimColor = true;
+          }
+          // removed lines and other types stay normal (no dim, no color)
+          leftText = truncateText(commentIndicator + (sideBySideLine.left.text || ' '), paneWidth - 2); // -2 for padding
+        } else {
+          leftDimColor = true; // empty space is dimmed
+        }
+        
+        // Format right pane
+        let rightText = '';
+        let rightColor = undefined;
+        let rightDimColor = false;
+        
+        if (sideBySideLine.right) {
+          if (sideBySideLine.right.type === 'header') {
+            rightColor = 'cyan';
+          } else if (sideBySideLine.right.type === 'context' || sideBySideLine.right.type === 'empty') {
+            rightDimColor = true;
+          }
+          // added lines and other types stay normal (no dim, no color)
+          rightText = truncateText((sideBySideLine.right.text || ' '), paneWidth - 2); // -2 for padding
+        } else {
+          rightDimColor = true; // empty space is dimmed
+        }
+        
+        // Create independent Text components for each pane with dimmed context
+        return h(Box, {
+          key: idx,
+          flexDirection: 'row'
+        }, 
+          // Left pane with dimmed context lines
+          h(Text, {
+            bold: isCurrentLine,
+            color: leftColor,
+            dimColor: leftDimColor,
+            backgroundColor: isCurrentLine ? 'blue' : undefined
+          }, (' ' + leftText).padEnd(paneWidth)),
+          // Separator
+          h(Text, {
+            bold: isCurrentLine,
+            backgroundColor: isCurrentLine ? 'blue' : undefined
+          }, '│'),
+          // Right pane with dimmed context lines
+          h(Text, {
+            bold: isCurrentLine,
+            color: rightColor,
+            dimColor: rightDimColor,
+            backgroundColor: isCurrentLine ? 'blue' : undefined
+          }, (' ' + rightText).padEnd(paneWidth))
+        );
+      }
     }),
     showAllComments && commentStore.count > 0 ? h(
       Box,
@@ -639,7 +883,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
         h(Text, {key: idx, color: 'gray'}, `${comment.fileName}:${comment.lineIndex} - ${comment.commentText}`)
       )
     ) : null,
-    h(Text, {color: 'gray'}, 'j/k move  c comment  C show all  d delete  S send to Claude  q close')
+    h(Text, {color: 'gray'}, `j/k move  v toggle view (${viewMode})  c comment  C show all  d delete  S send to Claude  q close`)
   );
 }
 

@@ -29,7 +29,7 @@ describe('Session Management E2E', () => {
       expect(lastFrame()).toContain('my-project/feature-1');
 
       // Create session through service
-      const sessionName = services.tmuxService.createSession('my-project', 'feature-1', 'idle');
+      const sessionName = services.tmuxService.createTestSession('my-project', 'feature-1', 'idle');
       await simulateTimeDelay(150);
 
       // Verify session was created in memory
@@ -196,7 +196,7 @@ describe('Session Management E2E', () => {
       await simulateTimeDelay(50);
       
       // Create a session for the new feature
-      const sessionName = services.tmuxService.createSession('my-project', 'new-feature', 'idle');
+      const sessionName = services.tmuxService.createTestSession('my-project', 'new-feature', 'idle');
       await simulateTimeDelay(150);
 
       // Should have created a session for the new feature
@@ -219,7 +219,7 @@ describe('Session Management E2E', () => {
       await simulateTimeDelay(50);
       
       // Create session for the new worktree
-      const sessionName = services.tmuxService.createSession('my-project', 'feature-x', 'idle');
+      const sessionName = services.tmuxService.createTestSession('my-project', 'feature-x', 'idle');
       await simulateTimeDelay(150);
 
       // Should have created session for the new worktree

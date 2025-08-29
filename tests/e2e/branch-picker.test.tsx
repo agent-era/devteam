@@ -221,7 +221,7 @@ describe('Branch Picker E2E', () => {
       await simulateTimeDelay(100);
       
       // Create session for the new worktree (simulates auto-attach behavior)
-      const sessionName = services.tmuxService.createSession('auto-attach', 'auto-session', 'idle');
+      const sessionName = services.tmuxService.createTestSession('auto-attach', 'auto-session', 'idle');
       expect(sessionName).toBe('dev-auto-attach-auto-session');
       
       // Verify session was created and attached

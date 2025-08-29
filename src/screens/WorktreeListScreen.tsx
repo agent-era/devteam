@@ -109,6 +109,11 @@ export default function WorktreeListScreen({
 
   const handlePreviousPage = () => {
     const totalPages = Math.max(1, Math.ceil(worktrees.length / pageSize));
+    if (totalPages <= 1) {
+      // Single page: Page Up jumps to first item
+      handleJumpToFirst();
+      return;
+    }
     const newPage = currentPage > 0 ? currentPage - 1 : totalPages - 1;
     setCurrentPage(newPage);
     selectWorktree(newPage * pageSize);
@@ -116,6 +121,11 @@ export default function WorktreeListScreen({
 
   const handleNextPage = () => {
     const totalPages = Math.max(1, Math.ceil(worktrees.length / pageSize));
+    if (totalPages <= 1) {
+      // Single page: Page Down jumps to last item
+      handleJumpToLast();
+      return;
+    }
     const newPage = (currentPage + 1) % totalPages;
     setCurrentPage(newPage);
     selectWorktree(newPage * pageSize);
@@ -127,12 +137,16 @@ export default function WorktreeListScreen({
   };
 
   const handleJumpToFirst = () => {
+    setCurrentPage(0);  // First item is always on page 0
     selectWorktree(0);
   };
 
   const handleJumpToLast = () => {
     if (worktrees.length > 0) {
-      selectWorktree(worktrees.length - 1);
+      const lastIndex = worktrees.length - 1;
+      const lastPage = Math.floor(lastIndex / pageSize);
+      setCurrentPage(lastPage);  // Navigate to the page containing the last item
+      selectWorktree(lastIndex);
     }
   };
 
