@@ -501,8 +501,8 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     });
     
     messageLines.forEach((line) => {
-      runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, line]);
-      runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 'Escape', 'Enter']);
+      tmuxService.sendKeys(sessionName, line);
+      tmuxService.sendKeysRaw(sessionName, 'Escape', 'Enter');
     });
   };
 
@@ -543,8 +543,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
         if (claudeStatus === 'not_running') {
           // Start Claude with the prompt pre-filled!
           const commentPrompt = formatCommentsAsPrompt(comments);
-          runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 
-                     `claude ${JSON.stringify(commentPrompt)}`, 'C-m']);
+          tmuxService.sendKeysWithEnter(sessionName, `claude ${JSON.stringify(commentPrompt)}`);
         } else {
           // Claude is idle/working/active - can accept input via Alt+Enter
           sendCommentsViaAltEnter(sessionName, comments);
@@ -565,13 +564,12 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
         }
       } else {
         // No session - create and start Claude with pre-filled prompt
-        runCommand(['tmux', 'new-session', '-ds', sessionName, '-c', worktreePath]);
+        tmuxService.createSession(sessionName, worktreePath);
         const hasClaude = runCommand(['bash', '-lc', 'command -v claude || true']).trim();
         if (hasClaude) {
           // Launch Claude with the comments as the initial prompt!
           const commentPrompt = formatCommentsAsPrompt(comments);
-          runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 
-                     `claude ${JSON.stringify(commentPrompt)}`, 'C-m']);
+          tmuxService.sendKeysWithEnter(sessionName, `claude ${JSON.stringify(commentPrompt)}`);
           
           // For new sessions, we can assume the prompt was received
           // since we're starting fresh with the prompt

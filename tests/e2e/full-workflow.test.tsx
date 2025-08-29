@@ -129,7 +129,7 @@ index 1234567..abcdefg 100644
       expect(worktree.feature).toBe('complete-feature');
       
       // Step 3: Create and attach Claude session
-      const sessionName = services.tmuxService.createSession('workflow-project', 'complete-feature', 'idle');
+      const sessionName = services.tmuxService.createTestSession('workflow-project', 'complete-feature', 'idle');
       expect(sessionName).toBe('dev-workflow-project-complete-feature');
       expectSessionInMemory(sessionName);
       
@@ -264,7 +264,7 @@ index 1234567..abcdefg 100644
       expect(worktree.branch).toBe('feature/existing-work'); // Branch name from remote
       
       // Step 3: Auto-attach session
-      const sessionName = services.tmuxService.createSession('branch-workflow', 'feature-branch', 'idle');
+      const sessionName = services.tmuxService.createTestSession('branch-workflow', 'feature-branch', 'idle');
       await simulateTimeDelay(100);
       
       expectSessionInMemory(sessionName);
@@ -318,7 +318,7 @@ index 1234567..abcdefg 100644
       await simulateTimeDelay(50);
       
       // Step 2: Create main Claude session
-      const mainSession = services.tmuxService.createSession('multi-session-project', 'multi-session-feature', 'idle');
+      const mainSession = services.tmuxService.createTestSession('multi-session-project', 'multi-session-feature', 'idle');
       expect(mainSession).toBe('dev-multi-session-project-multi-session-feature');
       expectSessionInMemory(mainSession);
       
@@ -426,7 +426,7 @@ index 1234567..abcdefg 100644
       (global as any).__mockTmuxShouldFail = true;
       
       // Step 3: Attempt session creation
-      const sessionName = services.tmuxService.createSession('session-fail', 'test-feature', 'idle');
+      const sessionName = services.tmuxService.createTestSession('session-fail', 'test-feature', 'idle');
       
       // Should handle failure gracefully (return null or empty string)
       expect(sessionName).toBeNull();
@@ -461,7 +461,7 @@ index 1234567..abcdefg 100644
       expect(newWorktree).toBeDefined();
       
       // Step 5: Create session for new feature
-      const sessionName = services.tmuxService.createSession('performance-test', 'new-feature', 'idle');
+      const sessionName = services.tmuxService.createTestSession('performance-test', 'new-feature', 'idle');
       expectSessionInMemory(sessionName);
     });
   });
@@ -492,8 +492,8 @@ index 1234567..abcdefg 100644
       expect(commentsB[0].fileName).toBe('src/moduleB.ts');
       
       // Step 4: Send comments to respective Claude sessions
-      const sessionA = services.tmuxService.createSession('comment-cross', 'feature-a', 'idle');
-      const sessionB = services.tmuxService.createSession('comment-cross', 'feature-b', 'idle');
+      const sessionA = services.tmuxService.createTestSession('comment-cross', 'feature-a', 'idle');
+      const sessionB = services.tmuxService.createTestSession('comment-cross', 'feature-b', 'idle');
       
       expectSessionInMemory(sessionA);
       expectSessionInMemory(sessionB);

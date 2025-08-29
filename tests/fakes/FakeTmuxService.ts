@@ -67,8 +67,61 @@ export class FakeTmuxService extends TmuxService {
     }
   }
 
+  // New methods from TmuxService refactor
+  createSession(sessionName: string, cwd: string): void {
+    const sessionInfo = new SessionInfo({
+      session_name: sessionName,
+      attached: true,
+      claude_status: 'active'
+    });
+    memoryStore.sessions.set(sessionName, sessionInfo);
+  }
+
+  createSessionWithCommand(sessionName: string, cwd: string, command: string): void {
+    const sessionInfo = new SessionInfo({
+      session_name: sessionName,
+      attached: true,
+      claude_status: 'active'
+    });
+    memoryStore.sessions.set(sessionName, sessionInfo);
+  }
+
+  sendKeys(session: string, keys: string): void {
+    this.recordSentKeys(session, [keys]);
+  }
+
+  sendKeysWithEnter(session: string, keys: string): void {
+    this.recordSentKeys(session, [keys, 'C-m']);
+  }
+
+  sendKeysRaw(session: string, ...keys: string[]): void {
+    this.recordSentKeys(session, keys);
+  }
+
+  attachSessionInteractive(sessionName: string): void {
+    // In tests, just mark as attached
+    const sessionInfo = memoryStore.sessions.get(sessionName);
+    if (sessionInfo) {
+      sessionInfo.attached = true;
+    }
+  }
+
+  setOption(option: string, value: string): void {
+    // Mock implementation - just store for testing if needed
+  }
+
+  setSessionOption(session: string, option: string, value: string): void {
+    // Mock implementation - just store for testing if needed
+  }
+
+  async listPanes(session: string): Promise<string> {
+    const sessionInfo = memoryStore.sessions.get(session);
+    if (!sessionInfo) return '';
+    return '0.0 bash\n1.0 claude'; // Mock pane list
+  }
+
   // Test helpers
-  createSession(project: string, feature: string, claudeStatus: ClaudeStatus = 'not_running'): string | null {
+  createTestSession(project: string, feature: string, claudeStatus: ClaudeStatus = 'not_running'): string | null {
     // Check if session creation should fail (for error testing)
     if ((global as any).__mockTmuxShouldFail) {
       return null;

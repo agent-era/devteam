@@ -24,7 +24,6 @@ import {
   runCommandQuick,
   copyWithIgnore,
   generateTimestamp,
-  runInteractive,
   runClaudeSync
 } from '../utils.js';
 import {useInputFocus} from './InputFocusContext.js';
@@ -410,22 +409,22 @@ export function WorktreeProvider({
     
     if (!activeSessions.includes(sessionName)) {
       // Create session inline
-      runCommand(['tmux', 'new-session', '-ds', sessionName, '-c', worktree.path]);
+      tmuxService.createSession(sessionName, worktree.path);
       configureTmuxDisplayTime();
       const hasClaude = !!runCommandQuick(['bash', '-lc', 'command -v claude || true']);
       if (hasClaude) {
         if (worktree.wasKilledIdle) {
           // Session was killed due to idle timeout - use /resume to restore context
-          runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 'claude "/resume"', 'C-m']);
+          tmuxService.sendKeysWithEnter(sessionName, 'claude "/resume"');
         } else {
           // Fresh session - use regular claude command
-          runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 'claude', 'C-m']);
+          tmuxService.sendKeysWithEnter(sessionName, 'claude');
         }
       }
     }
     
     configureTmuxDisplayTime();
-    runInteractive('tmux', ['attach-session', '-t', sessionName]);
+    tmuxService.attachSessionInteractive(sessionName);
   }, [tmuxService]);
 
   const attachShellSession = useCallback(async (worktree: WorktreeInfo) => {
@@ -437,7 +436,7 @@ export function WorktreeProvider({
     }
     
     configureTmuxDisplayTime();
-    runInteractive('tmux', ['attach-session', '-t', sessionName]);
+    tmuxService.attachSessionInteractive(sessionName);
   }, [tmuxService]);
 
   const attachRunSession = useCallback(async (worktree: WorktreeInfo): Promise<'success' | 'no_config'> => {
@@ -457,7 +456,7 @@ export function WorktreeProvider({
     }
     
     configureTmuxDisplayTime();
-    runInteractive('tmux', ['attach-session', '-t', sessionName]);
+    tmuxService.attachSessionInteractive(sessionName);
     return 'success';
   }, [tmuxService]);
 
@@ -566,7 +565,7 @@ export function WorktreeProvider({
   const createTmuxSession = useCallback((project: string, feature: string, cwd: string): string => {
     const sessionName = tmuxService.sessionName(project, feature);
     
-    runCommand(['tmux', 'new-session', '-ds', sessionName, '-c', cwd]);
+    tmuxService.createSession(sessionName, cwd);
     configureTmuxDisplayTime();
     startClaudeIfAvailable(sessionName);
     
@@ -577,7 +576,7 @@ export function WorktreeProvider({
     const sessionName = tmuxService.shellSessionName(project, feature);
     const shell = process.env.SHELL || '/bin/bash';
     
-    runCommand(['tmux', 'new-session', '-ds', sessionName, '-c', cwd, shell]);
+    tmuxService.createSessionWithCommand(sessionName, cwd, shell);
     configureTmuxDisplayTime();
     
     return sessionName;
@@ -589,9 +588,9 @@ export function WorktreeProvider({
     const configPath = path.join(projectPath, RUN_CONFIG_FILE);
     
     // Create detached session at cwd
-    runCommand(['tmux', 'new-session', '-ds', sessionName, '-c', cwd]);
+    tmuxService.createSession(sessionName, cwd);
     // Auto-destroy session when program exits
-    runCommand(['tmux', 'set-option', '-t', sessionName, 'remain-on-exit', 'off']);
+    tmuxService.setSessionOption(sessionName, 'remain-on-exit', 'off');
     configureTmuxDisplayTime();
     
     try {
@@ -601,14 +600,14 @@ export function WorktreeProvider({
       // Run setup commands if they exist
       if (config.setup && Array.isArray(config.setup)) {
         for (const setupCmd of config.setup) {
-          runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, setupCmd, 'C-m']);
+          tmuxService.sendKeysWithEnter(sessionName, setupCmd);
         }
       }
       
       // // Set environment variables if they exist
       // if (config.env && typeof config.env === 'object') {
       //   for (const [key, value] of Object.entries(config.env)) {
-      //     runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, `export ${key}="${value}"`, 'C-m']);
+      //     tmuxService.sendKeysWithEnter(sessionName, `export ${key}="${value}"`);
       //   }
       // }
       
@@ -616,16 +615,16 @@ export function WorktreeProvider({
       if (config.command) {
         if (config.watch === false) {
           // For non-watch commands (builds, tests), let session exit when command finishes
-          runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, config.command, 'C-m']);
+          tmuxService.sendKeysWithEnter(sessionName, config.command);
         } else {
           // For watch commands (servers, dev), keep session alive after command exits
-          runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, `${config.command}; exec bash`, 'C-m']);
+          tmuxService.sendKeysWithEnter(sessionName, `${config.command}; exec bash`);
         }
       }
     } catch (error) {
       // Config file exists but is invalid, show error
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, `echo "Invalid run config at ${configPath}: ${errorMessage}"`, 'C-m']);
+      tmuxService.sendKeysWithEnter(sessionName, `echo "Invalid run config at ${configPath}: ${errorMessage}"`);
     }
     
     return sessionName;
@@ -639,13 +638,13 @@ export function WorktreeProvider({
     
     // Kill all three session types
     if (activeSessions.includes(sessionName)) {
-      runCommand(['tmux', 'kill-session', '-t', sessionName]);
+      tmuxService.killSession(sessionName);
     }
     if (activeSessions.includes(shellSessionName)) {
-      runCommand(['tmux', 'kill-session', '-t', shellSessionName]);
+      tmuxService.killSession(shellSessionName);
     }
     if (activeSessions.includes(runSessionName)) {
-      runCommand(['tmux', 'kill-session', '-t', runSessionName]);
+      tmuxService.killSession(runSessionName);
     }
   }, [tmuxService]);
 
@@ -699,15 +698,15 @@ export function WorktreeProvider({
   }, []);
 
   const configureTmuxDisplayTime = useCallback(() => {
-    runCommand(['tmux', 'set-option', '-g', 'display-time', String(TMUX_DISPLAY_TIME)]);
-  }, []);
+    tmuxService.setOption('display-time', String(TMUX_DISPLAY_TIME));
+  }, [tmuxService]);
 
   const startClaudeIfAvailable = useCallback((sessionName: string) => {
     const hasClaude = !!runCommandQuick(['bash', '-lc', 'command -v claude || true']);
     if (hasClaude) {
-      runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 'claude', 'C-m']);
+      tmuxService.sendKeysWithEnter(sessionName, 'claude');
     }
-  }, []);
+  }, [tmuxService]);
 
   // Auto-refresh intervals
   useEffect(() => {
