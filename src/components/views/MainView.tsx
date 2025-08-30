@@ -38,13 +38,11 @@ export default function MainView({
 }: Props) {
   const {rows: terminalRows, columns: terminalWidth} = useTerminalDimensions();
   
-  // Safety net: clamp visible rows to actual terminal capacity
   // FullScreen intentionally leaves one row free to avoid bottom-line scroll.
   const effectiveRows = Math.max(1, terminalRows - 1);
   const maxVisibleRows = calculatePageSize(effectiveRows, terminalWidth);
-  const safePageSize = Math.max(1, Math.min(pageSize, maxVisibleRows));
 
-  const columnWidths = useColumnWidths(worktrees, terminalWidth, page, safePageSize);
+  const columnWidths = useColumnWidths(worktrees, terminalWidth, page, pageSize);
   
   const paginationInfo = useMemo(() => 
     // Keep pagination info based on requested pageSize for stability
@@ -53,9 +51,10 @@ export default function MainView({
   );
   
   const pageItems = useMemo(() => {
+    if (!worktrees || worktrees.length === 0) return [];
     const start = page * pageSize;
-    return worktrees.slice(start, start + safePageSize);
-  }, [worktrees, page, pageSize, safePageSize]);
+    return worktrees.slice(start, start + pageSize);
+  }, [worktrees, page, pageSize]);
   
   const headerText = useMemo(() => {
     // Keep header compact and single-line to avoid wrapping

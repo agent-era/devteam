@@ -329,6 +329,56 @@ describe('Archive Management E2E', () => {
       expect(lastFrame()).not.toContain('Archived');
       expect(lastFrame()).not.toContain('old-feature');
     });
+
+    test('should immediately display content when returning from archived view', async () => {
+      // This test reproduces the blank screen issue
+      setupBasicProject('render-test');
+      setupProjectWithWorktrees('render-test', ['feature-one', 'feature-two']);
+      
+      const archived = [new WorktreeInfo({
+        project: 'render-test',
+        feature: 'archived-feature',
+        path: '/fake/archived/render-test',
+        branch: 'feature/archived-feature',
+        is_archived: true,
+        git: new GitStatus(),
+        pr: new PRStatus(),
+        session: new SessionInfo()
+      })];
+      
+      memoryStore.archivedWorktrees.set('render-test', archived);
+      
+      const {setUIMode, lastFrame} = renderTestApp();
+      await simulateTimeDelay(50);
+      
+      // Verify main view is showing initially
+      const initialFrame = lastFrame();
+      expect(initialFrame).toContain('render-test/feature-one');
+      expect(initialFrame).toContain('render-test/feature-two');
+      expect(initialFrame).toContain('Enter attach, n new');
+      
+      // Switch to archived view
+      setUIMode('archived');
+      await simulateTimeDelay(50);
+      
+      expect(lastFrame()).toContain('Archived');
+      expect(lastFrame()).toContain('archived-feature');
+      
+      // Return to main view - this is where the blank screen issue occurs
+      setUIMode('list');
+      await simulateTimeDelay(50);
+      
+      // The screen should immediately show content without requiring user input
+      const returnedFrame = lastFrame();
+      expect(returnedFrame).toContain('render-test/feature-one');
+      expect(returnedFrame).toContain('render-test/feature-two');
+      expect(returnedFrame).toContain('Enter attach, n new');
+      expect(returnedFrame).not.toContain('Archived');
+      
+      // Verify it's not a blank screen
+      expect(returnedFrame.trim()).not.toBe('');
+      expect(returnedFrame.length).toBeGreaterThan(50); // Should have substantial content
+    });
   });
 
   describe('Archive Deletion', () => {

@@ -306,6 +306,7 @@ function AppContent() {
   // Default: Main worktree list screen
   return h(FullScreen, null,
     h(WorktreeListScreen, {
+      key: 'worktree-list', // Force proper remounting when returning from other views
       onCreateFeature: handleCreateFeature,
       onArchiveFeature: handleArchiveFeature,
       onViewArchived: showArchivedView,
