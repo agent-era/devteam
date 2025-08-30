@@ -1,6 +1,6 @@
 import {commandExitCode, runCommandQuick, runCommandQuickAsync, runCommand, runInteractive} from '../utils.js';
 import {SESSION_PREFIX, CLAUDE_PATTERNS} from '../constants.js';
-import {logInfo, logDebug} from '../shared/utils/logger.js';
+import {logDebug} from '../shared/utils/logger.js';
 import {Timer} from '../shared/utils/timing.js';
 
 export type ClaudeStatus = 'not_running' | 'working' | 'waiting' | 'idle' | 'active';

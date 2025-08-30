@@ -1,6 +1,6 @@
 import {PRStatus} from '../models.js';
 import {runCommand, runCommandAsync, runCommandQuick, runCommandQuickAsync} from '../utils.js';
-import {logInfo, logDebug} from '../shared/utils/logger.js';
+import {logDebug} from '../shared/utils/logger.js';
 import {Timer} from '../shared/utils/timing.js';
 
 export class GitHubService {
@@ -50,7 +50,7 @@ export class GitHubService {
       const timing = timer.elapsed();
       const branchCount = branches?.length || 'all';
       const totalPRs = Object.keys(prByBranch).length;
-      logInfo(`[GitHub.PR.Fetch] ${branchCount} branches -> ${totalPRs} PRs (Open: ${stateCounts.open}, Closed: ${stateCounts.closed}, Merged: ${stateCounts.merged}) in ${timing.formatted}`);
+      logDebug(`[GitHub.PR.Fetch] ${branchCount} branches -> ${totalPRs} PRs (Open: ${stateCounts.open}, Closed: ${stateCounts.closed}, Merged: ${stateCounts.merged}) in ${timing.formatted}`);
       
     } catch {}
     

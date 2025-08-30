@@ -2,7 +2,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {GitStatus, ProjectInfo} from '../models.js';
 import {
-  BASE_PATH,
   BASE_BRANCH_CANDIDATES,
   DIR_BRANCHES_SUFFIX,
   DIR_ARCHIVED_SUFFIX,
@@ -17,13 +16,13 @@ import {
   ensureDirectory,
   formatTimeAgo,
 } from '../utils.js';
-import {logInfo, logDebug} from '../shared/utils/logger.js';
+import {logDebug} from '../shared/utils/logger.js';
 import {Timer} from '../shared/utils/timing.js';
 
 export class GitService {
   basePath: string;
 
-  constructor(basePath: string = BASE_PATH) {
+  constructor(basePath: string) {
     this.basePath = basePath;
   }
 
@@ -48,7 +47,7 @@ export class GitService {
       .sort((a, b) => a.name.localeCompare(b.name));
     
     const timing = timer.elapsed();
-    logInfo(`[Project.Discovery] Found ${projects.length} projects in ${timing.formatted}`);
+    logDebug(`[Project.Discovery] Found ${projects.length} projects in ${timing.formatted}`);
     
     return projects;
   }
@@ -107,7 +106,7 @@ export class GitService {
     worktrees.sort((a, b) => b.mtime - a.mtime);
     
     const timing = timer.elapsed();
-    logInfo(`[Worktree.Collection] ${project.name}: ${worktrees.length} worktrees in ${timing.formatted}`);
+    logDebug(`[Worktree.Collection] ${project.name}: ${worktrees.length} worktrees in ${timing.formatted}`);
     
     return worktrees;
   }
@@ -156,8 +155,18 @@ export class GitService {
     ensureDirectory(branchesDir);
     if (fs.existsSync(worktreePath)) return false;
     
+    // Fetch latest changes from origin
+    runCommand(['git', '-C', mainRepo, 'fetch', 'origin'], {timeout: 30000});
+    
+    // Find the base branch (main or master)
+    const baseBranch = findBaseBranch(mainRepo, BASE_BRANCH_CANDIDATES);
+    if (!baseBranch) return false;
+    
+    // Ensure we use the origin version of the base branch
+    const originBase = baseBranch.startsWith('origin/') ? baseBranch : `origin/${baseBranch}`;
+    
     const branch = branchName || `feature/${featureName}`;
-    runCommand(['git', '-C', mainRepo, 'worktree', 'add', worktreePath, '-b', branch], {timeout: 30000});
+    runCommand(['git', '-C', mainRepo, 'worktree', 'add', worktreePath, '-b', branch, originBase], {timeout: 30000});
     return fs.existsSync(worktreePath);
   }
 

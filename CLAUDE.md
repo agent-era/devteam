@@ -17,9 +17,14 @@ A CLI-based tmux session manager built with TypeScript, React, and Ink. This too
 
 #### 1. **Worktrees** 
 Git worktrees allow multiple branches to be checked out simultaneously in different directories. This app manages worktrees in a structured way:
-- Main projects: `~/projects/{project-name}/`
-- Feature branches: `~/projects/{project-name}-branches/{feature-name}/`
-- Archived features: `~/projects/{project-name}-archived/archived-{timestamp}_{feature-name}/`
+- Main projects: `{projects-directory}/{project-name}/`
+- Feature branches: `{projects-directory}/{project-name}-branches/{feature-name}/`
+- Archived features: `{projects-directory}/{project-name}-archived/archived-{timestamp}_{feature-name}/`
+
+The projects directory is configurable:
+- **CLI Argument**: `dev-sessions --dir /path/to/projects`
+- **Environment Variable**: `PROJECTS_DIR=/path/to/projects dev-sessions`
+- **Default**: Current working directory
 
 #### 2. **Tmux Sessions**
 Each worktree gets associated tmux sessions:
