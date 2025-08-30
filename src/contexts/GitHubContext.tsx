@@ -1,9 +1,10 @@
-import React, {createContext, useContext, useState, useCallback, useEffect, ReactNode, useRef} from 'react';
+import React, {createContext, useContext, useState, useCallback, useEffect, ReactNode, useRef, useMemo} from 'react';
 import {PRStatus, WorktreeInfo} from '../models.js';
 import {GitHubService} from '../services/GitHubService.js';
 import {GitService} from '../services/GitService.js';
 import {PRStatusCacheService} from '../services/PRStatusCacheService.js';
 import {PR_REFRESH_DURATION} from '../constants.js';
+import {getProjectsDirectory} from '../config.js';
 import {logError, logDebug} from '../shared/utils/logger.js';
 
 const h = React.createElement;
@@ -45,7 +46,7 @@ export function GitHubProvider({children}: GitHubProviderProps) {
 
   // Service instances
   const gitHubService = new GitHubService();
-  const gitService = new GitService();
+  const gitService = useMemo(() => new GitService(getProjectsDirectory()), []);
   const cacheService = useRef(new PRStatusCacheService()).current;
   const refreshIntervalRef = useRef<NodeJS.Timeout>();
 

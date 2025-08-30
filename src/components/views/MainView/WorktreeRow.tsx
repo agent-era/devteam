@@ -83,6 +83,7 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
           <Text 
             {...textProps}
             color={getCellColor(cellIndex)}
+            wrap="truncate"
           >
             {cell.text.trim()}
           </Text>

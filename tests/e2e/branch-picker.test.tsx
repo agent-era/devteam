@@ -261,7 +261,7 @@ describe('Branch Picker E2E', () => {
     });
   });
 
-  describe('Branch Picker Integration with Main App', () => {
+  describe('Branch Picker with Main App', () => {
     test('should open branch picker from main view with b key', async () => {
       // Setup: Main view with existing worktree
       setupProjectWithWorktrees('picker-integration', ['current-feature']);
