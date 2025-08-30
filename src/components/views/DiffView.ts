@@ -1,5 +1,5 @@
 import React, {useEffect, useMemo, useState} from 'react';
-import {Box, Text, useInput, useStdin} from 'ink';
+import {Box, Text, Transform, useInput, useStdin} from 'ink';
 import SyntaxHighlight from 'ink-syntax-highlight';
 const h = React.createElement;
 import {runCommandAsync} from '../../utils.js';
@@ -1162,26 +1162,22 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                     bold: isCurrentLine,
                     backgroundColor: isCurrentLine ? 'blue' : undefined
                   }, ' [C] ');
-                  leftElement = h(Box, {flexDirection: 'row'},
+                  leftElement = h(Transform, {
+                    transform: (output) => padEndDisplay(output, paneWidth)
+                  }, h(Box, {flexDirection: 'row'},
                     commentText,
-                    leftSyntaxElement,
-                    h(Text, {
-                      bold: isCurrentLine,
-                      backgroundColor: isCurrentLine ? 'blue' : undefined
-                    }, ' '.repeat(Math.max(0, paneWidth - stringDisplayWidth(truncatedText) - 5)))
-                  );
+                    leftSyntaxElement
+                  ));
                 } else {
-                  leftElement = h(Box, {flexDirection: 'row'},
+                  leftElement = h(Transform, {
+                    transform: (output) => padEndDisplay(output, paneWidth)
+                  }, h(Box, {flexDirection: 'row'},
                     h(Text, {
                       bold: isCurrentLine,
                       backgroundColor: isCurrentLine ? 'blue' : undefined
                     }, ' '),
-                    leftSyntaxElement,
-                    h(Text, {
-                      bold: isCurrentLine,
-                      backgroundColor: isCurrentLine ? 'blue' : undefined
-                    }, ' '.repeat(Math.max(0, paneWidth - stringDisplayWidth(truncatedText) - 1)))
-                  );
+                    leftSyntaxElement
+                  ));
                 }
               }
             } else {
@@ -1218,18 +1214,16 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                   sideBySideLine.right.type
                 );
                 
-                // Create the element with proper padding
-                rightElement = h(Box, {flexDirection: 'row'},
+                // Create the element with proper padding using Transform
+                rightElement = h(Transform, {
+                  transform: (output) => padEndDisplay(output, paneWidth)
+                }, h(Box, {flexDirection: 'row'},
                   h(Text, {
                     bold: isCurrentLine,
                     backgroundColor: isCurrentLine ? 'blue' : undefined
                   }, ' '),
-                  rightSyntaxElement,
-                  h(Text, {
-                    bold: isCurrentLine,
-                    backgroundColor: isCurrentLine ? 'blue' : undefined
-                  }, ' '.repeat(Math.max(0, paneWidth - stringDisplayWidth(truncatedText) - 1)))
-                );
+                  rightSyntaxElement
+                ));
               }
             } else {
               rightElement = h(Text, {
@@ -1289,29 +1283,25 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                   
                   // Handle comment indicator for first segment
                   if (leftSegment.includes('[C] ') && segIdx === 0) {
-                    leftElement = h(Box, {flexDirection: 'row'},
+                    leftElement = h(Transform, {
+                      transform: (output) => padEndDisplay(output, paneWidth)
+                    }, h(Box, {flexDirection: 'row'},
                       h(Text, {
                         bold: isCurrentLine,
                         backgroundColor: isCurrentLine ? 'blue' : undefined
                       }, ' [C] '),
-                      leftSyntaxElement,
-                      h(Text, {
-                        bold: isCurrentLine,
-                        backgroundColor: isCurrentLine ? 'blue' : undefined
-                      }, ' '.repeat(Math.max(0, paneWidth - leftSegment.length)))
-                    );
+                      leftSyntaxElement
+                    ));
                   } else {
-                    leftElement = h(Box, {flexDirection: 'row'},
+                    leftElement = h(Transform, {
+                      transform: (output) => padEndDisplay(output, paneWidth)
+                    }, h(Box, {flexDirection: 'row'},
                       h(Text, {
                         bold: isCurrentLine,
                         backgroundColor: isCurrentLine ? 'blue' : undefined
                       }, ' '),
-                      leftSyntaxElement,
-                      h(Text, {
-                        bold: isCurrentLine,
-                        backgroundColor: isCurrentLine ? 'blue' : undefined
-                      }, ' '.repeat(Math.max(0, paneWidth - leftSegment.length - 1)))
-                    );
+                      leftSyntaxElement
+                    ));
                   }
                 }
               } else {
@@ -1345,17 +1335,15 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                     sideBySideLine.right.type
                   );
                   
-                  rightElement = h(Box, {flexDirection: 'row'},
+                  rightElement = h(Transform, {
+                    transform: (output) => padEndDisplay(output, paneWidth)
+                  }, h(Box, {flexDirection: 'row'},
                     h(Text, {
                       bold: isCurrentLine,
                       backgroundColor: isCurrentLine ? 'blue' : undefined
                     }, ' '),
-                    rightSyntaxElement,
-                    h(Text, {
-                      bold: isCurrentLine,
-                      backgroundColor: isCurrentLine ? 'blue' : undefined
-                    }, ' '.repeat(Math.max(0, paneWidth - rightSegment.length - 1)))
-                  );
+                    rightSyntaxElement
+                  ));
                 }
               } else {
                 rightElement = h(Text, {
