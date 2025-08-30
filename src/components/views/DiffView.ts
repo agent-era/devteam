@@ -1113,7 +1113,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
         } else {
           // Side-by-side diff rendering with syntax highlighting
           const sideBySideLine = l as SideBySideLine;
-          const paneWidth = Math.floor((terminalWidth - 1) / 2); // -1 for separator
+          const paneWidth = Math.floor(terminalWidth / 2); // Each column gets half the width
           
           // Get comment info based on the original line index
           const hasComment = (sideBySideLine.left?.fileName || sideBySideLine.right?.fileName) && 
@@ -1250,10 +1250,6 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
               flexDirection: 'row'
             }, 
               leftElement,
-              h(Text, {
-                bold: isCurrentLine,
-                backgroundColor: isCurrentLine ? 'blue' : undefined
-              }, '│'),
               rightElement
             ));
           } else {
@@ -1382,10 +1378,6 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                 flexDirection: 'row'
               },
                 leftElement,
-                h(Text, {
-                  bold: isCurrentLine,
-                  backgroundColor: isCurrentLine ? 'blue' : undefined
-                }, '│'),
                 rightElement
               ));
             }
