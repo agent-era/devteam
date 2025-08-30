@@ -288,10 +288,10 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     if (key.downArrow || input === 'j') {
       setSelectedLine(prev => Math.min(maxLineIndex, prev + 1));
     }
-    if (key.pageUp || input === 'b' || (key.pageUp && key.shift) || input === '\u001b[5;2~') {
+    if (key.pageUp || input === 'b') {
       setSelectedLine(prev => Math.max(0, prev - pageSize));
     }
-    if (key.pageDown || input === 'f' || input === ' ' || (key.pageDown && key.shift) || input === '\u001b[6;2~') {
+    if (key.pageDown || input === 'f' || input === ' ') {
       setSelectedLine(prev => Math.min(maxLineIndex, prev + pageSize));
     }
     if (input === 'g') {
@@ -952,7 +952,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
         h(Text, {key: idx, color: 'gray'}, `${comment.fileName}:${comment.lineIndex} - ${comment.commentText}`)
       )
     ) : null,
-    h(Text, {color: 'gray'}, `j/k move  b/f page up/down  Shift+PgUp/PgDn (macOS)  v toggle view (${viewMode})  w wrap (${wrapMode})  c comment  d delete  S send  q close`)
+    h(Text, {color: 'gray'}, `j/k move  b/f page up/down  v toggle view (${viewMode})  w wrap (${wrapMode})  c comment  d delete  S send  q close`)
   );
 }
 

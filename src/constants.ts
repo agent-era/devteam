@@ -104,7 +104,7 @@ export function generateHelpSections(projectsDir: string): string[] {
     '',
     'NAVIGATION:',
     '  ↑/↓, j/k    Navigate list',
-    '  PgUp/PgDn   Previous/next page (Shift+PgUp/PgDn on macOS)',
+    '  PgUp/PgDn   Previous/next page',
     '  < / >       Previous/next page',
     '  1-9         Select item on current page',
     '  Enter       Open/create session',
