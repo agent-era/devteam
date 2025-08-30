@@ -1139,8 +1139,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                 const truncatedText = truncateDisplay(actualLeftText, paneWidth - (hasComment ? 5 : 1));
                 leftElement = h(Text, {
                   bold: isCurrentLine,
-                  backgroundColor: isCurrentLine ? 'blue' : undefined,
-                  color: 'red'
+                  backgroundColor: isCurrentLine ? 'blue' : undefined
                 }, padEndDisplay((hasComment ? ' [C] ' : ' ') + truncatedText, paneWidth));
               }
             } else {
@@ -1171,11 +1170,10 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                 const actualRightText = sideBySideLine.right.text || ' ';
                 const truncatedText = truncateDisplay(actualRightText, paneWidth - 1);
                 
-                // For now, fall back to plain green text for side-by-side truncated view
+                // For side-by-side view, don't use diff colors - let syntax highlighting or normal text apply
                 rightElement = h(Text, {
                   bold: isCurrentLine,
-                  backgroundColor: isCurrentLine ? 'blue' : undefined,
-                  color: 'green'
+                  backgroundColor: isCurrentLine ? 'blue' : undefined
                 }, padEndDisplay(' ' + truncatedText, paneWidth));
               }
             } else {
@@ -1225,10 +1223,9 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                     backgroundColor: isCurrentLine ? 'blue' : undefined
                   }, padEndDisplay(' ' + leftSegment, paneWidth));
                 } else {
-                  // For wrapped removed lines, use plain red text with proper padding
+                  // For wrapped removed lines in side-by-side, don't use diff colors
                   leftElement = h(Text, {
                     bold: isCurrentLine,
-                    color: 'red',
                     backgroundColor: isCurrentLine ? 'blue' : undefined
                   }, padEndDisplay(' ' + leftSegment, paneWidth));
                 }
@@ -1254,10 +1251,9 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                     backgroundColor: isCurrentLine ? 'blue' : undefined
                   }, padEndDisplay(' ' + rightSegment, paneWidth));
                 } else {
-                  // For wrapped added lines, use plain green text with proper padding
+                  // For wrapped added lines in side-by-side, don't use diff colors
                   rightElement = h(Text, {
                     bold: isCurrentLine,
-                    color: 'green',
                     backgroundColor: isCurrentLine ? 'blue' : undefined
                   }, padEndDisplay(' ' + rightSegment, paneWidth));
                 }
