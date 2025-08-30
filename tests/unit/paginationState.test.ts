@@ -1,262 +1,274 @@
-import {describe, test, expect, beforeEach} from '@jest/globals';
-import {AppState, WorktreeInfo} from '../../src/models.js';
+/**
+ * @jest-environment jsdom
+ */
+import {describe, test, expect, beforeEach, jest} from '@jest/globals';
+import {renderHook} from '@testing-library/react';
+import {usePagination, usePageSize} from '../../src/hooks/usePagination.js';
+import {calculatePageSize, calculatePaginationInfo} from '../../src/utils/pagination.js';
 
-// Helper to create mock worktrees
-function createMockWorktrees(count: number): WorktreeInfo[] {
-  return Array.from({length: count}, (_, i) => new WorktreeInfo({
-    project: `project-${Math.floor(i / 5)}`,
-    feature: `feature-${i}`,
-    path: `/projects/project-${Math.floor(i / 5)}-branches/feature-${i}`,
-    branch: `feature-${i}`
-  }));
-}
+// Mock terminal dimensions for testing
+jest.mock('../../src/hooks/useTerminalDimensions.js', () => ({
+  useTerminalDimensions: jest.fn(() => ({
+    rows: 24,
+    columns: 80
+  }))
+}));
 
-describe('Pagination State Management', () => {
-  describe('AppState with pagination', () => {
-    test('should handle state updates with pagination correctly', () => {
-      const worktrees = createMockWorktrees(25);
-      const initialState = new AppState({
-        worktrees,
-        pageSize: 10,
-        page: 0,
-        selectedIndex: 0
-      });
+import {useTerminalDimensions} from '../../src/hooks/useTerminalDimensions.js';
+const mockUseTerminalDimensions = useTerminalDimensions as jest.MockedFunction<typeof useTerminalDimensions>;
 
-      // Simulate page navigation
-      const nextPageState = new AppState({
-        ...initialState,
-        page: 1,
-        selectedIndex: 10
-      });
-
-      expect(nextPageState.page).toBe(1);
-      expect(nextPageState.selectedIndex).toBe(10);
-      expect(nextPageState.worktrees.length).toBe(25);
-      expect(nextPageState.pageSize).toBe(10);
-    });
-
-    test('should handle selection movement across pages', () => {
-      const worktrees = createMockWorktrees(25);
-      let state = new AppState({
-        worktrees,
-        pageSize: 10,
-        page: 0,
-        selectedIndex: 9 // Last item on first page
-      });
-
-      // Simulate moving down one item (crosses page boundary)
-      const nextIndex = state.selectedIndex + 1;
-      const targetPage = Math.floor(nextIndex / state.pageSize);
-
-      state = new AppState({
-        ...state,
-        selectedIndex: nextIndex,
-        page: targetPage
-      });
-
-      expect(state.selectedIndex).toBe(10);
-      expect(state.page).toBe(1);
-    });
-
-    test('should handle edge case with last partial page', () => {
-      const worktrees = createMockWorktrees(25); // 2.5 pages
-      const state = new AppState({
-        worktrees,
-        pageSize: 10,
-        page: 2, // Last page
-        selectedIndex: 24 // Last item
-      });
-
-      const totalPages = Math.ceil(state.worktrees.length / state.pageSize);
-      const pageStartIndex = state.page * state.pageSize;
-      const pageEndIndex = Math.min(pageStartIndex + state.pageSize, state.worktrees.length) - 1;
-
-      expect(totalPages).toBe(3);
-      expect(pageStartIndex).toBe(20);
-      expect(pageEndIndex).toBe(24);
-      expect(state.selectedIndex).toBe(24);
-    });
-
-    test('should handle jumping to first and last items', () => {
-      const worktrees = createMockWorktrees(25);
-      let state = new AppState({
-        worktrees,
-        pageSize: 10,
-        page: 1,
-        selectedIndex: 15
-      });
-
-      // Jump to first
-      state = new AppState({
-        ...state,
-        selectedIndex: 0,
-        page: 0
-      });
-      expect(state.selectedIndex).toBe(0);
-      expect(state.page).toBe(0);
-
-      // Jump to last
-      const lastIndex = state.worktrees.length - 1;
-      const lastPage = Math.floor(lastIndex / state.pageSize);
-      state = new AppState({
-        ...state,
-        selectedIndex: lastIndex,
-        page: lastPage
-      });
-      expect(state.selectedIndex).toBe(24);
-      expect(state.page).toBe(2);
+describe('Pagination Integration Tests', () => {
+  beforeEach(() => {
+    mockUseTerminalDimensions.mockReturnValue({
+      rows: 24,
+      columns: 80
     });
   });
 
-  describe('Page slicing logic', () => {
-    test('should slice worktrees correctly for different pages', () => {
-      const worktrees = createMockWorktrees(25);
-      const pageSize = 10;
-
-      // First page
-      const page0Start = 0 * pageSize;
-      const page0Items = worktrees.slice(page0Start, page0Start + pageSize);
-      expect(page0Items.length).toBe(10);
-      expect(page0Items[0].feature).toBe('feature-0');
-      expect(page0Items[9].feature).toBe('feature-9');
-
-      // Middle page
-      const page1Start = 1 * pageSize;
-      const page1Items = worktrees.slice(page1Start, page1Start + pageSize);
-      expect(page1Items.length).toBe(10);
-      expect(page1Items[0].feature).toBe('feature-10');
-      expect(page1Items[9].feature).toBe('feature-19');
-
-      // Last partial page
-      const page2Start = 2 * pageSize;
-      const page2Items = worktrees.slice(page2Start, page2Start + pageSize);
-      expect(page2Items.length).toBe(5);
-      expect(page2Items[0].feature).toBe('feature-20');
-      expect(page2Items[4].feature).toBe('feature-24');
+  describe('calculatePageSize utility', () => {
+    test('should calculate page size for standard terminal', () => {
+      const pageSize = calculatePageSize(24, 80);
+      
+      // With 24 rows, should account for:
+      // - Header (1 line + 1 margin)
+      // - Column header (1 line) 
+      // - Footer + margin (2 lines)
+      // = 19 available rows for content
+      expect(pageSize).toBe(19);
     });
 
-    test('should handle edge cases in slicing', () => {
-      // Empty array
-      const emptyWorktrees: WorktreeInfo[] = [];
-      const emptySlice = emptyWorktrees.slice(0, 10);
-      expect(emptySlice.length).toBe(0);
+    test('should handle very small terminal', () => {
+      const pageSize = calculatePageSize(5, 40);
+      
+      // Very small terminal should ensure at least 1 item
+      expect(pageSize).toBeGreaterThanOrEqual(1);
+      expect(pageSize).toBeLessThan(5); // Should be significantly reduced
+    });
+
+    test('should handle wide header text wrapping', () => {
+      const pageSize = calculatePageSize(24, 30); // Very narrow
+      
+      // Should still calculate reasonable page size even with wrapped header
+      expect(pageSize).toBeGreaterThanOrEqual(1);
+      expect(pageSize).toBeLessThan(20);
+    });
+
+    test('should ensure minimum of 1 item per page', () => {
+      const pageSizeVerySmall = calculatePageSize(3, 20);
+      const pageSizeTiny = calculatePageSize(1, 10);
+      
+      expect(pageSizeVerySmall).toBe(1);
+      expect(pageSizeTiny).toBe(1);
+    });
+  });
+
+  describe('calculatePaginationInfo utility', () => {
+    test('should handle single page scenario', () => {
+      const info = calculatePaginationInfo(5, 0, 10);
+      
+      expect(info.totalPages).toBe(1);
+      expect(info.currentPageStart).toBe(1);
+      expect(info.currentPageEnd).toBe(5);
+      expect(info.paginationText).toBe('  [5 items]');
+    });
+
+    test('should handle multiple pages correctly', () => {
+      const info = calculatePaginationInfo(25, 1, 10);
+      
+      expect(info.totalPages).toBe(3);
+      expect(info.currentPageStart).toBe(11);
+      expect(info.currentPageEnd).toBe(20);
+      expect(info.paginationText).toBe('  [Page 2/3: 11-20/25]');
+    });
+
+    test('should handle last partial page', () => {
+      const info = calculatePaginationInfo(25, 2, 10);
+      
+      expect(info.totalPages).toBe(3);
+      expect(info.currentPageStart).toBe(21);
+      expect(info.currentPageEnd).toBe(25); // Should not exceed total items
+      expect(info.paginationText).toBe('  [Page 3/3: 21-25/25]');
+    });
+
+    test('should handle edge cases', () => {
+      // Empty list
+      const emptyInfo = calculatePaginationInfo(0, 0, 10);
+      expect(emptyInfo.totalPages).toBe(1);
+      expect(emptyInfo.currentPageStart).toBe(1);
+      expect(emptyInfo.currentPageEnd).toBe(0);
 
       // Single item
-      const singleWorktree = [createMockWorktrees(1)[0]];
-      const singleSlice = singleWorktree.slice(0, 10);
-      expect(singleSlice.length).toBe(1);
-
-      // Page size larger than array
-      const smallArray = createMockWorktrees(5);
-      const largeSlice = smallArray.slice(0, 20);
-      expect(largeSlice.length).toBe(5);
+      const singleInfo = calculatePaginationInfo(1, 0, 10);
+      expect(singleInfo.totalPages).toBe(1);
+      expect(singleInfo.currentPageStart).toBe(1);
+      expect(singleInfo.currentPageEnd).toBe(1);
     });
   });
 
-  describe('Page calculation utilities', () => {
-    test('should calculate pagination info correctly', () => {
-      const worktrees = createMockWorktrees(25);
-      const pageSize = 10;
-      const page = 1; // Second page
-
-      const totalPages = Math.ceil(worktrees.length / pageSize);
-      const currentPageStart = page * pageSize + 1; // 1-based indexing for display
-      const currentPageEnd = Math.min((page + 1) * pageSize, worktrees.length);
-
-      expect(totalPages).toBe(3);
-      expect(currentPageStart).toBe(11);
-      expect(currentPageEnd).toBe(20);
-    });
-
-    test('should handle various page size scenarios', () => {
-      const worktrees = createMockWorktrees(100);
+  describe('usePagination hook', () => {
+    test('should integrate terminal dimensions with pagination calculations', () => {
+      const {result} = renderHook(() => usePagination(100, 2));
       
-      // Small pages
-      let pageSize = 5;
-      let totalPages = Math.ceil(worktrees.length / pageSize);
-      expect(totalPages).toBe(20);
-
-      // Large pages
-      pageSize = 50;
-      totalPages = Math.ceil(worktrees.length / pageSize);
-      expect(totalPages).toBe(2);
-
-      // Page size larger than total
-      pageSize = 200;
-      totalPages = Math.ceil(worktrees.length / pageSize);
-      expect(totalPages).toBe(1);
+      // Should use mocked terminal dimensions (24x80)
+      expect(result.current.pageSize).toBe(19); // From calculatePageSize
+      expect(result.current.totalPages).toBe(6); // 100 items / 19 per page = 6 pages
+      expect(result.current.currentPageStart).toBe(39); // Page 2 (0-indexed) * 19 + 1
+      expect(result.current.currentPageEnd).toBe(57); // Page 2 end
+      expect(result.current.paginationText).toContain('Page 3/6'); // Human readable page numbers
     });
-  });
 
-  describe('Responsive page sizing', () => {
-    test('should calculate page size based on terminal height', () => {
-      // Simulate different terminal heights
-      const mockTerminalHeights = [10, 20, 30, 50];
+    test('should adapt to different terminal sizes', () => {
+      // Test with smaller terminal
+      mockUseTerminalDimensions.mockReturnValue({
+        rows: 12,
+        columns: 60
+      });
+
+      const {result} = renderHook(() => usePagination(50, 0));
       
-      mockTerminalHeights.forEach(height => {
-        const expectedPageSize = Math.max(1, height - 3); // Account for header/footer
-        expect(expectedPageSize).toBeGreaterThan(0);
-        expect(expectedPageSize).toBe(height - 3);
-      });
+      // Should have smaller page size for smaller terminal
+      expect(result.current.pageSize).toBeLessThan(19);
+      expect(result.current.totalPages).toBeGreaterThan(6); // More pages due to smaller page size
     });
 
-    test('should handle minimum page size', () => {
-      const minHeight = 3; // Very small terminal
-      const pageSize = Math.max(1, minHeight - 3);
-      expect(pageSize).toBe(1); // Minimum of 1 item per page
+    test('should handle responsive pagination correctly', () => {
+      // Test terminal size changes
+      mockUseTerminalDimensions.mockReturnValue({
+        rows: 30,
+        columns: 120
+      });
+
+      const {result, rerender} = renderHook(
+        ({totalItems, currentPage}) => usePagination(totalItems, currentPage),
+        {initialProps: {totalItems: 100, currentPage: 0}}
+      );
+
+      const largeTerminalPageSize = result.current.pageSize;
+      
+      // Change to small terminal
+      mockUseTerminalDimensions.mockReturnValue({
+        rows: 10,
+        columns: 40
+      });
+
+      rerender({totalItems: 100, currentPage: 0});
+
+      expect(result.current.pageSize).toBeLessThan(largeTerminalPageSize);
+      expect(result.current.totalPages).toBeGreaterThan(4); // More pages with smaller page size
     });
   });
 
-  describe('State transitions', () => {
-    test('should handle complete pagination workflow', () => {
-      const worktrees = createMockWorktrees(25);
-      let state = new AppState({
-        worktrees,
-        pageSize: 10,
-        page: 0,
-        selectedIndex: 0
-      });
+  describe('usePageSize hook', () => {
+    test('should return current page size based on terminal dimensions', () => {
+      const {result} = renderHook(() => usePageSize());
+      
+      expect(result.current).toBe(19); // Based on 24x80 terminal
+    });
 
-      // Step 1: Navigate to middle of first page
-      state = new AppState({
-        ...state,
-        selectedIndex: 5
+    test('should update when terminal dimensions change', () => {
+      const {result, rerender} = renderHook(() => usePageSize());
+      
+      expect(result.current).toBe(19);
+      
+      // Simulate terminal resize
+      mockUseTerminalDimensions.mockReturnValue({
+        rows: 15,
+        columns: 80
       });
-      expect(state.page).toBe(0);
-      expect(state.selectedIndex).toBe(5);
+      
+      rerender();
+      
+      expect(result.current).toBeLessThan(19); // Should be smaller for smaller terminal
+      expect(result.current).toBeGreaterThanOrEqual(1); // But at least 1
+    });
+  });
 
-      // Step 2: Navigate to second page
-      const nextPageState = {
-        ...state,
-        page: (state.page + 1) % Math.ceil(state.worktrees.length / state.pageSize),
-      };
-      const startIndex = nextPageState.page * state.pageSize;
-      state = new AppState({
-        ...nextPageState,
-        selectedIndex: Math.min(startIndex, state.worktrees.length - 1)
-      });
-      expect(state.page).toBe(1);
-      expect(state.selectedIndex).toBe(10);
+  describe('Pagination behavior with real data scenarios', () => {
+    test('should handle typical worktree list scenarios', () => {
+      const scenarios = [
+        {items: 5, expectedPages: 1, description: 'few items'},
+        {items: 19, expectedPages: 1, description: 'exactly one page'},
+        {items: 20, expectedPages: 2, description: 'just over one page'},
+        {items: 50, expectedPages: 3, description: 'multiple pages'},
+        {items: 100, expectedPages: 6, description: 'many pages'}
+      ];
 
-      // Step 3: Jump to last page
-      const lastIndex = state.worktrees.length - 1;
-      const lastPage = Math.floor(lastIndex / state.pageSize);
-      state = new AppState({
-        ...state,
-        selectedIndex: lastIndex,
-        page: lastPage
+      scenarios.forEach(scenario => {
+        const {result} = renderHook(() => usePagination(scenario.items, 0));
+        
+        expect(result.current.totalPages).toBe(scenario.expectedPages);
+        expect(result.current.currentPageStart).toBe(1);
+        expect(result.current.currentPageEnd).toBe(
+          Math.min(scenario.items, result.current.pageSize)
+        );
+        
+        // Pagination text should be appropriate
+        if (scenario.expectedPages === 1) {
+          expect(result.current.paginationText).toContain(`[${scenario.items} items]`);
+        } else {
+          expect(result.current.paginationText).toContain('Page 1/');
+        }
       });
-      expect(state.page).toBe(2);
-      expect(state.selectedIndex).toBe(24);
+    });
 
-      // Step 4: Return to first page
-      state = new AppState({
-        ...state,
-        selectedIndex: 0,
-        page: 0
+    test('should handle navigation between pages correctly', () => {
+      const totalItems = 50;
+      
+      // Test each page
+      for (let page = 0; page < 3; page++) {
+        const {result} = renderHook(() => usePagination(totalItems, page));
+        
+        expect(result.current.currentPageStart).toBe(page * 19 + 1);
+        expect(result.current.currentPageEnd).toBe(
+          Math.min((page + 1) * 19, totalItems)
+        );
+        
+        // Verify page numbering (1-based for display)
+        if (result.current.totalPages > 1) {
+          expect(result.current.paginationText).toContain(`Page ${page + 1}/`);
+        }
+      }
+    });
+
+    test('should handle edge cases gracefully', () => {
+      // Test with 0 items
+      const {result: emptyResult} = renderHook(() => usePagination(0, 0));
+      expect(emptyResult.current.totalPages).toBe(1);
+      expect(emptyResult.current.paginationText).toContain('[0 items]');
+
+      // Test with very large page number (should not crash)
+      const {result: largePageResult} = renderHook(() => usePagination(10, 100));
+      expect(largePageResult.current.currentPageStart).toBeDefined();
+      expect(largePageResult.current.currentPageEnd).toBeDefined();
+    });
+  });
+
+  describe('Terminal dimension integration', () => {
+    test('should handle extreme terminal sizes', () => {
+      const extremeCases = [
+        {rows: 3, columns: 20, expectMinimal: true},
+        {rows: 100, columns: 200, expectLarge: true},
+        {rows: 1, columns: 1, expectMinimum: true}
+      ];
+
+      extremeCases.forEach(({rows, columns, expectMinimal, expectLarge, expectMinimum}) => {
+        mockUseTerminalDimensions.mockReturnValue({rows, columns});
+        
+        const {result} = renderHook(() => usePagination(100, 0));
+        
+        if (expectMinimum) {
+          expect(result.current.pageSize).toBe(1);
+        } else if (expectMinimal) {
+          expect(result.current.pageSize).toBeLessThan(10);
+        } else if (expectLarge) {
+          expect(result.current.pageSize).toBeGreaterThan(50);
+        }
+        
+        // All cases should have valid pagination
+        expect(result.current.totalPages).toBeGreaterThan(0);
+        expect(result.current.currentPageStart).toBeGreaterThan(0);
+        expect(result.current.currentPageEnd).toBeGreaterThanOrEqual(result.current.currentPageStart);
       });
-      expect(state.page).toBe(0);
-      expect(state.selectedIndex).toBe(0);
     });
   });
 });
