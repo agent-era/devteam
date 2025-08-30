@@ -155,7 +155,7 @@ function generateMainListOutput(): string {
   const projects = Array.from(memoryStore.projects.values());
 
   if (worktrees.length === 0 && projects.length === 0) {
-    return 'No worktrees found.\nEnsure your projects live under ~/projects and have worktrees in -branches folders.\nPress q to quit.';
+    return 'No worktrees found.\nEnsure your projects have worktrees in -branches folders.\nPress q to quit.';
   }
 
   // Use centralized pagination calculation
