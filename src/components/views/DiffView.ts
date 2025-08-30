@@ -13,7 +13,7 @@ import {runCommand} from '../../utils.js';
 import CommentInputDialog from '../dialogs/CommentInputDialog.js';
 import SessionWaitingDialog from '../dialogs/SessionWaitingDialog.js';
 import UnsubmittedCommentsDialog from '../dialogs/UnsubmittedCommentsDialog.js';
-import {truncateDisplay, padEndDisplay} from '../../shared/utils/formatting.js';
+import {truncateDisplay, padEndDisplay, stringDisplayWidth} from '../../shared/utils/formatting.js';
 import {LineWrapper} from '../../shared/utils/lineWrapper.js';
 import {ViewportCalculator} from '../../shared/utils/viewport.js';
 
@@ -1168,7 +1168,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                     h(Text, {
                       bold: isCurrentLine,
                       backgroundColor: isCurrentLine ? 'blue' : undefined
-                    }, ' '.repeat(Math.max(0, paneWidth - truncatedText.length - 5)))
+                    }, ' '.repeat(Math.max(0, paneWidth - stringDisplayWidth(truncatedText) - 5)))
                   );
                 } else {
                   leftElement = h(Box, {flexDirection: 'row'},
@@ -1180,7 +1180,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                     h(Text, {
                       bold: isCurrentLine,
                       backgroundColor: isCurrentLine ? 'blue' : undefined
-                    }, ' '.repeat(Math.max(0, paneWidth - truncatedText.length - 1)))
+                    }, ' '.repeat(Math.max(0, paneWidth - stringDisplayWidth(truncatedText) - 1)))
                   );
                 }
               }
@@ -1229,7 +1229,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                   h(Text, {
                     bold: isCurrentLine,
                     backgroundColor: isCurrentLine ? 'blue' : undefined
-                  }, ' '.repeat(Math.max(0, paneWidth - truncatedText.length - 1)))
+                  }, ' '.repeat(Math.max(0, paneWidth - stringDisplayWidth(truncatedText) - 1)))
                 );
               }
             } else {
