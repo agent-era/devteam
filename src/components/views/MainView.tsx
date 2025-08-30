@@ -1,7 +1,7 @@
 import React, {useMemo, useCallback} from 'react';
 import {Box, Text} from 'ink';
 import type {WorktreeInfo} from '../../models.js';
-import {calculatePaginationInfo} from '../../utils/pagination.js';
+import {calculatePaginationInfo, calculatePageSize} from '../../utils/pagination.js';
 import {useTerminalDimensions} from '../../hooks/useTerminalDimensions.js';
 import {useColumnWidths} from './MainView/hooks/useColumnWidths.js';
 import {WorktreeRow} from './MainView/WorktreeRow.js';
@@ -36,24 +36,32 @@ export default function MainView({
   page = 0,
   pageSize = 20
 }: Props) {
-  const {columns: terminalWidth} = useTerminalDimensions();
+  const {rows: terminalRows, columns: terminalWidth} = useTerminalDimensions();
   
-  const columnWidths = useColumnWidths(worktrees, terminalWidth, page, pageSize);
+  // Safety net: clamp visible rows to actual terminal capacity
+  // FullScreen intentionally leaves one row free to avoid bottom-line scroll.
+  const effectiveRows = Math.max(1, terminalRows - 1);
+  const maxVisibleRows = calculatePageSize(effectiveRows, terminalWidth);
+  const safePageSize = Math.max(1, Math.min(pageSize, maxVisibleRows));
+
+  const columnWidths = useColumnWidths(worktrees, terminalWidth, page, safePageSize);
   
   const paginationInfo = useMemo(() => 
+    // Keep pagination info based on requested pageSize for stability
     calculatePaginationInfo(worktrees.length, page, pageSize),
     [worktrees.length, page, pageSize]
   );
   
   const pageItems = useMemo(() => {
     const start = page * pageSize;
-    return worktrees.slice(start, start + pageSize);
-  }, [worktrees, page, pageSize]);
+    return worktrees.slice(start, start + safePageSize);
+  }, [worktrees, page, pageSize, safePageSize]);
   
   const headerText = useMemo(() => {
-    const base = 'Enter attach, n new, a archive, x exec, d diff, s shell, q quit';
-    return `${base}${paginationInfo.paginationText}`;
-  }, [paginationInfo.paginationText]);
+    // Keep header compact and single-line to avoid wrapping
+    // Pagination details are shown in the footer when applicable
+    return 'Enter attach, n new, a archive, x exec, d diff, s shell, q quit';
+  }, []);
   
   const getRowKey = useCallback((worktree: WorktreeInfo, index: number) => 
     getWorktreeKey(worktree, index), []
@@ -73,7 +81,7 @@ export default function MainView({
   return (
     <Box flexDirection="column">
       <Box marginBottom={1}>
-        <Text color="magenta">{headerText}</Text>
+        <Text color="magenta" wrap="truncate">{headerText}</Text>
       </Box>
       
       <TableHeader columnWidths={columnWidths} />

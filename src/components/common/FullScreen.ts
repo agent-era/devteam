@@ -34,6 +34,7 @@ export default function FullScreen(props: {children: any; enableAltScreen?: bool
     return () => { stdout.off?.('resize', onResize as any); };
   }, [stdout]);
 
-  return h(Box, {width: dims.columns, height: dims.rows, flexDirection: 'column'}, props.children);
+  // Leave one row at the bottom to avoid terminal scroll on last-line newline
+  const usableRows = Math.max(1, (dims.rows || 1) - 1);
+  return h(Box, {width: dims.columns, height: usableRows, flexDirection: 'column'}, props.children);
 }
-
