@@ -162,7 +162,7 @@ export default function BranchPickerDialog({branches, onSubmit, onCancel, onRefr
   return h(
     Box, {flexDirection: 'column'},
     h(Text, {color: 'cyan'}, 'Create from Remote Branch'),
-    h(Text, {color: 'gray'}, `Type to filter, j/k arrows, PgUp/PgDn, 1-9 jump, r refresh, Enter select, ESC cancel  [${Math.floor(selected / pageSize) + 1}/${Math.max(1, Math.ceil(filtered.length / pageSize))}]`),
+    h(Text, {color: 'gray'}, `Type to filter, j/k arrows, PgUp/PgDn (Shift+PgUp/PgDn on macOS), 1-9 jump, r refresh, Enter select, ESC cancel  [${Math.floor(selected / pageSize) + 1}/${Math.max(1, Math.ceil(filtered.length / pageSize))}]`),
     h(Box, {flexDirection: 'row'}, 
       h(Text, {color: 'gray'}, 'Filter: '),
       filterInput.renderText(' ')

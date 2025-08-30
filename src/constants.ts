@@ -101,7 +101,7 @@ export const HELP_SECTIONS: string[] = [
   '',
   'NAVIGATION:',
   '  ↑/↓, j/k    Navigate list',
-  '  PgUp/PgDn   Previous/next page',
+  '  PgUp/PgDn   Previous/next page (Shift+PgUp/PgDn on macOS)',
   '  < / >       Previous/next page',
   '  1-9         Select item on current page',
   '  Enter       Open/create session',

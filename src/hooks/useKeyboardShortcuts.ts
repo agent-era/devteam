@@ -108,6 +108,12 @@ export function useKeyboardShortcuts(
       } else if (input === '\u001b[5~') { // Page Up  
         actions.onPreviousPage?.();
       }
+      // Shift+Page navigation keys (for macOS Terminal compatibility)
+      else if (input === '\u001b[6;2~') { // Shift+Page Down
+        actions.onNextPage?.();
+      } else if (input === '\u001b[5;2~') { // Shift+Page Up  
+        actions.onPreviousPage?.();
+      }
       
       // Home and End keys for first/last item
       else if (input === '\u001b[H' || input === '\u001b[1~') { // Home
