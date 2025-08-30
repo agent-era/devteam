@@ -92,7 +92,7 @@ describe('Fake Services Unit Tests', () => {
     });
   });
 
-  describe('Integration', () => {
+  describe('Service Interactions', () => {
     test('should work together for git and tmux operations', () => {
       setupTestProject('integration-test');
       

@@ -472,7 +472,7 @@ ${lines.join('\n')}`;
     });
   });
 
-  describe('Diff View Integration', () => {
+  describe('Diff View Navigation', () => {
     test('should close diff view and return to main list', async () => {
       // Setup: Worktree in diff view
       setupBasicProject('close-project');

@@ -33,12 +33,12 @@ function TestServicesComponent() {
   );
 }
 
-describe('App Integration Tests', () => {
+describe('App Services E2E', () => {
   beforeEach(() => {
     resetTestData();
   });
 
-  describe('Services Integration', () => {
+  describe('Services with Contexts', () => {
     test('should provide contexts for worktree operations', () => {
       setupTestProject('test-project');
       
