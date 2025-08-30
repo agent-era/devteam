@@ -4,7 +4,7 @@ import {GitHubService} from '../services/GitHubService.js';
 import {GitService} from '../services/GitService.js';
 import {PRStatusCacheService} from '../services/PRStatusCacheService.js';
 import {PR_REFRESH_DURATION} from '../constants.js';
-import {logError, logInfo} from '../shared/utils/logger.js';
+import {logError, logDebug} from '../shared/utils/logger.js';
 
 const h = React.createElement;
 
@@ -17,6 +17,7 @@ interface GitHubContextType {
   // Operations
   refreshPRStatus: (worktrees: WorktreeInfo[], visibleOnly?: boolean) => Promise<void>;
   refreshPRForWorktree: (worktreePath: string) => Promise<PRStatus | null>;
+  forceRefreshVisiblePRs: (worktrees: WorktreeInfo[]) => Promise<void>;
   getPRStatus: (worktreePath: string) => PRStatus;
   setVisibleWorktrees: (worktreePaths: string[]) => void;
   
@@ -131,7 +132,7 @@ export function GitHubProvider({children}: GitHubProviderProps) {
         }
       }
       
-      logInfo(`PR refresh: ${worktrees.length} worktrees requested, 0 need refresh (${worktrees.length} cached)`);
+      logDebug(`PR refresh: ${worktrees.length} worktrees requested, 0 need refresh (${worktrees.length} cached)`);
       
       if (Object.keys(cached).length > 0) {
         setPullRequests(prev => ({...prev, ...cached}));
@@ -141,7 +142,7 @@ export function GitHubProvider({children}: GitHubProviderProps) {
     }
     
     const cachedCount = worktrees.length - worktreesToRefresh.length;
-    logInfo(`PR refresh: ${worktrees.length} worktrees requested, ${worktreesToRefresh.length} need refresh (${cachedCount} cached)`);
+    logDebug(`PR refresh: ${worktrees.length} worktrees requested, ${worktreesToRefresh.length} need refresh (${cachedCount} cached)`);
     
     setLoading(true);
     try {
@@ -231,7 +232,7 @@ export function GitHubProvider({children}: GitHubProviderProps) {
         // Invalidate cache for any PRs found to be merged
         for (const wt of openPassingPRs) {
           if (wt.pr?.number && mergedPRNumbers.includes(wt.pr.number)) {
-            logInfo(`Found merged PR #${wt.pr.number} via git history, invalidating cache`);
+            logDebug(`Found merged PR #${wt.pr.number} via git history, invalidating cache`);
             cacheService.invalidateByPRNumber(wt.pr.number);
           }
         }
@@ -275,6 +276,26 @@ export function GitHubProvider({children}: GitHubProviderProps) {
       return null;
     }
   }, [gitHubService, cacheService]);
+
+  const forceRefreshVisiblePRs = useCallback(async (worktrees: WorktreeInfo[]): Promise<void> => {
+    if (loading || worktrees.length === 0) return;
+    
+    // Extract worktree paths
+    const worktreePaths = worktrees.map(wt => wt.path);
+    
+    // Invalidate cache for these specific worktrees
+    cacheService.invalidateMultiple(worktreePaths);
+    
+    // Force refresh by calling the internal refresh method
+    // Convert WorktreeInfo to the minimal format expected by refreshPRStatusInternal
+    const minimalWorktrees = worktrees.map(wt => ({
+      project: wt.project,
+      path: wt.path,
+      is_archived: wt.is_archived || false
+    }));
+    
+    await refreshPRStatusInternal(minimalWorktrees, false);
+  }, [loading, cacheService, refreshPRStatusInternal]);
 
   const getPRStatus = useCallback((worktreePath: string): PRStatus => {
     // Always return a PRStatus object, never null/undefined
@@ -349,6 +370,7 @@ export function GitHubProvider({children}: GitHubProviderProps) {
     // Operations
     refreshPRStatus,
     refreshPRForWorktree,
+    forceRefreshVisiblePRs,
     getPRStatus,
     setVisibleWorktrees: setVisibleWorktreesCallback,
     

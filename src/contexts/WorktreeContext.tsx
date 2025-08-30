@@ -28,7 +28,7 @@ import {
 } from '../utils.js';
 import {useInputFocus} from './InputFocusContext.js';
 import {useGitHubContext} from './GitHubContext.js';
-import {logInfo, logDebug} from '../shared/utils/logger.js';
+import {logDebug} from '../shared/utils/logger.js';
 import {Timer} from '../shared/utils/timing.js';
 
 const h = React.createElement;
@@ -46,6 +46,7 @@ interface WorktreeContextType {
   
   // Data operations
   refresh: (refreshPRs?: 'all' | 'visible' | 'none') => Promise<void>;
+  forceRefreshVisible: (currentPage: number, pageSize: number) => Promise<void>;
   refreshSelected: () => void;
   refreshPRSelective: () => Promise<void>;
   
@@ -86,7 +87,7 @@ export function WorktreeProvider({
   const {isAnyDialogFocused} = useInputFocus();
   
   // Access GitHub context directly instead of through props
-  const {getPRStatus, setVisibleWorktrees, refreshPRStatus, refreshPRForWorktree} = useGitHubContext();
+  const {getPRStatus, setVisibleWorktrees, refreshPRStatus, refreshPRForWorktree, forceRefreshVisiblePRs} = useGitHubContext();
 
   // Service instances - stable across re-renders
   const gitService = useMemo(() => new GitService(), []);
@@ -208,7 +209,7 @@ export function WorktreeProvider({
     setLoading(true);
     
     try {
-      logInfo(`[Refresh.Full] Starting complete refresh`);
+      logDebug(`[Refresh.Full] Starting complete refresh`);
       
       const rawList = await collectWorktrees();
       const enrichedList = await attachRuntimeData(rawList, getPRStatus);
@@ -235,16 +236,49 @@ export function WorktreeProvider({
       }
       
       const timing = timer.elapsed();
-      logInfo(`[Refresh.Full] Complete: ${enrichedList.length} worktrees in ${timing.formatted}`);
+      logDebug(`[Refresh.Full] Complete: ${enrichedList.length} worktrees in ${timing.formatted}`);
       
     } catch (error) {
       const timing = timer.elapsed();
-      logInfo(`[Refresh.Full] Failed in ${timing.formatted}: ${error instanceof Error ? error.message : String(error)}`);
+      logDebug(`[Refresh.Full] Failed in ${timing.formatted}: ${error instanceof Error ? error.message : String(error)}`);
       console.error('Failed to refresh worktrees:', error);
     } finally {
       setLoading(false);
     }
   }, [loading, collectWorktrees, attachRuntimeData, getPRStatus, setVisibleWorktrees, refreshPRStatus]);
+
+  const forceRefreshVisible = useCallback(async (currentPage: number, pageSize: number) => {
+    if (loading || worktrees.length === 0) return;
+    
+    // Calculate visible worktrees based on pagination
+    const startIndex = currentPage * pageSize;
+    const endIndex = Math.min(startIndex + pageSize, worktrees.length);
+    const visibleWorktrees = worktrees.slice(startIndex, endIndex);
+    
+    if (visibleWorktrees.length === 0) return;
+    
+    logDebug(`[Force Refresh] Refreshing ${visibleWorktrees.length} visible PRs on page ${currentPage + 1}`);
+    
+    try {
+      // Force refresh visible PRs by invalidating their cache first
+      await forceRefreshVisiblePRs(visibleWorktrees);
+      
+      // Update worktrees with fresh PR data
+      const updatedWorktrees = [...worktrees];
+      for (let i = startIndex; i < endIndex; i++) {
+        if (updatedWorktrees[i]) {
+          updatedWorktrees[i] = new WorktreeInfo({
+            ...updatedWorktrees[i],
+            pr: getPRStatus(updatedWorktrees[i].path)
+          });
+        }
+      }
+      setWorktrees(updatedWorktrees);
+      setLastRefreshed(Date.now());
+    } catch (error) {
+      console.error('Failed to force refresh visible PRs:', error);
+    }
+  }, [loading, worktrees, forceRefreshVisiblePRs, getPRStatus]);
 
   const refreshSelected = useCallback(async () => {
     const selected = worktrees[selectedIndex];
@@ -269,7 +303,7 @@ export function WorktreeProvider({
         // A push occurred - invalidate PR cache and refresh
         const pr = getPRStatus(selected.path);
         if (pr && pr.state === 'OPEN' && refreshPRForWorktree) {
-          logInfo(`Detected push for ${selected.feature}, invalidating PR cache and refreshing`);
+          logDebug(`Detected push for ${selected.feature}, invalidating PR cache and refreshing`);
           // The GitHubContext will handle cache invalidation in refreshPRForWorktree
           await refreshPRForWorktree(selected.path);
         }
@@ -758,6 +792,7 @@ export function WorktreeProvider({
     
     // Data operations
     refresh,
+    forceRefreshVisible,
     refreshSelected,
     refreshPRSelective,
     
