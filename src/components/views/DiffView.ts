@@ -1,5 +1,5 @@
 import React, {useEffect, useMemo, useState} from 'react';
-import {Box, Text, Transform, useInput, useStdin} from 'ink';
+import {Box, Text, useInput, useStdin} from 'ink';
 import SyntaxHighlight from 'ink-syntax-highlight';
 const h = React.createElement;
 import {runCommandAsync} from '../../utils.js';
@@ -1162,22 +1162,30 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                     bold: isCurrentLine,
                     backgroundColor: isCurrentLine ? 'blue' : undefined
                   }, ' [C] ');
-                  leftElement = h(Transform, {
-                    transform: (output) => padEndDisplay(output, paneWidth)
-                  }, h(Box, {flexDirection: 'row'},
+                  leftElement = h(Box, {
+                    flexDirection: 'row',
+                    width: paneWidth
+                  },
                     commentText,
-                    leftSyntaxElement
-                  ));
+                    h(Box, {
+                      flexShrink: 1,
+                      flexGrow: 0
+                    }, leftSyntaxElement)
+                  );
                 } else {
-                  leftElement = h(Transform, {
-                    transform: (output) => padEndDisplay(output, paneWidth)
-                  }, h(Box, {flexDirection: 'row'},
+                  leftElement = h(Box, {
+                    flexDirection: 'row',
+                    width: paneWidth
+                  },
                     h(Text, {
                       bold: isCurrentLine,
                       backgroundColor: isCurrentLine ? 'blue' : undefined
                     }, ' '),
-                    leftSyntaxElement
-                  ));
+                    h(Box, {
+                      flexShrink: 1,
+                      flexGrow: 0
+                    }, leftSyntaxElement)
+                  );
                 }
               }
             } else {
@@ -1214,16 +1222,20 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                   sideBySideLine.right.type
                 );
                 
-                // Create the element with proper padding using Transform
-                rightElement = h(Transform, {
-                  transform: (output) => padEndDisplay(output, paneWidth)
-                }, h(Box, {flexDirection: 'row'},
+                // Create the element with syntax highlighting constrained to paneWidth
+                rightElement = h(Box, {
+                  flexDirection: 'row',
+                  width: paneWidth
+                },
                   h(Text, {
                     bold: isCurrentLine,
                     backgroundColor: isCurrentLine ? 'blue' : undefined
                   }, ' '),
-                  rightSyntaxElement
-                ));
+                  h(Box, {
+                    flexShrink: 1,
+                    flexGrow: 0
+                  }, rightSyntaxElement)
+                );
               }
             } else {
               rightElement = h(Text, {
@@ -1283,25 +1295,33 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                   
                   // Handle comment indicator for first segment
                   if (leftSegment.includes('[C] ') && segIdx === 0) {
-                    leftElement = h(Transform, {
-                      transform: (output) => padEndDisplay(output, paneWidth)
-                    }, h(Box, {flexDirection: 'row'},
+                    leftElement = h(Box, {
+                      flexDirection: 'row',
+                      width: paneWidth
+                    },
                       h(Text, {
                         bold: isCurrentLine,
                         backgroundColor: isCurrentLine ? 'blue' : undefined
                       }, ' [C] '),
-                      leftSyntaxElement
-                    ));
+                      h(Box, {
+                        flexShrink: 1,
+                        flexGrow: 0
+                      }, leftSyntaxElement)
+                    );
                   } else {
-                    leftElement = h(Transform, {
-                      transform: (output) => padEndDisplay(output, paneWidth)
-                    }, h(Box, {flexDirection: 'row'},
+                    leftElement = h(Box, {
+                      flexDirection: 'row',
+                      width: paneWidth
+                    },
                       h(Text, {
                         bold: isCurrentLine,
                         backgroundColor: isCurrentLine ? 'blue' : undefined
                       }, ' '),
-                      leftSyntaxElement
-                    ));
+                      h(Box, {
+                        flexShrink: 1,
+                        flexGrow: 0
+                      }, leftSyntaxElement)
+                    );
                   }
                 }
               } else {
@@ -1335,15 +1355,19 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                     sideBySideLine.right.type
                   );
                   
-                  rightElement = h(Transform, {
-                    transform: (output) => padEndDisplay(output, paneWidth)
-                  }, h(Box, {flexDirection: 'row'},
+                  rightElement = h(Box, {
+                    flexDirection: 'row',
+                    width: paneWidth
+                  },
                     h(Text, {
                       bold: isCurrentLine,
                       backgroundColor: isCurrentLine ? 'blue' : undefined
                     }, ' '),
-                    rightSyntaxElement
-                  ));
+                    h(Box, {
+                      flexShrink: 1,
+                      flexGrow: 0
+                    }, rightSyntaxElement)
+                  );
                 }
               } else {
                 rightElement = h(Text, {
