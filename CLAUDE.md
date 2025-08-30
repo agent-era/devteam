@@ -38,7 +38,6 @@ The app monitors Claude AI status in tmux panes:
 - Waiting: Shows numbered prompt (e.g., "1. ")
 - Idle: Shows standard prompt
 - Thinking: Shows thinking indicator
-
 ## Project Structure
 
 ```
@@ -89,7 +88,6 @@ tests/
 │   ├── renderApp.tsx           # Test app rendering
 │   └── testHelpers.ts          # Setup helpers
 ├── unit/                  # Unit tests
-├── integration/           # Integration tests
 └── e2e/                   # End-to-end tests
 ```
 
@@ -190,7 +188,7 @@ tests/
 
 ### Test Structure
 
-1. **Unit Tests** (`tests/unit/`): Test services in isolation
+1. **Unit Tests** (`tests/unit/`): Test services and state logic in isolation
    ```typescript
    test('should create worktree', () => {
      const gitService = new FakeGitService();
@@ -199,17 +197,7 @@ tests/
    });
    ```
 
-2. **Integration Tests** (`tests/integration/`): Test service interactions
-   ```typescript
-   test('should create feature with session', () => {
-     const {result} = renderApp();
-     // Simulate user actions
-     result.rerender();
-     expect(memoryStore.sessions.size).toBe(1);
-   });
-   ```
-
-3. **E2E Tests** (`tests/e2e/`): Full user workflows
+2. **E2E Tests** (`tests/e2e/`): Full user workflows and cross-service interactions
    ```typescript
    test('complete feature workflow', async () => {
      const {result, stdin} = renderApp();
@@ -497,8 +485,7 @@ npm link            # Install globally as 'dev-sessions'
 
 When adding features:
 - [ ] Add unit tests for new services
-- [ ] Add integration tests for service interactions
-- [ ] Add E2E tests for user workflows
+- [ ] Add E2E tests for user workflows and cross-service interactions
 - [ ] Update fake implementations
 - [ ] Verify TypeScript types compile
 - [ ] Test error cases and edge conditions
