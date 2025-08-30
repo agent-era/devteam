@@ -269,6 +269,82 @@ describe('Comment Send to Claude E2E', () => {
     mockRunInteractive.mockRestore();
   });
 
+  test('should include line text with comments when sending to Claude', async () => {
+    // Setup: Create a project with a worktree
+    setupBasicProject('line-text-project');
+    const worktree = setupTestWorktree('line-text-project', 'line-text-feature');
+    const worktreePath = worktree.path;
+    
+    // Get comment store for this worktree
+    const commentStore = commentStoreManager.getStore(worktreePath);
+    
+    // Add multiple comments with different line text
+    commentStore.addComment(15, 'app.ts', 'let unchangedValue = 5;', 'This variable should be const');
+    commentStore.addComment(42, 'utils.ts', 'await fetchData();', 'Add error handling here');
+    commentStore.addComment(8, 'config.ts', 'const API_URL = "";', 'URL should not be empty');
+    
+    expect(commentStore.count).toBe(3);
+    
+    // Test the new format in both formatCommentsAsPrompt and sendCommentsViaAltEnter
+    const comments = commentStore.getAllComments();
+    
+    // Test formatCommentsAsPrompt format (used when Claude is not running)
+    let prompt = "Please address the following code review comments:\\n\\n";
+    
+    const commentsByFile: {[key: string]: typeof comments} = {};
+    comments.forEach(comment => {
+      if (!commentsByFile[comment.fileName]) {
+        commentsByFile[comment.fileName] = [];
+      }
+      commentsByFile[comment.fileName].push(comment);
+    });
+
+    Object.entries(commentsByFile).forEach(([fileName, fileComments]) => {
+      prompt += `File: ${fileName}\\n`;
+      fileComments.forEach(comment => {
+        prompt += `  Line ${comment.lineIndex + 1}: \`${comment.lineText}\`\\n`;
+        prompt += `  Comment: ${comment.commentText}\\n`;
+      });
+      prompt += "\\n";
+    });
+    
+    // Verify the prompt includes line text with proper formatting
+    expect(prompt).toContain("Line 16: `let unchangedValue = 5;`");
+    expect(prompt).toContain("Comment: This variable should be const");
+    expect(prompt).toContain("Line 43: `await fetchData();`");
+    expect(prompt).toContain("Comment: Add error handling here");
+    expect(prompt).toContain("Line 9: `const API_URL = \"\";`");
+    expect(prompt).toContain("Comment: URL should not be empty");
+    
+    // Test sendCommentsViaAltEnter format (used when Claude is already running)
+    const messageLines: string[] = [];
+    messageLines.push("Please address the following code review comments:");
+    messageLines.push("");
+    
+    Object.entries(commentsByFile).forEach(([fileName, fileComments]) => {
+      messageLines.push(`File: ${fileName}`);
+      fileComments.forEach(comment => {
+        messageLines.push(`  Line ${comment.lineIndex + 1}: \`${comment.lineText}\``);
+        messageLines.push(`  Comment: ${comment.commentText}`);
+      });
+      messageLines.push("");
+    });
+    
+    // Verify message lines include line text with proper formatting
+    const messageText = messageLines.join('\n');
+    expect(messageText).toContain("Line 16: `let unchangedValue = 5;`");
+    expect(messageText).toContain("Comment: This variable should be const");
+    expect(messageText).toContain("Line 43: `await fetchData();`");
+    expect(messageText).toContain("Comment: Add error handling here");
+    expect(messageText).toContain("Line 9: `const API_URL = \"\";`");
+    expect(messageText).toContain("Comment: URL should not be empty");
+    
+    // Verify structure: each comment should have line with code, then comment
+    expect(messageText).toMatch(/Line \d+: `.*`\n\s*Comment: .*/);
+    
+    commentStore.clear();
+  });
+
   test('should send comments when Claude is idle', async () => {
     setupBasicProject('idle-project');
     const worktree = setupTestWorktree('idle-project', 'idle-feature');
@@ -292,7 +368,8 @@ describe('Comment Send to Claude E2E', () => {
       "Please address the following code review comments:",
       "",
       "File: test.ts",
-      "  Line 11: Test comment",
+      "  Line 11: `const test = true;`",
+      "  Comment: Test comment",
       ""
     ];
     
