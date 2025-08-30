@@ -22,6 +22,7 @@ export interface KeyboardActions {
   onNumberSelect?: (number: number) => void;
   onExecuteRun?: () => void;
   onConfigureRun?: () => void;
+  onToolSwitch?: () => void;
 }
 
 export interface KeyboardShortcutsOptions {
@@ -87,6 +88,7 @@ export function useKeyboardShortcuts(
       else if (input === 'D') actions.onDiffUncommitted?.();
       else if (input === 'x') actions.onExecuteRun?.();
       else if (input === 'X') actions.onConfigureRun?.();
+      else if (input === 't') actions.onToolSwitch?.();
 
       // Pagination
       else if (input === '<' || input === ',') actions.onPreviousPage?.();

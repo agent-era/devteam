@@ -74,7 +74,41 @@ export const ASCII_SYMBOLS = {
   PENDING: '~',
 };
 
-// Claude status patterns (Python parity)
+// AI tool configurations with detection patterns
+export const AI_TOOLS = {
+  claude: {
+    name: 'Claude',
+    command: 'claude',
+    processPatterns: ['claude'],
+    statusPatterns: {
+      working: 'esc to interrupt',
+      waiting_numbered: ['❯', String.raw`\d+\.\s+\w+`],
+      idle_prompt: ['│ >', '│']
+    }
+  },
+  codex: {
+    name: 'OpenAI Codex',
+    command: 'codex',
+    processPatterns: ['codex', 'openai'],
+    statusPatterns: {
+      working: 'generating',
+      waiting_numbered: ['>', String.raw`\d+\.`],
+      idle_prompt: ['>>>', '']
+    }
+  },
+  gemini: {
+    name: 'Gemini',
+    command: 'gemini',
+    processPatterns: ['gemini', 'bard'],
+    statusPatterns: {
+      working: 'thinking',
+      waiting_numbered: ['gemini>', String.raw`\d+:`],
+      idle_prompt: ['gemini>', '']
+    }
+  }
+} as const;
+
+// Claude status patterns (Python parity) - kept for backward compatibility
 export const CLAUDE_PATTERNS = {
   working: 'esc to interrupt',
   waiting_numbered: ['❯', String.raw`\d+\.\s+\w+`],
@@ -114,6 +148,7 @@ export const HELP_SECTIONS: string[] = [
   '  s           Open shell in worktree',
   '  x           Execute/run program in worktree',
   '  X           Create/update run config with Claude',
+  '  t           Switch AI tool for session',
   '',
   'NEW FEATURE DIALOG:',
   '  Type        Filter projects',

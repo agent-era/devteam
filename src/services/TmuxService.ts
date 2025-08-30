@@ -1,9 +1,11 @@
 import {commandExitCode, runCommandQuick, runCommandQuickAsync, runCommand, runInteractive} from '../utils.js';
-import {SESSION_PREFIX, CLAUDE_PATTERNS} from '../constants.js';
+import {SESSION_PREFIX, CLAUDE_PATTERNS, AI_TOOLS} from '../constants.js';
 import {logDebug} from '../shared/utils/logger.js';
 import {Timer} from '../shared/utils/timing.js';
+import {AIStatus, AITool} from '../models.js';
 
-export type ClaudeStatus = 'not_running' | 'working' | 'waiting' | 'idle' | 'active';
+// Backward compatibility
+export type ClaudeStatus = AIStatus;
 
 export class TmuxService {
   sessionName(project: string, feature: string): string {
@@ -32,22 +34,29 @@ export class TmuxService {
   }
 
   async capturePane(session: string): Promise<string> {
-    const target = await this.findClaudePaneTarget(session) || `${session}:0.0`;
+    const target = await this.findAIPaneTarget(session) || `${session}:0.0`;
     const output = await runCommandQuickAsync(['tmux', 'capture-pane', '-p', '-t', target, '-S', '-50']);
     
     return output || '';
   }
 
-  async getClaudeStatus(session: string): Promise<ClaudeStatus> {
+  async getAIStatus(session: string): Promise<{tool: AITool, status: AIStatus}> {
     const text = await this.capturePane(session);
-    if (!text) return 'not_running';
+    if (!text) return {tool: 'none', status: 'not_running'};
     
-    let status: ClaudeStatus = 'active';
-    if (this.isClaudeWorking(text)) status = 'working';
-    else if (this.isClaudeWaiting(text)) status = 'waiting';
-    else if (this.isClaudeIdle(text)) status = 'idle';
+    // Detect which AI tool is running based on pane process
+    const aiTool = await this.detectSessionAITool(session);
+    if (aiTool === 'none') return {tool: 'none', status: 'not_running'};
     
-    return status;
+    // Get status based on the detected tool's patterns
+    const status = this.getStatusForTool(text, aiTool);
+    return {tool: aiTool, status};
+  }
+
+  // Backward compatibility
+  async getClaudeStatus(session: string): Promise<ClaudeStatus> {
+    const result = await this.getAIStatus(session);
+    return result.status;
   }
 
   killSession(session: string): string {
@@ -155,17 +164,17 @@ export class TmuxService {
   }
 
   // Private helper methods
-  private async findClaudePaneTarget(session: string): Promise<string | null> {
+  private async findAIPaneTarget(session: string): Promise<string | null> {
     const panes = await this.listPanes(session);
     if (!panes) return `${session}:0.0`;
     
     const lines = panes.split('\n').filter(Boolean);
     
-    // Look for Claude-related processes
+    // Look for AI tool processes
     for (const line of lines) {
       const [idx, ...rest] = line.split(' ');
       const command = rest.join(' ').toLowerCase();
-      if (this.isClaudeProcess(command)) {
+      if (this.detectAITool(command) !== 'none') {
         return `${session}:${idx}`;
       }
     }
@@ -175,22 +184,62 @@ export class TmuxService {
     return `${session}:${firstIdx}`;
   }
 
-  private isClaudeProcess(command: string): boolean {
-    return command.includes('claude') || command.includes('node') || command.includes('codex');
+  private detectAITool(command: string): AITool {
+    for (const [tool, config] of Object.entries(AI_TOOLS)) {
+      if (config.processPatterns.some(pattern => command.includes(pattern))) {
+        return tool as AITool;
+      }
+    }
+    return 'none';
   }
 
-  private isClaudeWorking(text: string): boolean {
+  private async detectSessionAITool(session: string): Promise<AITool> {
+    const panes = await this.listPanes(session);
+    if (!panes) return 'none';
+    
+    const lines = panes.split('\n').filter(Boolean);
+    for (const line of lines) {
+      const [, ...rest] = line.split(' ');
+      const command = rest.join(' ').toLowerCase();
+      const tool = this.detectAITool(command);
+      if (tool !== 'none') return tool;
+    }
+    
+    return 'none';
+  }
+
+  private getStatusForTool(text: string, tool: AITool): AIStatus {
+    if (tool === 'none') return 'not_running';
+    
+    const toolConfig = AI_TOOLS[tool];
+    const patterns = toolConfig.statusPatterns;
+    
+    let status: AIStatus = 'active';
+    
+    if (this.isWorking(text, patterns.working)) {
+      status = 'working';
+    } else if (this.isWaiting(text, patterns.waiting_numbered)) {
+      status = 'waiting';
+    } else if (this.isIdle(text, patterns.idle_prompt)) {
+      status = 'idle';
+    }
+    
+    return status;
+  }
+
+  // Generic status detection methods
+  private isWorking(text: string, pattern: string): boolean {
     const lowerText = text.toLowerCase();
-    return typeof CLAUDE_PATTERNS.working === 'string' && lowerText.includes(CLAUDE_PATTERNS.working);
+    return lowerText.includes(pattern.toLowerCase());
   }
 
-  private isClaudeWaiting(text: string): boolean {
-    const [promptSymbol, pattern] = CLAUDE_PATTERNS.waiting_numbered as unknown as [string, string];
+  private isWaiting(text: string, patterns: readonly [string, string]): boolean {
+    const [promptSymbol, pattern] = patterns;
     return text.includes(promptSymbol) && new RegExp(pattern, 'm').test(text);
   }
 
-  private isClaudeIdle(text: string): boolean {
-    const [promptStart, promptEnd] = CLAUDE_PATTERNS.idle_prompt as unknown as [string, string];
+  private isIdle(text: string, patterns: readonly [string, string]): boolean {
+    const [promptStart, promptEnd] = patterns;
     const standardIdle = text.includes(promptStart) && text.trim().endsWith(promptEnd);
     
     if (standardIdle) return true;
@@ -204,6 +253,23 @@ export class TmuxService {
     } catch {}
     
     return false;
+  }
+
+  // Backward compatibility - keep old methods but use new logic
+  private isClaudeProcess(command: string): boolean {
+    return this.detectAITool(command) === 'claude';
+  }
+
+  private isClaudeWorking(text: string): boolean {
+    return this.isWorking(text, CLAUDE_PATTERNS.working);
+  }
+
+  private isClaudeWaiting(text: string): boolean {
+    return this.isWaiting(text, CLAUDE_PATTERNS.waiting_numbered);
+  }
+
+  private isClaudeIdle(text: string): boolean {
+    return this.isIdle(text, CLAUDE_PATTERNS.idle_prompt);
   }
 
   private shouldPreservSession(session: string, validWorktrees: string[]): boolean {

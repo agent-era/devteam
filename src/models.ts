@@ -1,4 +1,8 @@
 import {calculatePageSize} from './utils/pagination.js';
+import {AI_TOOLS} from './constants.js';
+
+export type AIStatus = 'not_running' | 'working' | 'waiting' | 'idle' | 'active';
+export type AITool = keyof typeof AI_TOOLS | 'none';
 
 export class GitStatus {
   has_changes: boolean;
@@ -82,12 +86,27 @@ export class PRStatus {
 export class SessionInfo {
   session_name: string;
   attached: boolean;
-  claude_status: string;
+  ai_status: AIStatus;
+  ai_tool: AITool;
+  // Backward compatibility
+  get claude_status(): string {
+    return this.ai_status;
+  }
+  set claude_status(value: string) {
+    this.ai_status = value as AIStatus;
+  }
   constructor(init: Partial<SessionInfo> = {}) {
     this.session_name = '';
     this.attached = false;
-    this.claude_status = 'not_running';
+    this.ai_status = 'not_running';
+    this.ai_tool = 'none';
     Object.assign(this, init);
+    
+    // Handle backward compatibility during construction
+    if ('claude_status' in init && init.claude_status && !('ai_status' in init)) {
+      this.ai_status = init.claude_status as AIStatus;
+      this.ai_tool = 'claude';
+    }
   }
 }
 
@@ -124,9 +143,9 @@ export class WorktreeInfo {
   }
 
   get needs_attention(): boolean {
-    const cs = (this.session?.claude_status || '').toLowerCase();
-    if (cs.includes('waiting')) return true;
-    if (cs.includes('working')) return false;
+    const aiStatus = this.session?.ai_status || 'not_running';
+    if (aiStatus === 'waiting') return true;
+    if (aiStatus === 'working') return false;
     if (this.git?.has_changes) return true;
     if ((this.git?.ahead || 0) > 0) return true;
     if (this.pr?.needs_attention) return true;
@@ -135,9 +154,9 @@ export class WorktreeInfo {
   }
 
   get action_priority(): number {
-    const cs = (this.session?.claude_status || '').toLowerCase();
-    if (cs.includes('waiting')) return 0;
-    if (cs.includes('working')) return 10;
+    const aiStatus = this.session?.ai_status || 'not_running';
+    if (aiStatus === 'waiting') return 0;
+    if (aiStatus === 'working') return 10;
     if (this.git?.has_changes) return 1;
     if ((this.git?.ahead || 0) > 0) return 2;
     if (this.pr?.needs_attention) return 3;
