@@ -1208,9 +1208,8 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                   backgroundColor: isCurrentLine ? 'blue' : undefined
                 }, padEndDisplay(' ' + rightText, paneWidth));
               } else {
-                // For added lines, apply syntax highlighting with proper truncation
-                const actualRightText = sideBySideLine.right.text || ' ';
-                const truncatedText = truncateDisplay(actualRightText, paneWidth - 1);
+                // For added lines, apply syntax highlighting using already truncated text
+                const truncatedText = rightText;
                 const rightSyntaxElement = renderSyntaxHighlighted(
                   truncatedText, 
                   sideBySideLine.right.fileName, 
