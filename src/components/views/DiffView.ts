@@ -984,7 +984,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
           const fullText = commentIndicator + (unifiedLine.text || ' ');
           
           if (wrapMode === 'truncate') {
-            // Truncate mode with gutter and syntax highlighting
+            // Truncate mode with gutter and diff colors
             if (unifiedLine.type === 'header') {
               const displayText = truncateDisplay(fullText, terminalWidth - 4); // -4 for gutter
               renderedElements.push(h(Box, {
@@ -1045,7 +1045,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
               }
             }
           } else {
-            // Wrap mode with gutter and syntax highlighting
+            // Wrap mode with gutter and diff colors
             const maxWidth = terminalWidth - 4; // -4 for gutter
             const segments = LineWrapper.wrapLine(fullText, maxWidth);
             
