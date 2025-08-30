@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useState, useEffect} from 'react';
 import {Box} from 'ink';
 import MainView from '../components/views/MainView.js';
 import {useWorktreeContext} from '../contexts/WorktreeContext.js';
@@ -30,9 +30,14 @@ export default function WorktreeListScreen({
   onExecuteRun,
   onConfigureRun
 }: WorktreeListScreenProps) {
-  const {worktrees, selectedIndex, selectWorktree, refresh, attachSession, attachShellSession} = useWorktreeContext();
+  const {worktrees, selectedIndex, selectWorktree, refresh, forceRefreshVisible, attachSession, attachShellSession} = useWorktreeContext();
   const pageSize = usePageSize();
   const [currentPage, setCurrentPage] = useState(0);
+
+  // Refresh data when component mounts to ensure it's up to date
+  useEffect(() => {
+    refresh('none').catch(() => {});
+  }, []); // Only on mount
 
   const handleMove = (delta: number) => {
     const nextIndex = selectedIndex + delta;
@@ -132,8 +137,8 @@ export default function WorktreeListScreen({
   };
 
   const handleRefresh = async () => {
-    // Full refresh: worktrees and PR status for visible items only
-    await refresh('visible');
+    // Force refresh visible PRs, ignoring cache TTLs
+    await forceRefreshVisible(currentPage, pageSize);
   };
 
   const handleJumpToFirst = () => {

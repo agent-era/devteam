@@ -105,7 +105,7 @@ describe('InputFocus Context E2E', () => {
     });
   });
 
-  describe('Real-world Integration Scenarios', () => {
+  describe('Real-world Scenarios', () => {
     test('should simulate main screen to dialog workflow', () => {
       const focusState = {
         currentFocus: null as string | null,
@@ -278,7 +278,7 @@ describe('InputFocus Context E2E', () => {
     });
   });
 
-  describe('Integration with Existing Typing Race Fixes', () => {
+  describe('Typing Race Fixes', () => {
     test('should coordinate with useKeyboardShortcuts pattern', () => {
       // Simulate the pattern used in useKeyboardShortcuts.ts
       const keyboardShortcutsSimulation = {

@@ -1,10 +1,10 @@
 import {GitService} from '../../src/services/GitService.js';
 import {GitStatus, ProjectInfo, PRStatus, WorktreeInfo} from '../../src/models.js';
 import {memoryStore} from './stores.js';
-import {BASE_PATH, DIR_BRANCHES_SUFFIX, DIR_ARCHIVED_SUFFIX} from '../../src/constants.js';
+import {DIR_BRANCHES_SUFFIX, DIR_ARCHIVED_SUFFIX} from '../../src/constants.js';
 
 export class FakeGitService extends GitService {
-  constructor(basePath: string = BASE_PATH) {
+  constructor(basePath: string = '/tmp/test-projects') {
     super(basePath);
   }
 

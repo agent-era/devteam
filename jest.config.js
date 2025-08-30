@@ -6,10 +6,11 @@ export default {
     '^(\\.{1,2}/.*)\\.js$': '$1',
     // Mock ink and ink-testing-library to avoid ESM issues
     '^ink$': '<rootDir>/tests/__mocks__/ink.js',
-    '^ink-testing-library$': '<rootDir>/tests/__mocks__/ink-testing-library.js'
+    '^ink-testing-library$': '<rootDir>/tests/__mocks__/ink-testing-library.js',
+    '^ink-syntax-highlight$': '<rootDir>/tests/__mocks__/ink-syntax-highlight.js'
   },
   transformIgnorePatterns: [
-    'node_modules/(?!(ink|ink-testing-library)/)'
+    'node_modules/(?!(ink|ink-testing-library|ink-syntax-highlight)/)'
   ],
   transform: {
     '^.+\\.tsx?$': ['ts-jest', {
