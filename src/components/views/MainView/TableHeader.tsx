@@ -26,7 +26,7 @@ export const TableHeader = memo<TableHeaderProps>(({columnWidths}) => {
           justifyContent={header.justify}
           marginRight={index < headers.length - 1 ? 1 : 0}
         >
-          <Text color="gray" bold>
+          <Text color="gray" bold wrap="truncate">
             {header.text}
           </Text>
         </Box>
