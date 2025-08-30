@@ -183,7 +183,7 @@ describe('Session Management E2E', () => {
     });
   });
 
-  describe('Session Integration with Features', () => {
+  describe('Session with Features', () => {
     test('should update session info when creating new feature', async () => {
       // Setup: Project for creating new feature
       setupBasicProject('my-project');

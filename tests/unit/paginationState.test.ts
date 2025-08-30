@@ -11,7 +11,7 @@ function createMockWorktrees(count: number): WorktreeInfo[] {
   }));
 }
 
-describe('Pagination Integration - State Management', () => {
+describe('Pagination State Management', () => {
   describe('AppState with pagination', () => {
     test('should handle state updates with pagination correctly', () => {
       const worktrees = createMockWorktrees(25);

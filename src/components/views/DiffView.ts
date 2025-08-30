@@ -464,7 +464,8 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     Object.entries(commentsByFile).forEach(([fileName, fileComments]) => {
       prompt += `File: ${fileName}\\n`;
       fileComments.forEach(comment => {
-        prompt += `  Line ${comment.lineIndex + 1}: ${comment.commentText}\\n`;
+        prompt += `  Line ${comment.lineIndex + 1}: \`${comment.lineText}\`\\n`;
+        prompt += `  Comment: ${comment.commentText}\\n`;
       });
       prompt += "\\n";
     });
@@ -539,7 +540,8 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     Object.entries(commentsByFile).forEach(([fileName, fileComments]) => {
       messageLines.push(`File: ${fileName}`);
       fileComments.forEach(comment => {
-        messageLines.push(`  Line ${comment.lineIndex + 1}: ${comment.commentText}`);
+        messageLines.push(`  Line ${comment.lineIndex + 1}: \`${comment.lineText}\``);
+        messageLines.push(`  Comment: ${comment.commentText}`);
       });
       messageLines.push("");
     });
