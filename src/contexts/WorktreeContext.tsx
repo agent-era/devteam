@@ -8,7 +8,6 @@ import {
   CACHE_DURATION,
   AI_STATUS_REFRESH_DURATION,
   DIFF_STATUS_REFRESH_DURATION,
-  BASE_PATH,
   DIR_BRANCHES_SUFFIX,
   DIR_ARCHIVED_SUFFIX,
   ARCHIVE_PREFIX,
@@ -18,6 +17,7 @@ import {
   RUN_CONFIG_CLAUDE_PROMPT,
   TMUX_DISPLAY_TIME,
 } from '../constants.js';
+import {getProjectsDirectory} from '../config.js';
 import {
   ensureDirectory,
   runCommand,
@@ -90,7 +90,7 @@ export function WorktreeProvider({
   const {getPRStatus, setVisibleWorktrees, refreshPRStatus, refreshPRForWorktree, forceRefreshVisiblePRs} = useGitHubContext();
 
   // Service instances - stable across re-renders
-  const gitService = useMemo(() => new GitService(), []);
+  const gitService = useMemo(() => new GitService(getProjectsDirectory()), []);
   const tmuxService = useMemo(() => new TmuxService(), []);
 
   const collectWorktrees = useCallback(async (): Promise<Array<{
@@ -359,7 +359,7 @@ export function WorktreeProvider({
       const created = gitService.createWorktree(projectName, featureName);
       if (!created) return null;
 
-      const worktreePath = path.join(BASE_PATH, `${projectName}${DIR_BRANCHES_SUFFIX}`, featureName);
+      const worktreePath = path.join(gitService.basePath, `${projectName}${DIR_BRANCHES_SUFFIX}`, featureName);
       
       setupWorktreeEnvironment(projectName, worktreePath);
       createTmuxSession(projectName, featureName, worktreePath);
@@ -382,7 +382,7 @@ export function WorktreeProvider({
       const created = gitService.createWorktreeFromRemote(project, remoteBranch, localName);
       if (!created) return false;
 
-      const worktreePath = path.join(BASE_PATH, `${project}${DIR_BRANCHES_SUFFIX}`, localName);
+      const worktreePath = path.join(gitService.basePath, `${project}${DIR_BRANCHES_SUFFIX}`, localName);
       setupWorktreeEnvironment(project, worktreePath);
       createTmuxSession(project, localName, worktreePath);
       
@@ -412,7 +412,7 @@ export function WorktreeProvider({
       
       await terminateFeatureSessions(project, featureName);
       
-      const archivedRoot = path.join(BASE_PATH, `${project}${DIR_ARCHIVED_SUFFIX}`);
+      const archivedRoot = path.join(gitService.basePath, `${project}${DIR_ARCHIVED_SUFFIX}`);
       ensureDirectory(archivedRoot);
       
       const timestamp = generateTimestamp();
@@ -473,7 +473,7 @@ export function WorktreeProvider({
   }, [tmuxService]);
 
   const attachRunSession = useCallback(async (worktree: WorktreeInfo): Promise<'success' | 'no_config'> => {
-    const projectPath = path.join(BASE_PATH, worktree.project);
+    const projectPath = path.join(gitService.basePath, worktree.project);
     const configPath = path.join(projectPath, RUN_CONFIG_FILE);
     
     // Check if config exists before creating session
@@ -514,12 +514,12 @@ export function WorktreeProvider({
   }, [gitService]);
 
   const getRunConfigPath = useCallback((project: string): string => {
-    const projectPath = path.join(BASE_PATH, project);
+    const projectPath = path.join(gitService.basePath, project);
     return path.join(projectPath, RUN_CONFIG_FILE);
   }, []);
 
   const createOrFillRunConfig = useCallback(async (project: string): Promise<{success: boolean; content?: string; path: string; error?: string}> => {
-    const projectPath = path.join(BASE_PATH, project);
+    const projectPath = path.join(gitService.basePath, project);
     const configPath = path.join(projectPath, RUN_CONFIG_FILE);
     
     // Check if Claude CLI is available
@@ -588,7 +588,7 @@ export function WorktreeProvider({
 
   // Helper methods for WorktreeService operations
   const setupWorktreeEnvironment = useCallback((projectName: string, worktreePath: string) => {
-    const projectPath = path.join(BASE_PATH, projectName);
+    const projectPath = path.join(gitService.basePath, projectName);
     
     copyEnvironmentFile(projectPath, worktreePath);
     copyClaudeSettings(projectPath, worktreePath);
@@ -628,7 +628,7 @@ export function WorktreeProvider({
 
   const createRunSession = useCallback((project: string, feature: string, cwd: string): string => {
     const sessionName = tmuxService.runSessionName(project, feature);
-    const projectPath = path.join(BASE_PATH, project);
+    const projectPath = path.join(gitService.basePath, project);
     const configPath = path.join(projectPath, RUN_CONFIG_FILE);
     
     // Create detached session at cwd
@@ -703,7 +703,7 @@ export function WorktreeProvider({
   }, []);
 
   const pruneWorktreeReferences = useCallback((projectName: string) => {
-    const projectPath = path.join(BASE_PATH, projectName);
+    const projectPath = path.join(gitService.basePath, projectName);
     runCommand(['git', '-C', projectPath, 'worktree', 'prune']);
   }, []);
 

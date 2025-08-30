@@ -2,7 +2,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {GitStatus, ProjectInfo} from '../models.js';
 import {
-  BASE_PATH,
   BASE_BRANCH_CANDIDATES,
   DIR_BRANCHES_SUFFIX,
   DIR_ARCHIVED_SUFFIX,
@@ -23,7 +22,7 @@ import {Timer} from '../shared/utils/timing.js';
 export class GitService {
   basePath: string;
 
-  constructor(basePath: string = BASE_PATH) {
+  constructor(basePath: string) {
     this.basePath = basePath;
   }
 
