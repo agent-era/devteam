@@ -1019,14 +1019,24 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                   bold: isCurrentLine
                 }, '[C] ');
                 
-                const codeElement = renderSyntaxHighlighted(finalCodeText, unifiedLine.fileName, isCurrentLine, undefined, unifiedLine.type);
+                const codeElement = h(Text, {
+                  color: unifiedLine.type === 'added' ? 'green' : unifiedLine.type === 'removed' ? 'red' : undefined,
+                  dimColor: unifiedLine.type === 'context',
+                  backgroundColor: isCurrentLine ? 'blue' : undefined,
+                  bold: isCurrentLine
+                }, finalCodeText);
                 
                 renderedElements.push(h(Box, {
                   key: `line-${visibleLineIndex}`,
                   flexDirection: 'row'
                 }, gutterElement, commentElement, codeElement));
               } else {
-                const codeElement = renderSyntaxHighlighted(finalCodeText, unifiedLine.fileName, isCurrentLine, undefined, unifiedLine.type);
+                const codeElement = h(Text, {
+                  color: unifiedLine.type === 'added' ? 'green' : unifiedLine.type === 'removed' ? 'red' : undefined,
+                  dimColor: unifiedLine.type === 'context',
+                  backgroundColor: isCurrentLine ? 'blue' : undefined,
+                  bold: isCurrentLine
+                }, finalCodeText);
                 
                 renderedElements.push(h(Box, {
                   key: `line-${visibleLineIndex}`,
@@ -1073,14 +1083,24 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                     bold: isCurrentLine
                   }, '[C] ');
                   
-                  const codeElement = renderSyntaxHighlighted(codeText, unifiedLine.fileName, isCurrentLine, undefined, unifiedLine.type);
+                  const codeElement = h(Text, {
+                    color: unifiedLine.type === 'added' ? 'green' : unifiedLine.type === 'removed' ? 'red' : undefined,
+                    dimColor: unifiedLine.type === 'context',
+                    backgroundColor: isCurrentLine ? 'blue' : undefined,
+                    bold: isCurrentLine
+                  }, codeText);
                   
                   renderedElements.push(h(Box, {
                     key: `line-${visibleLineIndex}-seg-${segIdx}`,
                     flexDirection: 'row'
                   }, gutterElement, commentElement, codeElement));
                 } else {
-                  const codeElement = renderSyntaxHighlighted(codeText, unifiedLine.fileName, isCurrentLine, undefined, unifiedLine.type);
+                  const codeElement = h(Text, {
+                    color: unifiedLine.type === 'added' ? 'green' : unifiedLine.type === 'removed' ? 'red' : undefined,
+                    dimColor: unifiedLine.type === 'context',
+                    backgroundColor: isCurrentLine ? 'blue' : undefined,
+                    bold: isCurrentLine
+                  }, codeText);
                   
                   renderedElements.push(h(Box, {
                     key: `line-${visibleLineIndex}-seg-${segIdx}`,
@@ -1127,20 +1147,42 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
               } else {
                 // For removed lines, apply syntax highlighting
                 const actualLeftText = hasComment ? sideBySideLine.left.text || ' ' : leftText.replace('[C] ', '');
+                const truncatedText = truncateDisplay(actualLeftText, paneWidth - (hasComment ? 5 : 1));
                 const leftSyntaxElement = renderSyntaxHighlighted(
-                  actualLeftText, 
+                  truncatedText, 
                   sideBySideLine.left.fileName, 
                   isCurrentLine, 
-                  'red',
+                  undefined,
                   sideBySideLine.left.type
                 );
                 
-                // Use truncateDisplay to ensure proper width, then wrap in Text with padding
-                const truncatedText = truncateDisplay(actualLeftText, paneWidth - (hasComment ? 5 : 1));
-                leftElement = h(Text, {
-                  bold: isCurrentLine,
-                  backgroundColor: isCurrentLine ? 'blue' : undefined
-                }, padEndDisplay((hasComment ? ' [C] ' : ' ') + truncatedText, paneWidth));
+                // Create the element with proper padding and comment indicator
+                if (hasComment) {
+                  const commentText = h(Text, {
+                    bold: isCurrentLine,
+                    backgroundColor: isCurrentLine ? 'blue' : undefined
+                  }, ' [C] ');
+                  leftElement = h(Box, {flexDirection: 'row'},
+                    commentText,
+                    leftSyntaxElement,
+                    h(Text, {
+                      bold: isCurrentLine,
+                      backgroundColor: isCurrentLine ? 'blue' : undefined
+                    }, ' '.repeat(Math.max(0, paneWidth - truncatedText.length - 5)))
+                  );
+                } else {
+                  leftElement = h(Box, {flexDirection: 'row'},
+                    h(Text, {
+                      bold: isCurrentLine,
+                      backgroundColor: isCurrentLine ? 'blue' : undefined
+                    }, ' '),
+                    leftSyntaxElement,
+                    h(Text, {
+                      bold: isCurrentLine,
+                      backgroundColor: isCurrentLine ? 'blue' : undefined
+                    }, ' '.repeat(Math.max(0, paneWidth - truncatedText.length - 1)))
+                  );
+                }
               }
             } else {
               leftElement = h(Text, {
@@ -1169,12 +1211,26 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                 // For added lines, apply syntax highlighting with proper truncation
                 const actualRightText = sideBySideLine.right.text || ' ';
                 const truncatedText = truncateDisplay(actualRightText, paneWidth - 1);
+                const rightSyntaxElement = renderSyntaxHighlighted(
+                  truncatedText, 
+                  sideBySideLine.right.fileName, 
+                  isCurrentLine, 
+                  undefined,
+                  sideBySideLine.right.type
+                );
                 
-                // For side-by-side view, don't use diff colors - let syntax highlighting or normal text apply
-                rightElement = h(Text, {
-                  bold: isCurrentLine,
-                  backgroundColor: isCurrentLine ? 'blue' : undefined
-                }, padEndDisplay(' ' + truncatedText, paneWidth));
+                // Create the element with proper padding
+                rightElement = h(Box, {flexDirection: 'row'},
+                  h(Text, {
+                    bold: isCurrentLine,
+                    backgroundColor: isCurrentLine ? 'blue' : undefined
+                  }, ' '),
+                  rightSyntaxElement,
+                  h(Text, {
+                    bold: isCurrentLine,
+                    backgroundColor: isCurrentLine ? 'blue' : undefined
+                  }, ' '.repeat(Math.max(0, paneWidth - truncatedText.length - 1)))
+                );
               }
             } else {
               rightElement = h(Text, {
@@ -1223,11 +1279,41 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                     backgroundColor: isCurrentLine ? 'blue' : undefined
                   }, padEndDisplay(' ' + leftSegment, paneWidth));
                 } else {
-                  // For wrapped removed lines in side-by-side, don't use diff colors
-                  leftElement = h(Text, {
-                    bold: isCurrentLine,
-                    backgroundColor: isCurrentLine ? 'blue' : undefined
-                  }, padEndDisplay(' ' + leftSegment, paneWidth));
+                  // For wrapped removed lines in side-by-side, apply syntax highlighting
+                  const leftSyntaxElement = renderSyntaxHighlighted(
+                    leftSegment.replace('[C] ', ''), 
+                    sideBySideLine.left.fileName, 
+                    isCurrentLine, 
+                    undefined,
+                    sideBySideLine.left.type
+                  );
+                  
+                  // Handle comment indicator for first segment
+                  if (leftSegment.includes('[C] ') && segIdx === 0) {
+                    leftElement = h(Box, {flexDirection: 'row'},
+                      h(Text, {
+                        bold: isCurrentLine,
+                        backgroundColor: isCurrentLine ? 'blue' : undefined
+                      }, ' [C] '),
+                      leftSyntaxElement,
+                      h(Text, {
+                        bold: isCurrentLine,
+                        backgroundColor: isCurrentLine ? 'blue' : undefined
+                      }, ' '.repeat(Math.max(0, paneWidth - leftSegment.length)))
+                    );
+                  } else {
+                    leftElement = h(Box, {flexDirection: 'row'},
+                      h(Text, {
+                        bold: isCurrentLine,
+                        backgroundColor: isCurrentLine ? 'blue' : undefined
+                      }, ' '),
+                      leftSyntaxElement,
+                      h(Text, {
+                        bold: isCurrentLine,
+                        backgroundColor: isCurrentLine ? 'blue' : undefined
+                      }, ' '.repeat(Math.max(0, paneWidth - leftSegment.length - 1)))
+                    );
+                  }
                 }
               } else {
                 leftElement = h(Text, {
@@ -1251,11 +1337,26 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                     backgroundColor: isCurrentLine ? 'blue' : undefined
                   }, padEndDisplay(' ' + rightSegment, paneWidth));
                 } else {
-                  // For wrapped added lines in side-by-side, don't use diff colors
-                  rightElement = h(Text, {
-                    bold: isCurrentLine,
-                    backgroundColor: isCurrentLine ? 'blue' : undefined
-                  }, padEndDisplay(' ' + rightSegment, paneWidth));
+                  // For wrapped added lines in side-by-side, apply syntax highlighting
+                  const rightSyntaxElement = renderSyntaxHighlighted(
+                    rightSegment, 
+                    sideBySideLine.right.fileName, 
+                    isCurrentLine, 
+                    undefined,
+                    sideBySideLine.right.type
+                  );
+                  
+                  rightElement = h(Box, {flexDirection: 'row'},
+                    h(Text, {
+                      bold: isCurrentLine,
+                      backgroundColor: isCurrentLine ? 'blue' : undefined
+                    }, ' '),
+                    rightSyntaxElement,
+                    h(Text, {
+                      bold: isCurrentLine,
+                      backgroundColor: isCurrentLine ? 'blue' : undefined
+                    }, ' '.repeat(Math.max(0, paneWidth - rightSegment.length - 1)))
+                  );
                 }
               } else {
                 rightElement = h(Text, {
