@@ -10,7 +10,7 @@ interface ArchivedScreenProps {
 }
 
 export default function ArchivedScreen({onBack}: ArchivedScreenProps) {
-  const {discoverProjects, getArchivedForProject, deleteArchived} = useWorktreeContext();
+  const {discoverProjects, getArchivedForProject, deleteArchived, unarchiveFeature} = useWorktreeContext();
   const [archivedItems, setArchivedItems] = useState<any[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
 
@@ -48,12 +48,27 @@ export default function ArchivedScreen({onBack}: ArchivedScreenProps) {
     }
   };
 
+  const handleUnarchive = async (index: number) => {
+    const item = archivedItems[index];
+    if (!item) return;
+    
+    try {
+      await unarchiveFeature(item.path);
+      loadArchivedItems();
+      // Optionally navigate back to main list to show restored worktree
+      onBack();
+    } catch (error) {
+      console.error('Failed to unarchive item:', error);
+    }
+  };
+
   return h(FullScreen, null,
     h(ArchivedView, {
       items: archivedItems as any,
       selectedIndex,
       onMove: handleMove,
       onDelete: handleDelete,
+      onUnarchive: handleUnarchive,
       onBack
     })
   );

@@ -247,6 +247,59 @@ export class FakeGitService extends GitService {
     return archivedPath;
   }
 
+  // Unarchive a worktree (move from archived back to active)
+  unarchiveWorktree(archivedPath: string): string {
+    // Check if unarchive should fail (for error testing)
+    if ((global as any).__mockGitShouldFail || (global as any).__mockUnarchiveShouldFail) {
+      throw new Error('Mock unarchive failure');
+    }
+
+    // Find the archived worktree
+    let archivedWorktree: any = null;
+    let project: string = '';
+    let archivedIndex: number = -1;
+    let archivedList: any[] = [];
+    
+    for (const [proj, list] of memoryStore.archivedWorktrees.entries()) {
+      const index = list.findIndex(w => w.path === archivedPath);
+      if (index >= 0) {
+        archivedWorktree = list[index];
+        project = proj;
+        archivedIndex = index;
+        archivedList = list;
+        break;
+      }
+    }
+    
+    if (!archivedWorktree) {
+      throw new Error('Archived worktree not found');
+    }
+
+    // Generate restored path
+    const restoredPath = archivedPath
+      .replace(DIR_ARCHIVED_SUFFIX, DIR_BRANCHES_SUFFIX)
+      .replace(/archived-\d+_/, '');
+
+    // Check if restored path already exists BEFORE removing from archived
+    if (memoryStore.worktrees.has(restoredPath)) {
+      throw new Error(`Feature ${project}/${archivedWorktree.feature} already exists in active worktrees`);
+    }
+
+    // Now that we know it's safe, remove from archived
+    archivedList.splice(archivedIndex, 1);
+    memoryStore.archivedWorktrees.set(project, archivedList);
+
+    // Move back to active worktrees
+    const restoredWorktree = new WorktreeInfo({
+      ...archivedWorktree,
+      path: restoredPath,
+      is_archived: false
+    });
+    
+    memoryStore.worktrees.set(restoredPath, restoredWorktree);
+    return restoredPath;
+  }
+
   // Delete an archived worktree permanently
   deleteArchived(archivedPath: string): boolean {
     // Check if deletion should fail (for error testing)

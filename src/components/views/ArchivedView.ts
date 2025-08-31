@@ -17,15 +17,17 @@ type Props = {
   selectedIndex: number;
   onMove?: (delta: number) => void;
   onDelete?: (index: number) => void;
+  onUnarchive?: (index: number) => void;
   onBack?: () => void;
 };
 
-export default function ArchivedView({items, selectedIndex, onMove, onDelete, onBack}: Props) {
+export default function ArchivedView({items, selectedIndex, onMove, onDelete, onUnarchive, onBack}: Props) {
   useInput((input, key) => {
     if (key.escape || input === 'v') onBack?.();
     if (input === 'j' || key.downArrow) onMove?.(1);
     if (input === 'k' || key.upArrow) onMove?.(-1);
     if (input === 'd') onDelete?.(selectedIndex);
+    if (input === 'u') onUnarchive?.(selectedIndex);
   });
 
   const rows = useMemo(() => items.map((it, i) => {
@@ -44,7 +46,7 @@ export default function ArchivedView({items, selectedIndex, onMove, onDelete, on
   return h(
     Box,
     {flexDirection: 'column'},
-    h(Box, {marginBottom: 1}, h(Text, {color: 'magenta'}, 'Archived — j/k navigate, d delete, v back')),
+    h(Box, {marginBottom: 1}, h(Text, {color: 'magenta'}, 'Archived — j/k navigate, u unarchive, d delete, v back')),
     ...rows
   );
 }

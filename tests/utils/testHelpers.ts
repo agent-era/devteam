@@ -165,6 +165,18 @@ export function expectArchivedWorktree(project: string, feature: string) {
   return archivedWorktree;
 }
 
+export function expectWorktreeRestored(project: string, feature: string) {
+  const expectedPath = `/fake/projects/${project}-branches/${feature}`;
+  const restoredWorktree = memoryStore.worktrees.get(expectedPath);
+  
+  if (!restoredWorktree) {
+    throw new Error(`Expected to find restored worktree ${project}/${feature}, but it was not found`);
+  }
+  
+  expect(restoredWorktree.is_archived).toBe(false);
+  return restoredWorktree;
+}
+
 // Utility to get all worktrees for a project from memory
 export function getWorktreesFromMemory(project: string): WorktreeInfo[] {
   return Array.from(memoryStore.worktrees.values())

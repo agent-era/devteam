@@ -54,6 +54,7 @@ interface WorktreeContextType {
   createFeature: (projectName: string, featureName: string) => Promise<WorktreeInfo | null>;
   createFromBranch: (project: string, remoteBranch: string, localName: string) => Promise<boolean>;
   archiveFeature: (worktreeOrProject: WorktreeInfo | string, path?: string, feature?: string) => Promise<{archivedPath: string}>;
+  unarchiveFeature: (archivedPath: string) => Promise<{restoredPath: string}>;
   deleteArchived: (archivedPath: string) => Promise<boolean>;
   
   // Session operations  
@@ -437,6 +438,108 @@ export function WorktreeProvider({
     }
   }, []);
 
+  const unarchiveFeature = useCallback(async (archivedPath: string): Promise<{restoredPath: string}> => {
+    setLoading(true);
+    try {
+      // Parse the archived directory name to extract project and feature
+      const dirName = path.basename(archivedPath);
+      const match = dirName.match(/^archived-\d+_(.+)$/);
+      if (!match) {
+        throw new Error(`Invalid archived directory format: ${dirName}`);
+      }
+      
+      const feature = match[1];
+      
+      // Extract project from the parent directory
+      const archivedRoot = path.dirname(archivedPath);
+      const archivedRootName = path.basename(archivedRoot);
+      const projectMatch = archivedRootName.match(/^(.+)-archived$/);
+      if (!projectMatch) {
+        throw new Error(`Invalid archived root directory format: ${archivedRootName}`);
+      }
+      
+      const project = projectMatch[1];
+      const branchesDir = path.join(gitService.basePath, `${project}${DIR_BRANCHES_SUFFIX}`);
+      const restoredPath = path.join(branchesDir, feature);
+      
+      // Ensure the target directory doesn't already exist
+      if (fs.existsSync(restoredPath)) {
+        throw new Error(`Feature ${project}/${feature} already exists in active worktrees`);
+      }
+      
+      // Ensure branches directory exists
+      ensureDirectory(branchesDir);
+      
+      // Move the archived directory back to branches location
+      try {
+        fs.renameSync(archivedPath, restoredPath);
+      } catch {
+        // Fallback: copy then remove
+        copyWithIgnore(archivedPath, restoredPath);
+        fs.rmSync(archivedPath, {recursive: true, force: true});
+      }
+      
+      // Re-establish git worktree reference
+      const mainProjectPath = path.join(gitService.basePath, project);
+      const gitDir = path.join(restoredPath, '.git');
+      
+      if (fs.existsSync(gitDir)) {
+        try {
+          // Try to repair the existing worktree reference
+          runCommand(['git', '-C', mainProjectPath, 'worktree', 'repair', restoredPath]);
+        } catch {
+          // If repair fails, try to re-add the worktree
+          // First check what branch this worktree was on
+          try {
+            const headRef = fs.readFileSync(path.join(restoredPath, '.git', 'HEAD'), 'utf8').trim();
+            const branchMatch = headRef.match(/^ref: refs\/heads\/(.+)$/);
+            const branch = branchMatch ? branchMatch[1] : `feature/${feature}`;
+            
+            // Force re-add the worktree
+            runCommand(['git', '-C', mainProjectPath, 'worktree', 'add', '--force', restoredPath, branch]);
+          } catch {
+            // If all else fails, try without specifying branch
+            runCommand(['git', '-C', mainProjectPath, 'worktree', 'add', '--force', restoredPath]);
+          }
+        }
+      }
+      
+      // Set up worktree environment (copy env files, etc.)
+      const envProjectPath = path.join(gitService.basePath, project);
+      
+      // Copy environment file
+      const envSrc = path.join(envProjectPath, ENV_FILE);
+      const envDst = path.join(restoredPath, ENV_FILE);
+      if (fs.existsSync(envSrc)) {
+        ensureDirectory(path.dirname(envDst));
+        fs.copyFileSync(envSrc, envDst);
+      }
+      
+      // Copy Claude settings (symlink)
+      const claudeDirSrc = path.join(envProjectPath, '.claude');
+      const claudeDirDst = path.join(restoredPath, '.claude');
+      if (fs.existsSync(claudeDirSrc)) {
+        if (fs.existsSync(claudeDirDst)) {
+          fs.rmSync(claudeDirDst, { recursive: true, force: true });
+        }
+        fs.symlinkSync(claudeDirSrc, claudeDirDst, 'dir');
+      }
+      
+      // Copy Claude documentation
+      const claudeDoc = path.join(envProjectPath, 'CLAUDE.md');
+      const claudeDestDoc = path.join(restoredPath, 'CLAUDE.md');
+      if (fs.existsSync(claudeDoc)) {
+        fs.copyFileSync(claudeDoc, claudeDestDoc);
+      }
+      
+      await refresh();
+      return {restoredPath};
+      
+    } finally {
+      setLoading(false);
+    }
+  }, [gitService, refresh]);
+
   const attachSession = useCallback(async (worktree: WorktreeInfo) => {
     const sessionName = tmuxService.sessionName(worktree.project, worktree.feature);
     const activeSessions = await tmuxService.listSessions();
@@ -800,6 +903,7 @@ export function WorktreeProvider({
     createFeature,
     createFromBranch,
     archiveFeature,
+    unarchiveFeature,
     deleteArchived,
     
     // Session operations
