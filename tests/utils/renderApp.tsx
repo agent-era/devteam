@@ -102,26 +102,6 @@ export function renderTestApp(props?: TestAppProps, options?: any) {
         }
       }
       
-      // Handle unarchive in archived view
-      if (currentUIMode === 'archived' && input === 'u') {
-        // Simulate unarchive operation
-        const archived = Array.from(memoryStore.archivedWorktrees.entries());
-        if (archived.length > 0) {
-          const [project, worktrees] = archived[0];
-          if (worktrees.length > 0) {
-            const worktreeToUnarchive = worktrees[0];
-            // Call the actual unarchive function
-            services.worktreeService.unarchiveFeature(worktreeToUnarchive.path).then(() => {
-              // Switch back to main list after successful unarchive
-              currentUIMode = 'list';
-            }).catch((err: any) => {
-              console.error('Unarchive failed:', err);
-            });
-          }
-        }
-        return;
-      }
-      
       // Handle back from archived view
       if (currentUIMode === 'archived' && (input === 'v' || input === '\u001b')) { // v or ESC
         currentUIMode = 'list';
