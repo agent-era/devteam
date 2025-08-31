@@ -266,8 +266,10 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
   const [sideBySideLines, setSideBySideLines] = useState<SideBySideLine[]>([]);
   const [selectedLine, setSelectedLine] = useState(0);
   const [scrollRow, setScrollRow] = useState(0);
+  
   const [targetScrollRow, setTargetScrollRow] = useState(0);
   const [animationId, setAnimationId] = useState<NodeJS.Timeout | null>(null);
+  const [isFileNavigation, setIsFileNavigation] = useState(false);
   const [currentFileHeader, setCurrentFileHeader] = useState<string>('');
   const [currentHunkHeader, setCurrentHunkHeader] = useState<string>('');
   const [viewMode, setViewMode] = useState<ViewMode>('unified');
@@ -318,6 +320,8 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     if (distance <= 2) {
       setScrollRow(targetScrollRow);
       setAnimationId(null);
+      // Clear file navigation flag for non-animated scrolls
+      setIsFileNavigation(false);
       return;
     }
 
@@ -354,6 +358,8 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
         setAnimationId(id);
       } else {
         setAnimationId(null);
+        // Clear file navigation flag when animation completes
+        setIsFileNavigation(false);
       }
     };
 
@@ -482,6 +488,30 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       }
     };
     
+    // Helper function to find the first content line after a file header
+    const findFirstContentLineAfterHeader = (headerIndex: number): number => {
+      const currentLines = viewMode === 'unified' ? lines : sideBySideLines;
+      const maxIndex = currentLines.length;
+      
+      // Look for the first non-header line after the file header
+      for (let i = headerIndex + 1; i < maxIndex; i++) {
+        if (viewMode === 'unified') {
+          const line = lines[i];
+          if (line.type !== 'header') {
+            return i; // Found first content line (context, added, or removed)
+          }
+        } else {
+          const line = sideBySideLines[i];
+          if (line.left?.type !== 'header') {
+            return i; // Found first content line
+          }
+        }
+      }
+      
+      // If no content found, return the header index + 1 (fallback)
+      return Math.min(headerIndex + 1, maxIndex - 1);
+    };
+    
     // Left arrow: jump to previous chunk (▼ header)
     if (key.leftArrow) {
       for (let i = selectedLine - 1; i >= 0; i--) {
@@ -507,7 +537,42 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     if (key.leftArrow && key.shift) {
       for (let i = selectedLine - 1; i >= 0; i--) {
         if (isFileHeader(i)) {
-          setSelectedLine(i);
+          // Find the first content line after this file header
+          const contentLineIndex = findFirstContentLineAfterHeader(i);
+          setSelectedLine(contentLineIndex);
+          
+          // Calculate scroll position to show the content line at top of viewport
+          // This naturally makes the file header sticky (just above viewport)
+          let targetRow = 0;
+          if (wrapMode === 'truncate') {
+            // In truncate mode, line index maps directly to scroll row
+            targetRow = Math.max(0, contentLineIndex);
+          } else {
+            // In wrap mode, calculate the visual row position using LineWrapper
+            const currentLines = viewMode === 'unified' ? lines : sideBySideLines;
+            const maxWidth = viewMode === 'unified' ? terminalWidth - 2 : Math.floor((terminalWidth - 1) / 2) - 2;
+            const textLines = currentLines.map(line => {
+              if (viewMode === 'unified') {
+                return (line as DiffLine).text || ' ';
+              } else {
+                const sbsLine = line as SideBySideLine;
+                const leftText = sbsLine.left?.text || '';
+                const rightText = sbsLine.right?.text || '';
+                return leftText.length > rightText.length ? leftText : rightText;
+              }
+            });
+            
+            // Calculate the visual row for the content line index using LineWrapper
+            let targetRowStart = 0;
+            for (let j = 0; j < Math.min(contentLineIndex, textLines.length); j++) {
+              targetRowStart += LineWrapper.calculateHeight(textLines[j] || ' ', maxWidth);
+            }
+            targetRow = Math.max(0, targetRowStart);
+          }
+          
+          // Set flag to prevent auto-scroll from overriding our scroll position
+          setIsFileNavigation(true);
+          setTargetScrollRow(targetRow);
           break;
         }
       }
@@ -518,7 +583,42 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       const maxIndex = viewMode === 'unified' ? lines.length : sideBySideLines.length;
       for (let i = selectedLine + 1; i < maxIndex; i++) {
         if (isFileHeader(i)) {
-          setSelectedLine(i);
+          // Find the first content line after this file header
+          const contentLineIndex = findFirstContentLineAfterHeader(i);
+          setSelectedLine(contentLineIndex);
+          
+          // Calculate scroll position to show the content line at top of viewport
+          // This naturally makes the file header sticky (just above viewport)
+          let targetRow = 0;
+          if (wrapMode === 'truncate') {
+            // In truncate mode, line index maps directly to scroll row
+            targetRow = Math.max(0, contentLineIndex);
+          } else {
+            // In wrap mode, calculate the visual row position using LineWrapper
+            const currentLines = viewMode === 'unified' ? lines : sideBySideLines;
+            const maxWidth = viewMode === 'unified' ? terminalWidth - 2 : Math.floor((terminalWidth - 1) / 2) - 2;
+            const textLines = currentLines.map(line => {
+              if (viewMode === 'unified') {
+                return (line as DiffLine).text || ' ';
+              } else {
+                const sbsLine = line as SideBySideLine;
+                const leftText = sbsLine.left?.text || '';
+                const rightText = sbsLine.right?.text || '';
+                return leftText.length > rightText.length ? leftText : rightText;
+              }
+            });
+            
+            // Calculate the visual row for the content line index using LineWrapper
+            let targetRowStart = 0;
+            for (let j = 0; j < Math.min(contentLineIndex, textLines.length); j++) {
+              targetRowStart += LineWrapper.calculateHeight(textLines[j] || ' ', maxWidth);
+            }
+            targetRow = Math.max(0, targetRowStart);
+          }
+          
+          // Set flag to prevent auto-scroll from overriding our scroll position
+          setIsFileNavigation(true);
+          setTargetScrollRow(targetRow);
           break;
         }
       }
@@ -552,11 +652,13 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       wrapMode
     );
     
-    if (newScrollRow !== targetScrollRow) {
+    // Don't override scroll position during file navigation (Shift+Left/Right)
+    // File navigation sets a specific scroll position to make headers sticky
+    if (newScrollRow !== targetScrollRow && !isFileNavigation) {
       const maxScrollRow = ViewportCalculator.getMaxScrollRow(textLines, pageSize, maxWidth, wrapMode);
       setTargetScrollRow(Math.max(0, Math.min(maxScrollRow, newScrollRow)));
     }
-  }, [selectedLine, viewMode, wrapMode, terminalWidth, lines, sideBySideLines, pageSize]);
+  }, [selectedLine, viewMode, wrapMode, terminalWidth, lines, sideBySideLines, pageSize, isFileNavigation]);
 
   const formatCommentsAsPrompt = (comments: any[]): string => {
     let prompt = "Please address the following code review comments:\\n\\n";

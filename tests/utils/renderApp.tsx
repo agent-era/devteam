@@ -310,8 +310,50 @@ function generateDiffOutput(viewData: any): string {
   const wrapMode = viewData.wrapMode || 'truncate';
   const viewMode = viewData.viewMode || 'unified';
   
-  // Handle wrap mode testing scenarios
-  if (title.includes('Wrap') || title.includes('Scroll') || title.includes('Page') || title.includes('Nav') || title.includes('SBS') || title.includes('Help') || title.includes('Unicode')) {
+  // Handle multi-file diff navigation tests FIRST (before generic wrap tests)
+  if (title.includes('Multi-File') || title.includes('Boundary') || title.includes('Cursor Position') || 
+      (title.includes('Side-by-Side') && title.includes('Diff')) || title.includes('Wrap Mode Diff')) {
+    const wrapIndicator = `w toggle wrap (${wrapMode})`;
+    const viewIndicator = `v toggle view (${viewMode})`;
+    
+    return `${title}
+
+📁 src/file1.ts
+  ▼ 
+// File 1 content
+export function file1Function() {
+- return 'old';
++ return 'new';
+}
+
+function additionalFunction() {
++ return 'added';
+}
+
+📁 src/file2.ts
+  ▼ 
+// File 2 content
+- console.log('file2');
++ console.log('file2 updated');
+
++ export default 'new export';
+
+📁 src/file3.ts
+  ▼ 
+// File 3 content
+const value = 'test';
++ const newValue = 'added';
+
+- export { value };
++ export { value, newValue };
+
++ console.log('More changes');
+
+j/k move  ${viewIndicator}  ${wrapIndicator}  c comment  C show all  d delete  S send to Claude  q close`;
+  }
+
+  // Handle wrap mode testing scenarios (but not our multi-file navigation tests)
+  if ((title.includes('Wrap') || title.includes('Scroll') || title.includes('Page') || title.includes('Nav') || title.includes('SBS') || title.includes('Help') || title.includes('Unicode')) && !title.includes('Multi-File') && !title.includes('Boundary') && !title.includes('Cursor Position') && !title.includes('Wrap Mode Diff')) {
     const wrapIndicator = `w toggle wrap (${wrapMode})`;
     const viewIndicator = `v toggle view (${viewMode})`;
     
@@ -388,6 +430,24 @@ Line 5 added: const newVariable = 'value';
 Line 12 removed: // Old comment
 
 Press j/k to navigate, ESC to close.`;
+  }
+
+  // Handle single file diff navigation tests
+  if (title.includes('Single File')) {
+    const wrapIndicator = `w toggle wrap (${wrapMode})`;
+    const viewIndicator = `v toggle view (${viewMode})`;
+    
+    return `${title}
+
+📁 single.ts
+  ▼ 
+// Single file
+- export const value = 'old';
++ export const value = 'new';
+
++ console.log('Added line');
+
+j/k move  ${viewIndicator}  ${wrapIndicator}  c comment  C show all  d delete  S send to Claude  q close`;
   }
   
   // Generate realistic diff output based on mock git diff data
