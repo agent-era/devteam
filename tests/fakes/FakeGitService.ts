@@ -278,7 +278,7 @@ export class FakeGitService extends GitService {
     // Generate restored path
     const restoredPath = archivedPath
       .replace(DIR_ARCHIVED_SUFFIX, DIR_BRANCHES_SUFFIX)
-      .replace(/archived-\d+_/, '');
+      .replace(/archived-[0-9-]+_/, '');
 
     // Check if restored path already exists BEFORE removing from archived
     if (memoryStore.worktrees.has(restoredPath)) {

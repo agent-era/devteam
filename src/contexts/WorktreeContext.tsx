@@ -447,9 +447,11 @@ export function WorktreeProvider({
       const dirName = path.basename(archivedPath);
       console.log(`[Unarchive] Directory name: ${dirName}`);
       
-      const match = dirName.match(/^archived-\d+_(.+)$/);
+      // Match archived directory format: archived-{timestamp}_featurename
+      // Timestamp can be digits only or date format like 20250830-185919
+      const match = dirName.match(/^archived-[0-9-]+_(.+)$/);
       if (!match) {
-        const error = new Error(`Invalid archived directory format: ${dirName}`);
+        const error = new Error(`Invalid archived directory format: ${dirName}. Expected format: archived-{timestamp}_{featurename}`);
         console.error(`[Unarchive] Format error:`, error);
         throw error;
       }
