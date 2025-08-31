@@ -72,6 +72,7 @@ export function UIProvider({children}: UIProviderProps) {
     setBranchProject(null);
     setBranchList([]);
     setDiffWorktree(null);
+    setDiffType('full'); // Reset diff type to default
     setRunProject(null);
     setRunFeature(null);
     setRunPath(null);

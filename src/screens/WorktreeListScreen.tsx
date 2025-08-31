@@ -30,13 +30,18 @@ export default function WorktreeListScreen({
   onExecuteRun,
   onConfigureRun
 }: WorktreeListScreenProps) {
-  const {worktrees, selectedIndex, selectWorktree, refresh, forceRefreshVisible, attachSession, attachShellSession} = useWorktreeContext();
+  const {worktrees, selectedIndex, selectWorktree, refresh, forceRefreshVisible, attachSession, attachShellSession, lastRefreshed} = useWorktreeContext();
   const pageSize = usePageSize();
   const [currentPage, setCurrentPage] = useState(0);
 
-  // Refresh data when component mounts to ensure it's up to date
+  // Refresh data when component mounts, but only if data is missing or very stale
   useEffect(() => {
-    refresh('none').catch(() => {});
+    const isDataStale = !lastRefreshed || (Date.now() - lastRefreshed > 30000); // 30 seconds
+    const isDataEmpty = !worktrees || worktrees.length === 0;
+    
+    if (isDataEmpty || isDataStale) {
+      refresh('none').catch(() => {});
+    }
   }, []); // Only on mount
 
   const handleMove = (delta: number) => {
@@ -113,27 +118,21 @@ export default function WorktreeListScreen({
   };
 
   const handlePreviousPage = () => {
-    const totalPages = Math.max(1, Math.ceil(worktrees.length / pageSize));
-    if (totalPages <= 1) {
-      // Single page: Page Up jumps to first item
-      handleJumpToFirst();
-      return;
-    }
-    const newPage = currentPage > 0 ? currentPage - 1 : totalPages - 1;
+    // Always move by half a page, regardless of total pages
+    const halfPageSize = Math.floor(pageSize / 2);
+    const newIndex = Math.max(0, selectedIndex - halfPageSize);
+    const newPage = Math.floor(newIndex / pageSize);
     setCurrentPage(newPage);
-    selectWorktree(newPage * pageSize);
+    selectWorktree(newIndex);
   };
 
   const handleNextPage = () => {
-    const totalPages = Math.max(1, Math.ceil(worktrees.length / pageSize));
-    if (totalPages <= 1) {
-      // Single page: Page Down jumps to last item
-      handleJumpToLast();
-      return;
-    }
-    const newPage = (currentPage + 1) % totalPages;
+    // Always move by half a page, regardless of total pages
+    const halfPageSize = Math.floor(pageSize / 2);
+    const newIndex = Math.min(worktrees.length - 1, selectedIndex + halfPageSize);
+    const newPage = Math.floor(newIndex / pageSize);
     setCurrentPage(newPage);
-    selectWorktree(newPage * pageSize);
+    selectWorktree(newIndex);
   };
 
   const handleRefresh = async () => {
