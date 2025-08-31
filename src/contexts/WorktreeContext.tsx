@@ -441,67 +441,99 @@ export function WorktreeProvider({
   const unarchiveFeature = useCallback(async (archivedPath: string): Promise<{restoredPath: string}> => {
     setLoading(true);
     try {
+      console.log(`[Unarchive] Starting unarchive for: ${archivedPath}`);
+      
       // Parse the archived directory name to extract project and feature
       const dirName = path.basename(archivedPath);
+      console.log(`[Unarchive] Directory name: ${dirName}`);
+      
       const match = dirName.match(/^archived-\d+_(.+)$/);
       if (!match) {
-        throw new Error(`Invalid archived directory format: ${dirName}`);
+        const error = new Error(`Invalid archived directory format: ${dirName}`);
+        console.error(`[Unarchive] Format error:`, error);
+        throw error;
       }
       
       const feature = match[1];
+      console.log(`[Unarchive] Extracted feature: ${feature}`);
       
       // Extract project from the parent directory
       const archivedRoot = path.dirname(archivedPath);
       const archivedRootName = path.basename(archivedRoot);
+      console.log(`[Unarchive] Archived root name: ${archivedRootName}`);
+      
       const projectMatch = archivedRootName.match(/^(.+)-archived$/);
       if (!projectMatch) {
-        throw new Error(`Invalid archived root directory format: ${archivedRootName}`);
+        const error = new Error(`Invalid archived root directory format: ${archivedRootName}`);
+        console.error(`[Unarchive] Project format error:`, error);
+        throw error;
       }
       
       const project = projectMatch[1];
+      console.log(`[Unarchive] Extracted project: ${project}`);
+      
       const branchesDir = path.join(gitService.basePath, `${project}${DIR_BRANCHES_SUFFIX}`);
       const restoredPath = path.join(branchesDir, feature);
+      console.log(`[Unarchive] Target restored path: ${restoredPath}`);
       
       // Ensure the target directory doesn't already exist
       if (fs.existsSync(restoredPath)) {
-        throw new Error(`Feature ${project}/${feature} already exists in active worktrees`);
+        const error = new Error(`Feature ${project}/${feature} already exists in active worktrees`);
+        console.error(`[Unarchive] Duplicate feature error:`, error);
+        throw error;
       }
       
       // Ensure branches directory exists
+      console.log(`[Unarchive] Ensuring branches directory exists: ${branchesDir}`);
       ensureDirectory(branchesDir);
       
       // Move the archived directory back to branches location
+      console.log(`[Unarchive] Moving directory from ${archivedPath} to ${restoredPath}`);
       try {
         fs.renameSync(archivedPath, restoredPath);
-      } catch {
+        console.log(`[Unarchive] Successfully renamed directory`);
+      } catch (renameError) {
+        console.log(`[Unarchive] Rename failed, using copy fallback:`, renameError);
         // Fallback: copy then remove
         copyWithIgnore(archivedPath, restoredPath);
         fs.rmSync(archivedPath, {recursive: true, force: true});
+        console.log(`[Unarchive] Successfully copied and removed original`);
       }
       
       // Re-establish git worktree reference
       const mainProjectPath = path.join(gitService.basePath, project);
       const gitDir = path.join(restoredPath, '.git');
+      console.log(`[Unarchive] Main project path: ${mainProjectPath}`);
+      console.log(`[Unarchive] Git directory: ${gitDir}`);
       
       if (fs.existsSync(gitDir)) {
+        console.log(`[Unarchive] Git directory exists, attempting to repair worktree`);
         try {
           // Try to repair the existing worktree reference
           runCommand(['git', '-C', mainProjectPath, 'worktree', 'repair', restoredPath]);
-        } catch {
+          console.log(`[Unarchive] Successfully repaired worktree reference`);
+        } catch (repairError) {
+          console.log(`[Unarchive] Repair failed, attempting to re-add worktree:`, repairError);
           // If repair fails, try to re-add the worktree
           // First check what branch this worktree was on
           try {
             const headRef = fs.readFileSync(path.join(restoredPath, '.git', 'HEAD'), 'utf8').trim();
             const branchMatch = headRef.match(/^ref: refs\/heads\/(.+)$/);
             const branch = branchMatch ? branchMatch[1] : `feature/${feature}`;
+            console.log(`[Unarchive] Detected branch: ${branch}`);
             
             // Force re-add the worktree
             runCommand(['git', '-C', mainProjectPath, 'worktree', 'add', '--force', restoredPath, branch]);
-          } catch {
+            console.log(`[Unarchive] Successfully re-added worktree with branch`);
+          } catch (branchError) {
+            console.log(`[Unarchive] Branch detection failed, trying without branch:`, branchError);
             // If all else fails, try without specifying branch
             runCommand(['git', '-C', mainProjectPath, 'worktree', 'add', '--force', restoredPath]);
+            console.log(`[Unarchive] Successfully re-added worktree without branch`);
           }
         }
+      } else {
+        console.log(`[Unarchive] Git directory does not exist, skipping git operations`);
       }
       
       // Set up worktree environment (copy env files, etc.)
@@ -533,8 +565,20 @@ export function WorktreeProvider({
       }
       
       await refresh();
+      console.log(`[Unarchive] Successfully completed unarchive for ${project}/${feature}`);
       return {restoredPath};
       
+    } catch (error) {
+      console.error(`[Unarchive] Unarchive failed:`, error);
+      
+      // Ensure we have a proper error object with a message
+      if (error instanceof Error) {
+        throw error;
+      } else if (typeof error === 'string') {
+        throw new Error(error);
+      } else {
+        throw new Error(`Unarchive failed: ${JSON.stringify(error)}`);
+      }
     } finally {
       setLoading(false);
     }
