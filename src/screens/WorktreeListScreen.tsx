@@ -30,13 +30,18 @@ export default function WorktreeListScreen({
   onExecuteRun,
   onConfigureRun
 }: WorktreeListScreenProps) {
-  const {worktrees, selectedIndex, selectWorktree, refresh, forceRefreshVisible, attachSession, attachShellSession} = useWorktreeContext();
+  const {worktrees, selectedIndex, selectWorktree, refresh, forceRefreshVisible, attachSession, attachShellSession, lastRefreshed} = useWorktreeContext();
   const pageSize = usePageSize();
   const [currentPage, setCurrentPage] = useState(0);
 
-  // Refresh data when component mounts to ensure it's up to date
+  // Refresh data when component mounts, but only if data is missing or very stale
   useEffect(() => {
-    refresh('none').catch(() => {});
+    const isDataStale = !lastRefreshed || (Date.now() - lastRefreshed > 30000); // 30 seconds
+    const isDataEmpty = !worktrees || worktrees.length === 0;
+    
+    if (isDataEmpty || isDataStale) {
+      refresh('none').catch(() => {});
+    }
   }, []); // Only on mount
 
   const handleMove = (delta: number) => {
