@@ -13,6 +13,7 @@ import {runCommand} from '../../utils.js';
 import CommentInputDialog from '../dialogs/CommentInputDialog.js';
 import SessionWaitingDialog from '../dialogs/SessionWaitingDialog.js';
 import UnsubmittedCommentsDialog from '../dialogs/UnsubmittedCommentsDialog.js';
+import FileTreeOverlay from '../dialogs/FileTreeOverlay.js';
 import {truncateDisplay, padEndDisplay, stringDisplayWidth} from '../../shared/utils/formatting.js';
 import {LineWrapper} from '../../shared/utils/lineWrapper.js';
 import {ViewportCalculator} from '../../shared/utils/viewport.js';
@@ -281,6 +282,27 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
   const [showSessionWaitingDialog, setShowSessionWaitingDialog] = useState(false);
   const [sessionWaitingInfo, setSessionWaitingInfo] = useState<{sessionName: string}>({sessionName: ''});
   const [showUnsubmittedCommentsDialog, setShowUnsubmittedCommentsDialog] = useState(false);
+  const [showFileTreeOverlay, setShowFileTreeOverlay] = useState(false);
+  const [overlayHighlightedFile, setOverlayHighlightedFile] = useState<string>('');
+
+  // Derive list of files present in the diff (unique, in order encountered)
+  const diffFiles = useMemo(() => {
+    const seen = new Set<string>();
+    const files: string[] = [];
+    for (const l of lines) {
+      if (l.type === 'header' && l.headerType === 'file' && l.fileName && !seen.has(l.fileName)) {
+        seen.add(l.fileName);
+        files.push(l.fileName);
+      }
+    }
+    return files;
+  }, [lines]);
+
+  // Helper to show the file tree overlay
+  const showFileTree = (filePath: string) => {
+    setOverlayHighlightedFile(filePath);
+    setShowFileTreeOverlay(true);
+  };
 
   useEffect(() => {
     (async () => {
@@ -302,8 +324,10 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     return count;
   }, [currentFileHeader, currentHunkHeader]);
 
-  // Calculate page size dynamically - reserve space for title, help, and actual sticky headers
-  const pageSize = Math.max(1, terminalHeight - 2 - stickyHeaderCount - 1); // -1 title, -N sticky headers, -1 help
+  // Calculate page size dynamically - reserve space for title, help, sticky headers, and optional overlay area
+  const helpReservedRows = showFileTreeOverlay ? 0 : 1; // hide help when overlay shows
+  const overlayAreaHeight = showFileTreeOverlay ? Math.max(6, Math.floor(terminalHeight / 2)) : 0;
+  const pageSize = Math.max(1, terminalHeight - 2 - stickyHeaderCount - helpReservedRows - overlayAreaHeight); // -1 title, -N sticky headers, -help, -overlay
 
   // Smooth scrolling animation
   useEffect(() => {
@@ -385,6 +409,11 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     // Don't handle inputs when any dialog is open
     if (showCommentDialog || showSessionWaitingDialog || showUnsubmittedCommentsDialog) return;
     
+    // Hide overlay on any key except Shift+Left/Right (overlay trigger)
+    if (showFileTreeOverlay && !(key.shift && (key.leftArrow || key.rightArrow))) {
+      setShowFileTreeOverlay(false);
+    }
+
     if (key.escape || input === 'q') {
       // Check if there are unsaved comments
       if (commentStore.count > 0) {
@@ -551,6 +580,9 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
           // Find the first content line after this file header
           const contentLineIndex = findFirstContentLineAfterHeader(i);
           setSelectedLine(contentLineIndex);
+          // Highlight this file in overlay
+          const fileName = viewMode === 'unified' ? (lines[i]?.fileName || '') : (sideBySideLines[i]?.left?.fileName || sideBySideLines[i]?.right?.fileName || '');
+          if (fileName) showFileTree(fileName);
           
           // Calculate scroll position to show the content line at top of viewport
           // This naturally makes the file header sticky (just above viewport)
@@ -597,6 +629,9 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
           // Find the first content line after this file header
           const contentLineIndex = findFirstContentLineAfterHeader(i);
           setSelectedLine(contentLineIndex);
+          // Highlight this file in overlay
+          const fileName = viewMode === 'unified' ? (lines[i]?.fileName || '') : (sideBySideLines[i]?.left?.fileName || sideBySideLines[i]?.right?.fileName || '');
+          if (fileName) showFileTree(fileName);
           
           // Calculate scroll position to show the content line at top of viewport
           // This naturally makes the file header sticky (just above viewport)
@@ -1063,6 +1098,8 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     );
   }
 
+  // No early return: overlay is drawn on-screen while keeping diff visible
+
   return h(
     Box,
     {flexDirection: 'column'},
@@ -1230,7 +1267,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
         } else {
           // Side-by-side diff rendering with syntax highlighting
           const sideBySideLine = l as SideBySideLine;
-          const paneWidth = Math.floor(terminalWidth / 2); // Each column gets half the width
+          const paneWidth = Math.floor((terminalWidth - 2) / 2); // Leave 2 cols slack to avoid terminal wrap
           
           // Get comment info based on the original line index
           const hasComment = (sideBySideLine.left?.fileName || sideBySideLine.right?.fileName) && 
@@ -1518,6 +1555,18 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
         h(Text, {key: idx, color: 'gray'}, `${comment.fileName}:${comment.lineIndex} - ${comment.commentText}`)
       )
     ) : null,
-    h(Text, {color: 'gray'}, `j/k move  v toggle view (${viewMode})  w toggle wrap (${wrapMode})  c comment  C show all  d delete  S send to Claude  q close`)
+    !showFileTreeOverlay ? h(Text, {color: 'gray'}, `j/k move  v toggle view (${viewMode})  w toggle wrap (${wrapMode})  c comment  C show all  d delete  S send to Claude  q close`) : null,
+    // Bottom-left overlay while keeping diff visible
+    showFileTreeOverlay ? h(Box, {flexDirection: 'row', marginTop: 0},
+      h(FileTreeOverlay, {
+        files: diffFiles,
+        highlightedFile: overlayHighlightedFile,
+        maxWidth: terminalWidth,
+        maxHeight: overlayAreaHeight,
+        overlayWidth: Math.max(30, Math.floor(terminalWidth / 2)),
+        overlayHeight: overlayAreaHeight,
+        title: 'Files in Diff'
+      })
+    ) : null
   );
 }
