@@ -1555,7 +1555,9 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
         h(Text, {key: idx, color: 'gray'}, `${comment.fileName}:${comment.lineIndex} - ${comment.commentText}`)
       )
     ) : null,
-    !showFileTreeOverlay ? h(Text, {color: 'gray'}, `j/k move  v toggle view (${viewMode})  w toggle wrap (${wrapMode})  c comment  C show all  d delete  S send to Claude  q close`) : null,
+    !showFileTreeOverlay ?
+      h(Text, {color: 'gray'}, truncateDisplay(`j/k move  v toggle view (${viewMode})  w toggle wrap (${wrapMode})  c comment  C show all  d delete  S send to Claude  q close`, terminalWidth))
+      : null,
     // Bottom-left overlay while keeping diff visible
     showFileTreeOverlay ? h(Box, {flexDirection: 'row', marginTop: 0},
       h(FileTreeOverlay, {
