@@ -17,11 +17,11 @@ import {truncateDisplay, padEndDisplay, stringDisplayWidth} from '../../shared/u
 import {LineWrapper} from '../../shared/utils/lineWrapper.js';
 import {ViewportCalculator} from '../../shared/utils/viewport.js';
 
-type DiffLine = {type: 'added'|'removed'|'context'|'header'; text: string; fileName?: string};
+type DiffLine = {type: 'added'|'removed'|'context'|'header'; text: string; fileName?: string; headerType?: 'file' | 'hunk'};
 
 type SideBySideLine = {
-  left: {type: 'removed'|'context'|'header'|'empty'; text: string; fileName?: string} | null;
-  right: {type: 'added'|'context'|'header'|'empty'; text: string; fileName?: string} | null;
+  left: {type: 'removed'|'context'|'header'|'empty'; text: string; fileName?: string; headerType?: 'file' | 'hunk'} | null;
+  right: {type: 'added'|'context'|'header'|'empty'; text: string; fileName?: string; headerType?: 'file' | 'hunk'} | null;
   lineIndex: number; // Original line index for comments and navigation
 };
 
@@ -158,10 +158,10 @@ async function loadDiff(worktreePath: string, diffType: 'full' | 'uncommitted' =
       const parts = line.split(' ');
       const fp = parts[3]?.slice(2) || parts[2]?.slice(2) || '';
       currentFileName = fp;
-      lines.push({type: 'header', text: `📁 ${fp}`, fileName: fp});
+      lines.push({type: 'header', text: `📁 ${fp}`, fileName: fp, headerType: 'file'});
     } else if (line.startsWith('@@')) {
       const ctx = line.replace(/^@@.*@@ ?/, '');
-      if (ctx) lines.push({type: 'header', text: `  ▼ ${ctx}`, fileName: currentFileName});
+      if (ctx) lines.push({type: 'header', text: `  ▼ ${ctx}`, fileName: currentFileName, headerType: 'hunk'});
     } else if (line.startsWith('+') && !line.startsWith('+++')) {
       lines.push({type: 'added', text: line.slice(1), fileName: currentFileName});
     } else if (line.startsWith('-') && !line.startsWith('---')) {
@@ -176,7 +176,7 @@ async function loadDiff(worktreePath: string, diffType: 'full' | 'uncommitted' =
   const untracked = await runCommandAsync(['git', '-C', worktreePath, 'ls-files', '--others', '--exclude-standard']);
   if (untracked) {
     for (const fp of untracked.split('\n').filter(Boolean)) {
-      lines.push({type: 'header', text: `📁 ${fp} (new file)`, fileName: fp});
+      lines.push({type: 'header', text: `📁 ${fp} (new file)`, fileName: fp, headerType: 'file'});
       try {
         const cat = await runCommandAsync(['bash', '-lc', `cd ${JSON.stringify(worktreePath)} && sed -n '1,200p' ${JSON.stringify(fp)}`]);
         for (const l of (cat || '').split('\n').filter(Boolean)) lines.push({type: 'added', text: l, fileName: fp});
@@ -197,8 +197,8 @@ function convertToSideBySide(unifiedLines: DiffLine[]): SideBySideLine[] {
     if (line.type === 'header') {
       // Headers appear on both sides
       sideBySideLines.push({
-        left: {type: 'header', text: line.text, fileName: line.fileName},
-        right: {type: 'header', text: line.text, fileName: line.fileName},
+        left: {type: 'header', text: line.text, fileName: line.fileName, headerType: line.headerType},
+        right: {type: 'header', text: line.text, fileName: line.fileName, headerType: line.headerType},
         lineIndex: lineIndex++
       });
       i++;
@@ -465,20 +465,20 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     // Helper function to check if a line is a chunk header
     const isChunkHeader = (index: number): boolean => {
       if (viewMode === 'unified') {
-        return lines[index]?.type === 'header' && lines[index]?.text.includes('▼');
+        return lines[index]?.type === 'header' && lines[index]?.headerType === 'hunk';
       } else {
         const line = sideBySideLines[index];
-        return line?.left?.type === 'header' && line.left.text.includes('▼');
+        return line?.left?.type === 'header' && line.left.headerType === 'hunk';
       }
     };
     
     // Helper function to check if a line is a file header
     const isFileHeader = (index: number): boolean => {
       if (viewMode === 'unified') {
-        return lines[index]?.type === 'header' && lines[index]?.text.startsWith('📁');
+        return lines[index]?.type === 'header' && lines[index]?.headerType === 'file';
       } else {
         const line = sideBySideLines[index];
-        return line?.left?.type === 'header' && line.left.text.startsWith('📁');
+        return line?.left?.type === 'header' && line.left.headerType === 'file';
       }
     };
     
@@ -834,20 +834,20 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     for (let i = viewport.firstVisibleLine - 1; i >= 0; i--) {
       if (viewMode === 'unified') {
         const line = lines[i];
-        if (line.type === 'header' && line.text.startsWith('📁')) {
+        if (line.type === 'header' && line.headerType === 'file') {
           fileHeader = line.text;
           break;
         }
-        if (!fileHeader && line.type === 'header' && line.text.includes('▼')) {
+        if (!fileHeader && line.type === 'header' && line.headerType === 'hunk') {
           hunkHeader = line.text;
         }
       } else {
         const line = sideBySideLines[i];
-        if (line.left?.type === 'header' && line.left.text.startsWith('📁')) {
+        if (line.left?.type === 'header' && line.left.headerType === 'file') {
           fileHeader = line.left.text;
           break;
         }
-        if (!fileHeader && line.left?.type === 'header' && line.left.text.includes('▼')) {
+        if (!fileHeader && line.left?.type === 'header' && line.left.headerType === 'hunk') {
           hunkHeader = line.left.text;
         }
       }
@@ -956,7 +956,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     h(Text, {bold: true}, title),
     // Sticky headers - only render when content exists
     ...(currentFileHeader ? [h(Text, {
-      color: 'cyan',
+      color: 'white',
       bold: true,
       backgroundColor: 'gray'
     }, currentFileHeader)] : []),
@@ -989,6 +989,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
             // Truncate mode with gutter and diff colors
             if (unifiedLine.type === 'header') {
               const displayText = truncateDisplay(fullText, terminalWidth - 4); // -4 for gutter
+              const headerColor = unifiedLine.headerType === 'file' ? 'white' : 'cyan';
               renderedElements.push(h(Box, {
                 key: `line-${visibleLineIndex}`,
                 flexDirection: 'row'
@@ -999,9 +1000,9 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                   bold: isCurrentLine
                 }, gutterSymbol),
                 h(Text, {
-                  color: 'cyan',
+                  color: headerColor,
                   backgroundColor: isCurrentLine ? 'blue' : undefined,
-                  bold: isCurrentLine
+                  bold: true
                 }, displayText)
               ));
             } else {
@@ -1053,6 +1054,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
             
             segments.forEach((segment, segIdx) => {
               if (unifiedLine.type === 'header') {
+                const headerColor = unifiedLine.headerType === 'file' ? 'white' : 'cyan';
                 renderedElements.push(h(Box, {
                   key: `line-${visibleLineIndex}-seg-${segIdx}`,
                   flexDirection: 'row'
@@ -1063,9 +1065,9 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                     bold: isCurrentLine
                   }, segIdx === 0 ? gutterSymbol : '  '),
                   h(Text, {
-                    color: 'cyan',
+                    color: headerColor,
                     backgroundColor: isCurrentLine ? 'blue' : undefined,
-                    bold: isCurrentLine
+                    bold: true
                   }, segment)
                 ));
               } else {
@@ -1135,9 +1137,10 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
             let leftElement;
             if (sideBySideLine.left) {
               if (sideBySideLine.left.type === 'header') {
+                const headerColor = sideBySideLine.left.headerType === 'file' ? 'white' : 'cyan';
                 leftElement = h(Text, {
-                  bold: isCurrentLine,
-                  color: 'cyan',
+                  bold: true,
+                  color: headerColor,
                   backgroundColor: isCurrentLine ? 'blue' : undefined
                 }, padEndDisplay(' ' + leftText, paneWidth));
               } else if (sideBySideLine.left.type === 'context' || sideBySideLine.left.type === 'empty') {
@@ -1202,9 +1205,10 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
             let rightElement;
             if (sideBySideLine.right) {
               if (sideBySideLine.right.type === 'header') {
+                const headerColor = sideBySideLine.right.headerType === 'file' ? 'white' : 'cyan';
                 rightElement = h(Text, {
-                  bold: isCurrentLine,
-                  color: 'cyan',
+                  bold: true,
+                  color: headerColor,
                   backgroundColor: isCurrentLine ? 'blue' : undefined
                 }, padEndDisplay(' ' + rightText, paneWidth));
               } else if (sideBySideLine.right.type === 'context' || sideBySideLine.right.type === 'empty') {
@@ -1270,9 +1274,10 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
               
               if (sideBySideLine.left && leftSegment) {
                 if (sideBySideLine.left.type === 'header') {
+                  const headerColor = sideBySideLine.left.headerType === 'file' ? 'white' : 'cyan';
                   leftElement = h(Text, {
-                    bold: isCurrentLine,
-                    color: 'cyan',
+                    bold: true,
+                    color: headerColor,
                     backgroundColor: isCurrentLine ? 'blue' : undefined
                   }, padEndDisplay(' ' + leftSegment, paneWidth));
                 } else if (sideBySideLine.left.type === 'context' || sideBySideLine.left.type === 'empty') {
@@ -1332,9 +1337,10 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
               
               if (sideBySideLine.right && rightSegment) {
                 if (sideBySideLine.right.type === 'header') {
+                  const headerColor = sideBySideLine.right.headerType === 'file' ? 'white' : 'cyan';
                   rightElement = h(Text, {
-                    bold: isCurrentLine,
-                    color: 'cyan',
+                    bold: true,
+                    color: headerColor,
                     backgroundColor: isCurrentLine ? 'blue' : undefined
                   }, padEndDisplay(' ' + rightSegment, paneWidth));
                 } else if (sideBySideLine.right.type === 'context' || sideBySideLine.right.type === 'empty') {
