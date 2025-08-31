@@ -397,10 +397,10 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       setSelectedLine(prev => Math.min(maxLineIndex, prev + 1));
     }
     if (key.pageUp || input === 'b') {
-      setSelectedLine(prev => Math.max(0, prev - pageSize));
+      setSelectedLine(prev => Math.max(0, prev - Math.floor(pageSize / 2)));
     }
     if (key.pageDown || input === 'f' || input === ' ') {
-      setSelectedLine(prev => Math.min(maxLineIndex, prev + pageSize));
+      setSelectedLine(prev => Math.min(maxLineIndex, prev + Math.floor(pageSize / 2)));
     }
     if (input === 'g') {
       setSelectedLine(0);
