@@ -535,7 +535,18 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     
     // Previous file: Shift+Left
     if (key.leftArrow && key.shift) {
-      for (let i = selectedLine - 1; i >= 0; i--) {
+      // First, find the current file header
+      let currentFileHeaderIndex = -1;
+      for (let i = selectedLine; i >= 0; i--) {
+        if (isFileHeader(i)) {
+          currentFileHeaderIndex = i;
+          break;
+        }
+      }
+      
+      // Now search for the previous file header (before the current one)
+      const searchStart = currentFileHeaderIndex > 0 ? currentFileHeaderIndex - 1 : selectedLine - 1;
+      for (let i = searchStart; i >= 0; i--) {
         if (isFileHeader(i)) {
           // Find the first content line after this file header
           const contentLineIndex = findFirstContentLineAfterHeader(i);
