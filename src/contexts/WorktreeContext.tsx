@@ -443,148 +443,132 @@ export function WorktreeProvider({
     try {
       console.log(`[Unarchive] Starting unarchive for: ${archivedPath}`);
       
-      // Parse the archived directory name to extract project and feature
+      // Parse archived directory name to extract feature name
       const dirName = path.basename(archivedPath);
-      console.log(`[Unarchive] Directory name: ${dirName}`);
-      
-      // Match archived directory format: archived-{timestamp}_featurename
-      // Timestamp can be digits only or date format like 20250830-185919
       const match = dirName.match(/^archived-[0-9-]+_(.+)$/);
       if (!match) {
-        const error = new Error(`Invalid archived directory format: ${dirName}. Expected format: archived-{timestamp}_{featurename}`);
-        console.error(`[Unarchive] Format error:`, error);
-        throw error;
+        throw new Error(`Invalid archived directory format: ${dirName}. Expected: archived-{timestamp}_{feature}`);
       }
       
       const feature = match[1];
       console.log(`[Unarchive] Extracted feature: ${feature}`);
       
-      // Extract project from the parent directory
-      const archivedRoot = path.dirname(archivedPath);
-      const archivedRootName = path.basename(archivedRoot);
-      console.log(`[Unarchive] Archived root name: ${archivedRootName}`);
-      
+      // Extract project from parent directory
+      const archivedRootName = path.basename(path.dirname(archivedPath));
       const projectMatch = archivedRootName.match(/^(.+)-archived$/);
       if (!projectMatch) {
-        const error = new Error(`Invalid archived root directory format: ${archivedRootName}`);
-        console.error(`[Unarchive] Project format error:`, error);
-        throw error;
+        throw new Error(`Invalid archived root directory: ${archivedRootName}`);
       }
       
       const project = projectMatch[1];
-      console.log(`[Unarchive] Extracted project: ${project}`);
+      const mainProjectPath = path.join(gitService.basePath, project);
+      const branchName = `feature/${feature}`;
       
+      // Verify the branch still exists
+      const branchExists = runCommandQuick(['git', '-C', mainProjectPath, 'rev-parse', '--verify', branchName]);
+      if (!branchExists || branchExists.includes('fatal')) {
+        throw new Error(`Branch ${branchName} does not exist - cannot unarchive ${feature}`);
+      }
+      console.log(`[Unarchive] Verified branch ${branchName} exists`);
+      
+      // Define target path for new worktree
       const branchesDir = path.join(gitService.basePath, `${project}${DIR_BRANCHES_SUFFIX}`);
       const restoredPath = path.join(branchesDir, feature);
-      console.log(`[Unarchive] Target restored path: ${restoredPath}`);
       
-      // Ensure the target directory doesn't already exist
+      // Check if target already exists
       if (fs.existsSync(restoredPath)) {
-        const error = new Error(`Feature ${project}/${feature} already exists in active worktrees`);
-        console.error(`[Unarchive] Duplicate feature error:`, error);
-        throw error;
+        throw new Error(`Feature ${project}/${feature} already exists in active worktrees`);
       }
       
       // Ensure branches directory exists
-      console.log(`[Unarchive] Ensuring branches directory exists: ${branchesDir}`);
       ensureDirectory(branchesDir);
       
-      // Move the archived directory back to branches location
-      console.log(`[Unarchive] Moving directory from ${archivedPath} to ${restoredPath}`);
-      try {
-        fs.renameSync(archivedPath, restoredPath);
-        console.log(`[Unarchive] Successfully renamed directory`);
-      } catch (renameError) {
-        console.log(`[Unarchive] Rename failed, using copy fallback:`, renameError);
-        // Fallback: copy then remove
-        copyWithIgnore(archivedPath, restoredPath);
-        fs.rmSync(archivedPath, {recursive: true, force: true});
-        console.log(`[Unarchive] Successfully copied and removed original`);
-      }
+      // Create fresh worktree from existing branch
+      console.log(`[Unarchive] Creating fresh worktree at ${restoredPath} from branch ${branchName}`);
+      runCommand(['git', '-C', mainProjectPath, 'worktree', 'add', restoredPath, branchName]);
       
-      // Re-establish git worktree reference
-      const mainProjectPath = path.join(gitService.basePath, project);
-      const gitDir = path.join(restoredPath, '.git');
-      console.log(`[Unarchive] Main project path: ${mainProjectPath}`);
-      console.log(`[Unarchive] Git directory: ${gitDir}`);
+      // Copy environment files from archived directory
+      copyEnvironmentFiles(project, archivedPath, restoredPath);
       
-      if (fs.existsSync(gitDir)) {
-        console.log(`[Unarchive] Git directory exists, attempting to repair worktree`);
-        try {
-          // Try to repair the existing worktree reference
-          runCommand(['git', '-C', mainProjectPath, 'worktree', 'repair', restoredPath]);
-          console.log(`[Unarchive] Successfully repaired worktree reference`);
-        } catch (repairError) {
-          console.log(`[Unarchive] Repair failed, attempting to re-add worktree:`, repairError);
-          // If repair fails, try to re-add the worktree
-          // First check what branch this worktree was on
-          try {
-            const headRef = fs.readFileSync(path.join(restoredPath, '.git', 'HEAD'), 'utf8').trim();
-            const branchMatch = headRef.match(/^ref: refs\/heads\/(.+)$/);
-            const branch = branchMatch ? branchMatch[1] : `feature/${feature}`;
-            console.log(`[Unarchive] Detected branch: ${branch}`);
-            
-            // Force re-add the worktree
-            runCommand(['git', '-C', mainProjectPath, 'worktree', 'add', '--force', restoredPath, branch]);
-            console.log(`[Unarchive] Successfully re-added worktree with branch`);
-          } catch (branchError) {
-            console.log(`[Unarchive] Branch detection failed, trying without branch:`, branchError);
-            // If all else fails, try without specifying branch
-            runCommand(['git', '-C', mainProjectPath, 'worktree', 'add', '--force', restoredPath]);
-            console.log(`[Unarchive] Successfully re-added worktree without branch`);
-          }
-        }
-      } else {
-        console.log(`[Unarchive] Git directory does not exist, skipping git operations`);
-      }
+      // Copy any uncommitted changes from archived directory
+      copyUncommittedChanges(archivedPath, restoredPath);
       
-      // Set up worktree environment (copy env files, etc.)
-      const envProjectPath = path.join(gitService.basePath, project);
-      
-      // Copy environment file
-      const envSrc = path.join(envProjectPath, ENV_FILE);
-      const envDst = path.join(restoredPath, ENV_FILE);
-      if (fs.existsSync(envSrc)) {
-        ensureDirectory(path.dirname(envDst));
-        fs.copyFileSync(envSrc, envDst);
-      }
-      
-      // Copy Claude settings (symlink)
-      const claudeDirSrc = path.join(envProjectPath, '.claude');
-      const claudeDirDst = path.join(restoredPath, '.claude');
-      if (fs.existsSync(claudeDirSrc)) {
-        if (fs.existsSync(claudeDirDst)) {
-          fs.rmSync(claudeDirDst, { recursive: true, force: true });
-        }
-        fs.symlinkSync(claudeDirSrc, claudeDirDst, 'dir');
-      }
-      
-      // Copy Claude documentation
-      const claudeDoc = path.join(envProjectPath, 'CLAUDE.md');
-      const claudeDestDoc = path.join(restoredPath, 'CLAUDE.md');
-      if (fs.existsSync(claudeDoc)) {
-        fs.copyFileSync(claudeDoc, claudeDestDoc);
-      }
+      // Remove archived directory
+      console.log(`[Unarchive] Removing archived directory: ${archivedPath}`);
+      fs.rmSync(archivedPath, {recursive: true, force: true});
       
       await refresh();
       console.log(`[Unarchive] Successfully completed unarchive for ${project}/${feature}`);
       return {restoredPath};
       
     } catch (error) {
-      console.error(`[Unarchive] Unarchive failed:`, error);
-      
-      // Ensure we have a proper error object with a message
-      if (error instanceof Error) {
-        throw error;
-      } else if (typeof error === 'string') {
-        throw new Error(error);
-      } else {
-        throw new Error(`Unarchive failed: ${JSON.stringify(error)}`);
-      }
+      console.error(`[Unarchive] Failed:`, error);
+      throw error instanceof Error ? error : new Error(String(error));
     } finally {
       setLoading(false);
     }
   }, [gitService, refresh]);
+
+  // Helper function to copy environment files from archived to restored worktree
+  const copyEnvironmentFiles = useCallback((project: string, archivedPath: string, restoredPath: string) => {
+    const projectPath = path.join(gitService.basePath, project);
+    
+    // Copy .env.local if it exists in main project
+    const envSrc = path.join(projectPath, ENV_FILE);
+    const envDst = path.join(restoredPath, ENV_FILE);
+    if (fs.existsSync(envSrc)) {
+      fs.copyFileSync(envSrc, envDst);
+      console.log(`[Unarchive] Copied ${ENV_FILE}`);
+    }
+    
+    // Create symlink to .claude directory
+    const claudeDirSrc = path.join(projectPath, '.claude');
+    const claudeDirDst = path.join(restoredPath, '.claude');
+    if (fs.existsSync(claudeDirSrc)) {
+      if (fs.existsSync(claudeDirDst)) {
+        fs.rmSync(claudeDirDst, { recursive: true, force: true });
+      }
+      fs.symlinkSync(claudeDirSrc, claudeDirDst, 'dir');
+      console.log(`[Unarchive] Linked .claude directory`);
+    }
+    
+    // Copy CLAUDE.md
+    const claudeDoc = path.join(projectPath, 'CLAUDE.md');
+    const claudeDestDoc = path.join(restoredPath, 'CLAUDE.md');
+    if (fs.existsSync(claudeDoc)) {
+      fs.copyFileSync(claudeDoc, claudeDestDoc);
+      console.log(`[Unarchive] Copied CLAUDE.md`);
+    }
+  }, [gitService]);
+
+  // Helper function to copy any uncommitted changes from archived directory
+  const copyUncommittedChanges = useCallback((archivedPath: string, restoredPath: string) => {
+    // Check for any modified files in the archived directory by comparing against git
+    try {
+      const archivedFiles = fs.readdirSync(archivedPath, { withFileTypes: true })
+        .filter(dirent => dirent.isFile() && !dirent.name.startsWith('.'))
+        .map(dirent => dirent.name);
+      
+      for (const fileName of archivedFiles) {
+        const archivedFile = path.join(archivedPath, fileName);
+        const restoredFile = path.join(restoredPath, fileName);
+        
+        // Only copy if archived version is different from restored version
+        if (fs.existsSync(archivedFile) && fs.existsSync(restoredFile)) {
+          const archivedContent = fs.readFileSync(archivedFile, 'utf8');
+          const restoredContent = fs.readFileSync(restoredFile, 'utf8');
+          
+          if (archivedContent !== restoredContent) {
+            fs.copyFileSync(archivedFile, restoredFile);
+            console.log(`[Unarchive] Preserved changes in ${fileName}`);
+          }
+        }
+      }
+    } catch (error) {
+      // Don't fail the unarchive if we can't copy uncommitted changes
+      console.log(`[Unarchive] Could not copy uncommitted changes:`, error);
+    }
+  }, []);
 
   const attachSession = useCallback(async (worktree: WorktreeInfo) => {
     const sessionName = tmuxService.sessionName(worktree.project, worktree.feature);

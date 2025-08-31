@@ -1,5 +1,5 @@
 import {GitService} from '../../src/services/GitService.js';
-import {GitStatus, ProjectInfo, PRStatus, WorktreeInfo} from '../../src/models.js';
+import {GitStatus, ProjectInfo, PRStatus, WorktreeInfo, SessionInfo} from '../../src/models.js';
 import {memoryStore} from './stores.js';
 import {DIR_BRANCHES_SUFFIX, DIR_ARCHIVED_SUFFIX} from '../../src/constants.js';
 
@@ -247,7 +247,7 @@ export class FakeGitService extends GitService {
     return archivedPath;
   }
 
-  // Unarchive a worktree (move from archived back to active)
+  // Unarchive a worktree (create fresh worktree from existing branch)
   unarchiveWorktree(archivedPath: string): string {
     // Check if unarchive should fail (for error testing)
     if ((global as any).__mockGitShouldFail || (global as any).__mockUnarchiveShouldFail) {
@@ -275,25 +275,37 @@ export class FakeGitService extends GitService {
       throw new Error('Archived worktree not found');
     }
 
-    // Generate restored path
+    // Generate restored path (same as old logic)
     const restoredPath = archivedPath
       .replace(DIR_ARCHIVED_SUFFIX, DIR_BRANCHES_SUFFIX)
       .replace(/archived-[0-9-]+_/, '');
 
-    // Check if restored path already exists BEFORE removing from archived
+    // Check if restored path already exists
     if (memoryStore.worktrees.has(restoredPath)) {
       throw new Error(`Feature ${project}/${archivedWorktree.feature} already exists in active worktrees`);
     }
 
-    // Now that we know it's safe, remove from archived
+    // Verify branch exists (in real implementation this would check git branches)
+    // For fake service, we assume the branch exists since archive doesn't delete branches
+    
+    // Remove from archived (simulating removal of archived directory)
     archivedList.splice(archivedIndex, 1);
     memoryStore.archivedWorktrees.set(project, archivedList);
 
-    // Move back to active worktrees
+    // Create fresh worktree (simulating git worktree add)
     const restoredWorktree = new WorktreeInfo({
-      ...archivedWorktree,
+      project: archivedWorktree.project,
+      feature: archivedWorktree.feature,
       path: restoredPath,
-      is_archived: false
+      branch: archivedWorktree.branch,
+      is_archived: false,
+      // Fresh worktree starts with clean git status
+      git: new GitStatus(),
+      session: new SessionInfo({
+        session_name: `dev-${project}-${archivedWorktree.feature}`,
+        attached: false,
+        claude_status: 'not_running'
+      })
     });
     
     memoryStore.worktrees.set(restoredPath, restoredWorktree);
