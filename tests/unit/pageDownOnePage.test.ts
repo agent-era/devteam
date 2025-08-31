@@ -7,7 +7,7 @@ describe('Page Navigation Behavior', () => {
     resetTestData();
   });
 
-  test('should jump to bottom/top when page navigation is used on single page', async () => {
+  test('should move by half screen when page navigation is used on single page', async () => {
     // Setup: Create a small number of features (less than page size)
     createProjectWithFeatures('my-project', ['feature-1', 'feature-2', 'feature-3']);
 
@@ -26,21 +26,21 @@ describe('Page Navigation Behavior', () => {
     output = lastFrame();
     expect(output).toContain('my-project/feature-2');
 
-    // Press Page Down (should jump to last item since only 1 page)
+    // Press Page Down (should move by half screen, typically to last item for small list)
     stdin.write('\u001b[6~'); // Page Down key
     await simulateTimeDelay(50);
     
-    // Should still render normally without errors, and cursor should be on last item
+    // Should still render normally without errors, and likely be at last item due to half-screen movement
     output = lastFrame();
     expect(output).toContain('my-project/feature-1');
     expect(output).toContain('my-project/feature-2');
     expect(output).toContain('my-project/feature-3');
 
-    // Press Page Up (should jump to first item since only 1 page)
+    // Press Page Up (should move back by half screen, likely to first item for small list)
     stdin.write('\u001b[5~'); // Page Up key
     await simulateTimeDelay(50);
     
-    // Should still render normally without errors, and cursor should be on first item
+    // Should still render normally without errors
     output = lastFrame();
     expect(output).toContain('my-project/feature-1');
     expect(output).toContain('my-project/feature-2');

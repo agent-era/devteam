@@ -66,11 +66,11 @@ export default function BranchPickerDialog({branches, onSubmit, onCancel, onRefr
       return;
     }
     if (key.pageDown || input === 'f') {
-      setSelected((s) => Math.min(filtered.length - 1, s + pageSize));
+      setSelected((s) => Math.min(filtered.length - 1, s + Math.floor(pageSize / 2)));
       return;
     }
     if (key.pageUp || input === 'b') {
-      setSelected((s) => Math.max(0, s - pageSize));
+      setSelected((s) => Math.max(0, s - Math.floor(pageSize / 2)));
       return;
     }
     
