@@ -156,6 +156,48 @@ export class FakeWorktreeService {
   }
 
   /**
+   * Unarchive a feature (move from archived back to active)
+   */
+  async unarchiveFeature(archivedPath: string): Promise<{restoredPath: string}> {
+    try {
+      // Find the archived worktree to get project info for session creation
+      let archivedWorktree: WorktreeInfo | null = null;
+      
+      for (const [project, archived] of memoryStore.archivedWorktrees.entries()) {
+        const found = archived.find(w => w.path === archivedPath);
+        if (found) {
+          archivedWorktree = found;
+          break;
+        }
+      }
+      
+      if (!archivedWorktree) {
+        throw new Error(`Archived worktree not found: ${archivedPath}`);
+      }
+
+      // Restore the worktree through git service
+      const restoredPath = this.gitService.unarchiveWorktree(archivedPath);
+
+      // Recreate tmux sessions for the restored worktree
+      const sessionName = this.tmuxService.sessionName(archivedWorktree.project, archivedWorktree.feature);
+      this.tmuxService.createSession(sessionName, restoredPath);
+
+      // Get the restored worktree and link it to the session
+      const restoredWorktree = memoryStore.worktrees.get(restoredPath);
+      const session = memoryStore.sessions.get(sessionName);
+      if (restoredWorktree && session) {
+        restoredWorktree.session = session;
+        memoryStore.worktrees.set(restoredPath, restoredWorktree);
+      }
+
+      return {restoredPath};
+    } catch (error) {
+      console.error('Failed to unarchive feature:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Attach to main Claude session
    */
   async attachSession(worktree: WorktreeInfo): Promise<void> {

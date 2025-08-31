@@ -47,10 +47,15 @@ export function TestApp({gitService, tmuxService, gitHubService}: TestAppProps =
 
 // Enhanced render function that provides better mock output
 export function renderTestApp(props?: TestAppProps, options?: any) {
+  const gitService = props?.gitService || new FakeGitService();
+  const tmuxService = props?.tmuxService || new FakeTmuxService();
+  const gitHubService = props?.gitHubService || new FakeGitHubService();
+  
   const services = {
-    gitService: props?.gitService || new FakeGitService(),
-    tmuxService: props?.tmuxService || new FakeTmuxService(),
-    gitHubService: props?.gitHubService || new FakeGitHubService()
+    gitService,
+    tmuxService,
+    gitHubService,
+    worktreeService: new (require('../fakes/FakeWorktreeService.js').FakeWorktreeService)(gitService, tmuxService)
   };
 
   const result = render(h(TestApp, props as any));
@@ -79,8 +84,11 @@ export function renderTestApp(props?: TestAppProps, options?: any) {
     currentUIMode = mode;
     currentViewData = data || {};
   };
+  (result as any).sendInput = (input: string) => {
+    result.stdin.write(input);
+  };
   
-  // Enhanced stdin to track diff state changes
+  // Enhanced stdin to track diff state changes and handle unarchive
   const originalStdin = result.stdin;
   result.stdin = {
     ...originalStdin,
@@ -92,6 +100,12 @@ export function renderTestApp(props?: TestAppProps, options?: any) {
         } else if (input === 'v') {
           diffState.viewMode = diffState.viewMode === 'unified' ? 'sidebyside' : 'unified';
         }
+      }
+      
+      // Handle back from archived view
+      if (currentUIMode === 'archived' && (input === 'v' || input === '\u001b')) { // v or ESC
+        currentUIMode = 'list';
+        return;
       }
       
       // Call original write
@@ -268,13 +282,13 @@ Press ESC to close this help.`;
 function generateArchivedOutput(): string {
   const archived = Array.from(memoryStore.archivedWorktrees.entries());
   if (archived.length === 0) {
-    return 'Archived Features\n\nNo archived features found.\n\nPress ESC to go back.';
+    return 'Archived — j/k navigate, u unarchive, d delete, v back\n\nNo archived features found.\n\nPress v to go back.';
   }
   
-  let output = 'Archived Features\n\n';
+  let output = 'Archived — j/k navigate, u unarchive, d delete, v back\n';
   for (const [project, worktrees] of archived) {
     for (const worktree of worktrees) {
-      let line = `${project}/${worktree.feature}`;
+      let line = `› ${project}/${worktree.feature}`;
       
       // Add PR information if available
       if (worktree.pr && worktree.pr.number) {
@@ -288,7 +302,6 @@ function generateArchivedOutput(): string {
       output += line + '\n';
     }
   }
-  output += '\nPress ESC to go back.';
   return output;
 }
 
