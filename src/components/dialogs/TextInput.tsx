@@ -1,6 +1,5 @@
 import React, {useState, useCallback, useRef, useEffect} from 'react';
 import {Text} from 'ink';
-const h = React.createElement;
 
 interface InputBuffer {
   type: 'move' | 'edit' | 'insert';
@@ -170,12 +169,12 @@ export function useTextInput(initialValue = '') {
     const atCursor = displayValue[state.cursorPos] || ' ';
     const afterCursor = displayValue.slice(state.cursorPos + 1);
 
-    return h(
-      Text,
-      {color: state.value ? color : 'gray'},
-      beforeCursor,
-      h(Text, {color: cursorColor}, atCursor),
-      afterCursor
+    return (
+      <Text color={state.value ? color : 'gray'}>
+        {beforeCursor}
+        <Text color={cursorColor}>{atCursor}</Text>
+        {afterCursor}
+      </Text>
     );
   }, [state.value, state.cursorPos]);
 

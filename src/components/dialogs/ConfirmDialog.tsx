@@ -1,6 +1,5 @@
 import React from 'react';
 import {Box, Text, useInput, useStdin} from 'ink';
-const h = React.createElement;
 
 type Props = {
   title?: string;
@@ -16,11 +15,12 @@ export default function ConfirmDialog({title, message, confirmKey = 'y', cancelK
     if (key.escape || input === cancelKey) onCancel();
     if (key.return || input === confirmKey) onConfirm();
   });
-  return h(
-    Box, {flexDirection: 'column'},
-    title ? h(Text, {color: 'cyan'}, title) : null,
-    h(Text, null, message),
-    h(Text, {color: 'gray'}, `Press ${confirmKey} to confirm, ${cancelKey} to cancel`)
+  return (
+    <Box flexDirection="column">
+      {title ? <Text color="cyan">{title}</Text> : null}
+      <Text>{message}</Text>
+      <Text color="gray">Press {confirmKey} to confirm, {cancelKey} to cancel</Text>
+    </Box>
   );
 }
 

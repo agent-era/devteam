@@ -5,7 +5,6 @@ import {useWorktreeContext} from '../contexts/WorktreeContext.js';
 import {useKeyboardShortcuts} from '../hooks/useKeyboardShortcuts.js';
 import {usePageSize} from '../hooks/usePagination.js';
 
-const h = React.createElement;
 
 interface WorktreeListScreenProps {
   onCreateFeature: () => void;
@@ -177,13 +176,15 @@ export default function WorktreeListScreen({
     totalItems: worktrees.length
   });
 
-  return h(MainView, {
-    worktrees,
-    selectedIndex,
-    onMove: handleMove,
-    onSelect: handleSelect,
-    onQuit,
-    page: currentPage,
-    pageSize,
-  });
+  return (
+    <MainView
+      worktrees={worktrees}
+      selectedIndex={selectedIndex}
+      onMove={handleMove}
+      onSelect={handleSelect}
+      onQuit={onQuit}
+      page={currentPage}
+      pageSize={pageSize}
+    />
+  );
 }

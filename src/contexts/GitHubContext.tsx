@@ -7,7 +7,6 @@ import {PR_REFRESH_DURATION} from '../constants.js';
 import {getProjectsDirectory} from '../config.js';
 import {logError, logDebug} from '../shared/utils/logger.js';
 
-const h = React.createElement;
 
 interface GitHubContextType {
   // State
@@ -385,7 +384,11 @@ export function GitHubProvider({children}: GitHubProviderProps) {
     getCacheStats
   };
 
-  return h(GitHubContext.Provider, {value: contextValue}, children);
+  return (
+    <GitHubContext.Provider value={contextValue}>
+      {children}
+    </GitHubContext.Provider>
+  );
 }
 
 export function useGitHubContext(): GitHubContextType {

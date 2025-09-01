@@ -4,7 +4,6 @@ import CreateFeatureDialog from '../components/dialogs/CreateFeatureDialog.js';
 import FullScreen from '../components/common/FullScreen.js';
 import {useWorktreeContext} from '../contexts/WorktreeContext.js';
 
-const h = React.createElement;
 
 interface CreateFeatureScreenProps {
   projects: Array<{name: string; path: string}>;
@@ -42,14 +41,16 @@ export default function CreateFeatureScreen({
     }
   };
 
-  return h(FullScreen, null,
-    h(Box as any, {flexGrow: 1, alignItems: 'center', justifyContent: 'center'},
-      h(CreateFeatureDialog, {
-        projects: projects as any,
-        defaultProject,
-        onCancel,
-        onSubmit: handleSubmit
-      })
-    )
+  return (
+    <FullScreen>
+      <Box flexGrow={1} alignItems="center" justifyContent="center">
+        <CreateFeatureDialog
+          projects={projects as any}
+          defaultProject={defaultProject}
+          onCancel={onCancel}
+          onSubmit={handleSubmit}
+        />
+      </Box>
+    </FullScreen>
   );
 }

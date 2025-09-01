@@ -1,7 +1,6 @@
 import React, {useEffect, useMemo, useState} from 'react';
 import {Box, Text, useInput, useStdin} from 'ink';
 import SyntaxHighlight from 'ink-syntax-highlight';
-const h = React.createElement;
 import {runCommandAsync} from '../../utils.js';
 import {findBaseBranch} from '../../utils.js';
 import {useTerminalDimensions} from '../../hooks/useTerminalDimensions.js';
@@ -1017,111 +1016,128 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     
     // If the line is selected, use regular Text to ensure blue background is visible
     if (isSelected) {
-      return h(Text, {
-        backgroundColor: 'blue',
-        bold: true,
-        color: diffColor
-      }, text);
+      return (
+        <Text 
+          backgroundColor="blue"
+          bold
+          color={diffColor}
+        >
+          {text}
+        </Text>
+      );
     }
     
     // For removed lines in unified view, use plain red text without syntax highlighting
     if (lineType === 'removed') {
-      return h(Text, {
-        color: 'red'
-      }, text);
+      return (
+        <Text color="red">
+          {text}
+        </Text>
+      );
     }
     
     // For context lines in unified view, use dimmed text without syntax highlighting
     if (lineType === 'context') {
-      return h(Text, {
-        dimColor: true
-      }, text);
+      return (
+        <Text dimColor>
+          {text}
+        </Text>
+      );
     }
     
     // For added lines and side-by-side view, use syntax highlighting
-    return h(SyntaxHighlight, {
-      code: text,
-      language: language
-    });
+    return (
+      <SyntaxHighlight
+        code={text}
+        language={language}
+      />
+    );
   };
 
   // Create unsubmitted comments dialog if needed - render it instead of the main view when active
   if (showUnsubmittedCommentsDialog) {
-    return h(
-      Box,
-      {flexDirection: 'column', height: terminalHeight, justifyContent: 'center', alignItems: 'center'},
-      h(UnsubmittedCommentsDialog, {
-        commentCount: commentStore.count,
-        onSubmit: handleUnsubmittedCommentsSubmit,
-        onExitWithoutSubmitting: handleUnsubmittedCommentsExitWithoutSubmitting,
-        onCancel: handleUnsubmittedCommentsCancel
-      })
+    return (
+      <Box flexDirection="column" height={terminalHeight} justifyContent="center" alignItems="center">
+        <UnsubmittedCommentsDialog
+          commentCount={commentStore.count}
+          onSubmit={handleUnsubmittedCommentsSubmit}
+          onExitWithoutSubmitting={handleUnsubmittedCommentsExitWithoutSubmitting}
+          onCancel={handleUnsubmittedCommentsCancel}
+        />
+      </Box>
     );
   }
 
   // Create session waiting dialog if needed - render it instead of the main view when active
   if (showSessionWaitingDialog) {
-    return h(
-      Box,
-      {flexDirection: 'column', height: terminalHeight, justifyContent: 'center', alignItems: 'center'},
-      h(SessionWaitingDialog, {
-        sessionName: sessionWaitingInfo.sessionName,
-        onGoToSession: handleSessionWaitingGoToSession,
-        onCancel: handleSessionWaitingCancel
-      })
+    return (
+      <Box flexDirection="column" height={terminalHeight} justifyContent="center" alignItems="center">
+        <SessionWaitingDialog
+          sessionName={sessionWaitingInfo.sessionName}
+          onGoToSession={handleSessionWaitingGoToSession}
+          onCancel={handleSessionWaitingCancel}
+        />
+      </Box>
     );
   }
 
   // Create comment dialog if needed - render it instead of the main view when active
   if (showCommentDialog) {
-    return h(
-      Box,
-      {flexDirection: 'column', height: terminalHeight, justifyContent: 'center', alignItems: 'center'},
-      h(CommentInputDialog, {
-        fileName: viewMode === 'unified' ? 
-          (lines[selectedLine]?.fileName || '') : 
-          (sideBySideLines[selectedLine]?.left?.fileName || sideBySideLines[selectedLine]?.right?.fileName || ''),
-        lineText: viewMode === 'unified' ? 
-          (lines[selectedLine]?.text || '') : 
-          (sideBySideLines[selectedLine]?.left?.text || sideBySideLines[selectedLine]?.right?.text || ''),
-        initialComment: (() => {
-          if (viewMode === 'unified') {
-            return lines[selectedLine]?.fileName ? commentStore.getComment(selectedLine, lines[selectedLine].fileName)?.commentText || '' : '';
-          } else {
-            const fileName = sideBySideLines[selectedLine]?.left?.fileName || sideBySideLines[selectedLine]?.right?.fileName;
-            return fileName ? commentStore.getComment(sideBySideLines[selectedLine].lineIndex, fileName)?.commentText || '' : '';
-          }
-        })(),
-        onSave: handleCommentSave,
-        onCancel: handleCommentCancel
-      })
+    return (
+      <Box flexDirection="column" height={terminalHeight} justifyContent="center" alignItems="center">
+        <CommentInputDialog
+          fileName={viewMode === 'unified' ? 
+            (lines[selectedLine]?.fileName || '') : 
+            (sideBySideLines[selectedLine]?.left?.fileName || sideBySideLines[selectedLine]?.right?.fileName || '')}
+          lineText={viewMode === 'unified' ? 
+            (lines[selectedLine]?.text || '') : 
+            (sideBySideLines[selectedLine]?.left?.text || sideBySideLines[selectedLine]?.right?.text || '')}
+          initialComment={(() => {
+            if (viewMode === 'unified') {
+              return lines[selectedLine]?.fileName ? commentStore.getComment(selectedLine, lines[selectedLine].fileName)?.commentText || '' : '';
+            } else {
+              const fileName = sideBySideLines[selectedLine]?.left?.fileName || sideBySideLines[selectedLine]?.right?.fileName;
+              return fileName ? commentStore.getComment(sideBySideLines[selectedLine].lineIndex, fileName)?.commentText || '' : '';
+            }
+          })()}
+          onSave={handleCommentSave}
+          onCancel={handleCommentCancel}
+        />
+      </Box>
     );
   }
 
   // No early return: overlay is drawn on-screen while keeping diff visible
 
-  return h(
-    Box,
-    {flexDirection: 'column'},
-    h(Text, {bold: true}, title),
-    // Sticky headers - only render when content exists
-    ...(currentFileHeader ? [h(Text, {
-      color: 'white',
-      bold: true,
-      backgroundColor: 'gray'
-    }, currentFileHeader)] : []),
-    ...(currentHunkHeader ? [h(Text, {
-      color: 'cyan',
-      bold: true,
-      backgroundColor: 'gray'
-    }, currentHunkHeader)] : []),
-    ...(() => {
-      const renderedElements: React.ReactNode[] = [];
-      let visibleLineIndex = 0;
-      
-      for (const l of visibleLines) {
-        const actualLineIndex = viewport.visibleLines[visibleLineIndex];
-        const isCurrentLine = actualLineIndex === selectedLine;
+  return (
+    <Box flexDirection="column">
+      <Text bold>{title}</Text>
+      {/* Sticky headers - only render when content exists */}
+      {currentFileHeader && (
+        <Text
+          color="white"
+          bold
+          backgroundColor="gray"
+        >
+          {currentFileHeader}
+        </Text>
+      )}
+      {currentHunkHeader && (
+        <Text
+          color="cyan"
+          bold
+          backgroundColor="gray"
+        >
+          {currentHunkHeader}
+        </Text>
+      )}
+      {(() => {
+        const renderedElements: React.ReactNode[] = [];
+        let visibleLineIndex = 0;
+        
+        for (const l of visibleLines) {
+          const actualLineIndex = viewport.visibleLines[visibleLineIndex];
+          const isCurrentLine = actualLineIndex === selectedLine;
         
         if (viewMode === 'unified') {
           const unifiedLine = l as DiffLine;
@@ -1140,61 +1156,94 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
             if (unifiedLine.type === 'header') {
               const displayText = truncateDisplay(fullText, terminalWidth - 4); // -4 for gutter
               const headerColor = unifiedLine.headerType === 'file' ? 'white' : 'cyan';
-              renderedElements.push(h(Box, {
-                key: `line-${visibleLineIndex}`,
-                flexDirection: 'row'
-              },
-                h(Text, {
-                  color: 'gray',
-                  backgroundColor: isCurrentLine ? 'blue' : undefined,
-                  bold: isCurrentLine
-                }, gutterSymbol),
-                h(Text, {
-                  color: headerColor,
-                  backgroundColor: isCurrentLine ? 'blue' : undefined,
-                  bold: true
-                }, displayText)
-              ));
+              renderedElements.push(
+                <Box
+                  key={`line-${visibleLineIndex}`}
+                  flexDirection="row"
+                >
+                  <Text
+                    color="gray"
+                    backgroundColor={isCurrentLine ? 'blue' : undefined}
+                    bold={isCurrentLine}
+                  >
+                    {gutterSymbol}
+                  </Text>
+                  <Text
+                    color={headerColor}
+                    backgroundColor={isCurrentLine ? 'blue' : undefined}
+                    bold
+                  >
+                    {displayText}
+                  </Text>
+                </Box>
+              );
             } else {
               // Create gutter element
-              const gutterElement = h(Text, {
-                color: unifiedLine.type === 'added' ? 'green' : unifiedLine.type === 'removed' ? 'red' : 'gray',
-                backgroundColor: isCurrentLine ? 'blue' : undefined,
-                bold: isCurrentLine
-              }, gutterSymbol);
+              const gutterElement = (
+                <Text
+                  color={unifiedLine.type === 'added' ? 'green' : unifiedLine.type === 'removed' ? 'red' : 'gray'}
+                  backgroundColor={isCurrentLine ? 'blue' : undefined}
+                  bold={isCurrentLine}
+                >
+                  {gutterSymbol}
+                </Text>
+              );
               
               const finalCodeText = truncateDisplay(unifiedLine.text || ' ', terminalWidth - (hasComment ? 8 : 4));
               
               if (hasComment) {
-                const commentElement = h(Text, {
-                  color: unifiedLine.type === 'added' ? 'green' : unifiedLine.type === 'removed' ? 'red' : undefined,
-                  backgroundColor: isCurrentLine ? 'blue' : undefined,
-                  bold: isCurrentLine
-                }, '[C] ');
+                const commentElement = (
+                  <Text
+                    color={unifiedLine.type === 'added' ? 'green' : unifiedLine.type === 'removed' ? 'red' : undefined}
+                    backgroundColor={isCurrentLine ? 'blue' : undefined}
+                    bold={isCurrentLine}
+                  >
+                    [C] 
+                  </Text>
+                );
                 
-                const codeElement = h(Text, {
-                  color: unifiedLine.type === 'added' ? 'green' : unifiedLine.type === 'removed' ? 'red' : undefined,
-                  dimColor: unifiedLine.type === 'context',
-                  backgroundColor: isCurrentLine ? 'blue' : undefined,
-                  bold: isCurrentLine
-                }, finalCodeText);
+                const codeElement = (
+                  <Text
+                    color={unifiedLine.type === 'added' ? 'green' : unifiedLine.type === 'removed' ? 'red' : undefined}
+                    dimColor={unifiedLine.type === 'context'}
+                    backgroundColor={isCurrentLine ? 'blue' : undefined}
+                    bold={isCurrentLine}
+                  >
+                    {finalCodeText}
+                  </Text>
+                );
                 
-                renderedElements.push(h(Box, {
-                  key: `line-${visibleLineIndex}`,
-                  flexDirection: 'row'
-                }, gutterElement, commentElement, codeElement));
+                renderedElements.push(
+                  <Box
+                    key={`line-${visibleLineIndex}`}
+                    flexDirection="row"
+                  >
+                    {gutterElement}
+                    {commentElement}
+                    {codeElement}
+                  </Box>
+                );
               } else {
-                const codeElement = h(Text, {
-                  color: unifiedLine.type === 'added' ? 'green' : unifiedLine.type === 'removed' ? 'red' : undefined,
-                  dimColor: unifiedLine.type === 'context',
-                  backgroundColor: isCurrentLine ? 'blue' : undefined,
-                  bold: isCurrentLine
-                }, finalCodeText);
+                const codeElement = (
+                  <Text
+                    color={unifiedLine.type === 'added' ? 'green' : unifiedLine.type === 'removed' ? 'red' : undefined}
+                    dimColor={unifiedLine.type === 'context'}
+                    backgroundColor={isCurrentLine ? 'blue' : undefined}
+                    bold={isCurrentLine}
+                  >
+                    {finalCodeText}
+                  </Text>
+                );
                 
-                renderedElements.push(h(Box, {
-                  key: `line-${visibleLineIndex}`,
-                  flexDirection: 'row'
-                }, gutterElement, codeElement));
+                renderedElements.push(
+                  <Box
+                    key={`line-${visibleLineIndex}`}
+                    flexDirection="row"
+                  >
+                    {gutterElement}
+                    {codeElement}
+                  </Box>
+                );
               }
             }
           } else {
@@ -1205,61 +1254,94 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
             segments.forEach((segment, segIdx) => {
               if (unifiedLine.type === 'header') {
                 const headerColor = unifiedLine.headerType === 'file' ? 'white' : 'cyan';
-                renderedElements.push(h(Box, {
-                  key: `line-${visibleLineIndex}-seg-${segIdx}`,
-                  flexDirection: 'row'
-                },
-                  h(Text, {
-                    color: 'gray',
-                    backgroundColor: isCurrentLine ? 'blue' : undefined,
-                    bold: isCurrentLine
-                  }, segIdx === 0 ? gutterSymbol : '  '),
-                  h(Text, {
-                    color: headerColor,
-                    backgroundColor: isCurrentLine ? 'blue' : undefined,
-                    bold: true
-                  }, segment)
-                ));
+                renderedElements.push(
+                  <Box
+                    key={`line-${visibleLineIndex}-seg-${segIdx}`}
+                    flexDirection="row"
+                  >
+                    <Text
+                      color="gray"
+                      backgroundColor={isCurrentLine ? 'blue' : undefined}
+                      bold={isCurrentLine}
+                    >
+                      {segIdx === 0 ? gutterSymbol : '  '}
+                    </Text>
+                    <Text
+                      color={headerColor}
+                      backgroundColor={isCurrentLine ? 'blue' : undefined}
+                      bold
+                    >
+                      {segment}
+                    </Text>
+                  </Box>
+                );
               } else {
-                const gutterElement = h(Text, {
-                  color: unifiedLine.type === 'added' ? 'green' : unifiedLine.type === 'removed' ? 'red' : 'gray',
-                  backgroundColor: isCurrentLine ? 'blue' : undefined,
-                  bold: isCurrentLine
-                }, segIdx === 0 ? gutterSymbol : '  ');
+                const gutterElement = (
+                  <Text
+                    color={unifiedLine.type === 'added' ? 'green' : unifiedLine.type === 'removed' ? 'red' : 'gray'}
+                    backgroundColor={isCurrentLine ? 'blue' : undefined}
+                    bold={isCurrentLine}
+                  >
+                    {segIdx === 0 ? gutterSymbol : '  '}
+                  </Text>
+                );
                 
                 // For wrapped segments, extract the actual code text (removing comment indicator from non-first segments)
                 let codeText = segment;
                 if (segIdx === 0 && hasComment) {
                   codeText = segment.replace('[C] ', '');
-                  const commentElement = h(Text, {
-                    color: unifiedLine.type === 'added' ? 'green' : unifiedLine.type === 'removed' ? 'red' : undefined,
-                    backgroundColor: isCurrentLine ? 'blue' : undefined,
-                    bold: isCurrentLine
-                  }, '[C] ');
+                  const commentElement = (
+                    <Text
+                      color={unifiedLine.type === 'added' ? 'green' : unifiedLine.type === 'removed' ? 'red' : undefined}
+                      backgroundColor={isCurrentLine ? 'blue' : undefined}
+                      bold={isCurrentLine}
+                    >
+                      [C] 
+                    </Text>
+                  );
                   
-                  const codeElement = h(Text, {
-                    color: unifiedLine.type === 'added' ? 'green' : unifiedLine.type === 'removed' ? 'red' : undefined,
-                    dimColor: unifiedLine.type === 'context',
-                    backgroundColor: isCurrentLine ? 'blue' : undefined,
-                    bold: isCurrentLine
-                  }, codeText);
+                  const codeElement = (
+                    <Text
+                      color={unifiedLine.type === 'added' ? 'green' : unifiedLine.type === 'removed' ? 'red' : undefined}
+                      dimColor={unifiedLine.type === 'context'}
+                      backgroundColor={isCurrentLine ? 'blue' : undefined}
+                      bold={isCurrentLine}
+                    >
+                      {codeText}
+                    </Text>
+                  );
                   
-                  renderedElements.push(h(Box, {
-                    key: `line-${visibleLineIndex}-seg-${segIdx}`,
-                    flexDirection: 'row'
-                  }, gutterElement, commentElement, codeElement));
+                  renderedElements.push(
+                    <Box
+                      key={`line-${visibleLineIndex}-seg-${segIdx}`}
+                      flexDirection="row"
+                    >
+                      {gutterElement}
+                      {commentElement}
+                      {codeElement}
+                    </Box>
+                  );
                 } else {
-                  const codeElement = h(Text, {
-                    color: unifiedLine.type === 'added' ? 'green' : unifiedLine.type === 'removed' ? 'red' : undefined,
-                    dimColor: unifiedLine.type === 'context',
-                    backgroundColor: isCurrentLine ? 'blue' : undefined,
-                    bold: isCurrentLine
-                  }, codeText);
+                  const codeElement = (
+                    <Text
+                      color={unifiedLine.type === 'added' ? 'green' : unifiedLine.type === 'removed' ? 'red' : undefined}
+                      dimColor={unifiedLine.type === 'context'}
+                      backgroundColor={isCurrentLine ? 'blue' : undefined}
+                      bold={isCurrentLine}
+                    >
+                      {codeText}
+                    </Text>
+                  );
                   
-                  renderedElements.push(h(Box, {
-                    key: `line-${visibleLineIndex}-seg-${segIdx}`,
-                    flexDirection: 'row'
-                  }, gutterElement, codeElement));
+                  renderedElements.push(
+                    <Box
+                      key={`line-${visibleLineIndex}-seg-${segIdx}`}
+                      flexDirection="row"
+                    >
+                      {gutterElement}
+                      {codeElement}
+                    </Box>
+                  );
                 }
               }
             });
@@ -1288,17 +1370,25 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
             if (sideBySideLine.left) {
               if (sideBySideLine.left.type === 'header') {
                 const headerColor = sideBySideLine.left.headerType === 'file' ? 'white' : 'cyan';
-                leftElement = h(Text, {
-                  bold: true,
-                  color: headerColor,
-                  backgroundColor: isCurrentLine ? 'blue' : undefined
-                }, padEndDisplay(' ' + leftText, paneWidth));
+                leftElement = (
+                  <Text
+                    bold
+                    color={headerColor}
+                    backgroundColor={isCurrentLine ? 'blue' : undefined}
+                  >
+                    {padEndDisplay(' ' + leftText, paneWidth)}
+                  </Text>
+                );
               } else if (sideBySideLine.left.type === 'context' || sideBySideLine.left.type === 'empty') {
-                leftElement = h(Text, {
-                  bold: isCurrentLine,
-                  dimColor: true,
-                  backgroundColor: isCurrentLine ? 'blue' : undefined
-                }, padEndDisplay(' ' + leftText, paneWidth));
+                leftElement = (
+                  <Text
+                    bold={isCurrentLine}
+                    dimColor
+                    backgroundColor={isCurrentLine ? 'blue' : undefined}
+                  >
+                    {padEndDisplay(' ' + leftText, paneWidth)}
+                  </Text>
+                );
               } else {
                 // For removed lines, apply syntax highlighting
                 const actualLeftText = hasComment ? sideBySideLine.left.text || ' ' : leftText.replace('[C] ', '');
@@ -1313,42 +1403,60 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                 
                 // Create the element with proper padding and comment indicator
                 if (hasComment) {
-                  const commentText = h(Text, {
-                    bold: isCurrentLine,
-                    backgroundColor: isCurrentLine ? 'blue' : undefined
-                  }, ' [C] ');
-                  leftElement = h(Box, {
-                    flexDirection: 'row',
-                    width: paneWidth
-                  },
-                    commentText,
-                    h(Box, {
-                      flexShrink: 1,
-                      flexGrow: 0
-                    }, leftSyntaxElement)
+                  const commentText = (
+                    <Text
+                      bold={isCurrentLine}
+                      backgroundColor={isCurrentLine ? 'blue' : undefined}
+                    >
+                       [C] 
+                    </Text>
+                  );
+                  leftElement = (
+                    <Box
+                      flexDirection="row"
+                      width={paneWidth}
+                    >
+                      {commentText}
+                      <Box
+                        flexShrink={1}
+                        flexGrow={0}
+                      >
+                        {leftSyntaxElement}
+                      </Box>
+                    </Box>
                   );
                 } else {
-                  leftElement = h(Box, {
-                    flexDirection: 'row',
-                    width: paneWidth
-                  },
-                    h(Text, {
-                      bold: isCurrentLine,
-                      backgroundColor: isCurrentLine ? 'blue' : undefined
-                    }, ' '),
-                    h(Box, {
-                      flexShrink: 1,
-                      flexGrow: 0
-                    }, leftSyntaxElement)
+                  leftElement = (
+                    <Box
+                      flexDirection="row"
+                      width={paneWidth}
+                    >
+                      <Text
+                        bold={isCurrentLine}
+                        backgroundColor={isCurrentLine ? 'blue' : undefined}
+                      >
+                        {' '}
+                      </Text>
+                      <Box
+                        flexShrink={1}
+                        flexGrow={0}
+                      >
+                        {leftSyntaxElement}
+                      </Box>
+                    </Box>
                   );
                 }
               }
             } else {
-              leftElement = h(Text, {
-                bold: isCurrentLine,
-                dimColor: true,
-                backgroundColor: isCurrentLine ? 'blue' : undefined
-              }, padEndDisplay('', paneWidth));
+              leftElement = (
+                <Text
+                  bold={isCurrentLine}
+                  dimColor
+                  backgroundColor={isCurrentLine ? 'blue' : undefined}
+                >
+                  {padEndDisplay('', paneWidth)}
+                </Text>
+              );
             }
             
             // Format right pane with syntax highlighting
@@ -1356,17 +1464,25 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
             if (sideBySideLine.right) {
               if (sideBySideLine.right.type === 'header') {
                 const headerColor = sideBySideLine.right.headerType === 'file' ? 'white' : 'cyan';
-                rightElement = h(Text, {
-                  bold: true,
-                  color: headerColor,
-                  backgroundColor: isCurrentLine ? 'blue' : undefined
-                }, padEndDisplay(' ' + rightText, paneWidth));
+                rightElement = (
+                  <Text
+                    bold
+                    color={headerColor}
+                    backgroundColor={isCurrentLine ? 'blue' : undefined}
+                  >
+                    {padEndDisplay(' ' + rightText, paneWidth)}
+                  </Text>
+                );
               } else if (sideBySideLine.right.type === 'context' || sideBySideLine.right.type === 'empty') {
-                rightElement = h(Text, {
-                  bold: isCurrentLine,
-                  dimColor: true,
-                  backgroundColor: isCurrentLine ? 'blue' : undefined
-                }, padEndDisplay(' ' + rightText, paneWidth));
+                rightElement = (
+                  <Text
+                    bold={isCurrentLine}
+                    dimColor
+                    backgroundColor={isCurrentLine ? 'blue' : undefined}
+                  >
+                    {padEndDisplay(' ' + rightText, paneWidth)}
+                  </Text>
+                );
               } else {
                 // For added lines, apply syntax highlighting using already truncated text
                 const truncatedText = rightText;
@@ -1379,35 +1495,47 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                 );
                 
                 // Create the element with syntax highlighting constrained to paneWidth
-                rightElement = h(Box, {
-                  flexDirection: 'row',
-                  width: paneWidth
-                },
-                  h(Text, {
-                    bold: isCurrentLine,
-                    backgroundColor: isCurrentLine ? 'blue' : undefined
-                  }, ' '),
-                  h(Box, {
-                    flexShrink: 1,
-                    flexGrow: 0
-                  }, rightSyntaxElement)
+                rightElement = (
+                  <Box
+                    flexDirection="row"
+                    width={paneWidth}
+                  >
+                    <Text
+                      bold={isCurrentLine}
+                      backgroundColor={isCurrentLine ? 'blue' : undefined}
+                    >
+                      {' '}
+                    </Text>
+                    <Box
+                      flexShrink={1}
+                      flexGrow={0}
+                    >
+                      {rightSyntaxElement}
+                    </Box>
+                  </Box>
                 );
               }
             } else {
-              rightElement = h(Text, {
-                bold: isCurrentLine,
-                dimColor: true,
-                backgroundColor: isCurrentLine ? 'blue' : undefined
-              }, padEndDisplay('', paneWidth));
+              rightElement = (
+                <Text
+                  bold={isCurrentLine}
+                  dimColor
+                  backgroundColor={isCurrentLine ? 'blue' : undefined}
+                >
+                  {padEndDisplay('', paneWidth)}
+                </Text>
+              );
             }
             
-            renderedElements.push(h(Box, {
-              key: `line-${visibleLineIndex}`,
-              flexDirection: 'row'
-            }, 
-              leftElement,
-              rightElement
-            ));
+            renderedElements.push(
+              <Box
+                key={`line-${visibleLineIndex}`}
+                flexDirection="row"
+              >
+                {leftElement}
+                {rightElement}
+              </Box>
+            );
           } else {
             // Wrap mode: handle wrapped side-by-side content with syntax highlighting
             const maxPaneWidth = paneWidth - 2;
@@ -1425,17 +1553,25 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
               if (sideBySideLine.left && leftSegment) {
                 if (sideBySideLine.left.type === 'header') {
                   const headerColor = sideBySideLine.left.headerType === 'file' ? 'white' : 'cyan';
-                  leftElement = h(Text, {
-                    bold: true,
-                    color: headerColor,
-                    backgroundColor: isCurrentLine ? 'blue' : undefined
-                  }, padEndDisplay(' ' + leftSegment, paneWidth));
+                  leftElement = (
+                    <Text
+                      bold
+                      color={headerColor}
+                      backgroundColor={isCurrentLine ? 'blue' : undefined}
+                    >
+                      {padEndDisplay(' ' + leftSegment, paneWidth)}
+                    </Text>
+                  );
                 } else if (sideBySideLine.left.type === 'context' || sideBySideLine.left.type === 'empty') {
-                  leftElement = h(Text, {
-                    bold: isCurrentLine,
-                    dimColor: true,
-                    backgroundColor: isCurrentLine ? 'blue' : undefined
-                  }, padEndDisplay(' ' + leftSegment, paneWidth));
+                  leftElement = (
+                    <Text
+                      bold={isCurrentLine}
+                      dimColor
+                      backgroundColor={isCurrentLine ? 'blue' : undefined}
+                    >
+                      {padEndDisplay(' ' + leftSegment, paneWidth)}
+                    </Text>
+                  );
                 } else {
                   // For wrapped removed lines in side-by-side, apply syntax highlighting
                   const leftSyntaxElement = renderSyntaxHighlighted(
@@ -1448,57 +1584,81 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                   
                   // Handle comment indicator for first segment
                   if (leftSegment.includes('[C] ') && segIdx === 0) {
-                    leftElement = h(Box, {
-                      flexDirection: 'row',
-                      width: paneWidth
-                    },
-                      h(Text, {
-                        bold: isCurrentLine,
-                        backgroundColor: isCurrentLine ? 'blue' : undefined
-                      }, ' [C] '),
-                      h(Box, {
-                        flexShrink: 1,
-                        flexGrow: 0
-                      }, leftSyntaxElement)
+                    leftElement = (
+                      <Box
+                        flexDirection="row"
+                        width={paneWidth}
+                      >
+                        <Text
+                          bold={isCurrentLine}
+                          backgroundColor={isCurrentLine ? 'blue' : undefined}
+                        >
+                          {' [C] '}
+                        </Text>
+                        <Box
+                          flexShrink={1}
+                          flexGrow={0}
+                        >
+                          {leftSyntaxElement}
+                        </Box>
+                      </Box>
                     );
                   } else {
-                    leftElement = h(Box, {
-                      flexDirection: 'row',
-                      width: paneWidth
-                    },
-                      h(Text, {
-                        bold: isCurrentLine,
-                        backgroundColor: isCurrentLine ? 'blue' : undefined
-                      }, ' '),
-                      h(Box, {
-                        flexShrink: 1,
-                        flexGrow: 0
-                      }, leftSyntaxElement)
+                    leftElement = (
+                      <Box
+                        flexDirection="row"
+                        width={paneWidth}
+                      >
+                        <Text
+                          bold={isCurrentLine}
+                          backgroundColor={isCurrentLine ? 'blue' : undefined}
+                        >
+                          {' '}
+                        </Text>
+                        <Box
+                          flexShrink={1}
+                          flexGrow={0}
+                        >
+                          {leftSyntaxElement}
+                        </Box>
+                      </Box>
                     );
                   }
                 }
               } else {
-                leftElement = h(Text, {
-                  bold: isCurrentLine,
-                  dimColor: true,
-                  backgroundColor: isCurrentLine ? 'blue' : undefined
-                }, padEndDisplay('', paneWidth));
+                leftElement = (
+                  <Text
+                    bold={isCurrentLine}
+                    dimColor
+                    backgroundColor={isCurrentLine ? 'blue' : undefined}
+                  >
+                    {padEndDisplay('', paneWidth)}
+                  </Text>
+                );
               }
               
               if (sideBySideLine.right && rightSegment) {
                 if (sideBySideLine.right.type === 'header') {
                   const headerColor = sideBySideLine.right.headerType === 'file' ? 'white' : 'cyan';
-                  rightElement = h(Text, {
-                    bold: true,
-                    color: headerColor,
-                    backgroundColor: isCurrentLine ? 'blue' : undefined
-                  }, padEndDisplay(' ' + rightSegment, paneWidth));
+                  rightElement = (
+                    <Text
+                      bold
+                      color={headerColor}
+                      backgroundColor={isCurrentLine ? 'blue' : undefined}
+                    >
+                      {padEndDisplay(' ' + rightSegment, paneWidth)}
+                    </Text>
+                  );
                 } else if (sideBySideLine.right.type === 'context' || sideBySideLine.right.type === 'empty') {
-                  rightElement = h(Text, {
-                    bold: isCurrentLine,
-                    dimColor: true,
-                    backgroundColor: isCurrentLine ? 'blue' : undefined
-                  }, padEndDisplay(' ' + rightSegment, paneWidth));
+                  rightElement = (
+                    <Text
+                      bold={isCurrentLine}
+                      dimColor
+                      backgroundColor={isCurrentLine ? 'blue' : undefined}
+                    >
+                      {padEndDisplay(' ' + rightSegment, paneWidth)}
+                    </Text>
+                  );
                 } else {
                   // For wrapped added lines in side-by-side, apply syntax highlighting
                   const rightSyntaxElement = renderSyntaxHighlighted(
@@ -1509,35 +1669,47 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                     sideBySideLine.right.type
                   );
                   
-                  rightElement = h(Box, {
-                    flexDirection: 'row',
-                    width: paneWidth
-                  },
-                    h(Text, {
-                      bold: isCurrentLine,
-                      backgroundColor: isCurrentLine ? 'blue' : undefined
-                    }, ' '),
-                    h(Box, {
-                      flexShrink: 1,
-                      flexGrow: 0
-                    }, rightSyntaxElement)
+                  rightElement = (
+                    <Box
+                      flexDirection="row"
+                      width={paneWidth}
+                    >
+                      <Text
+                        bold={isCurrentLine}
+                        backgroundColor={isCurrentLine ? 'blue' : undefined}
+                      >
+                        {' '}
+                      </Text>
+                      <Box
+                        flexShrink={1}
+                        flexGrow={0}
+                      >
+                        {rightSyntaxElement}
+                      </Box>
+                    </Box>
                   );
                 }
               } else {
-                rightElement = h(Text, {
-                  bold: isCurrentLine,
-                  dimColor: true,
-                  backgroundColor: isCurrentLine ? 'blue' : undefined
-                }, padEndDisplay('', paneWidth));
+                rightElement = (
+                  <Text
+                    bold={isCurrentLine}
+                    dimColor
+                    backgroundColor={isCurrentLine ? 'blue' : undefined}
+                  >
+                    {padEndDisplay('', paneWidth)}
+                  </Text>
+                );
               }
               
-              renderedElements.push(h(Box, {
-                key: `line-${visibleLineIndex}-seg-${segIdx}`,
-                flexDirection: 'row'
-              },
-                leftElement,
-                rightElement
-              ));
+              renderedElements.push(
+                <Box
+                  key={`line-${visibleLineIndex}-seg-${segIdx}`}
+                  flexDirection="row"
+                >
+                  {leftElement}
+                  {rightElement}
+                </Box>
+              );
             }
           }
         }
@@ -1545,30 +1717,42 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
         visibleLineIndex++;
       }
       
-      return renderedElements;
-    })(),
-    showAllComments && commentStore.count > 0 ? h(
-      Box,
-      {flexDirection: 'column', borderStyle: 'single', borderColor: 'blue', padding: 1, marginTop: 1},
-      h(Text, {bold: true, color: 'blue'}, `All Comments (${commentStore.count}):`),
-      ...commentStore.getAllComments().map((comment, idx) => 
-        h(Text, {key: idx, color: 'gray'}, `${comment.fileName}:${comment.lineIndex} - ${comment.commentText}`)
-      )
-    ) : null,
-    !showFileTreeOverlay ?
-      h(Text, {color: 'gray'}, truncateDisplay(`j/k move  v toggle view (${viewMode})  w toggle wrap (${wrapMode})  c comment  C show all  d delete  S send to Claude  q close`, terminalWidth))
-      : null,
-    // Bottom-left overlay while keeping diff visible
-    showFileTreeOverlay ? h(Box, {flexDirection: 'row', marginTop: 0},
-      h(FileTreeOverlay, {
-        files: diffFiles,
-        highlightedFile: overlayHighlightedFile,
-        maxWidth: terminalWidth,
-        maxHeight: overlayAreaHeight,
-        overlayWidth: Math.max(30, Math.floor(terminalWidth / 2)),
-        overlayHeight: overlayAreaHeight,
-        title: 'Files in Diff'
-      })
-    ) : null
+        return renderedElements;
+      })()}
+      
+      {showAllComments && commentStore.count > 0 && (
+        <Box flexDirection="column" borderStyle="single" borderColor="blue" padding={1} marginTop={1}>
+          <Text bold color="blue">
+            All Comments ({commentStore.count}):
+          </Text>
+          {commentStore.getAllComments().map((comment, idx) => (
+            <Text key={idx} color="gray">
+              {comment.fileName}:{comment.lineIndex} - {comment.commentText}
+            </Text>
+          ))}
+        </Box>
+      )}
+      
+      {!showFileTreeOverlay && (
+        <Text color="gray">
+          {truncateDisplay(`j/k move  v toggle view (${viewMode})  w toggle wrap (${wrapMode})  c comment  C show all  d delete  S send to Claude  q close`, terminalWidth)}
+        </Text>
+      )}
+      
+      {/* Bottom-left overlay while keeping diff visible */}
+      {showFileTreeOverlay && (
+        <Box flexDirection="row" marginTop={0}>
+          <FileTreeOverlay
+            files={diffFiles}
+            highlightedFile={overlayHighlightedFile}
+            maxWidth={terminalWidth}
+            maxHeight={overlayAreaHeight}
+            overlayWidth={Math.max(30, Math.floor(terminalWidth / 2))}
+            overlayHeight={overlayAreaHeight}
+            title="Files in Diff"
+          />
+        </Box>
+      )}
+    </Box>
   );
 }

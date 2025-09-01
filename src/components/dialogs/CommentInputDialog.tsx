@@ -2,7 +2,6 @@ import React, {useState, useEffect} from 'react';
 import {Box, Text, useInput} from 'ink';
 import {useTextInput} from './TextInput.js';
 import {useInputFocus} from '../../contexts/InputFocusContext.js';
-const h = React.createElement;
 
 type Props = {
   fileName: string;
@@ -52,36 +51,33 @@ const CommentInputDialog = React.memo(function CommentInputDialog({fileName, lin
   const lines = commentInput.value.split('\n');
   const boxWidth = 70; // Fixed width for consistent appearance
 
-  return h(
-    Box,
-    {
-      flexDirection: 'column',
-      borderStyle: 'round',
-      borderColor: 'blue',
-      padding: 1,
-      width: boxWidth
-    },
-    h(Text, {bold: true, color: 'blue'}, 'Add Comment'),
-    h(Text, {color: 'gray'}, `File: ${fileName}`),
-    h(Text, {color: 'gray'}, `Line: ${lineText.slice(0, 60)}${lineText.length > 60 ? '...' : ''}`),
-    h(
-      Box,
-      {
-        flexDirection: 'column',
-        borderStyle: 'single',
-        borderColor: 'gray',
-        padding: 1,
-        minHeight: 3
-      },
-      lines.length === 1 
-        ? commentInput.renderText(' ')  // Single line - show cursor
-        : lines.map((line, index) => h(Text, {key: index}, line || ' '))  // Multi-line - no cursor for simplicity
-    ),
-    h(
-      Text,
-      {color: 'gray'},
-      'Enter: Save  Shift+Enter: New Line  Esc: Cancel'
-    )
+  return (
+    <Box
+      flexDirection="column"
+      borderStyle="round"
+      borderColor="blue"
+      padding={1}
+      width={boxWidth}
+    >
+      <Text bold color="blue">Add Comment</Text>
+      <Text color="gray">File: {fileName}</Text>
+      <Text color="gray">Line: {lineText.slice(0, 60)}{lineText.length > 60 ? '...' : ''}</Text>
+      <Box
+        flexDirection="column"
+        borderStyle="single"
+        borderColor="gray"
+        padding={1}
+        minHeight={3}
+      >
+        {lines.length === 1 
+          ? commentInput.renderText(' ')  // Single line - show cursor
+          : lines.map((line, index) => <Text key={index}>{line || ' '}</Text>)  // Multi-line - no cursor for simplicity
+        }
+      </Box>
+      <Text color="gray">
+        Enter: Save  Shift+Enter: New Line  Esc: Cancel
+      </Text>
+    </Box>
   );
 });
 

@@ -1,6 +1,5 @@
 import React, {useEffect, useState} from 'react';
 import {Box, useStdout} from 'ink';
-const h = React.createElement;
 
 function useAltScreen(enabled: boolean) {
   const {stdout} = useStdout();
@@ -36,5 +35,9 @@ export default function FullScreen(props: {children: any; enableAltScreen?: bool
 
   // Leave one row at the bottom to avoid terminal scroll on last-line newline
   const usableRows = Math.max(1, (dims.rows || 1) - 1);
-  return h(Box, {width: dims.columns, height: usableRows, flexDirection: 'column'}, props.children);
+  return (
+    <Box width={dims.columns} height={usableRows} flexDirection="column">
+      {props.children}
+    </Box>
+  );
 }

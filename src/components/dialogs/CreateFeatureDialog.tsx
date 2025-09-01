@@ -1,6 +1,5 @@
 import React, {useEffect, useMemo, useState} from 'react';
 import {Box, Text, useInput, useStdin} from 'ink';
-const h = React.createElement;
 import type {ProjectInfo} from '../../models.js';
 import {kebabCase, validateFeatureName, truncateText} from '../../utils.js';
 import {useTextInput} from './TextInput.js';
@@ -98,31 +97,38 @@ const CreateFeatureDialog = React.memo(function CreateFeatureDialog({projects, d
   });
 
   if (mode === 'creating') {
-    return h(
-      Box, {flexDirection: 'column', alignItems: 'center'},
-      h(Text, {color: 'cyan'}, 'Creating feature branch...'),
-      h(Text, {color: 'yellow'}, `${filtered[selected]?.name || ''}/${featureInput.value}`),
-      h(Text, {color: 'gray'}, 'Setting up worktree and tmux session...')
+    return (
+      <Box flexDirection="column" alignItems="center">
+        <Text color="cyan">Creating feature branch...</Text>
+        <Text color="yellow">{`${filtered[selected]?.name || ''}/${featureInput.value}`}</Text>
+        <Text color="gray">Setting up worktree and tmux session...</Text>
+      </Box>
     );
   }
 
   if (mode === 'select') {
-    return h(
-      Box, {flexDirection: 'column'},
-      h(Text, {color: 'cyan'}, 'Create Feature — Select Project'),
-      h(Text, {color: 'gray'}, 'Type to filter, arrows or j/k to move, Enter select, ESC cancel'),
-      h(Box, {flexDirection: 'row'}, 
-        h(Text, {color: 'gray'}, 'Filter: '),
-        h(Text, null, filter || ' ')
-      ),
-      ...filtered.slice(0, 20).map((p, i) => h(Text, {key: p.name, color: i === selected ? 'green' : undefined}, `${i === selected ? '› ' : '  '}${p.name}`))
+    return (
+      <Box flexDirection="column">
+        <Text color="cyan">Create Feature — Select Project</Text>
+        <Text color="gray">Type to filter, arrows or j/k to move, Enter select, ESC cancel</Text>
+        <Box flexDirection="row">
+          <Text color="gray">Filter: </Text>
+          <Text>{filter || ' '}</Text>
+        </Box>
+        {filtered.slice(0, 20).map((p, i) => 
+          <Text key={p.name} color={i === selected ? 'green' : undefined}>
+            {`${i === selected ? '› ' : '  '}${p.name}`}
+          </Text>
+        )}
+      </Box>
     );
   }
-  return h(
-    Box, {flexDirection: 'column'},
-    h(Text, {color: 'cyan'}, `Create Feature — ${filtered[selected]?.name || ''}`),
-    h(Text, null, 'Enter feature name (kebab-case suggested), ESC back'),
-    featureInput.renderText(' ', 'yellow')
+  return (
+    <Box flexDirection="column">
+      <Text color="cyan">Create Feature — {filtered[selected]?.name || ''}</Text>
+      <Text>Enter feature name (kebab-case suggested), ESC back</Text>
+      {featureInput.renderText(' ', 'yellow')}
+    </Box>
   );
 });
 
