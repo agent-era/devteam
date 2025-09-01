@@ -57,7 +57,7 @@ interface WorktreeContextType {
   createFeature: (projectName: string, featureName: string) => Promise<WorktreeInfo | null>;
   createFromBranch: (project: string, remoteBranch: string, localName: string) => Promise<boolean>;
   archiveFeature: (worktreeOrProject: WorktreeInfo | string, path?: string, feature?: string) => Promise<{archivedPath: string}>;
-  deleteArchived: (archivedPath: string) => Promise<boolean>;
+  
   
   // Session operations  
   attachSession: (worktree: WorktreeInfo, aiTool?: AITool) => Promise<void>;
@@ -70,7 +70,7 @@ interface WorktreeContextType {
   
   // Projects
   discoverProjects: () => ProjectInfo[];
-  getArchivedForProject: (project: ProjectInfo) => Array<any>;
+  
   getRemoteBranches: (project: string) => Promise<Array<Record<string, any>>>;
   
   // Run configuration
@@ -439,14 +439,7 @@ export function WorktreeProvider({
     }
   }, [tmuxService, refresh]);
 
-  const deleteArchived = useCallback(async (archivedPath: string): Promise<boolean> => {
-    try {
-      fs.rmSync(archivedPath, {recursive: true, force: true});
-      return true;
-    } catch {
-      return false;
-    }
-  }, []);
+  // Unarchive and delete archived functionality removed
 
   const attachSession = useCallback(async (worktree: WorktreeInfo, aiTool?: AITool) => {
     const sessionName = tmuxService.sessionName(worktree.project, worktree.feature);
@@ -556,9 +549,7 @@ export function WorktreeProvider({
     return gitService.discoverProjects();
   }, [gitService]);
 
-  const getArchivedForProject = useCallback((project: ProjectInfo) => {
-    return gitService.getArchivedForProject(project);
-  }, [gitService]);
+  
 
   const getRemoteBranches = useCallback((project: string): Promise<Array<Record<string, any>>> => {
     return gitService.getRemoteBranches(project);
@@ -865,7 +856,6 @@ export function WorktreeProvider({
     createFeature,
     createFromBranch,
     archiveFeature,
-    deleteArchived,
     
     // Session operations
     attachSession,
@@ -878,7 +868,7 @@ export function WorktreeProvider({
     
     // Projects
     discoverProjects,
-    getArchivedForProject,
+    
     getRemoteBranches,
     
     // Run configuration

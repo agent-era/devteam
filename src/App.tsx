@@ -14,7 +14,6 @@ import AIToolDialog from './components/dialogs/AIToolDialog.js';
 import WorktreeListScreen from './screens/WorktreeListScreen.js';
 import CreateFeatureScreen from './screens/CreateFeatureScreen.js';
 import ArchiveConfirmScreen from './screens/ArchiveConfirmScreen.js';
-import ArchivedScreen from './screens/ArchivedScreen.js';
 
 import {WorktreeProvider, useWorktreeContext} from './contexts/WorktreeContext.js';
 import {GitHubProvider, useGitHubContext} from './contexts/GitHubContext.js';
@@ -40,7 +39,7 @@ function AppContent() {
     attachShellSession,
     attachRunSession,
     discoverProjects,
-    getArchivedForProject,
+    
     getRemoteBranches,
     getRunConfigPath,
     createOrFillRunConfig,
@@ -67,7 +66,7 @@ function AppContent() {
     showList,
     showCreateFeature,
     showArchiveConfirmation,
-    showArchivedView,
+    
     showHelp,
     showBranchPicker,
     showBranchListForProject,
@@ -191,11 +190,7 @@ function AppContent() {
     });
   }
 
-  if (mode === 'archived') {
-    return h(ArchivedScreen, {
-      onBack: showList
-    });
-  }
+  // Archived view removed
 
   if (mode === 'help') {
     return h(FullScreen, null,
@@ -334,7 +329,6 @@ function AppContent() {
     h(WorktreeListScreen, {
       onCreateFeature: handleCreateFeature,
       onArchiveFeature: handleArchiveFeature,
-      onViewArchived: showArchivedView,
       onHelp: showHelp,
       onBranch: handleBranch,
       onDiff: handleDiff,

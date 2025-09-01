@@ -8,7 +8,6 @@ export interface KeyboardActions {
   onCreate?: () => void;
   onArchive?: () => void;
   onRefresh?: () => void;
-  onViewArchived?: () => void;
   onHelp?: () => void;
   onBranch?: () => void;
   onShell?: () => void;
@@ -80,7 +79,6 @@ export function useKeyboardShortcuts(
       else if (input === 'n') actions.onCreate?.();
       else if (input === 'a') actions.onArchive?.();
       else if (input === 'r') actions.onRefresh?.();
-      else if (input === 'v') actions.onViewArchived?.();
       else if (input === '?') actions.onHelp?.();
       else if (input === 'b') actions.onBranch?.();
       else if (input === 's') actions.onShell?.();

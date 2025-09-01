@@ -214,49 +214,7 @@ export class GitService {
     return branches;
   }
 
-  getArchivedForProject(project: ProjectInfo): Array<{
-    project: string; 
-    feature: string; 
-    path: string; 
-    branch: string; 
-    archived_date?: string; 
-    is_archived: boolean; 
-    mtime: number
-  }> {
-    const archived: Array<{
-      project: string; 
-      feature: string; 
-      path: string; 
-      branch: string; 
-      archived_date?: string; 
-      is_archived: boolean; 
-      mtime: number
-    }> = [];
-    
-    const archivedRoot = path.join(this.basePath, `${project.name}${DIR_ARCHIVED_SUFFIX}`);
-    if (!fs.existsSync(archivedRoot)) return archived;
-
-    for (const entry of fs.readdirSync(archivedRoot, {withFileTypes: true})) {
-      if (!entry.isDirectory()) continue;
-      
-      const entryPath = path.join(archivedRoot, entry.name);
-      const mtime = fs.statSync(entryPath).mtimeMs;
-      const {feature, archived_date} = this.parseArchivedName(entry.name);
-      
-      archived.push({
-        project: project.name,
-        feature: feature || entry.name,
-        path: entryPath,
-        branch: 'archived',
-        archived_date,
-        is_archived: true,
-        mtime,
-      });
-    }
-    
-    archived.sort((a, b) => (b.mtime || 0) - (a.mtime || 0));
-    return archived;
-  }
+  // getArchivedForProject removed with archived UI
 
 
   // Private helper methods
@@ -379,29 +337,7 @@ export class GitService {
     return ts ? Number(ts.trim()) : 0;
   }
 
-  private parseArchivedName(name: string): {feature: string; archived_date?: string} {
-    if (name.startsWith('archived-')) {
-      const rest = name.slice('archived-'.length);
-      const underscoreIdx = rest.indexOf('_');
-      if (underscoreIdx > 0) {
-        return {
-          feature: rest.slice(underscoreIdx + 1),
-          archived_date: rest.slice(0, underscoreIdx)
-        };
-      } else {
-        const parts = rest.split('-');
-        if (parts.length >= 3) {
-          return {
-            feature: parts.slice(0, -2).join('-'),
-            archived_date: parts.slice(-2).join('-')
-          };
-        } else {
-          return {feature: rest};
-        }
-      }
-    }
-    return {feature: name};
-  }
+  // parseArchivedName removed with archived UI
 
   getWorktreeBranchMapping(repoPath: string): Record<string, string> {
     const wtInfo = runCommandQuick(['git', '-C', repoPath, 'worktree', 'list', '--porcelain']);

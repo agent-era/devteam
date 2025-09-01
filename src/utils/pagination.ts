@@ -31,8 +31,11 @@ export function calculatePageSize(
   // Calculate available space for worktree rows
   const availableRows = terminalRows - reservedLines;
   
-  // Ensure minimum of 1 item per page
-  return Math.max(1, availableRows);
+  // Ensure minimum of 1 item per page with safety bounds
+  // Never return 0 or negative values that could break rendering
+  const pageSize = Math.max(1, Math.min(availableRows, 100)); // Cap at 100 for sanity
+  
+  return pageSize;
 }
 
 /**

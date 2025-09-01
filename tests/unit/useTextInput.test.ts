@@ -1,332 +1,430 @@
-// Simple unit tests for text input logic without React testing complexity
-// These tests focus on the key input handling logic
+/**
+ * @jest-environment jsdom
+ */
+import {describe, beforeEach, test, expect, jest, afterAll} from '@jest/globals';
+import {renderHook, act} from '@testing-library/react';
+import {useTextInput} from '../../src/components/dialogs/TextInput.js';
 
-describe('Text Input Logic', () => {
-  // Helper to simulate the key input handling logic
-  class TestTextInput {
-    state: {value: string; cursorPos: number};
+// Mock timers for testing debounced behavior
+jest.useFakeTimers();
 
-    constructor(initialValue = '') {
-      this.state = {
-        value: initialValue,
-        cursorPos: initialValue.length
-      };
-    }
+describe('useTextInput Hook', () => {
+  beforeEach(() => {
+    jest.clearAllTimers();
+  });
 
-    get value() { return this.state.value; }
-    get cursorPos() { return this.state.cursorPos; }
+  afterEach(() => {
+    act(() => {
+      jest.runOnlyPendingTimers();
+    });
+  });
 
-    handleKeyInput(input: string, key: any): boolean {
-      // Movement keys
-      if (key.leftArrow) {
-        this.state = {
-          ...this.state,
-          cursorPos: Math.max(0, this.state.cursorPos - 1)
-        };
-        return true;
-      }
-      if (key.rightArrow) {
-        this.state = {
-          ...this.state,
-          cursorPos: Math.min(this.state.value.length, this.state.cursorPos + 1)
-        };
-        return true;
-      }
-      if (key.home || (key.ctrl && input === 'a')) {
-        this.state = {
-          ...this.state,
-          cursorPos: 0
-        };
-        return true;
-      }
-      if (key.end || (key.ctrl && input === 'e')) {
-        this.state = {
-          ...this.state,
-          cursorPos: this.state.value.length
-        };
-        return true;
-      }
-      
-      // Editing keys (swapped due to terminal key mapping)
-      if (key.delete) {
-        if (this.state.cursorPos > 0) {
-          const newValue = this.state.value.slice(0, this.state.cursorPos - 1) + this.state.value.slice(this.state.cursorPos);
-          this.state = {
-            value: newValue,
-            cursorPos: this.state.cursorPos - 1
-          };
-        }
-        return true;
-      }
-      if (key.backspace) {
-        if (this.state.cursorPos < this.state.value.length) {
-          const newValue = this.state.value.slice(0, this.state.cursorPos) + this.state.value.slice(this.state.cursorPos + 1);
-          this.state = {
-            ...this.state,
-            value: newValue
-          };
-        }
-        return true;
-      }
-      
-      // Regular typing
-      if (input && !key.ctrl && !key.meta) {
-        const newValue = this.state.value.slice(0, this.state.cursorPos) + input + this.state.value.slice(this.state.cursorPos);
-        this.state = {
-          value: newValue,
-          cursorPos: this.state.cursorPos + 1
-        };
-        return true;
-      }
-      
-      return false;
-    }
-
-    setValue(newValue: string) {
-      this.state = {
-        value: newValue,
-        cursorPos: Math.min(this.state.cursorPos, newValue.length)
-      };
-    }
-
-    reset(newValue = '') {
-      this.state = {
-        value: newValue,
-        cursorPos: newValue.length
-      };
-    }
-  }
+  // Helper to wait for debounced updates
+  const flushUpdates = () => {
+    act(() => {
+      jest.advanceTimersByTime(16); // Flush the 16ms debounce
+    });
+  };
 
   test('should initialize with empty value and cursor at end', () => {
-    const input = new TestTextInput();
+    const {result} = renderHook(() => useTextInput());
     
-    expect(input.value).toBe('');
-    expect(input.cursorPos).toBe(0);
+    expect(result.current.value).toBe('');
+    expect(result.current.cursorPos).toBe(0);
   });
 
   test('should initialize with provided value and cursor at end', () => {
-    const input = new TestTextInput('hello');
+    const {result} = renderHook(() => useTextInput('hello'));
     
-    expect(input.value).toBe('hello');
-    expect(input.cursorPos).toBe(5);
+    expect(result.current.value).toBe('hello');
+    expect(result.current.cursorPos).toBe(5);
   });
 
   test('should handle typing at cursor position', () => {
-    const input = new TestTextInput('hello');
+    const {result} = renderHook(() => useTextInput('hello'));
     
-    input.handleKeyInput('!', {});
+    act(() => {
+      result.current.handleKeyInput('!', {});
+    });
+    flushUpdates();
     
-    expect(input.value).toBe('hello!');
-    expect(input.cursorPos).toBe(6);
+    expect(result.current.value).toBe('hello!');
+    expect(result.current.cursorPos).toBe(6);
   });
 
   test('should handle typing in middle of text', () => {
-    const input = new TestTextInput('hello');
+    const {result} = renderHook(() => useTextInput('hello'));
     
     // Move cursor to position 2 (between 'e' and 'l')
-    input.handleKeyInput('', {leftArrow: true});
-    input.handleKeyInput('', {leftArrow: true});
-    input.handleKeyInput('', {leftArrow: true});
+    act(() => {
+      result.current.handleKeyInput('', {leftArrow: true});
+      result.current.handleKeyInput('', {leftArrow: true});
+      result.current.handleKeyInput('', {leftArrow: true});
+    });
+    flushUpdates();
     
-    expect(input.cursorPos).toBe(2);
+    expect(result.current.cursorPos).toBe(2);
     
     // Type 'X' at position 2
-    input.handleKeyInput('X', {});
+    act(() => {
+      result.current.handleKeyInput('X', {});
+    });
+    flushUpdates();
     
-    expect(input.value).toBe('heXllo');
-    expect(input.cursorPos).toBe(3);
+    expect(result.current.value).toBe('heXllo');
+    expect(result.current.cursorPos).toBe(3);
   });
 
   test('should handle delete key as backspace (terminal key mapping)', () => {
-    const input = new TestTextInput('hello');
+    const {result} = renderHook(() => useTextInput('hello'));
     
-    input.handleKeyInput('', {delete: true});
+    act(() => {
+      result.current.handleKeyInput('', {delete: true});
+    });
+    flushUpdates();
     
-    expect(input.value).toBe('hell');
-    expect(input.cursorPos).toBe(4);
+    expect(result.current.value).toBe('hell');
+    expect(result.current.cursorPos).toBe(4);
   });
 
   test('should handle delete key as backspace in middle of text', () => {
-    const input = new TestTextInput('hello');
+    const {result} = renderHook(() => useTextInput('hello'));
     
     // Move cursor to position 2 (between 'e' and 'l')
-    input.handleKeyInput('', {leftArrow: true});
-    input.handleKeyInput('', {leftArrow: true});
-    input.handleKeyInput('', {leftArrow: true});
+    act(() => {
+      result.current.handleKeyInput('', {leftArrow: true});
+      result.current.handleKeyInput('', {leftArrow: true});
+      result.current.handleKeyInput('', {leftArrow: true});
+    });
+    flushUpdates();
     
-    expect(input.cursorPos).toBe(2);
+    expect(result.current.cursorPos).toBe(2);
     
     // Delete key should delete 'e' and move cursor to position 1
-    input.handleKeyInput('', {delete: true});
+    act(() => {
+      result.current.handleKeyInput('', {delete: true});
+    });
+    flushUpdates();
     
-    expect(input.value).toBe('hllo');
-    expect(input.cursorPos).toBe(1);
+    expect(result.current.value).toBe('hllo');
+    expect(result.current.cursorPos).toBe(1);
   });
 
   test('should not delete at beginning of text', () => {
-    const input = new TestTextInput('hello');
+    const {result} = renderHook(() => useTextInput('hello'));
     
     // Move cursor to beginning
-    input.handleKeyInput('', {home: true});
+    act(() => {
+      result.current.handleKeyInput('', {home: true});
+    });
+    flushUpdates();
     
-    expect(input.cursorPos).toBe(0);
+    expect(result.current.cursorPos).toBe(0);
     
     // Delete key should do nothing at beginning
-    input.handleKeyInput('', {delete: true});
+    act(() => {
+      result.current.handleKeyInput('', {delete: true});
+    });
+    flushUpdates();
     
-    expect(input.value).toBe('hello');
-    expect(input.cursorPos).toBe(0);
+    expect(result.current.value).toBe('hello');
+    expect(result.current.cursorPos).toBe(0);
   });
 
   test('should handle backspace key as delete (terminal key mapping)', () => {
-    const input = new TestTextInput('hello');
+    const {result} = renderHook(() => useTextInput('hello'));
     
     // Move cursor to beginning
-    input.handleKeyInput('', {home: true});
+    act(() => {
+      result.current.handleKeyInput('', {home: true});
+    });
+    flushUpdates();
     
     // Backspace key should remove 'h'
-    input.handleKeyInput('', {backspace: true});
+    act(() => {
+      result.current.handleKeyInput('', {backspace: true});
+    });
+    flushUpdates();
     
-    expect(input.value).toBe('ello');
-    expect(input.cursorPos).toBe(0);
+    expect(result.current.value).toBe('ello');
+    expect(result.current.cursorPos).toBe(0);
   });
 
   test('should not backspace at end of text', () => {
-    const input = new TestTextInput('hello');
+    const {result} = renderHook(() => useTextInput('hello'));
     
-    expect(input.cursorPos).toBe(5);
+    expect(result.current.cursorPos).toBe(5);
     
     // Backspace key should do nothing at end
-    input.handleKeyInput('', {backspace: true});
+    act(() => {
+      result.current.handleKeyInput('', {backspace: true});
+    });
+    flushUpdates();
     
-    expect(input.value).toBe('hello');
-    expect(input.cursorPos).toBe(5);
+    expect(result.current.value).toBe('hello');
+    expect(result.current.cursorPos).toBe(5);
   });
 
   test('should handle arrow key navigation', () => {
-    const input = new TestTextInput('hello');
+    const {result} = renderHook(() => useTextInput('hello'));
     
-    expect(input.cursorPos).toBe(5);
+    expect(result.current.cursorPos).toBe(5);
     
     // Left arrow
-    input.handleKeyInput('', {leftArrow: true});
-    expect(input.cursorPos).toBe(4);
+    act(() => {
+      result.current.handleKeyInput('', {leftArrow: true});
+    });
+    flushUpdates();
+    expect(result.current.cursorPos).toBe(4);
     
     // Right arrow
-    input.handleKeyInput('', {rightArrow: true});
-    expect(input.cursorPos).toBe(5);
+    act(() => {
+      result.current.handleKeyInput('', {rightArrow: true});
+    });
+    flushUpdates();
+    expect(result.current.cursorPos).toBe(5);
     
     // Home then left arrow at boundary
-    input.handleKeyInput('', {home: true});
-    expect(input.cursorPos).toBe(0);
+    act(() => {
+      result.current.handleKeyInput('', {home: true});
+    });
+    flushUpdates();
+    expect(result.current.cursorPos).toBe(0);
     
-    input.handleKeyInput('', {leftArrow: true});
-    expect(input.cursorPos).toBe(0); // Should not go negative
+    act(() => {
+      result.current.handleKeyInput('', {leftArrow: true});
+    });
+    flushUpdates();
+    expect(result.current.cursorPos).toBe(0); // Should not go negative
   });
 
   test('should handle home and end keys', () => {
-    const input = new TestTextInput('hello');
+    const {result} = renderHook(() => useTextInput('hello'));
     
     // Home key
-    input.handleKeyInput('', {home: true});
-    expect(input.cursorPos).toBe(0);
+    act(() => {
+      result.current.handleKeyInput('', {home: true});
+    });
+    flushUpdates();
+    expect(result.current.cursorPos).toBe(0);
     
     // End key
-    input.handleKeyInput('', {end: true});
-    expect(input.cursorPos).toBe(5);
+    act(() => {
+      result.current.handleKeyInput('', {end: true});
+    });
+    flushUpdates();
+    expect(result.current.cursorPos).toBe(5);
   });
 
   test('should handle ctrl+a (home) and ctrl+e (end)', () => {
-    const input = new TestTextInput('hello');
+    const {result} = renderHook(() => useTextInput('hello'));
     
     // Ctrl+A (home)
-    input.handleKeyInput('a', {ctrl: true});
-    expect(input.cursorPos).toBe(0);
+    act(() => {
+      result.current.handleKeyInput('a', {ctrl: true});
+    });
+    flushUpdates();
+    expect(result.current.cursorPos).toBe(0);
     
     // Ctrl+E (end)
-    input.handleKeyInput('e', {ctrl: true});
-    expect(input.cursorPos).toBe(5);
+    act(() => {
+      result.current.handleKeyInput('e', {ctrl: true});
+    });
+    flushUpdates();
+    expect(result.current.cursorPos).toBe(5);
   });
 
   test('should ignore control and meta key combinations', () => {
-    const input = new TestTextInput('hello');
+    const {result} = renderHook(() => useTextInput('hello'));
     
-    const originalValue = input.value;
-    const originalCursorPos = input.cursorPos;
+    const originalValue = result.current.value;
+    const originalCursorPos = result.current.cursorPos;
     
     // Ctrl+C should be ignored
-    input.handleKeyInput('c', {ctrl: true});
+    act(() => {
+      const handled = result.current.handleKeyInput('c', {ctrl: true});
+      expect(handled).toBe(false); // Should return false for unhandled keys
+    });
+    flushUpdates();
     
-    expect(input.value).toBe(originalValue);
-    expect(input.cursorPos).toBe(originalCursorPos);
+    expect(result.current.value).toBe(originalValue);
+    expect(result.current.cursorPos).toBe(originalCursorPos);
     
     // Meta+X should be ignored
-    input.handleKeyInput('x', {meta: true});
+    act(() => {
+      const handled = result.current.handleKeyInput('x', {meta: true});
+      expect(handled).toBe(false); // Should return false for unhandled keys
+    });
+    flushUpdates();
     
-    expect(input.value).toBe(originalValue);
-    expect(input.cursorPos).toBe(originalCursorPos);
+    expect(result.current.value).toBe(originalValue);
+    expect(result.current.cursorPos).toBe(originalCursorPos);
   });
 
   test('should handle reset method', () => {
-    const input = new TestTextInput('hello');
+    const {result} = renderHook(() => useTextInput('hello'));
     
     // Move cursor and modify text
-    input.handleKeyInput('', {home: true});
-    input.handleKeyInput('X', {});
+    act(() => {
+      result.current.handleKeyInput('', {home: true});
+      result.current.handleKeyInput('X', {});
+    });
+    flushUpdates();
     
-    expect(input.value).toBe('Xhello');
-    expect(input.cursorPos).toBe(1);
+    expect(result.current.value).toBe('Xhello');
+    expect(result.current.cursorPos).toBe(1);
     
     // Reset to new value
-    input.reset('world');
+    act(() => {
+      result.current.reset('world');
+    });
     
-    expect(input.value).toBe('world');
-    expect(input.cursorPos).toBe(5);
+    expect(result.current.value).toBe('world');
+    expect(result.current.cursorPos).toBe(5);
     
     // Reset to empty
-    input.reset();
+    act(() => {
+      result.current.reset();
+    });
     
-    expect(input.value).toBe('');
-    expect(input.cursorPos).toBe(0);
+    expect(result.current.value).toBe('');
+    expect(result.current.cursorPos).toBe(0);
   });
 
   test('should handle setValue method', () => {
-    const input = new TestTextInput('hello');
+    const {result} = renderHook(() => useTextInput('hello'));
     
     // Move cursor to middle
-    input.handleKeyInput('', {home: true});
-    input.handleKeyInput('', {rightArrow: true});
+    act(() => {
+      result.current.handleKeyInput('', {home: true});
+      result.current.handleKeyInput('', {rightArrow: true});
+    });
+    flushUpdates();
     
-    expect(input.cursorPos).toBe(1);
+    expect(result.current.cursorPos).toBe(1);
     
     // Set new value - cursor should be clamped to new length
-    input.setValue('hi');
+    act(() => {
+      result.current.setValue('hi');
+    });
     
-    expect(input.value).toBe('hi');
-    expect(input.cursorPos).toBe(1); // Cursor position preserved if within bounds
+    expect(result.current.value).toBe('hi');
+    expect(result.current.cursorPos).toBe(1); // Cursor position preserved if within bounds
     
     // Set shorter value - cursor should be clamped
-    input.setValue('x');
+    act(() => {
+      result.current.setValue('x');
+    });
     
-    expect(input.value).toBe('x');
-    expect(input.cursorPos).toBe(1); // Clamped to length
+    expect(result.current.value).toBe('x');
+    expect(result.current.cursorPos).toBe(1); // Clamped to length
   });
 
   test('should return false for unhandled keys', () => {
-    const input = new TestTextInput();
+    const {result} = renderHook(() => useTextInput());
     
     // Unrecognized key should return false
-    const handled = input.handleKeyInput('', {pageUp: true});
+    const handled = result.current.handleKeyInput('', {pageUp: true});
     expect(handled).toBe(false);
   });
 
   test('should return true for handled keys', () => {
-    const input = new TestTextInput();
+    const {result} = renderHook(() => useTextInput());
     
     // Recognized keys should return true
-    expect(input.handleKeyInput('a', {})).toBe(true);
-    expect(input.handleKeyInput('', {leftArrow: true})).toBe(true);
-    expect(input.handleKeyInput('', {delete: true})).toBe(true);
-    expect(input.handleKeyInput('', {backspace: true})).toBe(true);
+    expect(result.current.handleKeyInput('a', {})).toBe(true);
+    expect(result.current.handleKeyInput('', {leftArrow: true})).toBe(true);
+    expect(result.current.handleKeyInput('', {delete: true})).toBe(true);
+    expect(result.current.handleKeyInput('', {backspace: true})).toBe(true);
   });
+  
+  test('should handle rapid input buffering correctly', () => {
+    const {result} = renderHook(() => useTextInput());
+    
+    // Simulate rapid typing without flushing
+    act(() => {
+      result.current.handleKeyInput('h', {});
+      result.current.handleKeyInput('e', {});
+      result.current.handleKeyInput('l', {});
+      result.current.handleKeyInput('l', {});
+      result.current.handleKeyInput('o', {});
+    });
+    
+    // Before flush, value might not be updated due to buffering
+    // After flush, all inputs should be processed
+    flushUpdates();
+    
+    expect(result.current.value).toBe('hello');
+    expect(result.current.cursorPos).toBe(5);
+  });
+  
+  test('should handle complex editing operations in sequence', () => {
+    const {result} = renderHook(() => useTextInput('test'));
+    
+    act(() => {
+      // Go to beginning
+      result.current.handleKeyInput('', {home: true});
+      // Type at beginning
+      result.current.handleKeyInput('X', {});
+      // Move to end
+      result.current.handleKeyInput('', {end: true});
+      // Add at end
+      result.current.handleKeyInput('Y', {});
+      // Delete from end
+      result.current.handleKeyInput('', {delete: true});
+    });
+    flushUpdates();
+    
+    expect(result.current.value).toBe('Xtest');
+    expect(result.current.cursorPos).toBe(5);
+  });
+  
+  test('should properly clean up on unmount', () => {
+    const {result, unmount} = renderHook(() => useTextInput('test'));
+    
+    // Add some buffered input
+    act(() => {
+      result.current.handleKeyInput('X', {});
+    });
+    
+    // Unmount should clean up timers and flush pending inputs
+    unmount();
+    
+    // No errors should occur, and timers should be cleaned up
+    expect(() => {
+      act(() => {
+        jest.runOnlyPendingTimers();
+      });
+    }).not.toThrow();
+  });
+
+  test('should handle renderText method correctly', () => {
+    const {result} = renderHook(() => useTextInput('hello'));
+    
+    // Test renderText returns a valid React element
+    const element = result.current.renderText('placeholder');
+    expect(element).toBeDefined();
+    expect(element.type).toBeDefined(); // Should be a React element
+  });
+
+  test('should handle edge case with empty string operations', () => {
+    const {result} = renderHook(() => useTextInput());
+    
+    // Try operations on empty string
+    act(() => {
+      result.current.handleKeyInput('', {delete: true}); // Should do nothing
+      result.current.handleKeyInput('', {backspace: true}); // Should do nothing
+      result.current.handleKeyInput('', {leftArrow: true}); // Should stay at 0
+      result.current.handleKeyInput('', {rightArrow: true}); // Should stay at 0
+    });
+    flushUpdates();
+    
+    expect(result.current.value).toBe('');
+    expect(result.current.cursorPos).toBe(0);
+  });
+});
+
+// Restore real timers after all tests
+afterAll(() => {
+  jest.useRealTimers();
 });
