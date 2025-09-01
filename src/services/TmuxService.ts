@@ -45,7 +45,8 @@ export class TmuxService {
     if (!text) return {tool: 'none', status: 'not_running'};
     
     // Detect which AI tool is running based on pane process
-    const aiTool = await this.detectSessionAITool(session);
+    const toolsMap = await this.detectAllSessionAITools();
+    const aiTool = toolsMap.get(session) || 'none';
     if (aiTool === 'none') return {tool: 'none', status: 'not_running'};
     
     // Get status based on the detected tool's patterns
@@ -191,6 +192,80 @@ export class TmuxService {
       }
     }
     return 'none';
+  }
+
+  // Cache for batch detection results
+  private aiToolsCache: Map<string, AITool> | null = null;
+  private aiToolsCacheTime: number = 0;
+  private readonly CACHE_DURATION = 2000; // 2 seconds cache
+
+  private async detectAllSessionAITools(): Promise<Map<string, AITool>> {
+    // Return cached results if fresh
+    if (this.aiToolsCache && Date.now() - this.aiToolsCacheTime < this.CACHE_DURATION) {
+      return this.aiToolsCache;
+    }
+
+    const toolsMap = new Map<string, AITool>();
+    
+    // Get all sessions with their PIDs in one command
+    const output = await runCommandQuickAsync(['tmux', 'list-panes', '-a', '-F', '#{session_name}:#{pane_pid}']);
+    if (!output) {
+      this.aiToolsCache = toolsMap;
+      this.aiToolsCacheTime = Date.now();
+      return toolsMap;
+    }
+    
+    // Parse session:pid pairs
+    const sessionPids: Array<{session: string, pid: string}> = [];
+    const lines = output.split('\n').filter(Boolean);
+    for (const line of lines) {
+      const [session, pid] = line.split(':');
+      if (session && pid) {
+        // Only process our dev- sessions
+        if (session.startsWith(SESSION_PREFIX)) {
+          sessionPids.push({session, pid});
+        }
+      }
+    }
+    
+    // Batch get all process args with a single ps command
+    if (sessionPids.length > 0) {
+      const pids = sessionPids.map(sp => sp.pid).join(',');
+      const psOutput = await runCommandQuickAsync(['ps', '-p', pids, '-o', 'pid=', '-o', 'args=']);
+      
+      if (psOutput) {
+        const psLines = psOutput.split('\n').filter(Boolean);
+        for (const psLine of psLines) {
+          const match = psLine.match(/^\s*(\d+)\s+(.+)$/);
+          if (match) {
+            const [, pid, args] = match;
+            const argsLower = args.toLowerCase();
+            
+            // Find which session this PID belongs to
+            const sessionInfo = sessionPids.find(sp => sp.pid === pid);
+            if (sessionInfo) {
+              // Detect tool from args
+              let tool: AITool = 'none';
+              if (argsLower.includes('/claude') || argsLower.includes('claude')) {
+                tool = 'claude';
+              } else if (argsLower.includes('/codex') || argsLower.includes('codex')) {
+                tool = 'codex';
+              } else if (argsLower.includes('/gemini') || argsLower.includes('gemini')) {
+                tool = 'gemini';
+              }
+              
+              toolsMap.set(sessionInfo.session, tool);
+            }
+          }
+        }
+      }
+    }
+    
+    // Cache the results
+    this.aiToolsCache = toolsMap;
+    this.aiToolsCacheTime = Date.now();
+    
+    return toolsMap;
   }
 
   private async detectSessionAITool(session: string): Promise<AITool> {
