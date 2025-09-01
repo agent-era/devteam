@@ -146,6 +146,72 @@ export class ViewportCalculator {
       viewportHeight
     };
   }
+
+  /**
+   * Calculate viewport using precomputed per-line heights and start rows.
+   * This avoids recomputing wrapping and runs in O(visibleLines) time.
+   *
+   * @param lineHeights Height in visual rows for each logical line (>=1)
+   * @param lineStartRows Prefix sums (start row index for each line)
+   * @param scrollRow Which visual row should be at the top of viewport (0-based)
+   * @param viewportHeight How many rows can fit in the viewport
+   */
+  static calculateFromHeights(
+    lineHeights: number[],
+    lineStartRows: number[],
+    scrollRow: number,
+    viewportHeight: number
+  ): ViewportInfo {
+    const totalLines = lineHeights.length;
+    if (totalLines === 0) {
+      return {
+        firstVisibleLine: 0,
+        visibleLines: [],
+        totalVisualRows: 0,
+        viewportStartRow: scrollRow,
+        viewportHeight
+      };
+    }
+
+    // total rows = start of last line + its height
+    const totalVisualRows = lineStartRows[totalLines - 1] + lineHeights[totalLines - 1];
+
+    // Binary search the first line whose start row <= scrollRow
+    let lo = 0;
+    let hi = totalLines - 1;
+    let firstVisibleLine = 0;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (lineStartRows[mid] <= scrollRow) {
+        firstVisibleLine = mid;
+        lo = mid + 1;
+      } else {
+        hi = mid - 1;
+      }
+    }
+
+    // Collect lines until we fill viewport
+    const visibleLines: number[] = [];
+    let accumulatedRows = Math.max(0, (lineStartRows[firstVisibleLine] + lineHeights[firstVisibleLine]) - scrollRow);
+    visibleLines.push(firstVisibleLine);
+
+    let idx = firstVisibleLine + 1;
+    while (idx < totalLines && accumulatedRows < viewportHeight) {
+      const h = lineHeights[idx];
+      visibleLines.push(idx);
+      accumulatedRows += h;
+      if (accumulatedRows >= viewportHeight) break;
+      idx++;
+    }
+
+    return {
+      firstVisibleLine,
+      visibleLines,
+      totalVisualRows,
+      viewportStartRow: scrollRow,
+      viewportHeight
+    };
+  }
   
   /**
    * Calculate scroll position to keep a specific line visible.
@@ -192,6 +258,31 @@ export class ViewportCalculator {
       return Math.max(0, targetRowEnd - viewportHeight + 1); // Scroll down
     }
   }
+
+  /**
+   * Calculate scroll row to reveal a target line using precomputed heights.
+   */
+  static calculateScrollToShowLineFromHeights(
+    lineHeights: number[],
+    lineStartRows: number[],
+    targetLineIndex: number,
+    currentScrollRow: number,
+    viewportHeight: number
+  ): number {
+    const totalLines = lineHeights.length;
+    if (totalLines === 0) return 0;
+    const targetRowStart = lineStartRows[targetLineIndex] || 0;
+    const targetRowEnd = targetRowStart + (lineHeights[targetLineIndex] || 1) - 1;
+
+    const viewportEndRow = currentScrollRow + viewportHeight - 1;
+    if (targetRowStart >= currentScrollRow && targetRowEnd <= viewportEndRow) {
+      return currentScrollRow;
+    }
+    if (targetRowStart < currentScrollRow) {
+      return targetRowStart;
+    }
+    return Math.max(0, targetRowEnd - viewportHeight + 1);
+  }
   
   /**
    * Get maximum scroll position (prevents scrolling past end of content)
@@ -208,6 +299,20 @@ export class ViewportCalculator {
     }
     
     const totalRows = LineWrapper.calculateTotalHeight(lines, maxWidth);
+    return Math.max(0, totalRows - viewportHeight);
+  }
+
+  /**
+   * Maximum scroll row using precomputed heights.
+   */
+  static getMaxScrollRowFromHeights(
+    lineHeights: number[],
+    lineStartRows: number[],
+    viewportHeight: number
+  ): number {
+    const totalLines = lineHeights.length;
+    if (totalLines === 0) return 0;
+    const totalRows = lineStartRows[totalLines - 1] + lineHeights[totalLines - 1];
     return Math.max(0, totalRows - viewportHeight);
   }
 }

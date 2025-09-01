@@ -284,6 +284,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
   const [showUnsubmittedCommentsDialog, setShowUnsubmittedCommentsDialog] = useState(false);
   const [showFileTreeOverlay, setShowFileTreeOverlay] = useState(false);
   const [overlayHighlightedFile, setOverlayHighlightedFile] = useState<string>('');
+  // Always highlight; no rapid navigation fallback
 
   // Derive list of files present in the diff (unique, in order encountered)
   const diffFiles = useMemo(() => {
@@ -316,6 +317,21 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     })();
   }, [worktreePath, diffType]);
 
+  // Precompute per-line display widths for fast viewport calculations
+  const unifiedContentWidths = useMemo(() => {
+    return lines.map(l => stringDisplayWidth(l?.text || ' '));
+  }, [lines]);
+
+  const sbsContentWidths = useMemo(() => {
+    return sideBySideLines.map(l => {
+      const left = l.left?.text || '';
+      const right = l.right?.text || '';
+      const lw = stringDisplayWidth(left);
+      const rw = stringDisplayWidth(right);
+      return Math.max(lw, rw);
+    });
+  }, [sideBySideLines]);
+
   // Calculate dynamic sticky header count (0, 1, or 2 headers displayed)
   const stickyHeaderCount = useMemo(() => {
     let count = 0;
@@ -328,6 +344,28 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
   const helpReservedRows = showFileTreeOverlay ? 0 : 1; // hide help when overlay shows
   const overlayAreaHeight = showFileTreeOverlay ? Math.max(6, Math.floor(terminalHeight / 2)) : 0;
   const pageSize = Math.max(1, terminalHeight - 2 - stickyHeaderCount - helpReservedRows - overlayAreaHeight); // -1 title, -N sticky headers, -help, -overlay
+
+  // Derived layout data for current mode
+  const currentWidths = viewMode === 'unified' ? unifiedContentWidths : sbsContentWidths;
+  const currentTotalLines = currentWidths.length;
+  const currentMaxWidth = viewMode === 'unified' ? (terminalWidth - 2) : (Math.floor((terminalWidth - 1) / 2) - 2);
+
+  const lineHeights = useMemo(() => {
+    if (wrapMode === 'truncate') return [] as number[];
+    const maxW = Math.max(1, currentMaxWidth);
+    return currentWidths.map(w => Math.max(1, Math.ceil(w / maxW)));
+  }, [currentWidths, currentMaxWidth, wrapMode]);
+
+  const lineStartRows = useMemo(() => {
+    if (wrapMode === 'truncate') return [] as number[];
+    const out: number[] = [];
+    let acc = 0;
+    for (let i = 0; i < lineHeights.length; i++) {
+      out[i] = acc;
+      acc += lineHeights[i] || 1;
+    }
+    return out;
+  }, [lineHeights, wrapMode]);
 
   // Smooth scrolling animation
   useEffect(() => {
@@ -389,6 +427,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
 
     const initialId = setTimeout(animate, frameTime);
     setAnimationId(initialId);
+    // Keep syntax highlighting enabled during animation
 
     return () => {
       cancelled = true;
@@ -586,32 +625,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
           
           // Calculate scroll position to show the content line at top of viewport
           // This naturally makes the file header sticky (just above viewport)
-          let targetRow = 0;
-          if (wrapMode === 'truncate') {
-            // In truncate mode, line index maps directly to scroll row
-            targetRow = Math.max(0, contentLineIndex);
-          } else {
-            // In wrap mode, calculate the visual row position using LineWrapper
-            const currentLines = viewMode === 'unified' ? lines : sideBySideLines;
-            const maxWidth = viewMode === 'unified' ? terminalWidth - 2 : Math.floor((terminalWidth - 1) / 2) - 2;
-            const textLines = currentLines.map(line => {
-              if (viewMode === 'unified') {
-                return (line as DiffLine).text || ' ';
-              } else {
-                const sbsLine = line as SideBySideLine;
-                const leftText = sbsLine.left?.text || '';
-                const rightText = sbsLine.right?.text || '';
-                return leftText.length > rightText.length ? leftText : rightText;
-              }
-            });
-            
-            // Calculate the visual row for the content line index using LineWrapper
-            let targetRowStart = 0;
-            for (let j = 0; j < Math.min(contentLineIndex, textLines.length); j++) {
-              targetRowStart += LineWrapper.calculateHeight(textLines[j] || ' ', maxWidth);
-            }
-            targetRow = Math.max(0, targetRowStart);
-          }
+          const targetRow = wrapMode === 'truncate' ? Math.max(0, contentLineIndex) : Math.max(0, lineStartRows[contentLineIndex] || 0);
           
           // Set flag to prevent auto-scroll from overriding our scroll position
           setIsFileNavigation(true);
@@ -635,32 +649,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
           
           // Calculate scroll position to show the content line at top of viewport
           // This naturally makes the file header sticky (just above viewport)
-          let targetRow = 0;
-          if (wrapMode === 'truncate') {
-            // In truncate mode, line index maps directly to scroll row
-            targetRow = Math.max(0, contentLineIndex);
-          } else {
-            // In wrap mode, calculate the visual row position using LineWrapper
-            const currentLines = viewMode === 'unified' ? lines : sideBySideLines;
-            const maxWidth = viewMode === 'unified' ? terminalWidth - 2 : Math.floor((terminalWidth - 1) / 2) - 2;
-            const textLines = currentLines.map(line => {
-              if (viewMode === 'unified') {
-                return (line as DiffLine).text || ' ';
-              } else {
-                const sbsLine = line as SideBySideLine;
-                const leftText = sbsLine.left?.text || '';
-                const rightText = sbsLine.right?.text || '';
-                return leftText.length > rightText.length ? leftText : rightText;
-              }
-            });
-            
-            // Calculate the visual row for the content line index using LineWrapper
-            let targetRowStart = 0;
-            for (let j = 0; j < Math.min(contentLineIndex, textLines.length); j++) {
-              targetRowStart += LineWrapper.calculateHeight(textLines[j] || ' ', maxWidth);
-            }
-            targetRow = Math.max(0, targetRowStart);
-          }
+          const targetRow = wrapMode === 'truncate' ? Math.max(0, contentLineIndex) : Math.max(0, lineStartRows[contentLineIndex] || 0);
           
           // Set flag to prevent auto-scroll from overriding our scroll position
           setIsFileNavigation(true);
@@ -673,38 +662,26 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
 
   // Auto-scroll to keep selected line visible
   useEffect(() => {
-    const currentLines = viewMode === 'unified' ? lines : sideBySideLines;
-    const maxWidth = viewMode === 'unified' ? terminalWidth - 2 : Math.floor((terminalWidth - 1) / 2) - 2;
-    
-    // Convert diff lines to simple text for viewport calculation
-    const textLines = currentLines.map(line => {
-      if (viewMode === 'unified') {
-        return (line as DiffLine).text || ' ';
-      } else {
-        const sbsLine = line as SideBySideLine;
-        // For side-by-side, use the longer of left/right text for height calculation
-        const leftText = sbsLine.left?.text || '';
-        const rightText = sbsLine.right?.text || '';
-        return leftText.length > rightText.length ? leftText : rightText;
-      }
-    });
-    
-    const newScrollRow = ViewportCalculator.calculateScrollToShowLine(
-      textLines,
-      selectedLine,
-      targetScrollRow,
-      pageSize,
-      maxWidth,
-      wrapMode
-    );
-    
-    // Don't override scroll position during file navigation (Shift+Up/Down)
-    // File navigation sets a specific scroll position to make headers sticky
+    let newScrollRow = targetScrollRow;
+    if (wrapMode === 'truncate') {
+      if (selectedLine < targetScrollRow) newScrollRow = selectedLine;
+      else if (selectedLine >= targetScrollRow + pageSize) newScrollRow = Math.max(0, selectedLine - pageSize + 1);
+    } else {
+      newScrollRow = ViewportCalculator.calculateScrollToShowLineFromHeights(
+        lineHeights,
+        lineStartRows,
+        Math.min(selectedLine, Math.max(0, currentTotalLines - 1)),
+        targetScrollRow,
+        pageSize
+      );
+    }
     if (newScrollRow !== targetScrollRow && !isFileNavigation) {
-      const maxScrollRow = ViewportCalculator.getMaxScrollRow(textLines, pageSize, maxWidth, wrapMode);
+      const maxScrollRow = wrapMode === 'truncate'
+        ? Math.max(0, currentTotalLines - pageSize)
+        : ViewportCalculator.getMaxScrollRowFromHeights(lineHeights, lineStartRows, pageSize);
       setTargetScrollRow(Math.max(0, Math.min(maxScrollRow, newScrollRow)));
     }
-  }, [selectedLine, viewMode, wrapMode, terminalWidth, lines, sideBySideLines, pageSize, isFileNavigation]);
+  }, [selectedLine, wrapMode, pageSize, isFileNavigation, targetScrollRow, lineHeights, lineStartRows, currentTotalLines]);
 
   const formatCommentsAsPrompt = (comments: any[]): string => {
     let prompt = "Please address the following code review comments:\\n\\n";
@@ -943,29 +920,26 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
 
   // Update sticky headers - simplified using viewport info
   const viewport = useMemo(() => {
-    const currentLines = viewMode === 'unified' ? lines : sideBySideLines;
-    const maxWidth = viewMode === 'unified' ? terminalWidth - 2 : Math.floor((terminalWidth - 1) / 2) - 2;
-    
-    const textLines = currentLines.map(line => {
-      if (viewMode === 'unified') {
-        return (line as DiffLine).text || ' ';
-      } else {
-        const sbsLine = line as SideBySideLine;
-        const leftText = sbsLine.left?.text || '';
-        const rightText = sbsLine.right?.text || '';
-        return leftText.length > rightText.length ? leftText : rightText;
-      }
-    });
-    
-    return ViewportCalculator.calculate(
-      textLines,
-      selectedLine,
+    if (wrapMode === 'truncate') {
+      const firstVisibleLine = Math.max(0, Math.min(scrollRow, Math.max(0, currentTotalLines - 1)));
+      const lastVisibleLine = Math.min(currentTotalLines - 1, firstVisibleLine + pageSize - 1);
+      const visibleLines: number[] = [];
+      for (let i = firstVisibleLine; i <= lastVisibleLine; i++) visibleLines.push(i);
+      return {
+        firstVisibleLine,
+        visibleLines,
+        totalVisualRows: currentTotalLines,
+        viewportStartRow: firstVisibleLine,
+        viewportHeight: pageSize
+      };
+    }
+    return ViewportCalculator.calculateFromHeights(
+      lineHeights,
+      lineStartRows,
       scrollRow,
-      pageSize,
-      maxWidth,
-      wrapMode
+      pageSize
     );
-  }, [lines, sideBySideLines, selectedLine, scrollRow, pageSize, viewMode, wrapMode, terminalWidth]);
+  }, [wrapMode, scrollRow, pageSize, currentTotalLines, lineHeights, lineStartRows]);
   
   useEffect(() => {
     const currentLines = viewMode === 'unified' ? lines : sideBySideLines;
@@ -1023,6 +997,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
         color: diffColor
       }, text);
     }
+    // Always use syntax highlighting (no rapid navigation fallback)
     
     // For removed lines in unified view, use plain red text without syntax highlighting
     if (lineType === 'removed') {
