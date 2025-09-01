@@ -38,7 +38,6 @@ export default {
     'src/**/*.{ts,tsx}',
     '!src/**/*.d.ts',
   ],
-  testTimeout: 20000,
   clearMocks: true,
   resetMocks: true
 };

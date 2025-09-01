@@ -31,7 +31,6 @@ export default {
     'src/**/*.{ts,tsx}',
     '!src/**/*.d.ts',
   ],
-  testTimeout: 10000,
   fakeTimers: {
     enableGlobally: true,
     advanceTimers: true,
@@ -39,4 +38,3 @@ export default {
   clearMocks: true,
   resetMocks: true
 };
-
