@@ -94,11 +94,11 @@ export const AI_TOOLS = {
   gemini: {
     name: 'Gemini',
     command: 'gemini',
-    processPatterns: ['gemini', 'bard'],
+    processPatterns: ['node'],
     statusPatterns: {
       working: 'thinking',
-      waiting_numbered: ['gemini>', String.raw`\d+:`],
-      idle_prompt: ['gemini>', '']
+      waiting_numbered: ['│ >', String.raw`\d+\.`],
+      idle_prompt: ['│ >', 'gemini-2.5-pro']
     }
   }
 } as const;

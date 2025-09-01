@@ -202,13 +202,20 @@ export class TmuxService {
       const [, ...rest] = line.split(' ');
       const command = rest.join(' ').toLowerCase();
       
-      // First try direct process name detection
+      // First try direct process name detection for non-node processes
       const tool = this.detectAITool(command);
-      if (tool !== 'none' && tool !== 'codex') return tool;
+      if (tool !== 'none' && command !== 'node') return tool;
       
-      // For node processes, check pane content for codex-specific patterns
-      if (command === 'node' || tool === 'codex') {
+      // For node processes, check pane content for tool-specific patterns
+      if (command === 'node') {
         const paneContent = await this.capturePane(session);
+        
+        // Check for Gemini patterns first (more specific)
+        if (paneContent.includes('gemini-2.5-pro') || paneContent.includes('│ >')) {
+          return 'gemini';
+        }
+        
+        // Then check for Codex patterns
         if (paneContent.includes('▌') || paneContent.includes('⏎ send')) {
           return 'codex';
         }
