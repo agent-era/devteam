@@ -73,9 +73,9 @@ export function getAISymbol(aiStatus: string, hasSession: boolean, aiTool?: stri
   // Add AI tool indicator
   if (hasSession && aiTool && aiTool !== 'none') {
     const toolIndicators: Record<string, string> = {
-      'claude': '[C]',
-      'codex': '[X]', 
-      'gemini': '[G]'
+      'claude': '[A]',  // Anthropic
+      'codex': '[O]',   // OpenAI
+      'gemini': '[G]'   // Google
     };
     const indicator = toolIndicators[aiTool] || '[?]';
     return `${baseSymbol}${indicator}`;

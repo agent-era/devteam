@@ -84,11 +84,11 @@ export const AI_TOOLS = {
   codex: {
     name: 'OpenAI Codex',
     command: 'codex',
-    processPatterns: ['codex', 'openai'],
+    processPatterns: ['node'],
     statusPatterns: {
       working: 'generating',
-      waiting_numbered: ['>', String.raw`\d+\.`],
-      idle_prompt: ['>>>', '']
+      waiting_numbered: ['▌', String.raw`\d+\.`],
+      idle_prompt: ['▌', '⏎ send']
     }
   },
   gemini: {

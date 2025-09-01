@@ -201,8 +201,18 @@ export class TmuxService {
     for (const line of lines) {
       const [, ...rest] = line.split(' ');
       const command = rest.join(' ').toLowerCase();
+      
+      // First try direct process name detection
       const tool = this.detectAITool(command);
-      if (tool !== 'none') return tool;
+      if (tool !== 'none' && tool !== 'codex') return tool;
+      
+      // For node processes, check pane content for codex-specific patterns
+      if (command === 'node' || tool === 'codex') {
+        const paneContent = await this.capturePane(session);
+        if (paneContent.includes('▌') || paneContent.includes('⏎ send')) {
+          return 'codex';
+        }
+      }
     }
     
     return 'none';
