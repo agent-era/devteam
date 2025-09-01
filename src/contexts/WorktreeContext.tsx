@@ -96,12 +96,12 @@ export function WorktreeProvider({
   const {getPRStatus, setVisibleWorktrees, refreshPRStatus, refreshPRForWorktree, forceRefreshVisiblePRs} = useGitHubContext();
 
   // Service instances - stable across re-renders
-  const gitService = useMemo(() => {
-    const factory = (globalThis as any)?.__createGitService as ((basePath: string) => any) | undefined;
+  const gitService: GitService = useMemo(() => {
+    const factory = (globalThis as any)?.__createGitService as ((basePath: string) => GitService) | undefined;
     return factory ? factory(getProjectsDirectory()) : new GitService(getProjectsDirectory());
   }, []);
-  const tmuxService = useMemo(() => {
-    const factory = (globalThis as any)?.__createTmuxService as (() => any) | undefined;
+  const tmuxService: TmuxService = useMemo(() => {
+    const factory = (globalThis as any)?.__createTmuxService as (() => TmuxService) | undefined;
     return factory ? factory() : new TmuxService();
   }, []);
   // Filesystem operations are routed through GitService methods (see CLAUDE.md)
@@ -139,7 +139,7 @@ export function WorktreeProvider({
     feature: string; 
     path: string; 
     branch: string
-  }>, getPRStatus?: (path: string) => any): Promise<WorktreeInfo[]> => {
+  }>, getPRStatus?: (path: string) => PRStatus): Promise<WorktreeInfo[]> => {
     // Get existing worktrees to preserve idle timers and kill flags
     const existingWorktrees = new Map(worktrees.map(w => [`${w.project}/${w.feature}`, w]));
     

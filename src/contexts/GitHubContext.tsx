@@ -44,12 +44,12 @@ export function GitHubProvider({children}: GitHubProviderProps) {
   const [visibleWorktrees, setVisibleWorktrees] = useState<string[]>([]);
 
   // Service instances (allow test overrides via globals)
-  const gitHubService = useMemo(() => {
-    const factory = (globalThis as any)?.__createGitHubService as (() => any) | undefined;
+  const gitHubService: GitHubService = useMemo(() => {
+    const factory = (globalThis as any)?.__createGitHubService as (() => GitHubService) | undefined;
     return factory ? factory() : new GitHubService();
   }, []);
-  const gitService = useMemo(() => {
-    const factory = (globalThis as any)?.__createGitService as ((basePath: string) => any) | undefined;
+  const gitService: GitService = useMemo(() => {
+    const factory = (globalThis as any)?.__createGitService as ((basePath: string) => GitService) | undefined;
     return factory ? factory(getProjectsDirectory()) : new GitService(getProjectsDirectory());
   }, []);
   const cacheService = useRef(new PRStatusCacheService()).current;
@@ -155,7 +155,7 @@ export function GitHubProvider({children}: GitHubProviderProps) {
       // Check for recently merged PRs via git history before API refresh
       await checkForMergedPRsViaGit(worktreesToRefresh);
       
-      const prStatusMap = await gitHubService.batchGetPRStatusForWorktreesAsync(worktreesToRefresh, true);
+      const prStatusMap: Record<string, PRStatus> = await gitHubService.batchGetPRStatusForWorktreesAsync(worktreesToRefresh, true);
       
       // Only cache and update state for successful responses
       const newPRs: Record<string, PRStatus> = {};
@@ -265,8 +265,8 @@ export function GitHubProvider({children}: GitHubProviderProps) {
         is_archived: false
       };
       
-      const result = await gitHubService.batchGetPRStatusForWorktreesAsync([dummyWorktree], true);
-      const prStatus = result[worktreePath];
+      const result: Record<string, PRStatus> = await gitHubService.batchGetPRStatusForWorktreesAsync([dummyWorktree], true);
+      const prStatus: PRStatus | undefined = result[worktreePath];
       
       if (prStatus) {
         cacheService.set(worktreePath, prStatus);
