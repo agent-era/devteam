@@ -409,8 +409,8 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     // Don't handle inputs when any dialog is open
     if (showCommentDialog || showSessionWaitingDialog || showUnsubmittedCommentsDialog) return;
     
-    // Hide overlay on any key except Shift+Up/Down (overlay trigger)
-    if (showFileTreeOverlay && !(key.shift && (key.upArrow || key.downArrow))) {
+    // Hide overlay on any key except Shift+Up/Down or Ctrl+Up/Down (overlay trigger)
+    if (showFileTreeOverlay && !((key.shift || key.ctrl) && (key.upArrow || key.downArrow))) {
       setShowFileTreeOverlay(false);
     }
 
@@ -562,8 +562,8 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       }
     }
     
-    // Previous file: Shift+Up
-    if (key.upArrow && key.shift) {
+    // Previous file: Shift+Up or Ctrl+Up (undocumented)
+    if (key.upArrow && (key.shift || key.ctrl)) {
       // First, find the current file header
       let currentFileHeaderIndex = -1;
       for (let i = selectedLine; i >= 0; i--) {
@@ -621,8 +621,8 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       }
     }
     
-    // Next file: Shift+Down
-    if (key.downArrow && key.shift) {
+    // Next file: Shift+Down or Ctrl+Down (undocumented)
+    if (key.downArrow && (key.shift || key.ctrl)) {
       const maxIndex = viewMode === 'unified' ? lines.length : sideBySideLines.length;
       for (let i = selectedLine + 1; i < maxIndex; i++) {
         if (isFileHeader(i)) {
