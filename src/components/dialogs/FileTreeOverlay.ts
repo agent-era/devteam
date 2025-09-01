@@ -114,7 +114,7 @@ export default function FileTreeOverlay({files, highlightedFile, maxWidth, maxHe
           }, padded);
         })
       ),
-      h(Box, {paddingX: 1}, h(Text, {color: 'gray'}, 'Shift+←/→ to navigate files'))
+      h(Box, {paddingX: 1}, h(Text, {color: 'gray'}, 'Shift+↑/↓ to navigate files'))
     )
   );
 }
