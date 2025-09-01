@@ -321,23 +321,25 @@ function AppContent() {
   }
 
   if (mode === 'selectAITool' && pendingWorktree) {
-    return h(FullScreen, null,
-      h(Box as any, {flexGrow: 1, alignItems: 'center', justifyContent: 'center'},
-        h(AIToolDialog, {
-          availableTools: getAvailableAITools(),
-          currentTool: pendingWorktree.session?.ai_tool,
-          onSelect: async (tool) => {
-            showList();
-            // Attach session with selected tool
-            try {
-              await attachSession(pendingWorktree, tool);
-            } catch (error) {
-              console.error('Failed to attach session with selected tool:', error);
-            }
-          },
-          onCancel: showList
-        })
-      )
+    return (
+      <FullScreen>
+        <Box flexGrow={1} alignItems="center" justifyContent="center">
+          <AIToolDialog
+            availableTools={getAvailableAITools()}
+            currentTool={pendingWorktree.session?.ai_tool}
+            onSelect={async (tool) => {
+              showList();
+              // Attach session with selected tool
+              try {
+                await attachSession(pendingWorktree, tool);
+              } catch (error) {
+                console.error('Failed to attach session with selected tool:', error);
+              }
+            }}
+            onCancel={showList}
+          />
+        </Box>
+      </FullScreen>
     );
   }
 

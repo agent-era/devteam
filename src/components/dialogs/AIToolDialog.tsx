@@ -1,6 +1,5 @@
 import React, {useState} from 'react';
 import {Box, Text, useInput} from 'ink';
-const h = React.createElement;
 import {AI_TOOLS} from '../../constants.js';
 import type {AITool} from '../../models.js';
 
@@ -50,33 +49,35 @@ export default function AIToolDialog({availableTools, currentTool, onSelect, onC
   });
 
   if (availableTools.length === 0) {
-    return h(
-      Box, {flexDirection: 'column'},
-      h(Text, {color: 'red'}, 'No AI Tools Available'),
-      h(Text, null, 'No supported AI tools (Claude, Codex, Gemini) were found on this system.'),
-      h(Text, {color: 'gray'}, 'Press ESC to cancel')
+    return (
+      <Box flexDirection="column">
+        <Text color="red">No AI Tools Available</Text>
+        <Text>No supported AI tools (Claude, Codex, Gemini) were found on this system.</Text>
+        <Text color="gray">Press ESC to cancel</Text>
+      </Box>
     );
   }
 
-  return h(
-    Box, {flexDirection: 'column'},
-    h(Text, {color: 'cyan'}, 'Select AI Tool'),
-    h(Text, {color: 'gray'}, 'j/k arrows to move, 1-9 quick select, Enter to confirm, ESC to cancel'),
-    h(Text, null, ''),
-    ...availableTools.map((tool, i) => {
-      const config = AI_TOOLS[tool];
-      const isSelected = i === selected;
-      const isCurrent = tool === currentTool;
-      
-      return h(
-        Box, 
-        {key: tool, flexDirection: 'row'}, 
-        h(Text, {color: isSelected ? 'green' : undefined}, 
-          `${isSelected ? '› ' : '  '}[${i + 1}] ${config.name}${isCurrent ? ' (current)' : ''}`
-        )
-      );
-    }),
-    h(Text, null, ''),
-    h(Text, {color: 'gray'}, `Selected: ${AI_TOOLS[availableTools[selected]]?.name || 'None'}`)
+  return (
+    <Box flexDirection="column">
+      <Text color="cyan">Select AI Tool</Text>
+      <Text color="gray">j/k arrows to move, 1-9 quick select, Enter to confirm, ESC to cancel</Text>
+      <Text></Text>
+      {availableTools.map((tool, i) => {
+        const config = AI_TOOLS[tool];
+        const isSelected = i === selected;
+        const isCurrent = tool === currentTool;
+        
+        return (
+          <Box key={tool} flexDirection="row">
+            <Text color={isSelected ? 'green' : undefined}>
+              {isSelected ? '› ' : '  '}[{i + 1}] {config.name}{isCurrent ? ' (current)' : ''}
+            </Text>
+          </Box>
+        );
+      })}
+      <Text></Text>
+      <Text color="gray">Selected: {AI_TOOLS[availableTools[selected]]?.name || 'None'}</Text>
+    </Box>
   );
 }
