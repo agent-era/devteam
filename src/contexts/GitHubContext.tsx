@@ -48,7 +48,7 @@ export function GitHubProvider({children}: GitHubProviderProps) {
   const gitHubService = new GitHubService();
   const gitService = useMemo(() => new GitService(getProjectsDirectory()), []);
   const cacheService = useRef(new PRStatusCacheService()).current;
-  const refreshIntervalRef = useRef<NodeJS.Timeout>();
+  const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Load cached PR data on mount
   useEffect(() => {
