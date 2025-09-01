@@ -150,26 +150,28 @@ async function loadDiff(worktreePath: string, diffType: 'full' | 'uncommitted' =
     diff = await runCommandAsync(['git', '-C', worktreePath, 'diff', '--no-color', '--no-ext-diff', target]);
   }
   
-  if (!diff) return lines;
-  const raw = diff.split('\n');
-  let currentFileName = '';
-  for (const line of raw) {
-    if (line.startsWith('diff --git')) {
-      const parts = line.split(' ');
-      const fp = parts[3]?.slice(2) || parts[2]?.slice(2) || '';
-      currentFileName = fp;
-      lines.push({type: 'header', text: `📁 ${fp}`, fileName: fp, headerType: 'file'});
-    } else if (line.startsWith('@@')) {
-      const ctx = line.replace(/^@@.*@@ ?/, '');
-      if (ctx) lines.push({type: 'header', text: `  ▼ ${ctx}`, fileName: currentFileName, headerType: 'hunk'});
-    } else if (line.startsWith('+') && !line.startsWith('+++')) {
-      lines.push({type: 'added', text: line.slice(1), fileName: currentFileName});
-    } else if (line.startsWith('-') && !line.startsWith('---')) {
-      lines.push({type: 'removed', text: line.slice(1), fileName: currentFileName});
-    } else if (line.startsWith(' ')) {
-      lines.push({type: 'context', text: line.slice(1), fileName: currentFileName});
-    } else if (line === '') {
-      lines.push({type: 'context', text: ' ', fileName: currentFileName}); // Empty line gets a space so cursor is visible
+  // Process main diff if it exists
+  if (diff && diff.trim()) {
+    const raw = diff.split('\n');
+    let currentFileName = '';
+    for (const line of raw) {
+      if (line.startsWith('diff --git')) {
+        const parts = line.split(' ');
+        const fp = parts[3]?.slice(2) || parts[2]?.slice(2) || '';
+        currentFileName = fp;
+        lines.push({type: 'header', text: `📁 ${fp}`, fileName: fp, headerType: 'file'});
+      } else if (line.startsWith('@@')) {
+        const ctx = line.replace(/^@@.*@@ ?/, '');
+        if (ctx) lines.push({type: 'header', text: `  ▼ ${ctx}`, fileName: currentFileName, headerType: 'hunk'});
+      } else if (line.startsWith('+') && !line.startsWith('+++')) {
+        lines.push({type: 'added', text: line.slice(1), fileName: currentFileName});
+      } else if (line.startsWith('-') && !line.startsWith('---')) {
+        lines.push({type: 'removed', text: line.slice(1), fileName: currentFileName});
+      } else if (line.startsWith(' ')) {
+        lines.push({type: 'context', text: line.slice(1), fileName: currentFileName});
+      } else if (line === '') {
+        lines.push({type: 'context', text: ' ', fileName: currentFileName}); // Empty line gets a space so cursor is visible
+      }
     }
   }
   // Append untracked files
