@@ -44,9 +44,15 @@ export function GitHubProvider({children}: GitHubProviderProps) {
   const [lastUpdated, setLastUpdated] = useState(0);
   const [visibleWorktrees, setVisibleWorktrees] = useState<string[]>([]);
 
-  // Service instances
-  const gitHubService = new GitHubService();
-  const gitService = useMemo(() => new GitService(getProjectsDirectory()), []);
+  // Service instances (allow test overrides via globals)
+  const gitHubService = useMemo(() => {
+    const factory = (globalThis as any)?.__createGitHubService as (() => any) | undefined;
+    return factory ? factory() : new GitHubService();
+  }, []);
+  const gitService = useMemo(() => {
+    const factory = (globalThis as any)?.__createGitService as ((basePath: string) => any) | undefined;
+    return factory ? factory(getProjectsDirectory()) : new GitService(getProjectsDirectory());
+  }, []);
   const cacheService = useRef(new PRStatusCacheService()).current;
   const refreshIntervalRef = useRef<NodeJS.Timeout>();
 

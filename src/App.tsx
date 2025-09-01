@@ -74,9 +74,9 @@ function AppContent() {
   } = useUIContext();
 
 
-  // Exit immediately if raw mode isn't supported
+  // Exit immediately if raw mode isn't supported (unless overridden in E2E)
   useEffect(() => {
-    if (!isRawModeSupported) {
+    if (!isRawModeSupported && process.env.E2E_IGNORE_RAWMODE !== '1') {
       exit();
     }
   }, [isRawModeSupported, exit]);
@@ -299,7 +299,7 @@ function AppContent() {
   }
 
   // Default: Main worktree list screen
-  return h(FullScreen, null,
+  return h(FullScreen, {enableAltScreen: process.env.DISABLE_ALT_SCREEN === '1' ? false : true},
     h(WorktreeListScreen, {
       onCreateFeature: handleCreateFeature,
       onArchiveFeature: handleArchiveFeature,

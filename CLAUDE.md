@@ -198,15 +198,28 @@ tests/
    ```
 
 2. **E2E Tests** (`tests/e2e/`): Full user workflows and cross-service interactions
-   ```typescript
-   test('complete feature workflow', async () => {
-     const {result, stdin} = renderApp();
-     stdin.write('n'); // Create new
-     await delay(100);
-     stdin.write('\r'); // Select project
-     // ... continue workflow
-   });
-   ```
+  ```typescript
+  test('complete feature workflow', async () => {
+    const {result, stdin} = renderApp();
+    stdin.write('n'); // Create new
+    await delay(100);
+    stdin.write('\r'); // Select project
+    // ... continue workflow
+  });
+  ```
+
+### E2E Flavors
+
+- **tests/e2e/** (mock-rendered):
+  - Uses `tests/utils/renderApp.tsx` (mock output driver) for deterministic frames.
+  - Runs real app logic with in-memory fakes; avoids raw-mode/alt-screen quirks.
+  - Fast and stable; preferred for most end-to-end flows.
+
+- **tests/e2e/terminal/** (terminal-oriented):
+  - Reserved for tests focused on terminal rendering behavior and Ink I/O.
+  - May require environment hints for stability (see `tests/setup.e2e.ts`).
+  - Keep polling windows short; avoid heavy reliance on stdin unless necessary.
+  - Current example: `app.real.list.test.tsx` kept isolated under `terminal/` due to its rendering focus.
 
 ### Running Tests
 ```bash
