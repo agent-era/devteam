@@ -1,7 +1,8 @@
-import React, {useState} from 'react';
-import {Box, Text, useInput} from 'ink';
+import React, {useMemo} from 'react';
+import {Box, Text} from 'ink';
 import {AI_TOOLS} from '../../constants.js';
 import type {AITool} from '../../models.js';
+import SelectAdapter, {type SelectOption} from '../common/SelectAdapter.js';
 
 type Props = {
   availableTools: (keyof typeof AI_TOOLS)[];
@@ -11,42 +12,24 @@ type Props = {
 };
 
 export default function AIToolDialog({availableTools, currentTool, onSelect, onCancel}: Props) {
-  const [selected, setSelected] = useState(() => {
+  const options: SelectOption[] = useMemo(() => {
+    return availableTools.map((tool, i) => ({
+      label: `[${i + 1}] ${AI_TOOLS[tool].name}${tool === currentTool ? ' (current)' : ''}`,
+      value: tool
+    }));
+  }, [availableTools, currentTool]);
+
+  const defaultSelected = useMemo(() => {
     if (currentTool && currentTool !== 'none') {
       const idx = availableTools.indexOf(currentTool);
-      return idx >= 0 ? idx : 0;
+      return idx >= 0 ? availableTools[idx] : availableTools[0];
     }
-    return 0;
-  });
+    return availableTools[0];
+  }, [availableTools, currentTool]);
 
-  useInput((input, key) => {
-    if (key.escape) return onCancel();
-    
-    if (key.return) {
-      const tool = availableTools[selected];
-      if (tool) onSelect(tool);
-      return;
-    }
-    
-    // Navigation keys
-    if (key.downArrow || input === 'j') {
-      setSelected((s) => Math.min(availableTools.length - 1, s + 1));
-      return;
-    }
-    if (key.upArrow || input === 'k') {
-      setSelected((s) => Math.max(0, s - 1));
-      return;
-    }
-    
-    // Number keys for quick selection (1-9)
-    if (/^[1-9]$/.test(input)) {
-      const idx = Number(input) - 1;
-      if (idx >= 0 && idx < availableTools.length) {
-        onSelect(availableTools[idx]);
-      }
-      return;
-    }
-  });
+  const handleSelect = (toolValue: string) => {
+    onSelect(toolValue as keyof typeof AI_TOOLS);
+  };
 
   if (availableTools.length === 0) {
     return (
@@ -63,21 +46,15 @@ export default function AIToolDialog({availableTools, currentTool, onSelect, onC
       <Text color="cyan">Select AI Tool</Text>
       <Text color="gray">j/k arrows to move, 1-9 quick select, Enter to confirm, ESC to cancel</Text>
       <Text></Text>
-      {availableTools.map((tool, i) => {
-        const config = AI_TOOLS[tool];
-        const isSelected = i === selected;
-        const isCurrent = tool === currentTool;
-        
-        return (
-          <Box key={tool} flexDirection="row">
-            <Text color={isSelected ? 'green' : undefined}>
-              {isSelected ? '› ' : '  '}[{i + 1}] {config.name}{isCurrent ? ' (current)' : ''}
-            </Text>
-          </Box>
-        );
-      })}
-      <Text></Text>
-      <Text color="gray">Selected: {AI_TOOLS[availableTools[selected]]?.name || 'None'}</Text>
+      <SelectAdapter
+        options={options}
+        onSelect={handleSelect}
+        onCancel={onCancel}
+        defaultSelected={defaultSelected}
+        focusId="ai-tool-dialog"
+        supportNumberSelection={true}
+        supportJKNavigation={true}
+      />
     </Box>
   );
 }

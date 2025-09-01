@@ -1,7 +1,7 @@
 import React, {useMemo, useState} from 'react';
 import {Box, Text, useInput, useStdin} from 'ink';
 import type {ProjectInfo} from '../../models.js';
-import {useTextInput} from './TextInput.js';
+import TextInputAdapter from '../common/TextInputAdapter.js';
 
 type Props = {
   projects: ProjectInfo[];
@@ -11,16 +11,16 @@ type Props = {
 };
 
 export default function ProjectPickerDialog({projects, defaultProject, onSubmit, onCancel}: Props) {
-  const filterInput = useTextInput();
+  const [filter, setFilter] = useState('');
   const [selected, setSelected] = useState(() => {
     if (!projects || projects.length === 0) return 0;
     return Math.max(0, projects.findIndex(p => p.name === defaultProject));
   });
   const filtered = useMemo(() => {
     if (!projects || projects.length === 0) return [];
-    const f = filterInput.value.toLowerCase();
+    const f = filter.toLowerCase();
     return projects.filter(p => p.name.toLowerCase().includes(f));
-  }, [projects, filterInput.value]);
+  }, [projects, filter]);
 
   useInput((input, key) => {
     if (key.escape) return onCancel();
@@ -49,8 +49,15 @@ export default function ProjectPickerDialog({projects, defaultProject, onSubmit,
       return;
     }
     
-    // Let the filter input hook handle text input
-    if (filterInput.handleKeyInput(input, key)) {
+    // Text filtering - check both keys due to terminal key mapping inconsistencies
+    if (key.backspace || key.delete) {
+      setFilter((f) => f.slice(0, -1));
+      return;
+    }
+    
+    // Regular typing
+    if (input && !key.ctrl && !key.meta) {
+      setFilter((f) => f + input);
       return;
     }
   });
@@ -61,7 +68,7 @@ export default function ProjectPickerDialog({projects, defaultProject, onSubmit,
       <Text color="gray">Type to filter, j/k arrows to move, 1-9 jump, Enter select, ESC cancel</Text>
       <Box flexDirection="row">
         <Text color="gray">Filter: </Text>
-        {filterInput.renderText(' ')}
+        <Text>{filter || ' '}</Text>
       </Box>
       {filtered.slice(0, 20).map((p, i) => 
         <Text key={p.name} color={i === selected ? 'green' : undefined}>

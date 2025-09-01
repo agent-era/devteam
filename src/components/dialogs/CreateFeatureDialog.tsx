@@ -1,9 +1,8 @@
-import React, {useEffect, useMemo, useState} from 'react';
+import React, {useEffect, useMemo, useState, useRef} from 'react';
 import {Box, Text, useInput, useStdin} from 'ink';
 import type {ProjectInfo} from '../../models.js';
 import {kebabCase, validateFeatureName, truncateText} from '../../utils.js';
-import {useTextInput} from './TextInput.js';
-import {useInputFocus} from '../../contexts/InputFocusContext.js';
+import TextInputAdapter, {type TextInputAdapterRef} from '../common/TextInputAdapter.js';
 
 type Props = {
   projects: ProjectInfo[];
@@ -16,16 +15,8 @@ const CreateFeatureDialog = React.memo(function CreateFeatureDialog({projects, d
   const [mode, setMode] = useState<'select'|'input'|'creating'>('select');
   const [filter, setFilter] = useState('');
   const [selected, setSelected] = useState(() => Math.max(0, projects.findIndex(p => p.name === defaultProject)));
-  const featureInput = useTextInput();
-  const {requestFocus, releaseFocus} = useInputFocus();
-
-  // Request focus when dialog mounts
-  useEffect(() => {
-    requestFocus('create-feature-dialog');
-    return () => {
-      releaseFocus('create-feature-dialog');
-    };
-  }, [requestFocus, releaseFocus]);
+  const [featureName, setFeatureName] = useState('');
+  const featureInputRef = useRef<TextInputAdapterRef>(null);
 
   const filtered = useMemo(() => {
     const f = filter.toLowerCase();
@@ -74,33 +65,30 @@ const CreateFeatureDialog = React.memo(function CreateFeatureDialog({projects, d
         setFilter((f) => f + input);
         return;
       }
-    } else {
-      // input mode for feature name
-      if (key.return) {
-        const proj = filtered[selected]?.name || projects[0]?.name;
-        const feat = kebabCase(featureInput.value);
-        if (proj && validateFeatureName(feat)) {
-          setMode('creating');
-          Promise.resolve(onSubmit(proj, feat)).catch(() => {
-            // If creation fails, go back to input mode
-            setMode('input');
-          });
-        }
-        return;
-      }
-      
-      // Let the text input hook handle all text input
-      if (featureInput.handleKeyInput(input, key)) {
-        return;
-      }
     }
   });
+
+  const handleFeatureNameSubmit = (value: string) => {
+    const proj = filtered[selected]?.name || projects[0]?.name;
+    const feat = kebabCase(value);
+    if (proj && validateFeatureName(feat)) {
+      setMode('creating');
+      Promise.resolve(onSubmit(proj, feat)).catch(() => {
+        // If creation fails, go back to input mode
+        setMode('input');
+      });
+    }
+  };
+
+  const handleFeatureNameChange = (value: string) => {
+    setFeatureName(value);
+  };
 
   if (mode === 'creating') {
     return (
       <Box flexDirection="column" alignItems="center">
         <Text color="cyan">Creating feature branch...</Text>
-        <Text color="yellow">{`${filtered[selected]?.name || ''}/${featureInput.value}`}</Text>
+        <Text color="yellow">{`${filtered[selected]?.name || ''}/${featureName}`}</Text>
         <Text color="gray">Setting up worktree and tmux session...</Text>
       </Box>
     );
@@ -127,7 +115,13 @@ const CreateFeatureDialog = React.memo(function CreateFeatureDialog({projects, d
     <Box flexDirection="column">
       <Text color="cyan">Create Feature — {filtered[selected]?.name || ''}</Text>
       <Text>Enter feature name (kebab-case suggested), ESC back</Text>
-      {featureInput.renderText(' ', 'yellow')}
+      <TextInputAdapter
+        ref={featureInputRef}
+        placeholder=" "
+        onSubmit={handleFeatureNameSubmit}
+        onChange={handleFeatureNameChange}
+        focusId="create-feature-dialog"
+      />
     </Box>
   );
 });
