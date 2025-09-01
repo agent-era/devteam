@@ -139,10 +139,11 @@ Generating code...
 - Build and run CLI: npm install && npm run build && npm run cli
 - Point to projects dir: PROJECTS_DIR=/path/to/projects npm run cli
 
-Want me to run the tests or build the project here to confirm everything compiles?
+1. Do you want me to run the tests?
+2. Should I build the project?
 
-▌ Improve documentation in @filename
- ⏎ send   Ctrl+J newline   Ctrl+T transcript   Ctrl+C quit   22521 tokens used   94% context left
+▌ 
+ Ctrl+J newline   Ctrl+T transcript   Ctrl+C quit   22521 tokens used   94% context left
 `,
       idle: `
 Ready to help with your code!
@@ -188,6 +189,25 @@ Ready to help with your code!
       const result = await tmuxService.getAIStatus('dev-project-feature');
       expect(result.tool).toBe('codex');
       expect(result.status).toBe('waiting');
+    });
+
+    test('detects Codex idle state', async () => {
+      const mockCapture = jest.spyOn(tmuxService as any, 'capturePane');
+      mockCapture.mockResolvedValue(codexScreens.idle);
+      
+      (runCommandQuickAsync as jest.Mock).mockImplementation((args) => {
+        if (args.includes('list-panes')) {
+          return Promise.resolve('dev-project-feature:12345');
+        }
+        if (args.includes('-p') && args.includes('12345')) {
+          return Promise.resolve('12345 node /home/user/.nvm/versions/node/v24.7.0/bin/codex');
+        }
+        return Promise.resolve('');
+      });
+
+      const result = await tmuxService.getAIStatus('dev-project-feature');
+      expect(result.tool).toBe('codex');
+      expect(result.status).toBe('idle');
     });
   });
 

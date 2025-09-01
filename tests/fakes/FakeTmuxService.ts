@@ -253,6 +253,31 @@ export class FakeTmuxService extends TmuxService {
     }
   }
 
+  // Helper methods for testing AI tools
+  setAITool(session: string, tool: AITool): void {
+    const sessionInfo = memoryStore.sessions.get(session);
+    if (sessionInfo) {
+      sessionInfo.ai_tool = tool;
+      memoryStore.sessions.set(session, sessionInfo);
+    }
+  }
+
+  setAIStatus(session: string, status: AIStatus): void {
+    const sessionInfo = memoryStore.sessions.get(session);
+    if (sessionInfo) {
+      sessionInfo.ai_status = status;
+      // Also update claude_status for backward compatibility
+      if (sessionInfo.ai_tool === 'claude' || !sessionInfo.ai_tool) {
+        sessionInfo.claude_status = status;
+      }
+      memoryStore.sessions.set(session, sessionInfo);
+    }
+  }
+
+  getSessionInfo(session: string): SessionInfo | undefined {
+    return memoryStore.sessions.get(session);
+  }
+
   // Track sent keys for testing
   recordSentKeys(session: string, keys: string[]): void {
     this.sentKeys.push({session, keys});
