@@ -111,23 +111,23 @@ describe('Archive Management E2E', () => {
       const shellSession = 'dev-session-cleanup-cleanup-feature-shell';
       const runSession = 'dev-session-cleanup-cleanup-feature-run';
       
-      memoryStore.sessions.set(mainSession, {
+      memoryStore.sessions.set(mainSession, new SessionInfo({
         session_name: mainSession,
         attached: true,
         claude_status: 'idle'
-      });
+      }));
       
-      memoryStore.sessions.set(shellSession, {
+      memoryStore.sessions.set(shellSession, new SessionInfo({
         session_name: shellSession,
         attached: true,
         claude_status: 'active'
-      });
+      }));
       
-      memoryStore.sessions.set(runSession, {
+      memoryStore.sessions.set(runSession, new SessionInfo({
         session_name: runSession,
         attached: true,
         claude_status: 'active'
-      });
+      }));
       
       const {services} = renderTestApp();
       await simulateTimeDelay(50);

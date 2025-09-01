@@ -40,30 +40,53 @@ export function formatPushStatus(worktree: WorktreeInfo): string {
   return '↗';
 }
 
-export function getAISymbol(claudeStatus: string, hasSession: boolean): string {
-  if (!hasSession) return USE_EMOJI_SYMBOLS ? SYMBOL_NO_SESSION : ASCII_SYMBOLS.NO_SESSION;
+export function getAISymbol(aiStatus: string, hasSession: boolean, aiTool?: string): string {
+  // Get the base symbol
+  let baseSymbol: string;
   
-  const cs = claudeStatus.toLowerCase();
-  let symbol = SYMBOL_FAILED;
-  
-  if (cs.includes('waiting')) symbol = SYMBOL_WAITING;
-  else if (cs.includes('working')) symbol = SYMBOL_WORKING;
-  else if (cs.includes('thinking')) symbol = SYMBOL_THINKING;
-  else if (cs.includes('idle') || cs.includes('active')) symbol = SYMBOL_IDLE;
+  if (!hasSession) {
+    baseSymbol = USE_EMOJI_SYMBOLS ? SYMBOL_NO_SESSION : ASCII_SYMBOLS.NO_SESSION;
+  } else {
+    const status = aiStatus.toLowerCase();
+    let symbol = SYMBOL_FAILED;
+    
+    if (status.includes('waiting')) symbol = SYMBOL_WAITING;
+    else if (status.includes('working')) symbol = SYMBOL_WORKING;
+    else if (status.includes('thinking')) symbol = SYMBOL_THINKING;
+    else if (status.includes('idle') || status.includes('active')) symbol = SYMBOL_IDLE;
 
-  if (!USE_EMOJI_SYMBOLS) {
-    const symbolMap: Record<string, string> = {
-      [SYMBOL_NO_SESSION]: ASCII_SYMBOLS.NO_SESSION,
-      [SYMBOL_WAITING]: ASCII_SYMBOLS.WAITING,
-      [SYMBOL_WORKING]: ASCII_SYMBOLS.WORKING,
-      [SYMBOL_THINKING]: ASCII_SYMBOLS.THINKING,
-      [SYMBOL_IDLE]: ASCII_SYMBOLS.IDLE,
-      [SYMBOL_FAILED]: ASCII_SYMBOLS.FAILED,
-    };
-    return symbolMap[symbol] || symbol;
+    if (!USE_EMOJI_SYMBOLS) {
+      const symbolMap: Record<string, string> = {
+        [SYMBOL_NO_SESSION]: ASCII_SYMBOLS.NO_SESSION,
+        [SYMBOL_WAITING]: ASCII_SYMBOLS.WAITING,
+        [SYMBOL_WORKING]: ASCII_SYMBOLS.WORKING,
+        [SYMBOL_THINKING]: ASCII_SYMBOLS.THINKING,
+        [SYMBOL_IDLE]: ASCII_SYMBOLS.IDLE,
+        [SYMBOL_FAILED]: ASCII_SYMBOLS.FAILED,
+      };
+      baseSymbol = symbolMap[symbol] || symbol;
+    } else {
+      baseSymbol = symbol;
+    }
   }
+  
+  // Add AI tool indicator
+  if (hasSession && aiTool && aiTool !== 'none') {
+    const toolIndicators: Record<string, string> = {
+      'claude': '[A]',  // Anthropic
+      'codex': '[O]',   // OpenAI
+      'gemini': '[G]'   // Google
+    };
+    const indicator = toolIndicators[aiTool] || '[?]';
+    return `${baseSymbol}${indicator}`;
+  }
+  
+  return baseSymbol;
+}
 
-  return symbol;
+// Backward compatibility function
+export function getClaudeSymbol(claudeStatus: string, hasSession: boolean): string {
+  return getAISymbol(claudeStatus, hasSession, 'claude');
 }
 
 export function formatPRStatus(pr: WorktreeInfo['pr']): string {

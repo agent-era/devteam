@@ -3,6 +3,7 @@ import {Box} from 'ink';
 import CreateFeatureDialog from '../components/dialogs/CreateFeatureDialog.js';
 import FullScreen from '../components/common/FullScreen.js';
 import {useWorktreeContext} from '../contexts/WorktreeContext.js';
+import {useUIContext} from '../contexts/UIContext.js';
 
 
 interface CreateFeatureScreenProps {
@@ -18,7 +19,8 @@ export default function CreateFeatureScreen({
   onCancel,
   onSuccess
 }: CreateFeatureScreenProps) {
-  const {createFeature, attachSession} = useWorktreeContext();
+  const {createFeature, attachSession, needsToolSelection} = useWorktreeContext();
+  const {showAIToolSelection} = useUIContext();
 
   const handleSubmit = async (project: string, feature: string) => {
     try {
@@ -30,8 +32,16 @@ export default function CreateFeatureScreen({
         // Small delay to ensure UI is updated and tmux session is ready
         await new Promise(resolve => setTimeout(resolve, 100));
         
-        // Auto-attach to the newly created session
-        attachSession(result);
+        // Check if tool selection is needed
+        const needsSelection = await needsToolSelection(result);
+        
+        if (needsSelection) {
+          // Show AI tool selection dialog
+          showAIToolSelection(result);
+        } else {
+          // Auto-attach to the newly created session
+          attachSession(result);
+        }
       } else {
         onCancel();
       }

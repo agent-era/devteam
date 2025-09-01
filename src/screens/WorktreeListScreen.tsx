@@ -2,6 +2,7 @@ import React, {useState, useEffect} from 'react';
 import {Box} from 'ink';
 import MainView from '../components/views/MainView.js';
 import {useWorktreeContext} from '../contexts/WorktreeContext.js';
+import {useUIContext} from '../contexts/UIContext.js';
 import {useKeyboardShortcuts} from '../hooks/useKeyboardShortcuts.js';
 import {usePageSize} from '../hooks/usePagination.js';
 
@@ -27,7 +28,8 @@ export default function WorktreeListScreen({
   onExecuteRun,
   onConfigureRun
 }: WorktreeListScreenProps) {
-  const {worktrees, selectedIndex, selectWorktree, refresh, forceRefreshVisible, attachSession, attachShellSession, lastRefreshed} = useWorktreeContext();
+  const {worktrees, selectedIndex, selectWorktree, refresh, forceRefreshVisible, attachSession, attachShellSession, needsToolSelection, lastRefreshed} = useWorktreeContext();
+  const {showAIToolSelection} = useUIContext();
   const pageSize = usePageSize();
   const [currentPage, setCurrentPage] = useState(0);
 
@@ -74,17 +76,27 @@ export default function WorktreeListScreen({
     }
   };
 
-  const handleSelect = () => {
+  const handleSelect = async () => {
     const selectedWorktree = worktrees[selectedIndex];
     if (!selectedWorktree) return;
     
     try {
-      attachSession(selectedWorktree);
-    } catch {}
-    
-    refresh().catch(error => {
-      console.error('Refresh after attach failed:', error);
-    });
+      // Check if tool selection is needed
+      const needsSelection = await needsToolSelection(selectedWorktree);
+      
+      if (needsSelection) {
+        // Show AI tool selection dialog
+        showAIToolSelection(selectedWorktree);
+      } else {
+        // Proceed with session attachment
+        attachSession(selectedWorktree);
+        refresh().catch(error => {
+          console.error('Refresh after attach failed:', error);
+        });
+      }
+    } catch (error) {
+      console.error('Failed to handle selection:', error);
+    }
   };
 
   const handleShell = () => {

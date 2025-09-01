@@ -1,4 +1,4 @@
-import {WorktreeInfo, ProjectInfo, SessionInfo} from '../../src/models.js';
+import {WorktreeInfo, ProjectInfo, SessionInfo, AITool} from '../../src/models.js';
 import {FakeGitService} from './FakeGitService.js';
 import {FakeTmuxService} from './FakeTmuxService.js';
 import {memoryStore} from './stores.js';
@@ -194,6 +194,41 @@ export class FakeWorktreeService {
     } catch (error) {
       console.error('Failed to unarchive feature:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Switch AI tool for a worktree
+   */
+  async switchAITool(project: string, feature: string, tool: AITool): Promise<void> {
+    const sessionName = this.tmuxService.sessionName(project, feature);
+    
+    // Kill existing session if it exists
+    if (this.tmuxService.hasSession(sessionName)) {
+      this.tmuxService.killSession(sessionName);
+    }
+    
+    // Create new session with selected tool
+    const worktree = this.getAllWorktrees().find(w => w.project === project && w.feature === feature);
+    if (worktree) {
+      const command = this.getAIToolCommand(tool);
+      this.tmuxService.createSessionWithCommand(sessionName, worktree.path, command);
+    }
+  }
+
+  /**
+   * Get command for AI tool
+   */
+  getAIToolCommand(tool: AITool): string {
+    switch (tool) {
+      case 'claude':
+        return 'claude';
+      case 'codex':
+        return 'codex';
+      case 'gemini':
+        return 'gemini';
+      default:
+        return 'claude'; // Default fallback
     }
   }
 
