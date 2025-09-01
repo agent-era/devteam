@@ -1,5 +1,5 @@
 import {TmuxService, ClaudeStatus} from '../../src/services/TmuxService.js';
-import {SessionInfo} from '../../src/models.js';
+import {SessionInfo, AIStatus, AITool} from '../../src/models.js';
 import {memoryStore} from './stores.js';
 import {SESSION_PREFIX} from '../../src/constants.js';
 
@@ -45,11 +45,19 @@ export class FakeTmuxService extends TmuxService {
     }
   }
 
-  async getClaudeStatus(session: string): Promise<ClaudeStatus> {
+  async getAIStatus(session: string): Promise<{tool: AITool, status: AIStatus}> {
     const sessionInfo = memoryStore.sessions.get(session);
-    if (!sessionInfo) return 'not_running';
+    if (!sessionInfo) return {tool: 'none', status: 'not_running'};
     
-    return sessionInfo.claude_status as ClaudeStatus;
+    return {
+      tool: sessionInfo.ai_tool || 'claude',
+      status: sessionInfo.ai_status || sessionInfo.claude_status || 'not_running'
+    };
+  }
+
+  async getClaudeStatus(session: string): Promise<ClaudeStatus> {
+    const result = await this.getAIStatus(session);
+    return result.status;
   }
 
   killSession(session: string): string {
@@ -82,10 +90,26 @@ export class FakeTmuxService extends TmuxService {
   }
 
   createSessionWithCommand(sessionName: string, cwd: string, command: string, autoExit: boolean = true): void {
+    // Detect AI tool from command
+    let aiTool: AITool = 'none';
+    let aiStatus: AIStatus = 'idle';
+    
+    if (command.includes('claude')) {
+      aiTool = 'claude';
+    } else if (command.includes('codex')) {
+      aiTool = 'codex';
+    } else if (command.includes('gemini')) {
+      aiTool = 'gemini';
+    } else {
+      aiStatus = 'active';
+    }
+    
     const sessionInfo = new SessionInfo({
       session_name: sessionName,
       attached: true,
-      claude_status: command.includes('claude') ? 'idle' : 'active'
+      ai_tool: aiTool,
+      ai_status: aiStatus,
+      claude_status: aiTool === 'claude' ? aiStatus : 'active' // Backward compatibility
     });
     memoryStore.sessions.set(sessionName, sessionInfo);
     if (autoExit) {
@@ -93,6 +117,18 @@ export class FakeTmuxService extends TmuxService {
       this.recordSentKeys(sessionName, ['remain-on-exit', 'off']);
     }
     this.recordSentKeys(sessionName, ['command', command]);
+  }
+
+  createTestSessionWithTool(project: string, feature: string, tool: AITool, status: AIStatus = 'idle'): string | null {
+    const sessionName = this.sessionName(project, feature);
+    const sessionInfo = new SessionInfo({
+      session_name: sessionName,
+      attached: true,
+      ai_tool: tool,
+      ai_status: status
+    });
+    memoryStore.sessions.set(sessionName, sessionInfo);
+    return sessionName;
   }
 
   sendText(session: string, text: string, options: {
@@ -215,6 +251,31 @@ export class FakeTmuxService extends TmuxService {
       sessionInfo.attached = status !== 'not_running';
       memoryStore.sessions.set(session, sessionInfo);
     }
+  }
+
+  // Helper methods for testing AI tools
+  setAITool(session: string, tool: AITool): void {
+    const sessionInfo = memoryStore.sessions.get(session);
+    if (sessionInfo) {
+      sessionInfo.ai_tool = tool;
+      memoryStore.sessions.set(session, sessionInfo);
+    }
+  }
+
+  setAIStatus(session: string, status: AIStatus): void {
+    const sessionInfo = memoryStore.sessions.get(session);
+    if (sessionInfo) {
+      sessionInfo.ai_status = status;
+      // Also update claude_status for backward compatibility
+      if (sessionInfo.ai_tool === 'claude' || !sessionInfo.ai_tool) {
+        sessionInfo.claude_status = status;
+      }
+      memoryStore.sessions.set(session, sessionInfo);
+    }
+  }
+
+  getSessionInfo(session: string): SessionInfo | undefined {
+    return memoryStore.sessions.get(session);
   }
 
   // Track sent keys for testing

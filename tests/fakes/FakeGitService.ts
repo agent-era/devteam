@@ -53,6 +53,15 @@ export class FakeGitService extends GitService {
     });
   }
 
+  createProject(projectName: string): void {
+    if (!memoryStore.projects.has(projectName)) {
+      memoryStore.projects.set(projectName, new ProjectInfo({
+        name: projectName,
+        path: `/fake/projects/${projectName}`,
+      }));
+    }
+  }
+
   createWorktree(project: string, featureName: string, branchName?: string): boolean {
     // Check if this operation should fail (for error testing)
     if ((global as any).__mockGitShouldFail) {

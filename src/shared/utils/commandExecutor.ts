@@ -1,5 +1,5 @@
 import {execFileSync, spawnSync, execFile} from 'child_process';
-import {SUBPROCESS_SHORT_TIMEOUT, SUBPROCESS_TIMEOUT} from '../../constants.js';
+import {SUBPROCESS_SHORT_TIMEOUT, SUBPROCESS_TIMEOUT, AI_TOOLS} from '../../constants.js';
 
 // Clean environment for tmux commands to fix nvm compatibility
 function getCleanEnvironment(): NodeJS.ProcessEnv {
@@ -109,4 +109,31 @@ export function runClaudeSync(prompt: string, cwd?: string): {success: boolean; 
       error: errorMessage
     };
   }
+}
+
+/**
+ * Check if a command exists and is executable
+ */
+export function commandExists(command: string): boolean {
+  try {
+    const result = spawnSync('which', [command], { stdio: 'ignore' });
+    return result.status === 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Detect which AI tools are available on the system
+ */
+export function detectAvailableAITools(): (keyof typeof AI_TOOLS)[] {
+  const available: (keyof typeof AI_TOOLS)[] = [];
+  
+  for (const [tool, config] of Object.entries(AI_TOOLS)) {
+    if (commandExists(config.command)) {
+      available.push(tool as keyof typeof AI_TOOLS);
+    }
+  }
+  
+  return available;
 }

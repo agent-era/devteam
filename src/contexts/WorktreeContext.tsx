@@ -24,14 +24,16 @@ import {
   runCommandQuick,
   copyWithIgnore,
   generateTimestamp,
-  runClaudeSync
+  runClaudeSync,
+  detectAvailableAITools
 } from '../utils.js';
+import {AI_TOOLS} from '../constants.js';
+import type {AITool} from '../models.js';
 import {useInputFocus} from './InputFocusContext.js';
 import {useGitHubContext} from './GitHubContext.js';
 import {logDebug} from '../shared/utils/logger.js';
 import {Timer} from '../shared/utils/timing.js';
 
-const h = React.createElement;
 
 interface WorktreeContextType {
   // State
@@ -57,9 +59,13 @@ interface WorktreeContextType {
   
   
   // Session operations  
-  attachSession: (worktree: WorktreeInfo) => Promise<void>;
+  attachSession: (worktree: WorktreeInfo, aiTool?: AITool) => Promise<void>;
   attachShellSession: (worktree: WorktreeInfo) => Promise<void>;
   attachRunSession: (worktree: WorktreeInfo) => Promise<'success' | 'no_config'>;
+  
+  // AI tool management
+  getAvailableAITools: () => (keyof typeof AI_TOOLS)[];
+  needsToolSelection: (worktree: WorktreeInfo) => Promise<boolean>;
   
   // Projects
   discoverProjects: () => ProjectInfo[];
@@ -99,6 +105,9 @@ export function WorktreeProvider({
     return factory ? factory() : new TmuxService();
   }, []);
   // Filesystem operations are routed through GitService methods (see CLAUDE.md)
+
+  // Cache available AI tools on startup
+  const availableAITools = useMemo(() => detectAvailableAITools(), []);
 
   const collectWorktrees = useCallback(async (): Promise<Array<{
     project: string; 
@@ -146,16 +155,16 @@ export function WorktreeProvider({
       const sessionName = tmuxService.sessionName(w.project, w.feature);
       const attached = activeSessions.includes(sessionName);
       
-      const [gitStatus, claudeStatus] = await Promise.all([
+      const [gitStatus, aiResult] = await Promise.all([
         gitService.getGitStatus(w.path),
-        attached ? tmuxService.getClaudeStatus(sessionName) : Promise.resolve('not_running' as const)
+        attached ? tmuxService.getAIStatus(sessionName) : Promise.resolve({tool: 'none' as const, status: 'not_running' as const})
       ]);
       
       // Track idle time for ALL worktrees and kill after 30 minutes
       let idleStartTime = existing?.idleStartTime;
       let wasKilledIdle = existing?.wasKilledIdle || false;
       
-      if (claudeStatus === 'idle') {
+      if (aiResult.status === 'idle') {
         if (!idleStartTime) {
           idleStartTime = Date.now();
         }
@@ -180,7 +189,8 @@ export function WorktreeProvider({
       const sessionInfo = new SessionInfo({
         session_name: sessionName,
         attached,
-        claude_status: claudeStatus
+        ai_status: aiResult.status,
+        ai_tool: aiResult.tool
       });
 
       // Get PR status if available, otherwise create with 'not_checked' status
@@ -437,19 +447,37 @@ export function WorktreeProvider({
 
   // Unarchive and delete archived functionality removed
 
-  const attachSession = useCallback(async (worktree: WorktreeInfo) => {
+  const attachSession = useCallback(async (worktree: WorktreeInfo, aiTool?: AITool) => {
     const sessionName = tmuxService.sessionName(worktree.project, worktree.feature);
     const activeSessions = await tmuxService.listSessions();
     
     if (!activeSessions.includes(sessionName)) {
-      const hasClaude = !!runCommandQuick(['bash', '-lc', 'command -v claude || true']);
+      // Determine which AI tool to use
+      let selectedTool: AITool = aiTool || worktree.session?.ai_tool || 'none';
       
-      if (hasClaude) {
-        // Create session with Claude directly as the command
-        const claudeCmd = worktree.wasKilledIdle ? 'claude "/resume"' : 'claude';
-        tmuxService.createSessionWithCommand(sessionName, worktree.path, claudeCmd, true);
+      // If no tool specified and none in session, auto-select based on available tools
+      if (selectedTool === 'none') {
+        if (availableAITools.length === 1) {
+          selectedTool = availableAITools[0];
+        } else if (availableAITools.length > 1) {
+          // Multiple tools available - this should be handled by UI showing dialog
+          // For now, default to the first available tool
+          selectedTool = availableAITools[0];
+        }
+      }
+      
+      if (selectedTool !== 'none' && availableAITools.includes(selectedTool)) {
+        const toolConfig = AI_TOOLS[selectedTool];
+        let command: string = toolConfig.command;
+        
+        // Special handling for Claude resume
+        if (selectedTool === 'claude' && worktree.wasKilledIdle) {
+          command = 'claude "/resume"';
+        }
+        
+        tmuxService.createSessionWithCommand(sessionName, worktree.path, command, true);
       } else {
-        // No Claude available, create regular bash session with auto-exit
+        // No AI tool available or selected, create regular bash session
         tmuxService.createSession(sessionName, worktree.path, true);
       }
       
@@ -458,7 +486,7 @@ export function WorktreeProvider({
     
     configureTmuxDisplayTime();
     tmuxService.attachSessionInteractive(sessionName);
-  }, [tmuxService]);
+  }, [tmuxService, availableAITools]);
 
   const attachShellSession = useCallback(async (worktree: WorktreeInfo) => {
     const sessionName = tmuxService.shellSessionName(worktree.project, worktree.feature);
@@ -493,6 +521,24 @@ export function WorktreeProvider({
     return 'success';
   }, [tmuxService]);
 
+  const needsToolSelection = useCallback(async (worktree: WorktreeInfo): Promise<boolean> => {
+    const sessionName = tmuxService.sessionName(worktree.project, worktree.feature);
+    const activeSessions = await tmuxService.listSessions();
+    
+    // If session already exists, no need for tool selection
+    if (activeSessions.includes(sessionName)) {
+      return false;
+    }
+    
+    // If worktree already has a tool selected, no need for selection
+    if (worktree.session?.ai_tool && worktree.session.ai_tool !== 'none') {
+      return false;
+    }
+    
+    // If only one tool available or no tools, no selection needed
+    return availableAITools.length > 1;
+  }, [tmuxService, availableAITools]);
+
   const selectWorktree = useCallback((index: number) => {
     setSelectedIndex(index);
   }, []);
@@ -500,6 +546,10 @@ export function WorktreeProvider({
   const getSelectedWorktree = useCallback((): WorktreeInfo | null => {
     return worktrees[selectedIndex] || null;
   }, [worktrees, selectedIndex]);
+
+  const getAvailableAITools = useCallback(() => {
+    return availableAITools;
+  }, [availableAITools]);
 
   const discoverProjects = useCallback((): ProjectInfo[] => {
     return gitService.discoverProjects();
@@ -593,18 +643,32 @@ export function WorktreeProvider({
     copyClaudeDocumentation(projectPath, worktreePath);
   }, []);
 
-  const createTmuxSession = useCallback((project: string, feature: string, cwd: string, command?: string): string => {
+  const createTmuxSession = useCallback((project: string, feature: string, cwd: string, command?: string, aiTool?: AITool): string => {
     const sessionName = tmuxService.sessionName(project, feature);
     
     if (command) {
       // Create session with specific command and auto-exit
       tmuxService.createSessionWithCommand(sessionName, cwd, command, true);
     } else {
-      // Create session and start Claude if available
-      const hasClaude = !!runCommandQuick(['bash', '-lc', 'command -v claude || true']);
-      if (hasClaude) {
-        tmuxService.createSessionWithCommand(sessionName, cwd, 'claude', true);
+      // Determine AI tool to use
+      let selectedTool: AITool = aiTool || 'none';
+      
+      // If no tool specified, auto-select based on available tools
+      if (selectedTool === 'none') {
+        if (availableAITools.length === 1) {
+          selectedTool = availableAITools[0];
+        } else if (availableAITools.length > 1) {
+          // Multiple tools available - default to first one for now
+          // In practice, the UI should handle this by showing the dialog
+          selectedTool = availableAITools[0];
+        }
+      }
+      
+      if (selectedTool !== 'none' && availableAITools.includes(selectedTool)) {
+        const toolConfig = AI_TOOLS[selectedTool];
+        tmuxService.createSessionWithCommand(sessionName, cwd, toolConfig.command, true);
       } else {
+        // No AI tool available, create regular bash session
         tmuxService.createSession(sessionName, cwd, true);
       }
     }
@@ -612,7 +676,7 @@ export function WorktreeProvider({
     configureTmuxDisplayTime();
     
     return sessionName;
-  }, [tmuxService]);
+  }, [tmuxService, availableAITools]);
 
   const createShellSession = useCallback((project: string, feature: string, cwd: string): string => {
     const sessionName = tmuxService.shellSessionName(project, feature);
@@ -790,6 +854,9 @@ export function WorktreeProvider({
     attachShellSession,
     attachRunSession,
     
+    // AI tool management
+    getAvailableAITools,
+    needsToolSelection,
     
     // Projects
     discoverProjects,
@@ -801,7 +868,11 @@ export function WorktreeProvider({
     createOrFillRunConfig
   };
 
-  return h(WorktreeContext.Provider, {value: contextValue}, children);
+  return (
+    <WorktreeContext.Provider value={contextValue}>
+      {children}
+    </WorktreeContext.Provider>
+  );
 }
 
 export function useWorktreeContext(): WorktreeContextType {

@@ -9,6 +9,7 @@ import BranchPickerDialog from './components/dialogs/BranchPickerDialog.js';
 import RunConfigDialog from './components/dialogs/RunConfigDialog.js';
 import ProgressDialog from './components/dialogs/ProgressDialog.js';
 import ConfigResultsDialog from './components/dialogs/ConfigResultsDialog.js';
+import AIToolDialog from './components/dialogs/AIToolDialog.js';
 
 import WorktreeListScreen from './screens/WorktreeListScreen.js';
 import CreateFeatureScreen from './screens/CreateFeatureScreen.js';
@@ -19,7 +20,6 @@ import {GitHubProvider, useGitHubContext} from './contexts/GitHubContext.js';
 import {UIProvider, useUIContext} from './contexts/UIContext.js';
 import {InputFocusProvider} from './contexts/InputFocusContext.js';
 
-const h = React.createElement;
 
 function AppContent() {
   const {exit} = useApp();
@@ -41,7 +41,9 @@ function AppContent() {
     
     getRemoteBranches,
     getRunConfigPath,
-    createOrFillRunConfig
+    createOrFillRunConfig,
+    getAvailableAITools,
+    needsToolSelection
   } = useWorktreeContext();
   
   const {refreshPRStatus, getPRStatus} = useGitHubContext();
@@ -59,6 +61,7 @@ function AppContent() {
     runFeature,
     runPath,
     runConfigResult,
+    pendingWorktree,
     showList,
     showCreateFeature,
     showArchiveConfirmation,
@@ -70,6 +73,7 @@ function AppContent() {
     showRunConfig,
     showRunProgress,
     showRunResults,
+    showAIToolSelection,
     requestExit
   } = useUIContext();
 
@@ -169,162 +173,209 @@ function AppContent() {
   // Screen routing - much simpler now!
   if (mode === 'create') {
     const defaultProject = getSelectedWorktree()?.project || createProjects?.[0]?.name;
-    return h(CreateFeatureScreen, {
-      projects: createProjects || [],
-      defaultProject,
-      onCancel: showList,
-      onSuccess: showList
-    });
+    return (
+      <CreateFeatureScreen
+        projects={createProjects || []}
+        defaultProject={defaultProject}
+        onCancel={showList}
+        onSuccess={showList}
+      />
+    );
   }
 
   if (mode === 'confirmArchive' && pendingArchive) {
-    return h(ArchiveConfirmScreen, {
-      featureInfo: pendingArchive,
-      onCancel: showList,
-      onSuccess: showList
-    });
+    return (
+      <ArchiveConfirmScreen
+        featureInfo={pendingArchive}
+        onCancel={showList}
+        onSuccess={showList}
+      />
+    );
   }
 
   // Archived view removed
 
   if (mode === 'help') {
-    return h(FullScreen, null,
-      h(Box as any, {flexGrow: 1, paddingX: 1}, 
-        h(HelpOverlay, {onClose: showList})
-      )
+    return (
+      <FullScreen>
+        <Box flexGrow={1} paddingX={1}>
+          <HelpOverlay onClose={showList} />
+        </Box>
+      </FullScreen>
     );
   }
 
   if (mode === 'diff' && diffWorktree) {
-    return h(FullScreen, null,
-      h(Box as any, {flexGrow: 1, paddingX: 1},
-        h(DiffView, {
-          worktreePath: diffWorktree,
-          title: diffType === 'uncommitted' ? 'Diff Viewer (Uncommitted Changes)' : 'Diff Viewer',
-          diffType: diffType,
-          onClose: showList,
-          onAttachToSession: handleAttachToSession
-        })
-      )
+    return (
+      <FullScreen>
+        <Box flexGrow={1} paddingX={1}>
+          <DiffView
+            worktreePath={diffWorktree}
+            title={diffType === 'uncommitted' ? 'Diff Viewer (Uncommitted Changes)' : 'Diff Viewer'}
+            diffType={diffType}
+            onClose={showList}
+            onAttachToSession={handleAttachToSession}
+          />
+        </Box>
+      </FullScreen>
     );
   }
 
   if (mode === 'pickProjectForBranch') {
     const defaultProject = getSelectedWorktree()?.project || createProjects?.[0]?.name;
-    return h(FullScreen, null,
-      h(Box as any, {flexGrow: 1, alignItems: 'center', justifyContent: 'center'},
-        h(ProjectPickerDialog, {
-          projects: createProjects as any,
-          defaultProject,
-          onCancel: showList,
-          onSubmit: async (project: string) => {
-            // Load remote branches for the selected project
-            const branches = await getRemoteBranches(project);
-            showBranchListForProject(project, branches);
-          }
-        })
-      )
+    return (
+      <FullScreen>
+        <Box flexGrow={1} alignItems="center" justifyContent="center">
+          <ProjectPickerDialog
+            projects={createProjects as any}
+            defaultProject={defaultProject}
+            onCancel={showList}
+            onSubmit={async (project: string) => {
+              // Load remote branches for the selected project
+              const branches = await getRemoteBranches(project);
+              showBranchListForProject(project, branches);
+            }}
+          />
+        </Box>
+      </FullScreen>
     );
   }
 
   if (mode === 'pickBranch') {
-    return h(FullScreen, null,
-      h(Box as any, {flexGrow: 1, alignItems: 'center', justifyContent: 'center'},
-        h(BranchPickerDialog, {
-          branches: branchList as any,
-          onCancel: showList,
-          onSubmit: handleCreateFromBranch,
-          onRefresh: () => {
-            // TODO: Refresh branch list
-          }
-        })
-      )
+    return (
+      <FullScreen>
+        <Box flexGrow={1} alignItems="center" justifyContent="center">
+          <BranchPickerDialog
+            branches={branchList as any}
+            onCancel={showList}
+            onSubmit={handleCreateFromBranch}
+            onRefresh={() => {
+              // TODO: Refresh branch list
+            }}
+          />
+        </Box>
+      </FullScreen>
     );
   }
 
   if (mode === 'runConfig' && runProject) {
-    return h(FullScreen, null,
-      h(Box as any, {flexGrow: 1, alignItems: 'center', justifyContent: 'center'},
-        h(RunConfigDialog, {
-          project: runProject,
-          configPath: getRunConfigPath(runProject),
-          claudePrompt: `Analyze this project and generate run config`,
-          onCancel: showList,
-          onCreateConfig: () => {
-            showRunProgress();
-            // Generate config in background
-            setTimeout(async () => {
-              const result = await createOrFillRunConfig(runProject!);
-              showRunResults(result);
-            }, 100);
-          }
-        })
-      )
+    return (
+      <FullScreen>
+        <Box flexGrow={1} alignItems="center" justifyContent="center">
+          <RunConfigDialog
+            project={runProject}
+            configPath={getRunConfigPath(runProject)}
+            claudePrompt="Analyze this project and generate run config"
+            onCancel={showList}
+            onCreateConfig={() => {
+              showRunProgress();
+              // Generate config in background
+              setTimeout(async () => {
+                const result = await createOrFillRunConfig(runProject!);
+                showRunResults(result);
+              }, 100);
+            }}
+          />
+        </Box>
+      </FullScreen>
     );
   }
 
   if (mode === 'runProgress' && runProject) {
-    return h(FullScreen, null,
-      h(Box as any, {flexGrow: 1, alignItems: 'center', justifyContent: 'center'},
-        h(ProgressDialog, {
-          title: 'Generating Run Configuration',
-          message: 'Claude is analyzing your project and generating a run configuration...',
-          project: runProject
-        })
-      )
+    return (
+      <FullScreen>
+        <Box flexGrow={1} alignItems="center" justifyContent="center">
+          <ProgressDialog
+            title="Generating Run Configuration"
+            message="Claude is analyzing your project and generating a run configuration..."
+            project={runProject}
+          />
+        </Box>
+      </FullScreen>
     );
   }
 
   if (mode === 'runResults' && runConfigResult && runProject && runFeature && runPath) {
-    return h(FullScreen, null,
-      h(Box as any, {flexGrow: 1, alignItems: 'center', justifyContent: 'center'},
-        h(ConfigResultsDialog, {
-          success: runConfigResult.success,
-          content: runConfigResult.content,
-          configPath: runConfigResult.path,
-          error: runConfigResult.error,
-          onClose: () => {
-            showList();
-            // If successful, try to execute the run session
-            if (runConfigResult.success) {
+    return (
+      <FullScreen>
+        <Box flexGrow={1} alignItems="center" justifyContent="center">
+          <ConfigResultsDialog
+            success={runConfigResult.success}
+            content={runConfigResult.content}
+            configPath={runConfigResult.path}
+            error={runConfigResult.error}
+            onClose={() => {
+              showList();
+              // If successful, try to execute the run session
+              if (runConfigResult.success) {
+                try {
+                  const worktreeInfo = {project: runProject!, feature: runFeature!, path: runPath!};
+                  attachRunSession(worktreeInfo as any).catch(() => {});
+                } catch {}
+              }
+            }}
+          />
+        </Box>
+      </FullScreen>
+    );
+  }
+
+  if (mode === 'selectAITool' && pendingWorktree) {
+    return (
+      <FullScreen>
+        <Box flexGrow={1} alignItems="center" justifyContent="center">
+          <AIToolDialog
+            availableTools={getAvailableAITools()}
+            currentTool={pendingWorktree.session?.ai_tool}
+            onSelect={async (tool) => {
+              showList();
+              // Attach session with selected tool
               try {
-                const worktreeInfo = {project: runProject!, feature: runFeature!, path: runPath!};
-                attachRunSession(worktreeInfo as any).catch(() => {});
-              } catch {}
-            }
-          }
-        })
-      )
+                await attachSession(pendingWorktree, tool);
+              } catch (error) {
+                console.error('Failed to attach session with selected tool:', error);
+              }
+            }}
+            onCancel={showList}
+          />
+        </Box>
+      </FullScreen>
     );
   }
 
   // Default: Main worktree list screen
-  return h(FullScreen, {enableAltScreen: process.env.DISABLE_ALT_SCREEN === '1' ? false : true},
-    h(WorktreeListScreen, {
-      onCreateFeature: handleCreateFeature,
-      onArchiveFeature: handleArchiveFeature,
-      onHelp: showHelp,
-      onBranch: handleBranch,
-      onDiff: handleDiff,
-      onQuit: requestExit,
-      onExecuteRun: handleExecuteRun,
-      onConfigureRun: handleConfigureRun
-    })
+  return (
+    <FullScreen enableAltScreen={process.env.DISABLE_ALT_SCREEN === '1' ? false : true}>
+      <WorktreeListScreen
+        onCreateFeature={handleCreateFeature}
+        onArchiveFeature={handleArchiveFeature}
+        onHelp={showHelp}
+        onBranch={handleBranch}
+        onDiff={handleDiff}
+        onQuit={requestExit}
+        onExecuteRun={handleExecuteRun}
+        onConfigureRun={handleConfigureRun}
+      />
+    </FullScreen>
   );
 }
 
 export default function App() {
-  return h(InputFocusProvider, null,
-    h(GitHubProvider, null,
-      h(AppWithGitHub)
-    )
+  return (
+    <InputFocusProvider>
+      <GitHubProvider>
+        <AppWithGitHub />
+      </GitHubProvider>
+    </InputFocusProvider>
   );
 }
 
 function AppWithGitHub() {
-  return h(WorktreeProvider, {
-    children: h(UIProvider, null,
-      h(AppContent)
-    )
-  });
+  return (
+    <WorktreeProvider>
+      <UIProvider>
+        <AppContent />
+      </UIProvider>
+    </WorktreeProvider>
+  );
 }

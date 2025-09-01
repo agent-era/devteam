@@ -1,4 +1,4 @@
-import {run} from './app.js';
+import {run} from './bootstrap.js';
 import {initializeMemoryLogging, logError, dumpLogsToConsole} from './shared/utils/logger.js';
 
 // Initialize memory logging before running the app
