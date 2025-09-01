@@ -284,6 +284,50 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
   const [showFileTreeOverlay, setShowFileTreeOverlay] = useState(false);
   const [overlayHighlightedFile, setOverlayHighlightedFile] = useState<string>('');
 
+  // Map of unified view global line index -> per-file line index (0-based)
+  const unifiedPerFileIndex = useMemo(() => {
+    const map: number[] = [];
+    const counters = new Map<string, number>();
+    for (let i = 0; i < lines.length; i++) {
+      const l = lines[i];
+      const file = l.fileName || '';
+      if (!file) {
+        map[i] = 0;
+        continue;
+      }
+      if (l.type === 'header') {
+        // Do not advance counters for headers; keep current count
+        // but ensure map has a stable value for header rows
+        map[i] = counters.get(file) || 0;
+        continue;
+      }
+      const prev = counters.get(file) || 0;
+      map[i] = prev; // current line gets current count as 0-based index
+      counters.set(file, prev + 1);
+    }
+    return map;
+  }, [lines]);
+
+  // Map of side-by-side view line index -> per-file line index (0-based)
+  const sideBySidePerFileIndex = useMemo(() => {
+    const map: number[] = [];
+    const counters = new Map<string, number>();
+    for (let i = 0; i < sideBySideLines.length; i++) {
+      const s = sideBySideLines[i];
+      const file = s.left?.fileName || s.right?.fileName || '';
+      if (!file) { map[i] = 0; continue; }
+      const isHeader = (s.left?.type === 'header') || (s.right?.type === 'header');
+      if (isHeader) {
+        map[i] = counters.get(file) || 0;
+        continue;
+      }
+      const prev = counters.get(file) || 0;
+      map[i] = prev;
+      counters.set(file, prev + 1);
+    }
+    return map;
+  }, [sideBySideLines]);
+
   // Derive list of files present in the diff (unique, in order encountered)
   const diffFiles = useMemo(() => {
     const seen = new Set<string>();
@@ -477,18 +521,20 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       if (viewMode === 'unified') {
         const currentLine = lines[selectedLine];
         if (currentLine && currentLine.fileName) {
-          commentStore.removeComment(selectedLine, currentLine.fileName);
+          const perFileIndex = unifiedPerFileIndex[selectedLine] ?? selectedLine;
+          commentStore.removeComment(perFileIndex, currentLine.fileName);
         }
       } else {
         const currentLine = sideBySideLines[selectedLine];
         const fileName = currentLine.left?.fileName || currentLine.right?.fileName;
         if (currentLine && fileName) {
-          commentStore.removeComment(currentLine.lineIndex, fileName);
+          const perFileIndex = sideBySidePerFileIndex[selectedLine] ?? currentLine.lineIndex;
+          commentStore.removeComment(perFileIndex, fileName);
         }
       }
     }
     
-    if (input === 'S') {
+    if (input === 'S' || input === 's') {
       if (commentStore.count > 0) {
         sendCommentsToTmux().catch(error => {
           console.error('Failed to send comments:', error);
@@ -893,14 +939,16 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     if (viewMode === 'unified') {
       const currentLine = lines[selectedLine];
       if (currentLine && currentLine.fileName) {
-        commentStore.addComment(selectedLine, currentLine.fileName, currentLine.text, commentText);
+        const perFileIndex = unifiedPerFileIndex[selectedLine] ?? selectedLine;
+        commentStore.addComment(perFileIndex, currentLine.fileName, currentLine.text, commentText);
       }
     } else {
       const currentLine = sideBySideLines[selectedLine];
       const fileName = currentLine.left?.fileName || currentLine.right?.fileName;
       const lineText = currentLine.left?.text || currentLine.right?.text;
       if (currentLine && fileName && lineText) {
-        commentStore.addComment(currentLine.lineIndex, fileName, lineText, commentText);
+        const perFileIndex = sideBySidePerFileIndex[selectedLine] ?? currentLine.lineIndex;
+        commentStore.addComment(perFileIndex, fileName, lineText, commentText);
       }
     }
     setShowCommentDialog(false);
@@ -1094,10 +1142,13 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
             (sideBySideLines[selectedLine]?.left?.text || sideBySideLines[selectedLine]?.right?.text || '')}
           initialComment={(() => {
             if (viewMode === 'unified') {
-              return lines[selectedLine]?.fileName ? commentStore.getComment(selectedLine, lines[selectedLine].fileName)?.commentText || '' : '';
+              const file = lines[selectedLine]?.fileName || '';
+              const perFileIndex = unifiedPerFileIndex[selectedLine] ?? selectedLine;
+              return file ? commentStore.getComment(perFileIndex, file)?.commentText || '' : '';
             } else {
               const fileName = sideBySideLines[selectedLine]?.left?.fileName || sideBySideLines[selectedLine]?.right?.fileName;
-              return fileName ? commentStore.getComment(sideBySideLines[selectedLine].lineIndex, fileName)?.commentText || '' : '';
+              const perFileIndex = sideBySidePerFileIndex[selectedLine] ?? sideBySideLines[selectedLine].lineIndex;
+              return fileName ? commentStore.getComment(perFileIndex, fileName)?.commentText || '' : '';
             }
           })()}
           onSave={handleCommentSave}
@@ -1141,7 +1192,8 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
         
         if (viewMode === 'unified') {
           const unifiedLine = l as DiffLine;
-          const hasComment = unifiedLine.fileName && commentStore.hasComment(actualLineIndex, unifiedLine.fileName);
+          const perFileIndex = unifiedPerFileIndex[actualLineIndex] ?? actualLineIndex;
+          const hasComment = unifiedLine.fileName && commentStore.hasComment(perFileIndex, unifiedLine.fileName);
           const commentIndicator = hasComment ? '[C] ' : '';
           
           // Determine gutter symbol
@@ -1353,7 +1405,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
           
           // Get comment info based on the original line index
           const hasComment = (sideBySideLine.left?.fileName || sideBySideLine.right?.fileName) && 
-                            commentStore.hasComment(sideBySideLine.lineIndex, sideBySideLine.left?.fileName || sideBySideLine.right?.fileName || '');
+                            commentStore.hasComment((sideBySidePerFileIndex[actualLineIndex] ?? sideBySideLine.lineIndex), sideBySideLine.left?.fileName || sideBySideLine.right?.fileName || '');
           const commentIndicator = hasComment ? '[C] ' : '';
           
           // Prepare left and right content
