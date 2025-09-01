@@ -274,7 +274,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
   const [isFileNavigation, setIsFileNavigation] = useState(false);
   const [currentFileHeader, setCurrentFileHeader] = useState<string>('');
   const [currentHunkHeader, setCurrentHunkHeader] = useState<string>('');
-  const [viewMode, setViewMode] = useState<ViewMode>('unified');
+  const [viewMode, setViewMode] = useState<ViewMode>('sidebyside');
   const [wrapMode, setWrapMode] = useState<WrapMode>('truncate');
   const commentStore = useMemo(() => commentStoreManager.getStore(worktreePath), [worktreePath]);
   const [tmuxService] = useState(() => new TmuxService());
