@@ -345,7 +345,7 @@ function AppContent() {
 
   // Default: Main worktree list screen
   return (
-    <FullScreen enableAltScreen={process.env.DISABLE_ALT_SCREEN === '1' ? false : true}>
+    <FullScreen>
       <WorktreeListScreen
         onCreateFeature={handleCreateFeature}
         onArchiveFeature={handleArchiveFeature}
