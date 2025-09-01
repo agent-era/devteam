@@ -16,8 +16,6 @@ global.console = {
   error: jest.fn(),
 };
 
-// Hint the app to do an immediate refresh on mount for determinism
-process.env.E2E_IMMEDIATE_REFRESH = '1';
 // Avoid alternate screen escape sequences interfering with frame capture
 process.env.DISABLE_ALT_SCREEN = '1';
 // Ignore raw mode support check so app doesn't exit in test
