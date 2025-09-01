@@ -409,8 +409,8 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     // Don't handle inputs when any dialog is open
     if (showCommentDialog || showSessionWaitingDialog || showUnsubmittedCommentsDialog) return;
     
-    // Hide overlay on any key except Shift+Left/Right (overlay trigger)
-    if (showFileTreeOverlay && !(key.shift && (key.leftArrow || key.rightArrow))) {
+    // Hide overlay on any key except Shift+Up/Down (overlay trigger)
+    if (showFileTreeOverlay && !(key.shift && (key.upArrow || key.downArrow))) {
       setShowFileTreeOverlay(false);
     }
 
@@ -562,8 +562,8 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       }
     }
     
-    // Previous file: Shift+Left
-    if (key.leftArrow && key.shift) {
+    // Previous file: Shift+Up
+    if (key.upArrow && key.shift) {
       // First, find the current file header
       let currentFileHeaderIndex = -1;
       for (let i = selectedLine; i >= 0; i--) {
@@ -621,8 +621,8 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       }
     }
     
-    // Next file: Shift+Right
-    if (key.rightArrow && key.shift) {
+    // Next file: Shift+Down
+    if (key.downArrow && key.shift) {
       const maxIndex = viewMode === 'unified' ? lines.length : sideBySideLines.length;
       for (let i = selectedLine + 1; i < maxIndex; i++) {
         if (isFileHeader(i)) {
@@ -698,7 +698,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       wrapMode
     );
     
-    // Don't override scroll position during file navigation (Shift+Left/Right)
+    // Don't override scroll position during file navigation (Shift+Up/Down)
     // File navigation sets a specific scroll position to make headers sticky
     if (newScrollRow !== targetScrollRow && !isFileNavigation) {
       const maxScrollRow = ViewportCalculator.getMaxScrollRow(textLines, pageSize, maxWidth, wrapMode);

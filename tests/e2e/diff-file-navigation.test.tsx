@@ -92,7 +92,7 @@ index 3456789..cdefghi 100644
   });
 
   describe('File Header Navigation and Scrolling', () => {
-    test('should navigate between files with shift+left/right and show correct file content', async () => {
+    test('should navigate between files with shift+up/down and show correct file content', async () => {
       // Setup: Project with multi-file diff
       setupBasicProject('file-nav-project');
       const worktree = setupTestWorktree('file-nav-project', 'multi-file-feature');
@@ -112,8 +112,8 @@ index 3456789..cdefghi 100644
       let output = lastFrame();
       expect(output).toContain('📁 src/file1.ts');
       
-      // Navigate to next file using Shift+Right
-      stdin.write('\u001b[1;2C'); // Shift+Right arrow escape sequence
+      // Navigate to next file using Shift+Down
+      stdin.write('\u001b[1;2B'); // Shift+Down arrow escape sequence
       await simulateTimeDelay(100);
       
       // Should now show file2.ts content
@@ -121,8 +121,8 @@ index 3456789..cdefghi 100644
       expect(output).toContain('📁 src/file2.ts');
       expect(output).toContain('// File 2 content');
       
-      // Navigate to file3 using another Shift+Right
-      stdin.write('\u001b[1;2C'); 
+      // Navigate to file3 using another Shift+Down
+      stdin.write('\u001b[1;2B'); 
       await simulateTimeDelay(100);
       
       // Should now be at file3
@@ -130,8 +130,8 @@ index 3456789..cdefghi 100644
       expect(output).toContain('📁 src/file3.ts');
       expect(output).toContain('// File 3 content');
       
-      // Navigate back to file2 using Shift+Left
-      stdin.write('\u001b[1;2D'); // Shift+Left arrow escape sequence
+      // Navigate back to file2 using Shift+Up
+      stdin.write('\u001b[1;2A'); // Shift+Up arrow escape sequence
       await simulateTimeDelay(100);
       
       // Should now show file2.ts again
@@ -161,17 +161,17 @@ index 3456789..cdefghi 100644
       expect(output).toContain('📁 src/file1.ts');
       
       // Try to navigate to previous file (should stay at first file)
-      stdin.write('\u001b[1;2D'); // Shift+Left
+      stdin.write('\u001b[1;2A'); // Shift+Up
       await simulateTimeDelay(100);
       
       // Should still be at first file
       output = lastFrame();
       expect(output).toContain('📁 src/file1.ts');
       
-      // Navigate to last file (shift+right twice)
-      stdin.write('\u001b[1;2C'); // To file2
+      // Navigate to last file (shift+down twice)
+      stdin.write('\u001b[1;2B'); // To file2
       await simulateTimeDelay(50);
-      stdin.write('\u001b[1;2C'); // To file3
+      stdin.write('\u001b[1;2B'); // To file3
       await simulateTimeDelay(100);
       
       // Should be at last file
@@ -179,7 +179,7 @@ index 3456789..cdefghi 100644
       expect(output).toContain('📁 src/file3.ts');
       
       // Try to navigate to next file (should stay at last file)
-      stdin.write('\u001b[1;2C'); // Shift+Right
+      stdin.write('\u001b[1;2B'); // Shift+Down
       await simulateTimeDelay(100);
       
       // Should still be at last file
@@ -204,7 +204,7 @@ index 3456789..cdefghi 100644
       await simulateTimeDelay(100);
       
       // Test unified mode (default) - navigate to file2
-      stdin.write('\u001b[1;2C'); // Navigate to file2
+      stdin.write('\u001b[1;2B'); // Navigate to file2
       await simulateTimeDelay(100);
       let output = lastFrame();
       expect(output).toContain('📁 src/file2.ts');
@@ -212,7 +212,7 @@ index 3456789..cdefghi 100644
       // Test side-by-side view
       stdin.write('v'); // Toggle to side-by-side
       await simulateTimeDelay(100);
-      stdin.write('\u001b[1;2C'); // Navigate to file3
+      stdin.write('\u001b[1;2B'); // Navigate to file3
       await simulateTimeDelay(100);
       output = lastFrame();
       expect(output).toContain('📁 src/file3.ts');
@@ -221,7 +221,7 @@ index 3456789..cdefghi 100644
       stdin.write('v'); // Back to unified
       stdin.write('w'); // Toggle wrap mode
       await simulateTimeDelay(100);
-      stdin.write('\u001b[1;2D'); // Navigate back to file2
+      stdin.write('\u001b[1;2A'); // Navigate back to file2
       await simulateTimeDelay(100);
       output = lastFrame();
       expect(output).toContain('📁 src/file2.ts');
@@ -245,8 +245,8 @@ index 3456789..cdefghi 100644
       });
       await simulateTimeDelay(100);
       
-      // Navigate to file2 using Shift+Right
-      stdin.write('\u001b[1;2C'); // Shift+Right arrow
+      // Navigate to file2 using Shift+Down
+      stdin.write('\u001b[1;2B'); // Shift+Down arrow
       await simulateTimeDelay(100);
       
       // Should show file2.ts content and header should become sticky
@@ -255,9 +255,9 @@ index 3456789..cdefghi 100644
       expect(output).toContain('// File 2 content');
       
       // Navigate to file3, then back to file2 to test both directions
-      stdin.write('\u001b[1;2C'); // To file3
+      stdin.write('\u001b[1;2B'); // To file3
       await simulateTimeDelay(50);
-      stdin.write('\u001b[1;2D'); // Back to file2
+      stdin.write('\u001b[1;2A'); // Back to file2
       await simulateTimeDelay(100);
       
       // Should still show file2.ts as the navigated file
@@ -320,7 +320,7 @@ index 1234567..abcdefg 100644
       expect(output).toContain('📁 single.ts');
       
       // Try to navigate to next file (should stay on same file)
-      stdin.write('\u001b[1;2C'); // Shift+Right
+      stdin.write('\u001b[1;2B'); // Shift+Down
       await simulateTimeDelay(100);
       
       // Should still show the same file
@@ -328,7 +328,7 @@ index 1234567..abcdefg 100644
       expect(output).toContain('📁 single.ts');
       
       // Try to navigate to previous file (should stay on same file)
-      stdin.write('\u001b[1;2D'); // Shift+Left
+      stdin.write('\u001b[1;2A'); // Shift+Up
       await simulateTimeDelay(100);
       
       // Should still show the same file
