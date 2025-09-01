@@ -9,6 +9,7 @@ import BranchPickerDialog from './components/dialogs/BranchPickerDialog.js';
 import RunConfigDialog from './components/dialogs/RunConfigDialog.js';
 import ProgressDialog from './components/dialogs/ProgressDialog.js';
 import ConfigResultsDialog from './components/dialogs/ConfigResultsDialog.js';
+import AIToolDialog from './components/dialogs/AIToolDialog.js';
 
 import WorktreeListScreen from './screens/WorktreeListScreen.js';
 import CreateFeatureScreen from './screens/CreateFeatureScreen.js';
@@ -42,7 +43,9 @@ function AppContent() {
     getArchivedForProject,
     getRemoteBranches,
     getRunConfigPath,
-    createOrFillRunConfig
+    createOrFillRunConfig,
+    getAvailableAITools,
+    needsToolSelection
   } = useWorktreeContext();
   
   const {refreshPRStatus, getPRStatus} = useGitHubContext();
@@ -60,6 +63,7 @@ function AppContent() {
     runFeature,
     runPath,
     runConfigResult,
+    pendingWorktree,
     showList,
     showCreateFeature,
     showArchiveConfirmation,
@@ -71,6 +75,7 @@ function AppContent() {
     showRunConfig,
     showRunProgress,
     showRunResults,
+    showAIToolSelection,
     requestExit
   } = useUIContext();
 
@@ -298,6 +303,27 @@ function AppContent() {
               } catch {}
             }
           }
+        })
+      )
+    );
+  }
+
+  if (mode === 'selectAITool' && pendingWorktree) {
+    return h(FullScreen, null,
+      h(Box as any, {flexGrow: 1, alignItems: 'center', justifyContent: 'center'},
+        h(AIToolDialog, {
+          availableTools: getAvailableAITools(),
+          currentTool: pendingWorktree.session?.ai_tool,
+          onSelect: async (tool) => {
+            showList();
+            // Attach session with selected tool
+            try {
+              await attachSession(pendingWorktree, tool);
+            } catch (error) {
+              console.error('Failed to attach session with selected tool:', error);
+            }
+          },
+          onCancel: showList
         })
       )
     );

@@ -5,7 +5,7 @@ const h = React.createElement;
 
 type UIMode = 'list' | 'create' | 'confirmArchive' | 'archived' | 'help' | 
              'pickProjectForBranch' | 'pickBranch' | 'diff' | 'runConfig' | 
-             'runProgress' | 'runResults';
+             'runProgress' | 'runResults' | 'selectAITool';
 
 interface UIContextType {
   // Current UI state values
@@ -21,6 +21,7 @@ interface UIContextType {
   runFeature: string | null;
   runPath: string | null;
   runConfigResult: any | null;
+  pendingWorktree: WorktreeInfo | null;
   
   // UI navigation operations - self-documenting methods
   showList: () => void;
@@ -34,6 +35,7 @@ interface UIContextType {
   showRunConfig: (project: string, feature: string, path: string) => void;
   showRunProgress: () => void;
   showRunResults: (result: any) => void;
+  showAIToolSelection: (worktree: WorktreeInfo) => void;
   
   // Branch management
   setBranchList: (branches: any[]) => void;
@@ -63,6 +65,7 @@ export function UIProvider({children}: UIProviderProps) {
   const [runFeature, setRunFeature] = useState<string | null>(null);
   const [runPath, setRunPath] = useState<string | null>(null);
   const [runConfigResult, setRunConfigResult] = useState<any | null>(null);
+  const [pendingWorktree, setPendingWorktree] = useState<WorktreeInfo | null>(null);
 
 
   const resetUIState = () => {
@@ -76,6 +79,7 @@ export function UIProvider({children}: UIProviderProps) {
     setRunFeature(null);
     setRunPath(null);
     setRunConfigResult(null);
+    setPendingWorktree(null);
   };
 
   // UI Navigation Operations - Self-documenting and encapsulated
@@ -144,6 +148,11 @@ export function UIProvider({children}: UIProviderProps) {
     setRunConfigResult(result);
   };
 
+  const showAIToolSelection = (worktree: WorktreeInfo) => {
+    setMode('selectAITool');
+    setPendingWorktree(worktree);
+  };
+
   const requestExit = () => {
     setShouldExit(true);
   };
@@ -163,6 +172,7 @@ export function UIProvider({children}: UIProviderProps) {
     runFeature,
     runPath,
     runConfigResult,
+    pendingWorktree,
     
     // Navigation methods
     showList,
@@ -176,6 +186,7 @@ export function UIProvider({children}: UIProviderProps) {
     showRunConfig,
     showRunProgress,
     showRunResults,
+    showAIToolSelection,
     
     // Branch management
     setBranchList,

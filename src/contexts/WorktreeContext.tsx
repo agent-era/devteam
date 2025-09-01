@@ -66,6 +66,7 @@ interface WorktreeContextType {
   
   // AI tool management
   getAvailableAITools: () => (keyof typeof AI_TOOLS)[];
+  needsToolSelection: (worktree: WorktreeInfo) => Promise<boolean>;
   
   // Projects
   discoverProjects: () => ProjectInfo[];
@@ -521,6 +522,24 @@ export function WorktreeProvider({
     return 'success';
   }, [tmuxService]);
 
+  const needsToolSelection = useCallback(async (worktree: WorktreeInfo): Promise<boolean> => {
+    const sessionName = tmuxService.sessionName(worktree.project, worktree.feature);
+    const activeSessions = await tmuxService.listSessions();
+    
+    // If session already exists, no need for tool selection
+    if (activeSessions.includes(sessionName)) {
+      return false;
+    }
+    
+    // If worktree already has a tool selected, no need for selection
+    if (worktree.session?.ai_tool && worktree.session.ai_tool !== 'none') {
+      return false;
+    }
+    
+    // If only one tool available or no tools, no selection needed
+    return availableAITools.length > 1;
+  }, [tmuxService, availableAITools]);
+
   const selectWorktree = useCallback((index: number) => {
     setSelectedIndex(index);
   }, []);
@@ -855,6 +874,7 @@ export function WorktreeProvider({
     
     // AI tool management
     getAvailableAITools,
+    needsToolSelection,
     
     // Projects
     discoverProjects,
