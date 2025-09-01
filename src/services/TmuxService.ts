@@ -194,6 +194,30 @@ export class TmuxService {
   }
 
   private async detectSessionAITool(session: string): Promise<AITool> {
+    // Get the PID of the first pane to check full process command
+    const pidOutput = await runCommandQuickAsync(['tmux', 'list-panes', '-F', '#{pane_pid}', '-t', `${session}:0`]);
+    const pid = pidOutput?.trim();
+    
+    if (pid) {
+      // Get full command line arguments
+      const processArgs = await runCommandQuickAsync(['ps', '-p', pid, '-o', 'args=']);
+      if (processArgs) {
+        const argsLower = processArgs.toLowerCase();
+        
+        // Check for tool names in the full command path/args
+        if (argsLower.includes('/claude') || argsLower.includes('claude')) {
+          return 'claude';
+        }
+        if (argsLower.includes('/codex') || argsLower.includes('codex')) {
+          return 'codex';
+        }
+        if (argsLower.includes('/gemini') || argsLower.includes('gemini')) {
+          return 'gemini';
+        }
+      }
+    }
+    
+    // Fallback to original detection method if ps command fails
     const panes = await this.listPanes(session);
     if (!panes) return 'none';
     
@@ -206,7 +230,7 @@ export class TmuxService {
       const tool = this.detectAITool(command);
       if (tool !== 'none' && command !== 'node') return tool;
       
-      // For node processes, check pane content for tool-specific patterns
+      // For node processes, check pane content for tool-specific patterns as last resort
       if (command === 'node') {
         const paneContent = await this.capturePane(session);
         
