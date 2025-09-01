@@ -81,10 +81,14 @@ const WorktreeContext = createContext<WorktreeContextType | null>(null);
 
 interface WorktreeProviderProps {
   children: ReactNode;
+  gitService?: GitService;
+  tmuxService?: TmuxService;
 }
 
 export function WorktreeProvider({
-  children
+  children,
+  gitService: gitServiceOverride,
+  tmuxService: tmuxServiceOverride,
 }: WorktreeProviderProps) {
   const [worktrees, setWorktrees] = useState<WorktreeInfo[]>([]);
   const [loading, setLoading] = useState(false);
@@ -96,8 +100,15 @@ export function WorktreeProvider({
   const {getPRStatus, setVisibleWorktrees, refreshPRStatus, refreshPRForWorktree, forceRefreshVisiblePRs} = useGitHubContext();
 
   // Service instances - stable across re-renders
-  const gitService = useMemo(() => new GitService(getProjectsDirectory()), []);
-  const tmuxService = useMemo(() => new TmuxService(), []);
+  const gitService: GitService = useMemo(() => {
+    if (gitServiceOverride) return gitServiceOverride;
+    return new GitService(getProjectsDirectory());
+  }, [gitServiceOverride]);
+  const tmuxService: TmuxService = useMemo(() => {
+    if (tmuxServiceOverride) return tmuxServiceOverride;
+    return new TmuxService();
+  }, [tmuxServiceOverride]);
+  // Filesystem operations are routed through GitService methods (see CLAUDE.md)
 
   // Cache available AI tools on startup
   const availableAITools = useMemo(() => detectAvailableAITools(), []);
@@ -132,7 +143,7 @@ export function WorktreeProvider({
     feature: string; 
     path: string; 
     branch: string
-  }>, getPRStatus?: (path: string) => any): Promise<WorktreeInfo[]> => {
+  }>, getPRStatus?: (path: string) => PRStatus): Promise<WorktreeInfo[]> => {
     // Get existing worktrees to preserve idle timers and kill flags
     const existingWorktrees = new Map(worktrees.map(w => [`${w.project}/${w.feature}`, w]));
     
@@ -498,7 +509,7 @@ export function WorktreeProvider({
     const configPath = path.join(projectPath, RUN_CONFIG_FILE);
     
     // Check if config exists before creating session
-    if (!fs.existsSync(configPath)) {
+    if (!gitService.hasRunConfig(worktree.project)) {
       return 'no_config';
     }
 
@@ -610,7 +621,7 @@ export function WorktreeProvider({
     
     // Write the output to the config file
     try {
-      fs.writeFileSync(configPath, output);
+      gitService.writeRunConfig(project, output);
       return {
         success: true,
         content: output,
@@ -693,7 +704,7 @@ export function WorktreeProvider({
     configureTmuxDisplayTime();
     
     try {
-      const configContent = fs.readFileSync(configPath, 'utf8');
+      const configContent = gitService.readRunConfig(project);
       const config = JSON.parse(configContent);
       
       // Run setup commands if they exist
@@ -747,60 +758,35 @@ export function WorktreeProvider({
     }
   }, [tmuxService]);
 
-  const moveWorktreeToArchive = useCallback((worktreePath: string, archivedDest: string) => {
-    try {
-      fs.renameSync(worktreePath, archivedDest);
-    } catch {
-      // Fallback: copy then remove
-      copyWithIgnore(worktreePath, archivedDest);
-      fs.rmSync(worktreePath, {recursive: true, force: true});
-    }
-  }, []);
+  const moveWorktreeToArchive = useCallback((worktreePath: string, archivedDest: string, projectName?: string) => {
+    gitService.archiveWorktree(projectName || '', worktreePath, archivedDest);
+  }, [gitService]);
 
   const pruneWorktreeReferences = useCallback((projectName: string) => {
-    const projectPath = path.join(gitService.basePath, projectName);
-    runCommand(['git', '-C', projectPath, 'worktree', 'prune']);
-  }, []);
+    gitService.pruneWorktreeReferences(projectName);
+  }, [gitService]);
 
   const copyEnvironmentFile = useCallback((projectPath: string, worktreePath: string) => {
-    const envSrc = path.join(projectPath, ENV_FILE);
-    const envDst = path.join(worktreePath, ENV_FILE);
-    
-    if (fs.existsSync(envSrc)) {
-      ensureDirectory(path.dirname(envDst));
-      fs.copyFileSync(envSrc, envDst);
-    }
-  }, []);
+    const projectName = path.basename(projectPath);
+    gitService.copyEnvironmentFile(projectName, worktreePath);
+  }, [gitService]);
 
   const copyClaudeSettings = useCallback((projectPath: string, worktreePath: string) => {
-    // Create symlink to .claude directory instead of copying
-    const claudeDirSrc = path.join(projectPath, '.claude');
-    const claudeDirDst = path.join(worktreePath, '.claude');
-    
-    if (fs.existsSync(claudeDirSrc)) {
-      // Remove existing .claude if it exists (in case it was previously copied)
-      if (fs.existsSync(claudeDirDst)) {
-        fs.rmSync(claudeDirDst, { recursive: true, force: true });
-      }
-      // Create symlink to the original .claude directory
-      fs.symlinkSync(claudeDirSrc, claudeDirDst, 'dir');
-    }
-  }, []);
+    const projectName = path.basename(projectPath);
+    gitService.linkClaudeSettings(projectName, worktreePath);
+  }, [gitService]);
 
   const copyClaudeDocumentation = useCallback((projectPath: string, worktreePath: string) => {
-    const claudeDoc = path.join(projectPath, 'CLAUDE.md');
-    const claudeDestDoc = path.join(worktreePath, 'CLAUDE.md');
-    
-    if (fs.existsSync(claudeDoc)) {
-      fs.copyFileSync(claudeDoc, claudeDestDoc);
-    }
-  }, []);
+    const projectName = path.basename(projectPath);
+    gitService.copyClaudeDocumentation(projectName, worktreePath);
+  }, [gitService]);
 
   const configureTmuxDisplayTime = useCallback(() => {
     tmuxService.setOption('display-time', String(TMUX_DISPLAY_TIME));
   }, [tmuxService]);
 
   // Auto-refresh intervals
+  // Regular cache-based refresh cycle
   useEffect(() => {
     const shouldRefresh = Date.now() - lastRefreshed > CACHE_DURATION;
     if (shouldRefresh) {

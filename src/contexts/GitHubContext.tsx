@@ -35,17 +35,25 @@ const GitHubContext = createContext<GitHubContextType | null>(null);
 
 interface GitHubProviderProps {
   children: ReactNode;
+  gitHubService?: GitHubService;
+  gitService?: GitService;
 }
 
-export function GitHubProvider({children}: GitHubProviderProps) {
+export function GitHubProvider({children, gitHubService: ghOverride, gitService: gitOverride}: GitHubProviderProps) {
   const [pullRequests, setPullRequests] = useState<Record<string, PRStatus>>({});
   const [loading, setLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(0);
   const [visibleWorktrees, setVisibleWorktrees] = useState<string[]>([]);
 
-  // Service instances
-  const gitHubService = new GitHubService();
-  const gitService = useMemo(() => new GitService(getProjectsDirectory()), []);
+  // Service instances (allow test overrides via globals)
+  const gitHubService: GitHubService = useMemo(() => {
+    if (ghOverride) return ghOverride;
+    return new GitHubService();
+  }, [ghOverride]);
+  const gitService: GitService = useMemo(() => {
+    if (gitOverride) return gitOverride;
+    return new GitService(getProjectsDirectory());
+  }, [gitOverride]);
   const cacheService = useRef(new PRStatusCacheService()).current;
   const refreshIntervalRef = useRef<NodeJS.Timeout>();
 
@@ -149,7 +157,7 @@ export function GitHubProvider({children}: GitHubProviderProps) {
       // Check for recently merged PRs via git history before API refresh
       await checkForMergedPRsViaGit(worktreesToRefresh);
       
-      const prStatusMap = await gitHubService.batchGetPRStatusForWorktreesAsync(worktreesToRefresh, true);
+      const prStatusMap: Record<string, PRStatus> = await gitHubService.batchGetPRStatusForWorktreesAsync(worktreesToRefresh, true);
       
       // Only cache and update state for successful responses
       const newPRs: Record<string, PRStatus> = {};
@@ -259,8 +267,8 @@ export function GitHubProvider({children}: GitHubProviderProps) {
         is_archived: false
       };
       
-      const result = await gitHubService.batchGetPRStatusForWorktreesAsync([dummyWorktree], true);
-      const prStatus = result[worktreePath];
+      const result: Record<string, PRStatus> = await gitHubService.batchGetPRStatusForWorktreesAsync([dummyWorktree], true);
+      const prStatus: PRStatus | undefined = result[worktreePath];
       
       if (prStatus) {
         cacheService.set(worktreePath, prStatus);

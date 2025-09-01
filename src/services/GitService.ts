@@ -5,6 +5,8 @@ import {
   BASE_BRANCH_CANDIDATES,
   DIR_BRANCHES_SUFFIX,
   DIR_ARCHIVED_SUFFIX,
+  ENV_FILE,
+  RUN_CONFIG_FILE,
 } from '../constants.js';
 import {
   runCommand,
@@ -413,6 +415,84 @@ export class GitService {
       } catch {
         return [];
       }
+    }
+  }
+
+  // Filesystem-related helpers for run configuration and project setup
+  hasRunConfig(project: string): boolean {
+    const projectPath = path.join(this.basePath, project);
+    const configPath = path.join(projectPath, RUN_CONFIG_FILE);
+    return fs.existsSync(configPath);
+  }
+
+  readRunConfig(project: string): string {
+    const projectPath = path.join(this.basePath, project);
+    const configPath = path.join(projectPath, RUN_CONFIG_FILE);
+    return fs.readFileSync(configPath, 'utf8');
+  }
+
+  writeRunConfig(project: string, content: string): void {
+    const projectPath = path.join(this.basePath, project);
+    const configPath = path.join(projectPath, RUN_CONFIG_FILE);
+    fs.writeFileSync(configPath, content);
+  }
+
+  copyEnvironmentFile(project: string, worktreePath: string): void {
+    const projectPath = path.join(this.basePath, project);
+    const envSrc = path.join(projectPath, ENV_FILE);
+    const envDst = path.join(worktreePath, ENV_FILE);
+    if (fs.existsSync(envSrc)) {
+      const dir = path.dirname(envDst);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, {recursive: true});
+      fs.copyFileSync(envSrc, envDst);
+    }
+  }
+
+  linkClaudeSettings(project: string, worktreePath: string): void {
+    const projectPath = path.join(this.basePath, project);
+    const claudeDirSrc = path.join(projectPath, '.claude');
+    const claudeDirDst = path.join(worktreePath, '.claude');
+    if (fs.existsSync(claudeDirSrc)) {
+      // Replace destination with a symlink to project .claude
+      try { fs.rmSync(claudeDirDst, {recursive: true, force: true}); } catch {}
+      fs.symlinkSync(claudeDirSrc, claudeDirDst, 'dir');
+    }
+  }
+
+  copyClaudeDocumentation(project: string, worktreePath: string): void {
+    const projectPath = path.join(this.basePath, project);
+    const claudeDoc = path.join(projectPath, 'CLAUDE.md');
+    const claudeDestDoc = path.join(worktreePath, 'CLAUDE.md');
+    if (fs.existsSync(claudeDoc)) {
+      fs.copyFileSync(claudeDoc, claudeDestDoc);
+    }
+  }
+
+  archiveWorktree(project: string, sourcePath: string, archivedDest: string): void {
+    try {
+      fs.renameSync(sourcePath, archivedDest);
+    } catch {
+      // Fallback: copy then remove
+      this.copyRecursive(sourcePath, archivedDest);
+      fs.rmSync(sourcePath, {recursive: true, force: true});
+    }
+  }
+
+  pruneWorktreeReferences(project: string): void {
+    const projectPath = path.join(this.basePath, project);
+    runCommand(['git', '-C', projectPath, 'worktree', 'prune']);
+  }
+
+  private copyRecursive(src: string, dest: string): void {
+    if (!fs.existsSync(src)) return;
+    const stat = fs.statSync(src);
+    if (stat.isDirectory()) {
+      if (!fs.existsSync(dest)) fs.mkdirSync(dest, {recursive: true});
+      for (const entry of fs.readdirSync(src)) {
+        this.copyRecursive(path.join(src, entry), path.join(dest, entry));
+      }
+    } else if (stat.isFile()) {
+      fs.copyFileSync(src, dest);
     }
   }
 }
