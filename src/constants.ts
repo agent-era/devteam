@@ -32,8 +32,6 @@ export const COL_DIFF_WIDTH = 10;
 export const COL_CHANGES_WIDTH = 8;
 export const COL_PR_WIDTH = 15;
 
-export const COL_PROJECT_FEATURE_WIDTH_ARCHIVED = 50;
-export const COL_ARCHIVED_WIDTH = 10;
 
 export const COL_NUMBER_POS = 0;
 export const COL_PROJECT_FEATURE_POS = 4;
@@ -41,7 +39,6 @@ export const COL_AI_POS = 30;
 export const COL_DIFF_POS = 36;
 export const COL_CHANGES_POS = 47;
 export const COL_PR_POS = 58;
-export const COL_ARCHIVED_POS = 55;
 
 // Symbols
 export const SYMBOL_NO_SESSION = '○';
@@ -49,7 +46,6 @@ export const SYMBOL_IDLE = '✓';
 export const SYMBOL_WORKING = '⚡';
 export const SYMBOL_WAITING = '❓';
 export const SYMBOL_FAILED = '✗';
-export const SYMBOL_ARCHIVED = '📦';
 export const SYMBOL_MERGED = '⟫';
 export const SYMBOL_PENDING = '⏳';
 export const SYMBOL_THINKING = '🤔';
@@ -113,7 +109,6 @@ export function generateHelpSections(projectsDir: string): string[] {
     '  n           Create new feature and activate',
     '  b           Create from existing branch',
     '  a           Archive selected feature',
-    '  v           View archived sessions',
     '  s           Open shell in worktree',
     '  x           Execute/run program in worktree',
     '  X           Create/update run config with Claude',
@@ -125,17 +120,16 @@ export function generateHelpSections(projectsDir: string): string[] {
     '  Enter       Select project',
     '  ESC         Cancel',
     '',
-    'ARCHIVED VIEW:',
-    '  v           Return to active sessions',
-    '  d           Delete permanently',
+    // Archived view removed; archived items remain on disk
     '',
     'TMUX:',
     '  Ctrl+b, d   Detach from session',
     '',
-    'OTHER:',
-    '  r           Refresh list',
-    '  ?           Show this help',
-    '  q           Quit manager',
+  'OTHER:',
+    '  Restore:    Use b to create from branch; check -archived/ for uncommitted diffs',
+  '  r           Refresh list',
+  '  ?           Show this help',
+  '  q           Quit manager',
     '',
     'CONFIGURATION:',
     '  --dir PATH  Specify projects directory',

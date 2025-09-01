@@ -10,7 +10,6 @@ const h = React.createElement;
 interface WorktreeListScreenProps {
   onCreateFeature: () => void;
   onArchiveFeature: () => void;
-  onViewArchived: () => void;
   onHelp: () => void;
   onBranch: () => void;
   onDiff: (type: 'full' | 'uncommitted') => void;
@@ -22,7 +21,6 @@ interface WorktreeListScreenProps {
 export default function WorktreeListScreen({
   onCreateFeature,
   onArchiveFeature,
-  onViewArchived,
   onHelp,
   onBranch,
   onDiff,
@@ -160,7 +158,6 @@ export default function WorktreeListScreen({
     onCreate: onCreateFeature,
     onArchive: onArchiveFeature,
     onRefresh: handleRefresh,
-    onViewArchived: onViewArchived,
     onHelp: onHelp,
     onBranch: onBranch,
     onShell: handleShell,

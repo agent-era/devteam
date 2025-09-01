@@ -3,7 +3,7 @@ import {WorktreeInfo} from '../models.js';
 
 const h = React.createElement;
 
-type UIMode = 'list' | 'create' | 'confirmArchive' | 'archived' | 'help' | 
+type UIMode = 'list' | 'create' | 'confirmArchive' | 'help' | 
              'pickProjectForBranch' | 'pickBranch' | 'diff' | 'runConfig' | 
              'runProgress' | 'runResults';
 
@@ -26,7 +26,6 @@ interface UIContextType {
   showList: () => void;
   showCreateFeature: (projects: any[]) => void;
   showArchiveConfirmation: (worktree: WorktreeInfo) => void;
-  showArchivedView: () => void;
   showHelp: () => void;
   showBranchPicker: (projects: any[], defaultProject?: string) => void;
   showBranchListForProject: (project: string, branches: any[]) => void;
@@ -98,10 +97,6 @@ export function UIProvider({children}: UIProviderProps) {
     });
   };
 
-  const showArchivedView = () => {
-    setMode('archived');
-  };
-
   const showHelp = () => {
     setMode('help');
   };
@@ -169,7 +164,6 @@ export function UIProvider({children}: UIProviderProps) {
     showList,
     showCreateFeature,
     showArchiveConfirmation,
-    showArchivedView,
     showHelp,
     showBranchPicker,
     showBranchListForProject,
