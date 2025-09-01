@@ -86,8 +86,8 @@ export const AI_TOOLS = {
     command: 'codex',
     processPatterns: ['node'],
     statusPatterns: {
-      working: 'esc to interrupt',
-      waiting_numbered: ['▌', ''],  // Just check for prompt with content
+      working: 'Esc to interrupt',
+      waiting_numbered: ['▌', '[A-Za-z]'],  // Check for prompt with text content after it
       idle_prompt: ['▌', '⏎ send']
     }
   },

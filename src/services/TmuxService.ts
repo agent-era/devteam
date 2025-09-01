@@ -330,23 +330,31 @@ export class TmuxService {
     const toolConfig = AI_TOOLS[tool];
     const patterns = toolConfig.statusPatterns;
     
-    let status: AIStatus = 'active';
+    // Check in priority order: working → waiting → idle (default)
+    // We check working first because it's more specific (contains "esc to interrupt/cancel")
     
-    // Special case for Gemini "Waiting for user" prompt
-    if (tool === 'gemini' && text.toLowerCase().includes('waiting for user')) {
-      status = 'waiting';
-    } else if (this.isWorking(text, patterns.working)) {
-      status = 'working';
-    } else if (tool === 'codex' && text.includes('▌') && text.includes('?')) {
-      // Codex shows question marks when waiting for response
-      status = 'waiting';
-    } else if (this.isWaiting(text, patterns.waiting_numbered)) {
-      status = 'waiting';
-    } else if (this.isIdle(text, patterns.idle_prompt)) {
-      status = 'idle';
+    // 1. Check for working state first (most specific)
+    if (this.isWorking(text, patterns.working)) {
+      return 'working';
     }
     
-    return status;
+    // 2. Check for waiting states
+    if (tool === 'gemini' && text.toLowerCase().includes('waiting for user')) {
+      return 'waiting';
+    }
+    if (tool === 'codex') {
+      // Codex is waiting if it does NOT have "⏎ send" (when not working)
+      // This means it's waiting for user response to a question
+      if (!text.includes('⏎ send')) {
+        return 'waiting';
+      }
+    }
+    if (tool === 'claude' && this.isWaiting(text, patterns.waiting_numbered)) {
+      return 'waiting';
+    }
+    
+    // 3. Default to idle (don't check patterns, just assume idle if not waiting/working)
+    return 'idle';
   }
 
   // Generic status detection methods
