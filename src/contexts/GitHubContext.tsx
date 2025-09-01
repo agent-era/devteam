@@ -37,11 +37,9 @@ interface GitHubProviderProps {
   children: ReactNode;
   gitHubService?: GitHubService;
   gitService?: GitService;
-  gitHubServiceFactory?: () => GitHubService;
-  gitServiceFactory?: (basePath: string) => GitService;
 }
 
-export function GitHubProvider({children, gitHubService: ghOverride, gitService: gitOverride, gitHubServiceFactory, gitServiceFactory}: GitHubProviderProps) {
+export function GitHubProvider({children, gitHubService: ghOverride, gitService: gitOverride}: GitHubProviderProps) {
   const [pullRequests, setPullRequests] = useState<Record<string, PRStatus>>({});
   const [loading, setLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(0);
@@ -50,14 +48,12 @@ export function GitHubProvider({children, gitHubService: ghOverride, gitService:
   // Service instances (allow test overrides via globals)
   const gitHubService: GitHubService = useMemo(() => {
     if (ghOverride) return ghOverride;
-    if (gitHubServiceFactory) return gitHubServiceFactory();
     return new GitHubService();
-  }, [ghOverride, gitHubServiceFactory]);
+  }, [ghOverride]);
   const gitService: GitService = useMemo(() => {
     if (gitOverride) return gitOverride;
-    if (gitServiceFactory) return gitServiceFactory(getProjectsDirectory());
     return new GitService(getProjectsDirectory());
-  }, [gitOverride, gitServiceFactory]);
+  }, [gitOverride]);
   const cacheService = useRef(new PRStatusCacheService()).current;
   const refreshIntervalRef = useRef<NodeJS.Timeout>();
 

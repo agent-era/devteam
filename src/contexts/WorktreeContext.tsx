@@ -83,16 +83,12 @@ interface WorktreeProviderProps {
   children: ReactNode;
   gitService?: GitService;
   tmuxService?: TmuxService;
-  gitServiceFactory?: (basePath: string) => GitService;
-  tmuxServiceFactory?: () => TmuxService;
 }
 
 export function WorktreeProvider({
   children,
   gitService: gitServiceOverride,
   tmuxService: tmuxServiceOverride,
-  gitServiceFactory,
-  tmuxServiceFactory,
 }: WorktreeProviderProps) {
   const [worktrees, setWorktrees] = useState<WorktreeInfo[]>([]);
   const [loading, setLoading] = useState(false);
@@ -106,14 +102,12 @@ export function WorktreeProvider({
   // Service instances - stable across re-renders
   const gitService: GitService = useMemo(() => {
     if (gitServiceOverride) return gitServiceOverride;
-    if (gitServiceFactory) return gitServiceFactory(getProjectsDirectory());
     return new GitService(getProjectsDirectory());
-  }, [gitServiceOverride, gitServiceFactory]);
+  }, [gitServiceOverride]);
   const tmuxService: TmuxService = useMemo(() => {
     if (tmuxServiceOverride) return tmuxServiceOverride;
-    if (tmuxServiceFactory) return tmuxServiceFactory();
     return new TmuxService();
-  }, [tmuxServiceOverride, tmuxServiceFactory]);
+  }, [tmuxServiceOverride]);
   // Filesystem operations are routed through GitService methods (see CLAUDE.md)
 
   // Cache available AI tools on startup
@@ -792,17 +786,6 @@ export function WorktreeProvider({
   }, [tmuxService]);
 
   // Auto-refresh intervals
-  // In E2E tests, allow forcing an immediate refresh on mount to make
-  // UI readiness deterministic without relying on timers.
-  useEffect(() => {
-    if (process.env.E2E_IMMEDIATE_REFRESH === '1') {
-      // Kick a refresh right after mount
-      // Avoid awaiting; fire-and-forget is fine for initial population
-      void refresh('all');
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   // Regular cache-based refresh cycle
   useEffect(() => {
     const shouldRefresh = Date.now() - lastRefreshed > CACHE_DURATION;
