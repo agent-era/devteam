@@ -122,7 +122,6 @@ export default function SelectAdapter({
   return (
     <Select
       options={filteredOptions}
-      defaultValue={selectedValue}
       onChange={handleSelect}
       isDisabled={disabled}
     />
