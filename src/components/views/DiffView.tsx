@@ -16,6 +16,7 @@ import FileTreeOverlay from '../dialogs/FileTreeOverlay.js';
 import {truncateDisplay, padEndDisplay, stringDisplayWidth} from '../../shared/utils/formatting.js';
 import {LineWrapper} from '../../shared/utils/lineWrapper.js';
 import {ViewportCalculator} from '../../shared/utils/viewport.js';
+import {computeUnifiedPerFileIndices, computeSideBySidePerFileIndices} from '../../shared/utils/diffLineIndex.js';
 
 type DiffLine = {type: 'added'|'removed'|'context'|'header'; text: string; fileName?: string; headerType?: 'file' | 'hunk'};
 
@@ -286,6 +287,12 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
   const [showFileTreeOverlay, setShowFileTreeOverlay] = useState(false);
   const [overlayHighlightedFile, setOverlayHighlightedFile] = useState<string>('');
 
+  // Map of unified view global line index -> per-file line index (0-based)
+  const unifiedPerFileIndex = useMemo(() => computeUnifiedPerFileIndices(lines as any), [lines]);
+
+  // Map of side-by-side view line index -> per-file line index (0-based)
+  const sideBySidePerFileIndex = useMemo(() => computeSideBySidePerFileIndices(sideBySideLines as any), [sideBySideLines]);
+
   // Derive list of files present in the diff (unique, in order encountered)
   const diffFiles = useMemo(() => {
     const seen = new Set<string>();
@@ -479,18 +486,24 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       if (viewMode === 'unified') {
         const currentLine = lines[selectedLine];
         if (currentLine && currentLine.fileName) {
-          commentStore.removeComment(selectedLine, currentLine.fileName);
+          const perFileIndex = unifiedPerFileIndex[selectedLine];
+          if (perFileIndex !== undefined) {
+            commentStore.removeComment(perFileIndex, currentLine.fileName);
+          }
         }
       } else {
         const currentLine = sideBySideLines[selectedLine];
         const fileName = currentLine.left?.fileName || currentLine.right?.fileName;
         if (currentLine && fileName) {
-          commentStore.removeComment(currentLine.lineIndex, fileName);
+          const perFileIndex = sideBySidePerFileIndex[selectedLine];
+          if (perFileIndex !== undefined) {
+            commentStore.removeComment(perFileIndex, fileName);
+          }
         }
       }
     }
     
-    if (input === 'S') {
+    if (input === 'S' || input === 's') {
       if (commentStore.count > 0) {
         sendCommentsToTmux().catch(error => {
           console.error('Failed to send comments:', error);
@@ -895,14 +908,20 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     if (viewMode === 'unified') {
       const currentLine = lines[selectedLine];
       if (currentLine && currentLine.fileName) {
-        commentStore.addComment(selectedLine, currentLine.fileName, currentLine.text, commentText);
+        const perFileIndex = unifiedPerFileIndex[selectedLine];
+        if (perFileIndex !== undefined) {
+          commentStore.addComment(perFileIndex, currentLine.fileName, currentLine.text, commentText);
+        }
       }
     } else {
       const currentLine = sideBySideLines[selectedLine];
       const fileName = currentLine.left?.fileName || currentLine.right?.fileName;
       const lineText = currentLine.left?.text || currentLine.right?.text;
       if (currentLine && fileName && lineText) {
-        commentStore.addComment(currentLine.lineIndex, fileName, lineText, commentText);
+        const perFileIndex = sideBySidePerFileIndex[selectedLine];
+        if (perFileIndex !== undefined) {
+          commentStore.addComment(perFileIndex, fileName, lineText, commentText);
+        }
       }
     }
     setShowCommentDialog(false);
@@ -1096,10 +1115,13 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
             (sideBySideLines[selectedLine]?.left?.text || sideBySideLines[selectedLine]?.right?.text || '')}
           initialComment={(() => {
             if (viewMode === 'unified') {
-              return lines[selectedLine]?.fileName ? commentStore.getComment(selectedLine, lines[selectedLine].fileName)?.commentText || '' : '';
+              const file = lines[selectedLine]?.fileName || '';
+              const perFileIndex = unifiedPerFileIndex[selectedLine];
+              return file && perFileIndex !== undefined ? (commentStore.getComment(perFileIndex, file)?.commentText || '') : '';
             } else {
               const fileName = sideBySideLines[selectedLine]?.left?.fileName || sideBySideLines[selectedLine]?.right?.fileName;
-              return fileName ? commentStore.getComment(sideBySideLines[selectedLine].lineIndex, fileName)?.commentText || '' : '';
+              const perFileIndex = sideBySidePerFileIndex[selectedLine];
+              return fileName && perFileIndex !== undefined ? (commentStore.getComment(perFileIndex, fileName)?.commentText || '') : '';
             }
           })()}
           onSave={handleCommentSave}
@@ -1143,7 +1165,8 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
         
         if (viewMode === 'unified') {
           const unifiedLine = l as DiffLine;
-          const hasComment = unifiedLine.fileName && commentStore.hasComment(actualLineIndex, unifiedLine.fileName);
+          const perFileIndex = unifiedPerFileIndex[actualLineIndex];
+          const hasComment = unifiedLine.fileName && perFileIndex !== undefined && commentStore.hasComment(perFileIndex, unifiedLine.fileName);
           const commentIndicator = hasComment ? '[C] ' : '';
           
           // Determine gutter symbol
@@ -1355,7 +1378,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
           
           // Get comment info based on the original line index
           const hasComment = (sideBySideLine.left?.fileName || sideBySideLine.right?.fileName) && 
-                            commentStore.hasComment(sideBySideLine.lineIndex, sideBySideLine.left?.fileName || sideBySideLine.right?.fileName || '');
+                            (sideBySidePerFileIndex[actualLineIndex] !== undefined && commentStore.hasComment(sideBySidePerFileIndex[actualLineIndex], sideBySideLine.left?.fileName || sideBySideLine.right?.fileName || ''));
           const commentIndicator = hasComment ? '[C] ' : '';
           
           // Prepare left and right content
