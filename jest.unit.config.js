@@ -7,7 +7,8 @@ export default {
     // Mock ink and ink-testing-library to avoid ESM issues in unit/integration tests
     '^ink$': '<rootDir>/tests/__mocks__/ink.js',
     '^ink-testing-library$': '<rootDir>/tests/__mocks__/ink-testing-library.js',
-    '^ink-syntax-highlight$': '<rootDir>/tests/__mocks__/ink-syntax-highlight.js'
+    '^ink-syntax-highlight$': '<rootDir>/tests/__mocks__/ink-syntax-highlight.js',
+    '^@inkjs/ui$': '<rootDir>/tests/__mocks__/@inkjs/ui.js'
   },
   transformIgnorePatterns: [
     'node_modules/(?!(ink|ink-testing-library|ink-syntax-highlight)/)'

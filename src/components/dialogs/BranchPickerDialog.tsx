@@ -2,7 +2,6 @@ import React, {useEffect, useMemo, useState} from 'react';
 import {Box, Text, useInput, useStdin} from 'ink';
 import {fitDisplay, padStartDisplay, stringDisplayWidth} from '../../shared/utils/formatting.js';
 import {useTerminalDimensions} from '../../hooks/useTerminalDimensions.js';
-import {useTextInput} from './TextInput.js';
 
 type BranchInfo = {
   name: string; // may be origin/...
@@ -27,18 +26,18 @@ type Props = {
 };
 
 export default function BranchPickerDialog({branches, onSubmit, onCancel, onRefresh}: Props) {
-  const filterInput = useTextInput();
+  const [filter, setFilter] = useState('');
   const [selected, setSelected] = useState(0);
   const [page, setPage] = useState(0);
   const {rows, columns} = useTerminalDimensions();
   const pageSize = Math.max(1, rows - 6); // Reserve space for dialog chrome
   const {isRawModeSupported} = useStdin();
   const filtered = useMemo(() => {
-    const f = filterInput.value.toLowerCase();
+    const f = filter.toLowerCase();
     const arr = branches.filter(b => (b.name + ' ' + b.local_name + ' ' + (b.pr_title || '')).toLowerCase().includes(f));
     arr.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
     return arr;
-  }, [branches, filterInput.value]);
+  }, [branches, filter]);
 
   useInput((input, key) => {
     if (key.escape) return onCancel();
@@ -80,8 +79,15 @@ export default function BranchPickerDialog({branches, onSubmit, onCancel, onRefr
       return;
     }
     
-    // Let the filter input hook handle text input
-    if (filterInput.handleKeyInput(input, key)) {
+    // Text filtering - check both keys due to terminal key mapping inconsistencies
+    if (key.backspace || key.delete) {
+      setFilter((f) => f.slice(0, -1));
+      return;
+    }
+    
+    // Regular typing
+    if (input && !key.ctrl && !key.meta) {
+      setFilter((f) => f + input);
       return;
     }
   });
@@ -178,7 +184,7 @@ export default function BranchPickerDialog({branches, onSubmit, onCancel, onRefr
       </Text>
       <Box flexDirection="row">
         <Text color="gray">Filter: </Text>
-        {filterInput.renderText(' ')}
+        <Text>{filter || ' '}</Text>
       </Box>
       {header}
       {pageItems.map((b, i) => {

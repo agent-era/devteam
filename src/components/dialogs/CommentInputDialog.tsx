@@ -1,7 +1,6 @@
-import React, {useState, useEffect} from 'react';
+import React, {useState, useRef} from 'react';
 import {Box, Text, useInput} from 'ink';
-import {useTextInput} from './TextInput.js';
-import {useInputFocus} from '../../contexts/InputFocusContext.js';
+import TextInputAdapter from '../common/TextInputAdapter.js';
 
 type Props = {
   fileName: string;
@@ -12,16 +11,7 @@ type Props = {
 };
 
 const CommentInputDialog = React.memo(function CommentInputDialog({fileName, lineText, initialComment = '', onSave, onCancel}: Props) {
-  const commentInput = useTextInput(initialComment);
-  const {requestFocus, releaseFocus} = useInputFocus();
-
-  // Request focus when dialog mounts
-  useEffect(() => {
-    requestFocus('comment-input-dialog');
-    return () => {
-      releaseFocus('comment-input-dialog');
-    };
-  }, [requestFocus, releaseFocus]);
+  const [comment, setComment] = useState(initialComment);
 
   useInput((input, key) => {
     if (key.escape) {
@@ -29,26 +19,26 @@ const CommentInputDialog = React.memo(function CommentInputDialog({fileName, lin
       return;
     }
 
-    if (key.return && !key.shift) {
-      if (commentInput.value.trim()) {
-        onSave(commentInput.value.trim());
-      } else {
-        onCancel();
-      }
-      return;
-    }
-
     if (key.return && key.shift) {
       // Handle newlines for multi-line comments
-      commentInput.handleKeyInput('\n', {});
+      setComment(prev => prev + '\n');
       return;
     }
-
-    // Let the text input hook handle all other input
-    commentInput.handleKeyInput(input, key);
   });
 
-  const lines = commentInput.value.split('\n');
+  const handleSubmit = (value: string) => {
+    if (value.trim()) {
+      onSave(value.trim());
+    } else {
+      onCancel();
+    }
+  };
+
+  const handleChange = (value: string) => {
+    setComment(value);
+  };
+
+  const lines = comment.split('\n');
   const boxWidth = 70; // Fixed width for consistent appearance
 
   return (
@@ -69,10 +59,14 @@ const CommentInputDialog = React.memo(function CommentInputDialog({fileName, lin
         padding={1}
         minHeight={3}
       >
-        {lines.length === 1 
-          ? commentInput.renderText(' ')  // Single line - show cursor
-          : lines.map((line, index) => <Text key={index}>{line || ' '}</Text>)  // Multi-line - no cursor for simplicity
-        }
+        <TextInputAdapter
+          initialValue={initialComment}
+          placeholder=" "
+          onSubmit={handleSubmit}
+          onChange={handleChange}
+          focusId="comment-input-dialog"
+          multiline={true}
+        />
       </Box>
       <Text color="gray">
         Enter: Save  Shift+Enter: New Line  Esc: Cancel
