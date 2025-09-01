@@ -133,6 +133,251 @@ function getLanguageFromFileName(fileName: string | undefined): string {
   return languageMap[ext || ''] || 'plaintext';
 }
 
+// Helper to render syntax highlighted code (module-scoped so it's stable across renders)
+function renderSyntaxHighlighted(
+  text: string,
+  fileName: string | undefined,
+  isSelected: boolean,
+  diffColor?: string,
+  lineType?: 'added'|'removed'|'context'|'header'
+) {
+  const language = getLanguageFromFileName(fileName);
+  // If the line is selected, use regular Text to ensure blue background is visible
+  if (isSelected) {
+    return h(Text, {
+      backgroundColor: 'blue',
+      bold: true,
+      color: diffColor
+    }, text);
+  }
+  // For removed lines in unified view, use plain red text without syntax highlighting
+  if (lineType === 'removed') {
+    return h(Text, { color: 'red' }, text);
+  }
+  // For context lines in unified view, use dimmed text without syntax highlighting
+  if (lineType === 'context') {
+    return h(Text, { dimColor: true }, text);
+  }
+  // For added lines and side-by-side view, use syntax highlighting
+  return h(SyntaxHighlight, { code: text, language });
+}
+
+// Memoized row for unified view; re-renders only when its props change
+const UnifiedRowMemo = React.memo(function UnifiedRow({
+  line,
+  isSelected,
+  terminalWidth,
+  wrapMode,
+  hasComment
+}: {
+  line: DiffLine;
+  isSelected: boolean;
+  terminalWidth: number;
+  wrapMode: 'truncate' | 'wrap';
+  hasComment: boolean;
+}) {
+  // Determine gutter symbol
+  let gutterSymbol = '  ';
+  if (line.type === 'added') gutterSymbol = '+ ';
+  else if (line.type === 'removed') gutterSymbol = '- ';
+
+  const commentIndicator = hasComment ? '[C] ' : '';
+  const fullText = commentIndicator + (line.text || ' ');
+
+  if (wrapMode === 'truncate') {
+    if (line.type === 'header') {
+      const displayText = truncateDisplay(fullText, terminalWidth - 4);
+      const headerColor = line.headerType === 'file' ? 'white' : 'cyan';
+      return h(Box, {flexDirection: 'row'},
+        h(Text, {color: 'gray', backgroundColor: isSelected ? 'blue' : undefined, bold: isSelected}, gutterSymbol),
+        h(Text, {color: headerColor, backgroundColor: isSelected ? 'blue' : undefined, bold: true}, displayText)
+      );
+    }
+    const gutterElement = h(Text, {
+      color: line.type === 'added' ? 'green' : line.type === 'removed' ? 'red' : 'gray',
+      backgroundColor: isSelected ? 'blue' : undefined,
+      bold: isSelected
+    }, gutterSymbol);
+
+    const finalCodeText = truncateDisplay(line.text || ' ', terminalWidth - (hasComment ? 8 : 4));
+    if (hasComment) {
+      const commentElement = h(Text, {
+        color: line.type === 'added' ? 'green' : line.type === 'removed' ? 'red' : undefined,
+        backgroundColor: isSelected ? 'blue' : undefined,
+        bold: isSelected
+      }, '[C] ');
+      const codeElement = h(Text, {
+        color: line.type === 'added' ? 'green' : line.type === 'removed' ? 'red' : undefined,
+        dimColor: line.type === 'context',
+        backgroundColor: isSelected ? 'blue' : undefined,
+        bold: isSelected
+      }, finalCodeText);
+      return h(Box, {flexDirection: 'row'}, gutterElement, commentElement, codeElement);
+    }
+    const codeElement = h(Text, {
+      color: line.type === 'added' ? 'green' : line.type === 'removed' ? 'red' : undefined,
+      dimColor: line.type === 'context',
+      backgroundColor: isSelected ? 'blue' : undefined,
+      bold: isSelected
+    }, finalCodeText);
+    return h(Box, {flexDirection: 'row'}, gutterElement, codeElement);
+  }
+
+  // wrap mode
+  const maxWidth = terminalWidth - 4;
+  const segments = LineWrapper.wrapLine(fullText, maxWidth);
+  const rows: React.ReactNode[] = [];
+  segments.forEach((segment, segIdx) => {
+    if (line.type === 'header') {
+      const headerColor = line.headerType === 'file' ? 'white' : 'cyan';
+      rows.push(h(Box, {key: segIdx, flexDirection: 'row'},
+        h(Text, {color: 'gray', backgroundColor: isSelected ? 'blue' : undefined, bold: isSelected}, segIdx === 0 ? gutterSymbol : '  '),
+        h(Text, {color: headerColor, backgroundColor: isSelected ? 'blue' : undefined, bold: true}, segment)
+      ));
+    } else {
+      const gutterElement = h(Text, {
+        color: line.type === 'added' ? 'green' : line.type === 'removed' ? 'red' : 'gray',
+        backgroundColor: isSelected ? 'blue' : undefined,
+        bold: isSelected
+      }, segIdx === 0 ? gutterSymbol : '  ');
+      let codeText = segment;
+      if (segIdx === 0 && hasComment) {
+        codeText = segment.replace('[C] ', '');
+        const commentElement = h(Text, {
+          color: line.type === 'added' ? 'green' : line.type === 'removed' ? 'red' : undefined,
+          backgroundColor: isSelected ? 'blue' : undefined,
+          bold: isSelected
+        }, '[C] ');
+        const codeElement = h(Text, {
+          color: line.type === 'added' ? 'green' : line.type === 'removed' ? 'red' : undefined,
+          dimColor: line.type === 'context',
+          backgroundColor: isSelected ? 'blue' : undefined,
+          bold: isSelected
+        }, codeText);
+        rows.push(h(Box, {key: segIdx, flexDirection: 'row'}, gutterElement, commentElement, codeElement));
+      } else {
+        const codeElement = h(Text, {
+          color: line.type === 'added' ? 'green' : line.type === 'removed' ? 'red' : undefined,
+          dimColor: line.type === 'context',
+          backgroundColor: isSelected ? 'blue' : undefined,
+          bold: isSelected
+        }, codeText);
+        rows.push(h(Box, {key: segIdx, flexDirection: 'row'}, gutterElement, codeElement));
+      }
+    }
+  });
+  return h(Box, {flexDirection: 'column'}, ...rows);
+});
+
+// Memoized row for side-by-side view
+const SbsRowMemo = React.memo(function SbsRow({
+  line,
+  isSelected,
+  paneWidth,
+  wrapMode,
+  hasComment
+}: {
+  line: SideBySideLine;
+  isSelected: boolean;
+  paneWidth: number;
+  wrapMode: 'truncate' | 'wrap';
+  hasComment: boolean;
+}) {
+  const commentIndicator = hasComment ? '[C] ' : '';
+  const leftFullText = line.left ? (commentIndicator + (line.left.text || ' ')) : '';
+  const rightFullText = line.right ? (line.right.text || ' ') : '';
+
+  if (wrapMode === 'truncate') {
+    const leftText = leftFullText ? truncateDisplay(leftFullText, paneWidth - 2) : '';
+    const rightText = rightFullText ? truncateDisplay(rightFullText, paneWidth - 2) : '';
+    let leftElement: React.ReactNode;
+    if (line.left) {
+      if (line.left.type === 'header') {
+        const headerColor = line.left.headerType === 'file' ? 'white' : 'cyan';
+        leftElement = h(Text, {bold: true, color: headerColor, backgroundColor: isSelected ? 'blue' : undefined}, padEndDisplay(' ' + leftText, paneWidth));
+      } else if (line.left.type === 'context' || line.left.type === 'empty') {
+        leftElement = h(Text, {bold: isSelected, dimColor: true, backgroundColor: isSelected ? 'blue' : undefined}, padEndDisplay(' ' + leftText, paneWidth));
+      } else {
+        const actualLeftText = hasComment ? (line.left.text || ' ') : leftText.replace('[C] ', '');
+        const truncatedText = truncateDisplay(actualLeftText, paneWidth - (hasComment ? 5 : 1));
+        const leftSyntaxElement = renderSyntaxHighlighted(truncatedText, line.left.fileName, isSelected, undefined, line.left.type);
+        if (hasComment) {
+          const commentText = h(Text, {bold: isSelected, backgroundColor: isSelected ? 'blue' : undefined}, ' [C] ');
+          leftElement = h(Box, {flexDirection: 'row', width: paneWidth}, commentText, h(Box, {flexShrink: 1, flexGrow: 0}, leftSyntaxElement));
+        } else {
+          leftElement = h(Box, {flexDirection: 'row', width: paneWidth}, h(Text, {bold: isSelected, backgroundColor: isSelected ? 'blue' : undefined}, ' '), h(Box, {flexShrink: 1, flexGrow: 0}, leftSyntaxElement));
+        }
+      }
+    } else {
+      leftElement = h(Text, {bold: isSelected, dimColor: true, backgroundColor: isSelected ? 'blue' : undefined}, padEndDisplay('', paneWidth));
+    }
+
+    let rightElement: React.ReactNode;
+    if (line.right) {
+      if (line.right.type === 'header') {
+        const headerColor = line.right.headerType === 'file' ? 'white' : 'cyan';
+        rightElement = h(Text, {bold: true, color: headerColor, backgroundColor: isSelected ? 'blue' : undefined}, padEndDisplay(' ' + rightText, paneWidth));
+      } else if (line.right.type === 'context' || line.right.type === 'empty') {
+        rightElement = h(Text, {bold: isSelected, dimColor: true, backgroundColor: isSelected ? 'blue' : undefined}, padEndDisplay(' ' + rightText, paneWidth));
+      } else {
+        const rightSyntaxElement = renderSyntaxHighlighted(rightText, line.right.fileName, isSelected, undefined, line.right.type);
+        rightElement = h(Box, {flexDirection: 'row', width: paneWidth}, h(Text, {bold: isSelected, backgroundColor: isSelected ? 'blue' : undefined}, ' '), h(Box, {flexShrink: 1, flexGrow: 0}, rightSyntaxElement));
+      }
+    } else {
+      rightElement = h(Text, {bold: isSelected, dimColor: true, backgroundColor: isSelected ? 'blue' : undefined}, padEndDisplay('', paneWidth));
+    }
+
+    return h(Box, {flexDirection: 'row'}, leftElement, rightElement);
+  }
+
+  // Wrap mode for side-by-side
+  const maxPaneWidth = paneWidth - 2;
+  const leftSegments = leftFullText ? LineWrapper.wrapLine(leftFullText, maxPaneWidth) : [''];
+  const rightSegments = rightFullText ? LineWrapper.wrapLine(rightFullText, maxPaneWidth) : [''];
+  const maxSegments = Math.max(leftSegments.length, rightSegments.length);
+  const rows: React.ReactNode[] = [];
+  for (let segIdx = 0; segIdx < maxSegments; segIdx++) {
+    const leftSegment = leftSegments[segIdx] || '';
+    const rightSegment = rightSegments[segIdx] || '';
+    let leftElement: React.ReactNode;
+    if (line.left && leftSegment) {
+      if (line.left.type === 'header') {
+        const headerColor = line.left.headerType === 'file' ? 'white' : 'cyan';
+        leftElement = h(Text, {bold: true, color: headerColor, backgroundColor: isSelected ? 'blue' : undefined}, padEndDisplay(' ' + leftSegment, paneWidth));
+      } else if (line.left.type === 'context' || line.left.type === 'empty') {
+        leftElement = h(Text, {bold: isSelected, dimColor: true, backgroundColor: isSelected ? 'blue' : undefined}, padEndDisplay(' ' + leftSegment, paneWidth));
+      } else {
+        const leftSyntaxElement = renderSyntaxHighlighted(leftSegment.replace('[C] ', ''), line.left.fileName, isSelected, undefined, line.left.type);
+        if (leftSegment.includes('[C] ') && segIdx === 0) {
+          leftElement = h(Box, {flexDirection: 'row', width: paneWidth}, h(Text, {bold: isSelected, backgroundColor: isSelected ? 'blue' : undefined}, ' [C] '), h(Box, {flexShrink: 1, flexGrow: 0}, leftSyntaxElement));
+        } else {
+          leftElement = h(Box, {flexDirection: 'row', width: paneWidth}, h(Text, {bold: isSelected, backgroundColor: isSelected ? 'blue' : undefined}, ' '), h(Box, {flexShrink: 1, flexGrow: 0}, leftSyntaxElement));
+        }
+      }
+    } else {
+      leftElement = h(Text, {bold: isSelected, dimColor: true, backgroundColor: isSelected ? 'blue' : undefined}, padEndDisplay('', paneWidth));
+    }
+
+    let rightElement: React.ReactNode;
+    if (line.right && rightSegment) {
+      if (line.right.type === 'header') {
+        const headerColor = line.right.headerType === 'file' ? 'white' : 'cyan';
+        rightElement = h(Text, {bold: true, color: headerColor, backgroundColor: isSelected ? 'blue' : undefined}, padEndDisplay(' ' + rightSegment, paneWidth));
+      } else if (line.right.type === 'context' || line.right.type === 'empty') {
+        rightElement = h(Text, {bold: isSelected, dimColor: true, backgroundColor: isSelected ? 'blue' : undefined}, padEndDisplay(' ' + rightSegment, paneWidth));
+      } else {
+        const rightSyntaxElement = renderSyntaxHighlighted(rightSegment, line.right.fileName, isSelected, undefined, line.right.type);
+        rightElement = h(Box, {flexDirection: 'row', width: paneWidth}, h(Text, {bold: isSelected, backgroundColor: isSelected ? 'blue' : undefined}, ' '), h(Box, {flexShrink: 1, flexGrow: 0}, rightSyntaxElement));
+      }
+    } else {
+      rightElement = h(Text, {bold: isSelected, dimColor: true, backgroundColor: isSelected ? 'blue' : undefined}, padEndDisplay('', paneWidth));
+    }
+
+    rows.push(h(Box, {key: segIdx, flexDirection: 'row'}, leftElement, rightElement));
+  }
+  return h(Box, {flexDirection: 'column'}, ...rows);
+});
+
 async function loadDiff(worktreePath: string, diffType: 'full' | 'uncommitted' = 'full'): Promise<DiffLine[]> {
   const lines: DiffLine[] = [];
   let diff: string | null = null;
@@ -1091,436 +1336,24 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       backgroundColor: 'gray'
     }, currentHunkHeader)] : []),
     ...(() => {
-      const renderedElements: React.ReactNode[] = [];
-      let visibleLineIndex = 0;
-      
-      for (const l of visibleLines) {
-        const actualLineIndex = viewport.visibleLines[visibleLineIndex];
+      const nodes: React.ReactNode[] = [];
+      const total = viewport.visibleLines.length;
+      for (let i = 0; i < total; i++) {
+        const actualLineIndex = viewport.visibleLines[i];
         const isCurrentLine = actualLineIndex === selectedLine;
-        
         if (viewMode === 'unified') {
-          const unifiedLine = l as DiffLine;
-          const hasComment = unifiedLine.fileName && commentStore.hasComment(actualLineIndex, unifiedLine.fileName);
-          const commentIndicator = hasComment ? '[C] ' : '';
-          
-          // Determine gutter symbol
-          let gutterSymbol = '  '; // default for context and headers
-          if (unifiedLine.type === 'added') gutterSymbol = '+ ';
-          else if (unifiedLine.type === 'removed') gutterSymbol = '- ';
-          
-          const fullText = commentIndicator + (unifiedLine.text || ' ');
-          
-          if (wrapMode === 'truncate') {
-            // Truncate mode with gutter and diff colors
-            if (unifiedLine.type === 'header') {
-              const displayText = truncateDisplay(fullText, terminalWidth - 4); // -4 for gutter
-              const headerColor = unifiedLine.headerType === 'file' ? 'white' : 'cyan';
-              renderedElements.push(h(Box, {
-                key: `line-${visibleLineIndex}`,
-                flexDirection: 'row'
-              },
-                h(Text, {
-                  color: 'gray',
-                  backgroundColor: isCurrentLine ? 'blue' : undefined,
-                  bold: isCurrentLine
-                }, gutterSymbol),
-                h(Text, {
-                  color: headerColor,
-                  backgroundColor: isCurrentLine ? 'blue' : undefined,
-                  bold: true
-                }, displayText)
-              ));
-            } else {
-              // Create gutter element
-              const gutterElement = h(Text, {
-                color: unifiedLine.type === 'added' ? 'green' : unifiedLine.type === 'removed' ? 'red' : 'gray',
-                backgroundColor: isCurrentLine ? 'blue' : undefined,
-                bold: isCurrentLine
-              }, gutterSymbol);
-              
-              const finalCodeText = truncateDisplay(unifiedLine.text || ' ', terminalWidth - (hasComment ? 8 : 4));
-              
-              if (hasComment) {
-                const commentElement = h(Text, {
-                  color: unifiedLine.type === 'added' ? 'green' : unifiedLine.type === 'removed' ? 'red' : undefined,
-                  backgroundColor: isCurrentLine ? 'blue' : undefined,
-                  bold: isCurrentLine
-                }, '[C] ');
-                
-                const codeElement = h(Text, {
-                  color: unifiedLine.type === 'added' ? 'green' : unifiedLine.type === 'removed' ? 'red' : undefined,
-                  dimColor: unifiedLine.type === 'context',
-                  backgroundColor: isCurrentLine ? 'blue' : undefined,
-                  bold: isCurrentLine
-                }, finalCodeText);
-                
-                renderedElements.push(h(Box, {
-                  key: `line-${visibleLineIndex}`,
-                  flexDirection: 'row'
-                }, gutterElement, commentElement, codeElement));
-              } else {
-                const codeElement = h(Text, {
-                  color: unifiedLine.type === 'added' ? 'green' : unifiedLine.type === 'removed' ? 'red' : undefined,
-                  dimColor: unifiedLine.type === 'context',
-                  backgroundColor: isCurrentLine ? 'blue' : undefined,
-                  bold: isCurrentLine
-                }, finalCodeText);
-                
-                renderedElements.push(h(Box, {
-                  key: `line-${visibleLineIndex}`,
-                  flexDirection: 'row'
-                }, gutterElement, codeElement));
-              }
-            }
-          } else {
-            // Wrap mode with gutter and diff colors
-            const maxWidth = terminalWidth - 4; // -4 for gutter
-            const segments = LineWrapper.wrapLine(fullText, maxWidth);
-            
-            segments.forEach((segment, segIdx) => {
-              if (unifiedLine.type === 'header') {
-                const headerColor = unifiedLine.headerType === 'file' ? 'white' : 'cyan';
-                renderedElements.push(h(Box, {
-                  key: `line-${visibleLineIndex}-seg-${segIdx}`,
-                  flexDirection: 'row'
-                },
-                  h(Text, {
-                    color: 'gray',
-                    backgroundColor: isCurrentLine ? 'blue' : undefined,
-                    bold: isCurrentLine
-                  }, segIdx === 0 ? gutterSymbol : '  '),
-                  h(Text, {
-                    color: headerColor,
-                    backgroundColor: isCurrentLine ? 'blue' : undefined,
-                    bold: true
-                  }, segment)
-                ));
-              } else {
-                const gutterElement = h(Text, {
-                  color: unifiedLine.type === 'added' ? 'green' : unifiedLine.type === 'removed' ? 'red' : 'gray',
-                  backgroundColor: isCurrentLine ? 'blue' : undefined,
-                  bold: isCurrentLine
-                }, segIdx === 0 ? gutterSymbol : '  ');
-                
-                // For wrapped segments, extract the actual code text (removing comment indicator from non-first segments)
-                let codeText = segment;
-                if (segIdx === 0 && hasComment) {
-                  codeText = segment.replace('[C] ', '');
-                  const commentElement = h(Text, {
-                    color: unifiedLine.type === 'added' ? 'green' : unifiedLine.type === 'removed' ? 'red' : undefined,
-                    backgroundColor: isCurrentLine ? 'blue' : undefined,
-                    bold: isCurrentLine
-                  }, '[C] ');
-                  
-                  const codeElement = h(Text, {
-                    color: unifiedLine.type === 'added' ? 'green' : unifiedLine.type === 'removed' ? 'red' : undefined,
-                    dimColor: unifiedLine.type === 'context',
-                    backgroundColor: isCurrentLine ? 'blue' : undefined,
-                    bold: isCurrentLine
-                  }, codeText);
-                  
-                  renderedElements.push(h(Box, {
-                    key: `line-${visibleLineIndex}-seg-${segIdx}`,
-                    flexDirection: 'row'
-                  }, gutterElement, commentElement, codeElement));
-                } else {
-                  const codeElement = h(Text, {
-                    color: unifiedLine.type === 'added' ? 'green' : unifiedLine.type === 'removed' ? 'red' : undefined,
-                    dimColor: unifiedLine.type === 'context',
-                    backgroundColor: isCurrentLine ? 'blue' : undefined,
-                    bold: isCurrentLine
-                  }, codeText);
-                  
-                  renderedElements.push(h(Box, {
-                    key: `line-${visibleLineIndex}-seg-${segIdx}`,
-                    flexDirection: 'row'
-                  }, gutterElement, codeElement));
-                }
-              }
-            });
-          }
+          const unifiedLine = lines[actualLineIndex];
+          const hasComment = !!(unifiedLine?.fileName && unifiedLine.type !== 'header' && commentStore.hasComment(actualLineIndex, unifiedLine.fileName));
+          nodes.push(h(UnifiedRowMemo, { key: `line-${actualLineIndex}`, line: unifiedLine, isSelected: isCurrentLine, terminalWidth, wrapMode, hasComment }));
         } else {
-          // Side-by-side diff rendering with syntax highlighting
-          const sideBySideLine = l as SideBySideLine;
-          const paneWidth = Math.floor((terminalWidth - 2) / 2); // Leave 2 cols slack to avoid terminal wrap
-          
-          // Get comment info based on the original line index
-          const hasComment = (sideBySideLine.left?.fileName || sideBySideLine.right?.fileName) && 
-                            commentStore.hasComment(sideBySideLine.lineIndex, sideBySideLine.left?.fileName || sideBySideLine.right?.fileName || '');
-          const commentIndicator = hasComment ? '[C] ' : '';
-          
-          // Prepare left and right content
-          const leftFullText = sideBySideLine.left ? (commentIndicator + (sideBySideLine.left.text || ' ')) : '';
-          const rightFullText = sideBySideLine.right ? (sideBySideLine.right.text || ' ') : '';
-          
-          if (wrapMode === 'truncate') {
-            // Truncate mode with syntax highlighting for side-by-side
-            const leftText = leftFullText ? truncateDisplay(leftFullText, paneWidth - 2) : '';
-            const rightText = rightFullText ? truncateDisplay(rightFullText, paneWidth - 2) : '';
-            
-            // Format left pane with syntax highlighting
-            let leftElement;
-            if (sideBySideLine.left) {
-              if (sideBySideLine.left.type === 'header') {
-                const headerColor = sideBySideLine.left.headerType === 'file' ? 'white' : 'cyan';
-                leftElement = h(Text, {
-                  bold: true,
-                  color: headerColor,
-                  backgroundColor: isCurrentLine ? 'blue' : undefined
-                }, padEndDisplay(' ' + leftText, paneWidth));
-              } else if (sideBySideLine.left.type === 'context' || sideBySideLine.left.type === 'empty') {
-                leftElement = h(Text, {
-                  bold: isCurrentLine,
-                  dimColor: true,
-                  backgroundColor: isCurrentLine ? 'blue' : undefined
-                }, padEndDisplay(' ' + leftText, paneWidth));
-              } else {
-                // For removed lines, apply syntax highlighting
-                const actualLeftText = hasComment ? sideBySideLine.left.text || ' ' : leftText.replace('[C] ', '');
-                const truncatedText = truncateDisplay(actualLeftText, paneWidth - (hasComment ? 5 : 1));
-                const leftSyntaxElement = renderSyntaxHighlighted(
-                  truncatedText, 
-                  sideBySideLine.left.fileName, 
-                  isCurrentLine, 
-                  undefined,
-                  sideBySideLine.left.type
-                );
-                
-                // Create the element with proper padding and comment indicator
-                if (hasComment) {
-                  const commentText = h(Text, {
-                    bold: isCurrentLine,
-                    backgroundColor: isCurrentLine ? 'blue' : undefined
-                  }, ' [C] ');
-                  leftElement = h(Box, {
-                    flexDirection: 'row',
-                    width: paneWidth
-                  },
-                    commentText,
-                    h(Box, {
-                      flexShrink: 1,
-                      flexGrow: 0
-                    }, leftSyntaxElement)
-                  );
-                } else {
-                  leftElement = h(Box, {
-                    flexDirection: 'row',
-                    width: paneWidth
-                  },
-                    h(Text, {
-                      bold: isCurrentLine,
-                      backgroundColor: isCurrentLine ? 'blue' : undefined
-                    }, ' '),
-                    h(Box, {
-                      flexShrink: 1,
-                      flexGrow: 0
-                    }, leftSyntaxElement)
-                  );
-                }
-              }
-            } else {
-              leftElement = h(Text, {
-                bold: isCurrentLine,
-                dimColor: true,
-                backgroundColor: isCurrentLine ? 'blue' : undefined
-              }, padEndDisplay('', paneWidth));
-            }
-            
-            // Format right pane with syntax highlighting
-            let rightElement;
-            if (sideBySideLine.right) {
-              if (sideBySideLine.right.type === 'header') {
-                const headerColor = sideBySideLine.right.headerType === 'file' ? 'white' : 'cyan';
-                rightElement = h(Text, {
-                  bold: true,
-                  color: headerColor,
-                  backgroundColor: isCurrentLine ? 'blue' : undefined
-                }, padEndDisplay(' ' + rightText, paneWidth));
-              } else if (sideBySideLine.right.type === 'context' || sideBySideLine.right.type === 'empty') {
-                rightElement = h(Text, {
-                  bold: isCurrentLine,
-                  dimColor: true,
-                  backgroundColor: isCurrentLine ? 'blue' : undefined
-                }, padEndDisplay(' ' + rightText, paneWidth));
-              } else {
-                // For added lines, apply syntax highlighting using already truncated text
-                const truncatedText = rightText;
-                const rightSyntaxElement = renderSyntaxHighlighted(
-                  truncatedText, 
-                  sideBySideLine.right.fileName, 
-                  isCurrentLine, 
-                  undefined,
-                  sideBySideLine.right.type
-                );
-                
-                // Create the element with syntax highlighting constrained to paneWidth
-                rightElement = h(Box, {
-                  flexDirection: 'row',
-                  width: paneWidth
-                },
-                  h(Text, {
-                    bold: isCurrentLine,
-                    backgroundColor: isCurrentLine ? 'blue' : undefined
-                  }, ' '),
-                  h(Box, {
-                    flexShrink: 1,
-                    flexGrow: 0
-                  }, rightSyntaxElement)
-                );
-              }
-            } else {
-              rightElement = h(Text, {
-                bold: isCurrentLine,
-                dimColor: true,
-                backgroundColor: isCurrentLine ? 'blue' : undefined
-              }, padEndDisplay('', paneWidth));
-            }
-            
-            renderedElements.push(h(Box, {
-              key: `line-${visibleLineIndex}`,
-              flexDirection: 'row'
-            }, 
-              leftElement,
-              rightElement
-            ));
-          } else {
-            // Wrap mode: handle wrapped side-by-side content with syntax highlighting
-            const maxPaneWidth = paneWidth - 2;
-            const leftSegments = leftFullText ? LineWrapper.wrapLine(leftFullText, maxPaneWidth) : [''];
-            const rightSegments = rightFullText ? LineWrapper.wrapLine(rightFullText, maxPaneWidth) : [''];
-            const maxSegments = Math.max(leftSegments.length, rightSegments.length);
-            
-            for (let segIdx = 0; segIdx < maxSegments; segIdx++) {
-              const leftSegment = leftSegments[segIdx] || '';
-              const rightSegment = rightSegments[segIdx] || '';
-              
-              // Apply syntax highlighting logic for wrapped segments
-              let leftElement, rightElement;
-              
-              if (sideBySideLine.left && leftSegment) {
-                if (sideBySideLine.left.type === 'header') {
-                  const headerColor = sideBySideLine.left.headerType === 'file' ? 'white' : 'cyan';
-                  leftElement = h(Text, {
-                    bold: true,
-                    color: headerColor,
-                    backgroundColor: isCurrentLine ? 'blue' : undefined
-                  }, padEndDisplay(' ' + leftSegment, paneWidth));
-                } else if (sideBySideLine.left.type === 'context' || sideBySideLine.left.type === 'empty') {
-                  leftElement = h(Text, {
-                    bold: isCurrentLine,
-                    dimColor: true,
-                    backgroundColor: isCurrentLine ? 'blue' : undefined
-                  }, padEndDisplay(' ' + leftSegment, paneWidth));
-                } else {
-                  // For wrapped removed lines in side-by-side, apply syntax highlighting
-                  const leftSyntaxElement = renderSyntaxHighlighted(
-                    leftSegment.replace('[C] ', ''), 
-                    sideBySideLine.left.fileName, 
-                    isCurrentLine, 
-                    undefined,
-                    sideBySideLine.left.type
-                  );
-                  
-                  // Handle comment indicator for first segment
-                  if (leftSegment.includes('[C] ') && segIdx === 0) {
-                    leftElement = h(Box, {
-                      flexDirection: 'row',
-                      width: paneWidth
-                    },
-                      h(Text, {
-                        bold: isCurrentLine,
-                        backgroundColor: isCurrentLine ? 'blue' : undefined
-                      }, ' [C] '),
-                      h(Box, {
-                        flexShrink: 1,
-                        flexGrow: 0
-                      }, leftSyntaxElement)
-                    );
-                  } else {
-                    leftElement = h(Box, {
-                      flexDirection: 'row',
-                      width: paneWidth
-                    },
-                      h(Text, {
-                        bold: isCurrentLine,
-                        backgroundColor: isCurrentLine ? 'blue' : undefined
-                      }, ' '),
-                      h(Box, {
-                        flexShrink: 1,
-                        flexGrow: 0
-                      }, leftSyntaxElement)
-                    );
-                  }
-                }
-              } else {
-                leftElement = h(Text, {
-                  bold: isCurrentLine,
-                  dimColor: true,
-                  backgroundColor: isCurrentLine ? 'blue' : undefined
-                }, padEndDisplay('', paneWidth));
-              }
-              
-              if (sideBySideLine.right && rightSegment) {
-                if (sideBySideLine.right.type === 'header') {
-                  const headerColor = sideBySideLine.right.headerType === 'file' ? 'white' : 'cyan';
-                  rightElement = h(Text, {
-                    bold: true,
-                    color: headerColor,
-                    backgroundColor: isCurrentLine ? 'blue' : undefined
-                  }, padEndDisplay(' ' + rightSegment, paneWidth));
-                } else if (sideBySideLine.right.type === 'context' || sideBySideLine.right.type === 'empty') {
-                  rightElement = h(Text, {
-                    bold: isCurrentLine,
-                    dimColor: true,
-                    backgroundColor: isCurrentLine ? 'blue' : undefined
-                  }, padEndDisplay(' ' + rightSegment, paneWidth));
-                } else {
-                  // For wrapped added lines in side-by-side, apply syntax highlighting
-                  const rightSyntaxElement = renderSyntaxHighlighted(
-                    rightSegment, 
-                    sideBySideLine.right.fileName, 
-                    isCurrentLine, 
-                    undefined,
-                    sideBySideLine.right.type
-                  );
-                  
-                  rightElement = h(Box, {
-                    flexDirection: 'row',
-                    width: paneWidth
-                  },
-                    h(Text, {
-                      bold: isCurrentLine,
-                      backgroundColor: isCurrentLine ? 'blue' : undefined
-                    }, ' '),
-                    h(Box, {
-                      flexShrink: 1,
-                      flexGrow: 0
-                    }, rightSyntaxElement)
-                  );
-                }
-              } else {
-                rightElement = h(Text, {
-                  bold: isCurrentLine,
-                  dimColor: true,
-                  backgroundColor: isCurrentLine ? 'blue' : undefined
-                }, padEndDisplay('', paneWidth));
-              }
-              
-              renderedElements.push(h(Box, {
-                key: `line-${visibleLineIndex}-seg-${segIdx}`,
-                flexDirection: 'row'
-              },
-                leftElement,
-                rightElement
-              ));
-            }
-          }
+          const sbsLine = sideBySideLines[actualLineIndex];
+          const fileName = sbsLine?.left?.fileName || sbsLine?.right?.fileName || '';
+          const hasComment = !!(fileName && commentStore.hasComment(sbsLine.lineIndex, fileName));
+          const paneWidth = Math.floor((terminalWidth - 2) / 2);
+          nodes.push(h(SbsRowMemo, { key: `line-${actualLineIndex}`, line: sbsLine, isSelected: isCurrentLine, paneWidth, wrapMode, hasComment }));
         }
-        
-        visibleLineIndex++;
       }
-      
-      return renderedElements;
+      return nodes;
     })(),
     showAllComments && commentStore.count > 0 ? h(
       Box,
