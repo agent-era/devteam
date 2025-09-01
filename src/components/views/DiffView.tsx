@@ -16,6 +16,7 @@ import FileTreeOverlay from '../dialogs/FileTreeOverlay.js';
 import {truncateDisplay, padEndDisplay, stringDisplayWidth} from '../../shared/utils/formatting.js';
 import {LineWrapper} from '../../shared/utils/lineWrapper.js';
 import {ViewportCalculator} from '../../shared/utils/viewport.js';
+import {computeUnifiedPerFileIndices, computeSideBySidePerFileIndices} from '../../shared/utils/diffLineIndex.js';
 
 type DiffLine = {type: 'added'|'removed'|'context'|'header'; text: string; fileName?: string; headerType?: 'file' | 'hunk'};
 
@@ -285,48 +286,10 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
   const [overlayHighlightedFile, setOverlayHighlightedFile] = useState<string>('');
 
   // Map of unified view global line index -> per-file line index (0-based)
-  const unifiedPerFileIndex = useMemo(() => {
-    const map: number[] = [];
-    const counters = new Map<string, number>();
-    for (let i = 0; i < lines.length; i++) {
-      const l = lines[i];
-      const file = l.fileName || '';
-      if (!file) {
-        map[i] = 0;
-        continue;
-      }
-      if (l.type === 'header') {
-        // Do not advance counters for headers; keep current count
-        // but ensure map has a stable value for header rows
-        map[i] = counters.get(file) || 0;
-        continue;
-      }
-      const prev = counters.get(file) || 0;
-      map[i] = prev; // current line gets current count as 0-based index
-      counters.set(file, prev + 1);
-    }
-    return map;
-  }, [lines]);
+  const unifiedPerFileIndex = useMemo(() => computeUnifiedPerFileIndices(lines as any), [lines]);
 
   // Map of side-by-side view line index -> per-file line index (0-based)
-  const sideBySidePerFileIndex = useMemo(() => {
-    const map: number[] = [];
-    const counters = new Map<string, number>();
-    for (let i = 0; i < sideBySideLines.length; i++) {
-      const s = sideBySideLines[i];
-      const file = s.left?.fileName || s.right?.fileName || '';
-      if (!file) { map[i] = 0; continue; }
-      const isHeader = (s.left?.type === 'header') || (s.right?.type === 'header');
-      if (isHeader) {
-        map[i] = counters.get(file) || 0;
-        continue;
-      }
-      const prev = counters.get(file) || 0;
-      map[i] = prev;
-      counters.set(file, prev + 1);
-    }
-    return map;
-  }, [sideBySideLines]);
+  const sideBySidePerFileIndex = useMemo(() => computeSideBySidePerFileIndices(sideBySideLines as any), [sideBySideLines]);
 
   // Derive list of files present in the diff (unique, in order encountered)
   const diffFiles = useMemo(() => {
