@@ -86,8 +86,8 @@ export const AI_TOOLS = {
     command: 'codex',
     processPatterns: ['node'],
     statusPatterns: {
-      working: 'generating',
-      waiting_numbered: ['▌', String.raw`\d+\.`],
+      working: 'esc to interrupt',
+      waiting_numbered: ['▌', ''],  // Just check for prompt with content
       idle_prompt: ['▌', '⏎ send']
     }
   },
@@ -96,9 +96,9 @@ export const AI_TOOLS = {
     command: 'gemini',
     processPatterns: ['node'],
     statusPatterns: {
-      working: 'thinking',
-      waiting_numbered: ['│ >', String.raw`\d+\.`],
-      idle_prompt: ['│ >', 'gemini-2.5-pro']
+      working: 'esc to cancel',
+      waiting_numbered: ['Waiting for user', String.raw`\d+\.`],
+      idle_prompt: ['│ >', '']  // Just check for prompt, idle is default state
     }
   }
 } as const;

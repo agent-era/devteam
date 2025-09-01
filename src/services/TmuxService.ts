@@ -332,8 +332,14 @@ export class TmuxService {
     
     let status: AIStatus = 'active';
     
-    if (this.isWorking(text, patterns.working)) {
+    // Special case for Gemini "Waiting for user" prompt
+    if (tool === 'gemini' && text.toLowerCase().includes('waiting for user')) {
+      status = 'waiting';
+    } else if (this.isWorking(text, patterns.working)) {
       status = 'working';
+    } else if (tool === 'codex' && text.includes('▌') && text.includes('?')) {
+      // Codex shows question marks when waiting for response
+      status = 'waiting';
     } else if (this.isWaiting(text, patterns.waiting_numbered)) {
       status = 'waiting';
     } else if (this.isIdle(text, patterns.idle_prompt)) {
