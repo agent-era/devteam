@@ -20,13 +20,11 @@ export interface TestAppProps {
 
 // Create a custom WorktreeProvider for testing that accepts fake services
 function TestWorktreeProvider({children, gitService, tmuxService}: any) {
-  // For testing, we'll create a simplified provider that just passes through the fake services
-  // The real context logic is tested separately
-  return h(WorktreeProvider, null, children);
+  return h(WorktreeProvider, {gitService, tmuxService, children});
 }
 
 function TestGitHubProvider({children, gitHubService}: any) {
-  return h(GitHubProvider, null, children);
+  return h(GitHubProvider, {gitHubService, children});
 }
 
 export function TestApp({gitService, tmuxService, gitHubService}: TestAppProps = {}) {

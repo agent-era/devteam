@@ -81,10 +81,18 @@ const WorktreeContext = createContext<WorktreeContextType | null>(null);
 
 interface WorktreeProviderProps {
   children: ReactNode;
+  gitService?: GitService;
+  tmuxService?: TmuxService;
+  gitServiceFactory?: (basePath: string) => GitService;
+  tmuxServiceFactory?: () => TmuxService;
 }
 
 export function WorktreeProvider({
-  children
+  children,
+  gitService: gitServiceOverride,
+  tmuxService: tmuxServiceOverride,
+  gitServiceFactory,
+  tmuxServiceFactory,
 }: WorktreeProviderProps) {
   const [worktrees, setWorktrees] = useState<WorktreeInfo[]>([]);
   const [loading, setLoading] = useState(false);
@@ -97,13 +105,15 @@ export function WorktreeProvider({
 
   // Service instances - stable across re-renders
   const gitService: GitService = useMemo(() => {
-    const factory = (globalThis as any)?.__createGitService as ((basePath: string) => GitService) | undefined;
-    return factory ? factory(getProjectsDirectory()) : new GitService(getProjectsDirectory());
-  }, []);
+    if (gitServiceOverride) return gitServiceOverride;
+    if (gitServiceFactory) return gitServiceFactory(getProjectsDirectory());
+    return new GitService(getProjectsDirectory());
+  }, [gitServiceOverride, gitServiceFactory]);
   const tmuxService: TmuxService = useMemo(() => {
-    const factory = (globalThis as any)?.__createTmuxService as (() => TmuxService) | undefined;
-    return factory ? factory() : new TmuxService();
-  }, []);
+    if (tmuxServiceOverride) return tmuxServiceOverride;
+    if (tmuxServiceFactory) return tmuxServiceFactory();
+    return new TmuxService();
+  }, [tmuxServiceOverride, tmuxServiceFactory]);
   // Filesystem operations are routed through GitService methods (see CLAUDE.md)
 
   // Cache available AI tools on startup

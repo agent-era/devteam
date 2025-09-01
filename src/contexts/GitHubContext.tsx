@@ -35,9 +35,13 @@ const GitHubContext = createContext<GitHubContextType | null>(null);
 
 interface GitHubProviderProps {
   children: ReactNode;
+  gitHubService?: GitHubService;
+  gitService?: GitService;
+  gitHubServiceFactory?: () => GitHubService;
+  gitServiceFactory?: (basePath: string) => GitService;
 }
 
-export function GitHubProvider({children}: GitHubProviderProps) {
+export function GitHubProvider({children, gitHubService: ghOverride, gitService: gitOverride, gitHubServiceFactory, gitServiceFactory}: GitHubProviderProps) {
   const [pullRequests, setPullRequests] = useState<Record<string, PRStatus>>({});
   const [loading, setLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(0);
@@ -45,13 +49,15 @@ export function GitHubProvider({children}: GitHubProviderProps) {
 
   // Service instances (allow test overrides via globals)
   const gitHubService: GitHubService = useMemo(() => {
-    const factory = (globalThis as any)?.__createGitHubService as (() => GitHubService) | undefined;
-    return factory ? factory() : new GitHubService();
-  }, []);
+    if (ghOverride) return ghOverride;
+    if (gitHubServiceFactory) return gitHubServiceFactory();
+    return new GitHubService();
+  }, [ghOverride, gitHubServiceFactory]);
   const gitService: GitService = useMemo(() => {
-    const factory = (globalThis as any)?.__createGitService as ((basePath: string) => GitService) | undefined;
-    return factory ? factory(getProjectsDirectory()) : new GitService(getProjectsDirectory());
-  }, []);
+    if (gitOverride) return gitOverride;
+    if (gitServiceFactory) return gitServiceFactory(getProjectsDirectory());
+    return new GitService(getProjectsDirectory());
+  }, [gitOverride, gitServiceFactory]);
   const cacheService = useRef(new PRStatusCacheService()).current;
   const refreshIntervalRef = useRef<NodeJS.Timeout>();
 
