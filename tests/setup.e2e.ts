@@ -16,8 +16,6 @@ global.console = {
   error: jest.fn(),
 };
 
-// Avoid alternate screen escape sequences interfering with frame capture
-process.env.DISABLE_ALT_SCREEN = '1';
 // Ignore raw mode support check so app doesn't exit in test
 process.env.E2E_IGNORE_RAWMODE = '1';
 // Ensure Ink doesn't think it's running in CI (which suppresses writes)
