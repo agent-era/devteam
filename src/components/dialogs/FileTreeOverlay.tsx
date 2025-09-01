@@ -2,8 +2,6 @@ import React, {useMemo} from 'react';
 import {Box, Text} from 'ink';
 import {stringDisplayWidth, truncateDisplay, padEndDisplay} from '../../shared/utils/formatting.js';
 
-const h = React.createElement;
-
 type Props = {
   files: string[];
   highlightedFile: string;
@@ -94,27 +92,37 @@ export default function FileTreeOverlay({files, highlightedFile, maxWidth, maxHe
   const endIndex = Math.min(totalRows, startIndex + contentHeight);
   const visibleRows = rows.slice(startIndex, endIndex);
 
-  return h(Box, {flexDirection: 'column', width: preferredWidth, height: boxHeight},
-    h(Box, {flexDirection: 'column', borderStyle: 'round', borderColor: 'cyan', width: preferredWidth, height: boxHeight},
-      // Title
-      h(Box, {paddingX: 1}, h(Text, {bold: true, color: 'cyan'}, title)),
-      // Divider (implicit spacing)
-      h(Box, {flexDirection: 'column', flexGrow: 1, paddingX: 1},
-        ...visibleRows.map((r, i) => {
-          const isActive = startIndex + i === highlightedIndex;
-          const prefix = '  '.repeat(r.depth);
-          const raw = prefix + r.label;
-          const clipped = truncateDisplay(raw, innerWidth);
-          const padded = padEndDisplay(clipped, innerWidth);
-          return h(Text, {
-            key: `${r.path}-${i}`,
-            backgroundColor: isActive ? 'blue' : undefined,
-            bold: isActive,
-            color: r.isDir ? 'white' : undefined
-          }, padded);
-        })
-      ),
-      h(Box, {paddingX: 1}, h(Text, {color: 'gray'}, 'Shift+↑/↓ to navigate files'))
-    )
+  return (
+    <Box flexDirection="column" width={preferredWidth} height={boxHeight}>
+      <Box flexDirection="column" borderStyle="round" borderColor="cyan" width={preferredWidth} height={boxHeight}>
+        {/* Title */}
+        <Box paddingX={1}>
+          <Text bold color="cyan">{title}</Text>
+        </Box>
+        {/* Divider (implicit spacing) */}
+        <Box flexDirection="column" flexGrow={1} paddingX={1}>
+          {visibleRows.map((r, i) => {
+            const isActive = startIndex + i === highlightedIndex;
+            const prefix = '  '.repeat(r.depth);
+            const raw = prefix + r.label;
+            const clipped = truncateDisplay(raw, innerWidth);
+            const padded = padEndDisplay(clipped, innerWidth);
+            return (
+              <Text
+                key={`${r.path}-${i}`}
+                backgroundColor={isActive ? 'blue' : undefined}
+                bold={isActive}
+                color={r.isDir ? 'white' : undefined}
+              >
+                {padded}
+              </Text>
+            );
+          })}
+        </Box>
+        <Box paddingX={1}>
+          <Text color="gray">Shift+↑/↓ to navigate files</Text>
+        </Box>
+      </Box>
+    </Box>
   );
 }

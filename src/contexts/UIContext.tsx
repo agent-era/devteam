@@ -1,7 +1,6 @@
 import React, {createContext, useContext, useState, ReactNode} from 'react';
 import {WorktreeInfo} from '../models.js';
 
-const h = React.createElement;
 
 type UIMode = 'list' | 'create' | 'confirmArchive' | 'help' | 
              'pickProjectForBranch' | 'pickBranch' | 'diff' | 'runConfig' | 
@@ -190,7 +189,11 @@ export function UIProvider({children}: UIProviderProps) {
     requestExit
   };
 
-  return h(UIContext.Provider, {value: contextValue}, children);
+  return (
+    <UIContext.Provider value={contextValue}>
+      {children}
+    </UIContext.Provider>
+  );
 }
 
 export function useUIContext(): UIContextType {
