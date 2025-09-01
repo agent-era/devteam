@@ -43,7 +43,7 @@ The app monitors Claude AI status in tmux panes:
 ```
 src/
 ├── index.ts                 # Entry point
-├── app.ts                  # App bootstrap (Ink render)
+├── bootstrap.tsx           # App bootstrap (Ink render)
 ├── App.tsx                 # Main React component
 ├── bin/                    # CLI binary
 │   └── dev-sessions.ts     # CLI executable
@@ -100,15 +100,20 @@ tests/
    import {GitService} from '../services/GitService.js';
    ```
 
-2. **React Without JSX**: Use `React.createElement` via `h` helper
-   ```typescript
-   const h = React.createElement;
-   return h(Box, {flexDirection: 'column'}, 
-     h(Text, null, 'Hello')
+2. **JSX Syntax**: Use modern JSX syntax for React components
+   ```tsx
+   return (
+     <Box flexDirection="column">
+       <Text>Hello</Text>
+     </Box>
    );
    ```
 
-3. **Class Models**: Use classes with constructor initialization
+3. **File Extensions**: 
+   - `.ts` for non-React files (services, utils, models)
+   - `.tsx` for React components and contexts
+
+4. **Class Models**: Use classes with constructor initialization
    ```typescript
    export class WorktreeInfo {
      project: string;
@@ -121,7 +126,7 @@ tests/
    }
    ```
 
-4. **Service Pattern**: Services are classes with dependency injection
+5. **Service Pattern**: Services are classes with dependency injection
    ```typescript
    export class WorktreeService {
      constructor(
@@ -134,8 +139,8 @@ tests/
    }
    ```
 
-5. **Context Providers**: Use React Context for state + operations
-   ```typescript
+6. **Context Providers**: Use React Context for state + operations
+   ```tsx
    export function WorktreeProvider({children}) {
      const [worktrees, setWorktrees] = useState([]);
      const gitService = new GitService();
@@ -148,7 +153,11 @@ tests/
      };
      
      const value = { worktrees, createFeature, refresh };
-     return h(WorktreeContext.Provider, {value}, children);
+     return (
+       <WorktreeContext.Provider value={value}>
+         {children}
+       </WorktreeContext.Provider>
+     );
    }
    ```
 
@@ -220,11 +229,9 @@ npm run typecheck          # Type checking only
 ### 1. New Dialog Component
 
 Create in `src/components/dialogs/`:
-```typescript
+```tsx
 import React from 'react';
 import {Box, Text} from 'ink';
-
-const h = React.createElement;
 
 interface MyDialogProps {
   title: string;
@@ -232,9 +239,11 @@ interface MyDialogProps {
 }
 
 export default function MyDialog({title, onClose}: MyDialogProps) {
-  return h(Box, {flexDirection: 'column'},
-    h(Text, null, title),
-    // Dialog content
+  return (
+    <Box flexDirection="column">
+      <Text>{title}</Text>
+      {/* Dialog content */}
+    </Box>
   );
 }
 ```
@@ -286,20 +295,20 @@ export function MyContextProvider({children}) {
 ### 4. New Screen (Using Contexts)
 
 Create in `src/screens/`:
-```typescript
+```tsx
 import React from 'react';
 import {Box} from 'ink';
 import {useMyContext} from '../contexts/MyContext.js';
 import {useUIContext} from '../contexts/UIContext.js';
 
-const h = React.createElement;
-
 export default function MyScreen() {
   const {data, loading, createItem} = useMyContext();
   const {showList} = useUIContext();
   
-  return h(Box, null, 
-    // Screen content that uses context state and operations
+  return (
+    <Box>
+      {/* Screen content that uses context state and operations */}
+    </Box>
   );
 }
 ```

@@ -31,7 +31,6 @@ import {useGitHubContext} from './GitHubContext.js';
 import {logDebug} from '../shared/utils/logger.js';
 import {Timer} from '../shared/utils/timing.js';
 
-const h = React.createElement;
 
 interface WorktreeContextType {
   // State
@@ -808,7 +807,11 @@ export function WorktreeProvider({
     createOrFillRunConfig
   };
 
-  return h(WorktreeContext.Provider, {value: contextValue}, children);
+  return (
+    <WorktreeContext.Provider value={contextValue}>
+      {children}
+    </WorktreeContext.Provider>
+  );
 }
 
 export function useWorktreeContext(): WorktreeContextType {

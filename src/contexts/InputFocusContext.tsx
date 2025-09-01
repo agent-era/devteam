@@ -1,6 +1,5 @@
 import React, {createContext, useContext, useState, useCallback} from 'react';
 
-const h = React.createElement;
 
 interface InputFocusContextType {
   hasFocus: (componentId: string) => boolean;
@@ -43,5 +42,9 @@ export function InputFocusProvider({children}: {children: React.ReactNode}) {
     isAnyDialogFocused
   };
 
-  return h(InputFocusContext.Provider, {value}, children);
+  return (
+    <InputFocusContext.Provider value={value}>
+      {children}
+    </InputFocusContext.Provider>
+  );
 }
