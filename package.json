@@ -18,7 +18,7 @@
     "test:watch": "jest --watch"
   },
   "dependencies": {
-    "ink": "^6.2.3",
+    "ink": "6.2.3",
     "react": "^19.0.0",
     "ink-syntax-highlight": "^2.0.2"
   },
