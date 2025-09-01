@@ -302,18 +302,18 @@ describe('Comment Send to Claude E2E', () => {
     Object.entries(commentsByFile).forEach(([fileName, fileComments]) => {
       prompt += `File: ${fileName}\\n`;
       fileComments.forEach(comment => {
-        prompt += `  Line ${comment.lineIndex + 1}: \`${comment.lineText}\`\\n`;
+        prompt += `  Line ${comment.lineIndex + 1}: ${comment.lineText}\\n`;
         prompt += `  Comment: ${comment.commentText}\\n`;
       });
       prompt += "\\n";
     });
     
     // Verify the prompt includes line text with proper formatting
-    expect(prompt).toContain("Line 16: `let unchangedValue = 5;`");
+    expect(prompt).toContain("Line 16: let unchangedValue = 5;");
     expect(prompt).toContain("Comment: This variable should be const");
-    expect(prompt).toContain("Line 43: `await fetchData();`");
+    expect(prompt).toContain("Line 43: await fetchData();");
     expect(prompt).toContain("Comment: Add error handling here");
-    expect(prompt).toContain("Line 9: `const API_URL = \"\";`");
+    expect(prompt).toContain("Line 9: const API_URL = \"\";");
     expect(prompt).toContain("Comment: URL should not be empty");
     
     // Test sendCommentsViaAltEnter format (used when Claude is already running)
