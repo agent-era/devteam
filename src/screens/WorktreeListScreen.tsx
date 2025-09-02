@@ -2,6 +2,8 @@ import React, {useState, useEffect} from 'react';
 import {Box} from 'ink';
 import MainView from '../components/views/MainView.js';
 import {useWorktreeContext} from '../contexts/WorktreeContext.js';
+import {useGitHubContext} from '../contexts/GitHubContext.js';
+import {useInputFocus} from '../contexts/InputFocusContext.js';
 import {useUIContext} from '../contexts/UIContext.js';
 import {useKeyboardShortcuts} from '../hooks/useKeyboardShortcuts.js';
 import {usePageSize} from '../hooks/usePagination.js';
@@ -28,7 +30,9 @@ export default function WorktreeListScreen({
   onExecuteRun,
   onConfigureRun
 }: WorktreeListScreenProps) {
-  const {worktrees, selectedIndex, selectWorktree, refresh, forceRefreshVisible, attachSession, attachShellSession, needsToolSelection, lastRefreshed} = useWorktreeContext();
+  const {worktrees, selectedIndex, selectWorktree, refresh, refreshVisibleStatus, forceRefreshVisible, attachSession, attachShellSession, needsToolSelection, lastRefreshed} = useWorktreeContext();
+  const {setVisibleWorktrees} = useGitHubContext();
+  const {isAnyDialogFocused} = useInputFocus();
   const {showAIToolSelection} = useUIContext();
   const pageSize = usePageSize();
   const [currentPage, setCurrentPage] = useState(0);
@@ -42,6 +46,24 @@ export default function WorktreeListScreen({
       refresh('none').catch(() => {});
     }
   }, []); // Only on mount
+
+  // Keep GitHub context informed of which worktrees are visible (current page)
+  useEffect(() => {
+    const startIndex = currentPage * pageSize;
+    const endIndex = Math.min(startIndex + pageSize, worktrees.length);
+    const visiblePaths = worktrees.slice(startIndex, endIndex).map(w => w.path);
+    setVisibleWorktrees(visiblePaths);
+  }, [worktrees, currentPage, pageSize, setVisibleWorktrees]);
+
+  // Single 2s loop to refresh git+AI status for visible rows only
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (!isAnyDialogFocused) {
+        refreshVisibleStatus(currentPage, pageSize).catch(() => {});
+      }
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [currentPage, pageSize, refreshVisibleStatus, isAnyDialogFocused]);
 
   const handleMove = (delta: number) => {
     const nextIndex = selectedIndex + delta;

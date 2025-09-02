@@ -245,8 +245,8 @@ export class PRStatusCacheService {
         }
 
         if (prStatus.checks === 'pending') {
-          // Pending checks should be refreshed quickly to catch completion
-          return 20 * 1000; // 20 seconds
+          // Pending checks should be refreshed very quickly to catch completion
+          return 5 * 1000; // 5 seconds
         }
 
         if (prStatus.checks === 'passing' && prStatus.state === 'OPEN') {
