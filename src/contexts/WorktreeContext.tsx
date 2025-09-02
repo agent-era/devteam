@@ -119,6 +119,9 @@ export function WorktreeProvider({
     return new TmuxService();
   }, [tmuxServiceOverride]);
   const idleManager: SessionIdleManager = useMemo(() => new SessionIdleManager(30), []);
+  const refreshingVisibleRef = React.useRef(false);
+  const lastSessionsRef = React.useRef<string[] | null>(null);
+  const lastSessionsAtRef = React.useRef<number>(0);
   // Filesystem operations are routed through GitService methods (see CLAUDE.md)
 
   // Cache available AI tools on startup
@@ -254,10 +257,21 @@ export function WorktreeProvider({
     if (startIndex >= endIndex) return;
 
     try {
-      const activeSessions = await tmuxService.listSessions();
+      if (refreshingVisibleRef.current) return;
+      refreshingVisibleRef.current = true;
+      // Reuse session list if fetched very recently to avoid excessive tmux calls
+      let activeSessions: string[];
+      const now = Date.now();
+      if (lastSessionsRef.current && now - lastSessionsAtRef.current < 1500) {
+        activeSessions = lastSessionsRef.current;
+      } else {
+        activeSessions = await tmuxService.listSessions();
+        lastSessionsRef.current = activeSessions;
+        lastSessionsAtRef.current = now;
+      }
       const indices = Array.from({length: endIndex - startIndex}, (_, k) => startIndex + k);
       if (indices.length > 0) {
-        const results = await mapLimit(indices, 6, async (i) => {
+        const results = await mapLimit(indices, 3, async (i) => {
           const wt = worktrees[i];
           const sessionName = tmuxService.sessionName(wt.project, wt.feature);
           const attached = activeSessions.includes(sessionName);
@@ -296,6 +310,8 @@ export function WorktreeProvider({
       setLastRefreshed(Date.now());
     } catch (error) {
       console.error('Failed to refresh visible statuses:', error);
+    } finally {
+      refreshingVisibleRef.current = false;
     }
   }, [worktrees, gitService, tmuxService, getPRStatus, refreshPRForWorktree]);
 

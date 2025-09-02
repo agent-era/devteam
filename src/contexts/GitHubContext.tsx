@@ -177,7 +177,7 @@ export function GitHubProvider({children, gitHubService: ghOverride, gitService:
   const throttledRefreshPR = useMemo(() => {
     type WT = {project: string; path: string; is_archived?: boolean};
     return createThrottledBatch<{worktrees: WT[]; visibleOnly: boolean}>(
-      1000,
+      PR_REFRESH_DURATION,
       async ({worktrees, visibleOnly}) => refreshPRStatusInternal(worktrees, visibleOnly),
       (pending) => {
         const map = new Map<string, WT>();

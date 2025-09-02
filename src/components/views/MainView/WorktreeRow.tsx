@@ -4,6 +4,7 @@ import type {WorktreeInfo} from '../../../models.js';
 import {stringDisplayWidth} from '../../../shared/utils/formatting.js';
 import {useHighlightPriority} from './hooks/useHighlightPriority.js';
 import {useGitHubContext} from '../../../contexts/GitHubContext.js';
+import type {PRStatus} from '../../../models.js';
 import {
   formatDiffStats,
   formatGitChanges,
@@ -29,8 +30,14 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
   selected,
   columnWidths,
 }) => {
-  const {getPRStatus} = useGitHubContext();
-  const pr = getPRStatus(worktree.path);
+  // Safely get PR status if GitHubContext is available; fallback to undefined in standalone renders
+  let pr: PRStatus | undefined;
+  try {
+    const {getPRStatus} = useGitHubContext();
+    pr = getPRStatus(worktree.path);
+  } catch {
+    pr = undefined;
+  }
   const highlightInfo = useHighlightPriority(worktree, pr);
   const isDimmed = shouldDimRow(pr);
   
