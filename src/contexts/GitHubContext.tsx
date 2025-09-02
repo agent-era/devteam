@@ -6,7 +6,7 @@ import {PRStatusCacheService} from '../services/PRStatusCacheService.js';
 import {PR_REFRESH_DURATION} from '../constants.js';
 import {getProjectsDirectory} from '../config.js';
 import {logError, logDebug} from '../shared/utils/logger.js';
-import pThrottle from 'p-throttle';
+// Inline simple throttle to avoid ESM test issues with p-throttle
 
 
 interface GitHubContextType {
@@ -177,10 +177,22 @@ export function GitHubProvider({children, gitHubService: ghOverride, gitService:
   // Throttle wrapper to avoid spamming GitHub; merges queued paths
   const throttledRefreshPR = useMemo(() => {
     type WT = {project: string; path: string; is_archived?: boolean};
-    const throttle = pThrottle({limit: 1, interval: REFRESH_MS});
-    const run = throttle(async (args: {worktrees: WT[]; visibleOnly: boolean}) => {
-      await refreshPRStatusInternal(args.worktrees, args.visibleOnly);
-    });
+    let lastRunAt = 0;
+    let chain: Promise<void> = Promise.resolve();
+    const enqueue = (args: {worktrees: WT[]; visibleOnly: boolean}) => {
+      chain = chain.then(async () => {
+        const now = Date.now();
+        const waitMs = Math.max(0, lastRunAt + REFRESH_MS - now);
+        if (waitMs > 0) {
+          await new Promise(res => setTimeout(res, waitMs));
+        }
+        await refreshPRStatusInternal(args.worktrees, args.visibleOnly);
+        lastRunAt = Date.now();
+      }).catch(err => {
+        // eslint-disable-next-line no-console
+        console.error('[throttle] runner failed:', err instanceof Error ? err.message : String(err));
+      });
+    };
 
     let pending: Array<{worktrees: WT[]; visibleOnly: boolean}> = [];
     let scheduled = false;
@@ -199,12 +211,7 @@ export function GitHubProvider({children, gitHubService: ghOverride, gitService:
         }
         const args = {worktrees: Array.from(map.values()), visibleOnly};
         pending = [];
-        try {
-          await (run as any)(args);
-        } catch (err) {
-          // eslint-disable-next-line no-console
-          console.error('[throttle] runner failed:', err instanceof Error ? err.message : String(err));
-        }
+        enqueue(args);
       });
     };
 
