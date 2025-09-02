@@ -15,6 +15,11 @@ export function computeUnifiedPerFileIndices(lines: UnifiedDiffLine[]): Array<nu
       map[i] = counters.get(file);
       continue;
     }
+    // Use current-version line numbers: count only added or context lines
+    if (l.type === 'removed') {
+      map[i] = undefined;
+      continue;
+    }
     const prev = counters.get(file) || 0;
     map[i] = prev;
     counters.set(file, prev + 1);
@@ -28,11 +33,18 @@ export function computeSideBySidePerFileIndices(rows: SideBySideRow[]): Array<nu
   const counters = new Map<string, number>();
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
-    const file = r.left?.fileName || r.right?.fileName || '';
+    // Prefer right-side file name (current version)
+    const file = r.right?.fileName || r.left?.fileName || '';
     if (!file) { map[i] = undefined; continue; }
     const isHeader = (r.left?.type === 'header') || (r.right?.type === 'header');
     if (isHeader) {
       map[i] = counters.get(file);
+      continue;
+    }
+    // Map to current-version line numbers: only count rows that have a right cell (context/added)
+    const hasRight = !!r.right && r.right.type !== 'empty';
+    if (!hasRight) {
+      map[i] = undefined;
       continue;
     }
     const prev = counters.get(file) || 0;
@@ -41,4 +53,3 @@ export function computeSideBySidePerFileIndices(rows: SideBySideRow[]): Array<nu
   }
   return map;
 }
-

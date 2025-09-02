@@ -93,7 +93,7 @@ describe('Comment Send to Claude E2E', () => {
     Object.entries(commentsByFile).forEach(([fileName, fileComments]) => {
       messageLines.push(`**${fileName}:**`);
       fileComments.forEach(comment => {
-        messageLines.push(`- Line ${comment.lineIndex}: ${comment.commentText}`);
+        messageLines.push(`- Line ${comment.lineIndex !== undefined ? comment.lineIndex : 'N/A'}: ${comment.commentText}`);
         messageLines.push(`  \`${comment.lineText}\``);
       });
       messageLines.push("");
@@ -302,7 +302,7 @@ describe('Comment Send to Claude E2E', () => {
     Object.entries(commentsByFile).forEach(([fileName, fileComments]) => {
       prompt += `File: ${fileName}\\n`;
       fileComments.forEach(comment => {
-        prompt += `  Line ${comment.lineIndex + 1}: ${comment.lineText}\\n`;
+        prompt += `  Line ${comment.lineIndex !== undefined ? comment.lineIndex + 1 : 'N/A'}: ${comment.lineText}\\n`;
         prompt += `  Comment: ${comment.commentText}\\n`;
       });
       prompt += "\\n";
@@ -324,7 +324,7 @@ describe('Comment Send to Claude E2E', () => {
     Object.entries(commentsByFile).forEach(([fileName, fileComments]) => {
       messageLines.push(`File: ${fileName}`);
       fileComments.forEach(comment => {
-        messageLines.push(`  Line ${comment.lineIndex + 1}: \`${comment.lineText}\``);
+        messageLines.push(`  Line ${comment.lineIndex !== undefined ? comment.lineIndex + 1 : 'N/A'}: \`${comment.lineText}\``);
         messageLines.push(`  Comment: ${comment.commentText}`);
       });
       messageLines.push("");

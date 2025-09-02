@@ -499,14 +499,20 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     if (input === 'c') {
       if (viewMode === 'unified') {
         const currentLine = lines[selectedLine];
-        if (currentLine && currentLine.fileName && currentLine.type !== 'header') {
+        // Allow comments on: added, context, removed lines, and file headers (but not hunk headers)
+        if (currentLine && currentLine.fileName && 
+            (currentLine.type !== 'header' || currentLine.headerType === 'file')) {
           setShowCommentDialog(true);
         }
       } else {
         const currentLine = sideBySideLines[selectedLine];
-        if (currentLine && (currentLine.left?.fileName || currentLine.right?.fileName) && 
-            currentLine.left?.type !== 'header') {
-          setShowCommentDialog(true);
+        if (currentLine && (currentLine.left?.fileName || currentLine.right?.fileName)) {
+          // Allow comments except on hunk headers
+          const isHunkHeader = (currentLine.left?.type === 'header' && currentLine.left.headerType === 'hunk') ||
+                               (currentLine.right?.type === 'header' && currentLine.right.headerType === 'hunk');
+          if (!isHunkHeader) {
+            setShowCommentDialog(true);
+          }
         }
       }
     }
@@ -767,7 +773,14 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     Object.entries(commentsByFile).forEach(([fileName, fileComments]) => {
       prompt += `File: ${fileName}\\n`;
       fileComments.forEach(comment => {
-        prompt += `  Line ${comment.lineIndex + 1}: ${comment.lineText}\\n`;
+        if (comment.lineIndex !== undefined) {
+          // Normal line with line number
+          prompt += `  Line ${comment.lineIndex + 1}: ${comment.lineText}\\n`;
+        } else if (comment.lineText && comment.lineText.trim().length > 0) {
+          // Removed line or other content - show line content without line number
+          prompt += `  Line content: ${comment.lineText}\\n`;
+        }
+        // For file headers (no meaningful lineText), just show the comment
         prompt += `  Comment: ${comment.commentText}\\n`;
       });
       prompt += "\\n";
@@ -943,17 +956,35 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       if (currentLine && currentLine.fileName) {
         const perFileIndex = unifiedPerFileIndex[selectedLine];
         if (perFileIndex !== undefined) {
+          // Original logic for lines with valid line numbers
           commentStore.addComment(perFileIndex, currentLine.fileName, currentLine.text, commentText);
+        } else {
+          // New logic for removed lines and file headers
+          const lineText = currentLine.type === 'header' ? currentLine.fileName : currentLine.text;
+          commentStore.addComment(undefined, currentLine.fileName, lineText, commentText);
         }
       }
     } else {
       const currentLine = sideBySideLines[selectedLine];
-      const fileName = currentLine.left?.fileName || currentLine.right?.fileName;
-      const lineText = currentLine.left?.text || currentLine.right?.text;
+      const fileName = currentLine.right?.fileName || currentLine.left?.fileName;
+      const lineText = currentLine.right?.text || currentLine.left?.text;
+      
       if (currentLine && fileName && lineText) {
         const perFileIndex = sideBySidePerFileIndex[selectedLine];
         if (perFileIndex !== undefined) {
+          // Original logic for lines with valid line numbers
           commentStore.addComment(perFileIndex, fileName, lineText, commentText);
+        } else {
+          // New logic for removed lines and file headers
+          let textForComment = '';
+          if (currentLine.left?.type === 'header' && currentLine.left.headerType === 'file') {
+            // File header - use filename as line text
+            textForComment = fileName || '';
+          } else {
+            // Removed lines - use the line text
+            textForComment = currentLine.left?.text || lineText;
+          }
+          commentStore.addComment(undefined, fileName, textForComment, commentText);
         }
       }
     }
@@ -1142,17 +1173,18 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
         <CommentInputDialog
           fileName={viewMode === 'unified' ? 
             (lines[selectedLine]?.fileName || '') : 
-            (sideBySideLines[selectedLine]?.left?.fileName || sideBySideLines[selectedLine]?.right?.fileName || '')}
+            (sideBySideLines[selectedLine]?.right?.fileName || sideBySideLines[selectedLine]?.left?.fileName || '')}
           lineText={viewMode === 'unified' ? 
             (lines[selectedLine]?.text || '') : 
-            (sideBySideLines[selectedLine]?.left?.text || sideBySideLines[selectedLine]?.right?.text || '')}
+            // Prefer the current version (right) text when available
+            (sideBySideLines[selectedLine]?.right?.text || sideBySideLines[selectedLine]?.left?.text || '')}
           initialComment={(() => {
             if (viewMode === 'unified') {
               const file = lines[selectedLine]?.fileName || '';
               const perFileIndex = unifiedPerFileIndex[selectedLine];
               return file && perFileIndex !== undefined ? (commentStore.getComment(perFileIndex, file)?.commentText || '') : '';
             } else {
-              const fileName = sideBySideLines[selectedLine]?.left?.fileName || sideBySideLines[selectedLine]?.right?.fileName;
+              const fileName = sideBySideLines[selectedLine]?.right?.fileName || sideBySideLines[selectedLine]?.left?.fileName;
               const perFileIndex = sideBySidePerFileIndex[selectedLine];
               return fileName && perFileIndex !== undefined ? (commentStore.getComment(perFileIndex, fileName)?.commentText || '') : '';
             }
@@ -1410,8 +1442,9 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
           const paneWidth = Math.floor((terminalWidth - 2) / 2); // Leave 2 cols slack to avoid terminal wrap
           
           // Get comment info based on the original line index
-          const hasComment = (sideBySideLine.left?.fileName || sideBySideLine.right?.fileName) && 
-                            (sideBySidePerFileIndex[actualLineIndex] !== undefined && commentStore.hasComment(sideBySidePerFileIndex[actualLineIndex], sideBySideLine.left?.fileName || sideBySideLine.right?.fileName || ''));
+          const sbsFileForComment = sideBySideLine.right?.fileName || sideBySideLine.left?.fileName || '';
+          const sbsIndexForComment = sideBySidePerFileIndex[actualLineIndex];
+          const hasComment = !!sbsFileForComment && sbsIndexForComment !== undefined && commentStore.hasComment(sbsIndexForComment, sbsFileForComment);
           const commentIndicator = hasComment ? '[C] ' : '';
           
           // Prepare left and right content
