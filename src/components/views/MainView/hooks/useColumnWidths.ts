@@ -2,6 +2,7 @@ import {useMemo} from 'react';
 import type {WorktreeInfo} from '../../../../models.js';
 import {stringDisplayWidth} from '../../../../shared/utils/formatting.js';
 import {formatNumber, formatDiffStats, formatGitChanges, formatPRStatus} from '../utils.js';
+import {useGitHubContext} from '../../../../contexts/GitHubContext.js';
 
 export interface ColumnWidths {
   number: number;
@@ -19,6 +20,15 @@ export function useColumnWidths(
   page: number,
   pageSize: number
 ): ColumnWidths {
+  // Read PR status directly from provider state to avoid expensive loads during render
+  let pullRequests: Record<string, any> = {};
+  try {
+    ({pullRequests} = useGitHubContext() as any);
+  } catch {
+    // In non-context renders (tests), fall back to empty map
+    pullRequests = {} as any;
+  }
+
   return useMemo(() => {
     const start = page * pageSize;
     const pageItems = worktrees.slice(start, start + pageSize);
@@ -38,8 +48,7 @@ export function useColumnWidths(
         pushed = (w.git.ahead === 0 && !w.git.has_changes) ? '✓' : '↗';
       }
       
-      const prStr = formatPRStatus(w.pr);
-      
+      const prStr = formatPRStatus(pullRequests[w.path]);
       return [
         String(start + i0 + 1),
         `${w.project}/${w.feature}`,
@@ -75,5 +84,5 @@ export function useColumnWidths(
       pushed: fixedWidths[5],
       pr: fixedWidths[6],
     };
-  }, [worktrees, terminalWidth, page, pageSize]);
+  }, [worktrees, terminalWidth, page, pageSize, pullRequests]);
 }

@@ -3,6 +3,8 @@ import {Box, Text} from 'ink';
 import type {WorktreeInfo} from '../../../models.js';
 import {stringDisplayWidth} from '../../../shared/utils/formatting.js';
 import {useHighlightPriority} from './hooks/useHighlightPriority.js';
+import {useGitHubContext} from '../../../contexts/GitHubContext.js';
+import type {PRStatus} from '../../../models.js';
 import {
   formatDiffStats,
   formatGitChanges,
@@ -21,15 +23,23 @@ interface WorktreeRowProps {
   columnWidths: ColumnWidths;
 }
 
-export const WorktreeRow = memo<WorktreeRowProps>(({
+export const WorktreeRow = memo<WorktreeRowProps>(({ 
   worktree,
   index,
   globalIndex,
   selected,
   columnWidths,
 }) => {
-  const highlightInfo = useHighlightPriority(worktree);
-  const isDimmed = shouldDimRow(worktree.pr);
+  // Read PR status from provider state; fallback to undefined in standalone renders
+  let pr: PRStatus | undefined;
+  try {
+    const {pullRequests} = useGitHubContext() as any;
+    pr = pullRequests?.[worktree.path];
+  } catch {
+    pr = undefined;
+  }
+  const highlightInfo = useHighlightPriority(worktree, pr);
+  const isDimmed = shouldDimRow(pr);
   
   // Format all data for display
   const data = {
@@ -39,7 +49,7 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
     diff: formatDiffStats(worktree.git?.base_added_lines || 0, worktree.git?.base_deleted_lines || 0),
     changes: formatGitChanges(worktree.git?.ahead || 0, worktree.git?.behind || 0),
     pushed: formatPushStatus(worktree),
-    pr: formatPRStatus(worktree.pr),
+    pr: formatPRStatus(pr),
   };
   
   // Truncate PROJECT/FEATURE if it's too long
