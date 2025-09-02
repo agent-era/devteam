@@ -3,10 +3,7 @@ import path from 'node:path';
 import {WorktreeInfo, GitStatus, SessionInfo, ProjectInfo} from '../models.js';
 import {GitService} from '../services/GitService.js';
 import {TmuxService} from '../services/TmuxService.js';
-import {SessionIdleManager} from '../services/SessionIdleManager.js';
 import {mapLimit} from '../shared/utils/concurrency.js';
-
-//
 import {
   DIR_BRANCHES_SUFFIX,
   DIR_ARCHIVED_SUFFIX,
@@ -118,7 +115,6 @@ export function WorktreeProvider({
     if (tmuxServiceOverride) return tmuxServiceOverride;
     return new TmuxService();
   }, [tmuxServiceOverride]);
-  const idleManager: SessionIdleManager = useMemo(() => new SessionIdleManager(30), []);
   const refreshingVisibleRef = React.useRef(false);
   const lastSessionsRef = React.useRef<string[] | null>(null);
   const lastSessionsAtRef = React.useRef<number>(0);
@@ -280,10 +276,10 @@ export function WorktreeProvider({
             attached ? tmuxService.getAIStatus(sessionName) : Promise.resolve({tool: 'none' as const, status: 'not_running' as const})
           ]);
 
-          // Detect push (ahead went from >0 to 0) and refresh PR for this worktree
-          const prevAhead = wt.git?.ahead || 0;
-          const currAhead = gitStatus.ahead || 0;
-          if (prevAhead > 0 && currAhead === 0) {
+          // Detect push using same logic as pushed column (is_pushed transition)
+          const prevPushed = wt.git?.is_pushed === true;
+          const currPushed = gitStatus.is_pushed === true;
+          if (!prevPushed && currPushed) {
             const pr = getPRStatus(wt.path);
             if (pr && pr.state === 'OPEN' && refreshPRForWorktree) {
               logDebug(`Detected push for ${wt.feature}, refreshing PR status`);
@@ -328,7 +324,6 @@ export function WorktreeProvider({
       const worktreePath = path.join(gitService.basePath, `${projectName}${DIR_BRANCHES_SUFFIX}`, featureName);
       
       setupWorktreeEnvironment(projectName, worktreePath);
-      // Do not auto-create tmux session here; allow UI to prompt for AI tool first
       
       await refresh();
       return new WorktreeInfo({
@@ -350,7 +345,6 @@ export function WorktreeProvider({
 
       const worktreePath = path.join(gitService.basePath, `${project}${DIR_BRANCHES_SUFFIX}`, localName);
       setupWorktreeEnvironment(project, worktreePath);
-      // Do not auto-create tmux session here; allow UI to prompt for AI tool first
       
       await refresh();
       return true;
@@ -419,13 +413,7 @@ export function WorktreeProvider({
         const toolConfig = AI_TOOLS[selectedTool];
         let command: string = toolConfig.command;
         
-        // Special handling for Claude resume (consult idle manager)
-        if (selectedTool === 'claude') {
-          if (idleManager.wasKilledIdle(sessionName)) {
-            command = 'claude "/resume"';
-            idleManager.clearWasKilledIdle(sessionName);
-          }
-        }
+        // No auto-resume handling; auto-kill feature removed
         
         tmuxService.createSessionWithCommand(sessionName, worktree.path, command, true);
       } else {
@@ -737,13 +725,12 @@ export function WorktreeProvider({
   useEffect(() => {
     const interval = setInterval(() => {
       if (!isAnyDialogFocused) {
-        // Background discovery of worktrees (structure), and idle cleanup
+        // Background discovery of worktrees (structure)
         refresh('none').catch(err => console.error('Background discovery failed:', err));
-        idleManager.periodicCheck(tmuxService).catch(err => console.error('Idle check failed:', err));
       }
     }, 60_000);
     return () => clearInterval(interval);
-  }, [refresh, isAnyDialogFocused, idleManager, tmuxService]);
+  }, [refresh, isAnyDialogFocused, tmuxService]);
 
   const contextValue: WorktreeContextType = {
     // State

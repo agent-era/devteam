@@ -13,6 +13,13 @@ export const AI_STATUS_REFRESH_DURATION = 2_000; // 2s AI status refresh
 export const DIFF_STATUS_REFRESH_DURATION = 2_000; // 2s diff status refresh
 export const GIT_REFRESH_DURATION = 5_000; // 5s git refresh
 export const PR_REFRESH_DURATION = 5_000; // 5s PR status refresh (visible + stale only)
+export const VISIBLE_STATUS_REFRESH_DURATION = 2_000; // 2s visible rows git+AI refresh
+
+// Time helpers
+export const SECOND_MS = 1_000;
+export const MINUTE_MS = 60_000;
+export const HOUR_MS = 60 * MINUTE_MS;
+export const DAY_MS = 24 * HOUR_MS;
 
 export const ENV_FILE = '.env.local';
 export const CLAUDE_SETTINGS_FILE = path.join('.claude', 'settings.local.json');
@@ -125,6 +132,18 @@ export const SUBPROCESS_SHORT_TIMEOUT = 5_000;
 // How long tmux shows messages (like "detached") in ms
 // 0 disables message display entirely in supported tmux versions
 export const TMUX_DISPLAY_TIME = 0;
+
+// PR cache TTLs (ms)
+export const PR_TTL_MERGED_MS = 365 * DAY_MS;
+export const PR_TTL_NO_PR_MS = 30 * SECOND_MS;
+export const PR_TTL_ERROR_MS = 60 * SECOND_MS;
+export const PR_TTL_CHECKS_FAIL_MS = 2 * MINUTE_MS;
+export const PR_TTL_CHECKS_PENDING_MS = 5 * SECOND_MS;
+export const PR_TTL_PASSING_OPEN_MS = 30 * SECOND_MS;
+export const PR_TTL_OPEN_MS = 5 * MINUTE_MS;
+export const PR_TTL_CLOSED_MS = HOUR_MS;
+export const PR_TTL_UNKNOWN_MS = 10 * MINUTE_MS;
+export const PR_TTL_FALLBACK_MS = 5 * MINUTE_MS;
 
 /**
  * Generate help sections with dynamic projects directory path

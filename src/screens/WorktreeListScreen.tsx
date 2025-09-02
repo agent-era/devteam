@@ -7,6 +7,7 @@ import {useInputFocus} from '../contexts/InputFocusContext.js';
 import {useUIContext} from '../contexts/UIContext.js';
 import {useKeyboardShortcuts} from '../hooks/useKeyboardShortcuts.js';
 import {usePageSize} from '../hooks/usePagination.js';
+import {VISIBLE_STATUS_REFRESH_DURATION} from '../constants.js';
 
 
 interface WorktreeListScreenProps {
@@ -55,13 +56,13 @@ export default function WorktreeListScreen({
     setVisibleWorktrees(visiblePaths);
   }, [worktrees, currentPage, pageSize, setVisibleWorktrees]);
 
-  // Single 2s loop to refresh git+AI status for visible rows only
+  // Single loop to refresh git+AI status for visible rows only
   useEffect(() => {
     const interval = setInterval(() => {
       if (!isAnyDialogFocused) {
         refreshVisibleStatus(currentPage, pageSize).catch(() => {});
       }
-    }, 2000);
+    }, VISIBLE_STATUS_REFRESH_DURATION);
     return () => clearInterval(interval);
   }, [currentPage, pageSize, refreshVisibleStatus, isAnyDialogFocused]);
 

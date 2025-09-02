@@ -1,7 +1,8 @@
 import {useMemo} from 'react';
 import type {WorktreeInfo} from '../../../../models.js';
 import {stringDisplayWidth} from '../../../../shared/utils/formatting.js';
-import {formatNumber, formatDiffStats, formatGitChanges} from '../utils.js';
+import {formatNumber, formatDiffStats, formatGitChanges, formatPRStatus} from '../utils.js';
+import {useGitHubContext} from '../../../../contexts/GitHubContext.js';
 
 export interface ColumnWidths {
   number: number;
@@ -19,6 +20,14 @@ export function useColumnWidths(
   page: number,
   pageSize: number
 ): ColumnWidths {
+  let getPRStatus: (path: string) => any;
+  try {
+    ({getPRStatus} = useGitHubContext());
+  } catch {
+    // In non-context renders (tests), fall back to a stub
+    getPRStatus = () => undefined as any;
+  }
+
   return useMemo(() => {
     const start = page * pageSize;
     const pageItems = worktrees.slice(start, start + pageSize);
@@ -38,6 +47,7 @@ export function useColumnWidths(
         pushed = (w.git.ahead === 0 && !w.git.has_changes) ? '✓' : '↗';
       }
       
+      const prStr = formatPRStatus(getPRStatus(w.path));
       return [
         String(start + i0 + 1),
         `${w.project}/${w.feature}`,
@@ -45,7 +55,7 @@ export function useColumnWidths(
         diffStr,
         changes,
         pushed,
-        '-'
+        prStr
       ];
     });
     
@@ -56,9 +66,6 @@ export function useColumnWidths(
       const maxContentWidth = Math.max(...allRows.map(row => stringDisplayWidth(row[colIndex] || '')));
       return Math.max(4, maxContentWidth);
     });
-    
-    // Force PR column width to a static size (8 chars)
-    fixedWidths[6] = 8;
     
     const fixedColumnsWidth = fixedWidths.reduce((sum, width, index) => index === 1 ? sum : sum + width, 0);
     const marginsWidth = 6;
@@ -76,5 +83,5 @@ export function useColumnWidths(
       pushed: fixedWidths[5],
       pr: fixedWidths[6],
     };
-  }, [worktrees, terminalWidth, page, pageSize]);
+  }, [worktrees, terminalWidth, page, pageSize, getPRStatus]);
 }

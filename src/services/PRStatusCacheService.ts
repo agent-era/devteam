@@ -2,6 +2,18 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import {PRStatus} from '../models.js';
+import {
+  PR_TTL_MERGED_MS,
+  PR_TTL_NO_PR_MS,
+  PR_TTL_ERROR_MS,
+  PR_TTL_CHECKS_FAIL_MS,
+  PR_TTL_CHECKS_PENDING_MS,
+  PR_TTL_PASSING_OPEN_MS,
+  PR_TTL_OPEN_MS,
+  PR_TTL_CLOSED_MS,
+  PR_TTL_UNKNOWN_MS,
+  PR_TTL_FALLBACK_MS,
+} from '../constants.js';
 import {runCommandQuick} from '../utils.js';
 
 interface CacheEntry {
@@ -227,49 +239,34 @@ export class PRStatusCacheService {
         return 0;  // Don't cache these states
         
       case 'no_pr':
-        return 30 * 1000;  // 30 seconds for no PR
+        return PR_TTL_NO_PR_MS;
         
       case 'error':
-        return 60 * 1000;  // 1 minute for errors
+        return PR_TTL_ERROR_MS;  // errors cache briefly
         
       case 'exists':
         // For existing PRs, use dynamic TTL based on PR state
         if (prStatus.is_merged) {
           // Merged PRs never change - cache indefinitely (1 year)
-          return 365 * 24 * 60 * 60 * 1000;
+          return PR_TTL_MERGED_MS;
         }
 
-        if (prStatus.checks === 'failing') {
-          // Failing checks might be fixed quickly
-          return 2 * 60 * 1000; // 2 minutes
-        }
+        if (prStatus.checks === 'failing') return PR_TTL_CHECKS_FAIL_MS;
 
-        if (prStatus.checks === 'pending') {
-          // Pending checks should be refreshed very quickly to catch completion
-          return 5 * 1000; // 5 seconds
-        }
+        if (prStatus.checks === 'pending') return PR_TTL_CHECKS_PENDING_MS;
 
-        if (prStatus.checks === 'passing' && prStatus.state === 'OPEN') {
-          // Passing PRs might be merged soon - refresh more frequently
-          return 30 * 1000; // 30 seconds
-        }
+        if (prStatus.checks === 'passing' && prStatus.state === 'OPEN') return PR_TTL_PASSING_OPEN_MS;
 
-        if (prStatus.state === 'OPEN') {
-          // Open PRs change moderately
-          return 5 * 60 * 1000; // 5 minutes
-        }
+        if (prStatus.state === 'OPEN') return PR_TTL_OPEN_MS;
 
-        if (prStatus.state === 'CLOSED') {
-          // Closed PRs rarely change
-          return 60 * 60 * 1000; // 1 hour
-        }
+        if (prStatus.state === 'CLOSED') return PR_TTL_CLOSED_MS;
 
         // Unknown PR state - moderate TTL
-        return 10 * 60 * 1000; // 10 minutes
+        return PR_TTL_UNKNOWN_MS;
         
       default:
         // Fallback for unknown loading status
-        return 5 * 60 * 1000; // 5 minutes
+        return PR_TTL_FALLBACK_MS;
     }
   }
 
