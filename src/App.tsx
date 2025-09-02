@@ -393,3 +393,26 @@ function AppWithGitHub() {
     </WorktreeProvider>
   );
 }
+
+// Test-friendly entry that allows injecting fake services while using the full App composition
+export function TestableApp({
+  gitService,
+  gitHubService,
+  tmuxService
+}: {
+  gitService?: any;
+  gitHubService?: any;
+  tmuxService?: any;
+}) {
+  return (
+    <InputFocusProvider>
+      <GitHubProvider gitHubService={gitHubService} gitService={gitService}>
+        <WorktreeProvider gitService={gitService} tmuxService={tmuxService}>
+          <UIProvider>
+            <AppContent />
+          </UIProvider>
+        </WorktreeProvider>
+      </GitHubProvider>
+    </InputFocusProvider>
+  );
+}
