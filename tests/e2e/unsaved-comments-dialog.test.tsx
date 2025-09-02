@@ -77,7 +77,7 @@ describe('Unsaved Comments Dialog E2E', () => {
     const comments = commentStore.getAllComments();
     expect(comments).toHaveLength(3);
     
-    // Verify comment structure is preserved
+    // Verify comment structure is preserved (sorted by filename, then lineIndex)
     expect(comments[0]).toMatchObject({
       lineIndex: 5,
       fileName: 'main.ts',
@@ -86,17 +86,17 @@ describe('Unsaved Comments Dialog E2E', () => {
     });
     
     expect(comments[1]).toMatchObject({
+      lineIndex: 25,
+      fileName: 'main.ts',
+      lineText: 'function foo() {}',
+      commentText: 'Add return type annotation'
+    });
+    
+    expect(comments[2]).toMatchObject({
       lineIndex: 15,
       fileName: 'utils.ts',
       lineText: 'const unused = true;',
       commentText: 'Remove unused variable'
-    });
-    
-    expect(comments[2]).toMatchObject({
-      lineIndex: 25,
-      fileName: 'main.ts', 
-      lineText: 'function foo() {}',
-      commentText: 'Add return type annotation'
     });
   });
 
