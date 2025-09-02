@@ -29,7 +29,7 @@ export default function CreateFeatureScreen({
         // Auto-attach functionality from main
         onSuccess();
         
-        // Small delay to ensure UI is updated and tmux session is ready
+        // Small delay to ensure UI state updates and worktree is visible
         await new Promise(resolve => setTimeout(resolve, 100));
         
         // Check if tool selection is needed

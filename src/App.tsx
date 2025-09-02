@@ -156,11 +156,25 @@ function AppContent() {
       const success = await createFromBranch(project, remoteBranch, localName);
       if (success) {
         showList();
-        
-        // Small delay then auto-attach to the newly created session
+
+        // Small delay to ensure UI state updates and new worktree is visible
         await new Promise(resolve => setTimeout(resolve, 100));
-        const worktreePath = `/home/mserv/projects/${project}-branches/${localName}`;
-        // The session will be automatically created by createFromBranch
+
+        // Find the newly created worktree entry
+        const newWorktree = worktrees.find(wt => wt.project === project && wt.feature === localName);
+
+        if (newWorktree) {
+          // Check if tool selection is needed
+          const needsSelection = await needsToolSelection(newWorktree);
+
+          if (needsSelection) {
+            // Show AI tool selection dialog
+            showAIToolSelection(newWorktree);
+          } else {
+            // Auto-attach to the newly created session
+            await attachSession(newWorktree);
+          }
+        }
       } else {
         showList();
       }

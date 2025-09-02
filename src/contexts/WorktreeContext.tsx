@@ -79,6 +79,17 @@ interface WorktreeContextType {
 
 const WorktreeContext = createContext<WorktreeContextType | null>(null);
 
+// Extracted decision helper for testability and clarity
+export function shouldPromptForAITool(
+  availableTools: (keyof typeof AI_TOOLS)[],
+  sessionExists: boolean,
+  worktreeTool?: AITool | null
+): boolean {
+  if (sessionExists) return false;
+  if (worktreeTool && worktreeTool !== 'none') return false;
+  return availableTools.length > 1;
+}
+
 interface WorktreeProviderProps {
   children: ReactNode;
   gitService?: GitService;
@@ -383,7 +394,7 @@ export function WorktreeProvider({
       const worktreePath = path.join(gitService.basePath, `${projectName}${DIR_BRANCHES_SUFFIX}`, featureName);
       
       setupWorktreeEnvironment(projectName, worktreePath);
-      createTmuxSession(projectName, featureName, worktreePath);
+      // Do not auto-create tmux session here; allow UI to prompt for AI tool first
       
       await refresh();
       return new WorktreeInfo({
@@ -405,7 +416,7 @@ export function WorktreeProvider({
 
       const worktreePath = path.join(gitService.basePath, `${project}${DIR_BRANCHES_SUFFIX}`, localName);
       setupWorktreeEnvironment(project, worktreePath);
-      createTmuxSession(project, localName, worktreePath);
+      // Do not auto-create tmux session here; allow UI to prompt for AI tool first
       
       await refresh();
       return true;
