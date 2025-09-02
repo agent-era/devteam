@@ -20,12 +20,13 @@ export function useColumnWidths(
   page: number,
   pageSize: number
 ): ColumnWidths {
-  let getPRStatus: (path: string) => any;
+  // Read PR status directly from provider state to avoid expensive loads during render
+  let pullRequests: Record<string, any> = {};
   try {
-    ({getPRStatus} = useGitHubContext());
+    ({pullRequests} = useGitHubContext() as any);
   } catch {
-    // In non-context renders (tests), fall back to a stub
-    getPRStatus = () => undefined as any;
+    // In non-context renders (tests), fall back to empty map
+    pullRequests = {} as any;
   }
 
   return useMemo(() => {
@@ -47,7 +48,7 @@ export function useColumnWidths(
         pushed = (w.git.ahead === 0 && !w.git.has_changes) ? '✓' : '↗';
       }
       
-      const prStr = formatPRStatus(getPRStatus(w.path));
+      const prStr = formatPRStatus(pullRequests[w.path]);
       return [
         String(start + i0 + 1),
         `${w.project}/${w.feature}`,
@@ -83,5 +84,5 @@ export function useColumnWidths(
       pushed: fixedWidths[5],
       pr: fixedWidths[6],
     };
-  }, [worktrees, terminalWidth, page, pageSize, getPRStatus]);
+  }, [worktrees, terminalWidth, page, pageSize, pullRequests]);
 }
