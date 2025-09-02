@@ -1,6 +1,7 @@
-import React, {useState, useRef} from 'react';
+import React, {useState, useRef, useEffect} from 'react';
 import {Box, Text, useInput} from 'ink';
-import TextInputAdapter from '../common/TextInputAdapter.js';
+import {TextInput} from '@inkjs/ui';
+import {useInputFocus} from '../../contexts/InputFocusContext.js';
 
 type Props = {
   fileName: string;
@@ -12,6 +13,12 @@ type Props = {
 
 const CommentInputDialog = React.memo(function CommentInputDialog({fileName, lineText, initialComment = '', onSave, onCancel}: Props) {
   const [comment, setComment] = useState(initialComment);
+  const {requestFocus, releaseFocus} = useInputFocus();
+
+  useEffect(() => {
+    requestFocus('comment-input-dialog');
+    return () => releaseFocus('comment-input-dialog');
+  }, [requestFocus, releaseFocus]);
 
   useInput((input, key) => {
     if (key.escape) {
@@ -59,13 +66,11 @@ const CommentInputDialog = React.memo(function CommentInputDialog({fileName, lin
         padding={1}
         minHeight={3}
       >
-        <TextInputAdapter
-          initialValue={initialComment}
+        <TextInput
+          defaultValue={initialComment}
           placeholder=" "
           onSubmit={handleSubmit}
           onChange={handleChange}
-          focusId="comment-input-dialog"
-          multiline={true}
         />
       </Box>
       <Text color="gray">

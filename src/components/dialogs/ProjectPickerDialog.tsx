@@ -1,7 +1,6 @@
 import React, {useMemo, useState} from 'react';
 import {Box, Text, useInput, useStdin} from 'ink';
 import type {ProjectInfo} from '../../models.js';
-import TextInputAdapter from '../common/TextInputAdapter.js';
 
 type Props = {
   projects: ProjectInfo[];
@@ -78,4 +77,3 @@ export default function ProjectPickerDialog({projects, defaultProject, onSubmit,
     </Box>
   );
 }
-
