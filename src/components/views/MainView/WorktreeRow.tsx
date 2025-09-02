@@ -30,11 +30,11 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
   selected,
   columnWidths,
 }) => {
-  // Safely get PR status if GitHubContext is available; fallback to undefined in standalone renders
+  // Read PR status from provider state; fallback to undefined in standalone renders
   let pr: PRStatus | undefined;
   try {
-    const {getPRStatus} = useGitHubContext();
-    pr = getPRStatus(worktree.path);
+    const {pullRequests} = useGitHubContext() as any;
+    pr = pullRequests?.[worktree.path];
   } catch {
     pr = undefined;
   }
