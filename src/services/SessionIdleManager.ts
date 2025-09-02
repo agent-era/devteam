@@ -59,7 +59,9 @@ export class SessionIdleManager {
     for (const session of devSessions) {
       try {
         const {status} = await tmux.getAIStatus(session);
-        this.updateFromStatus(session, status, true, tmux);
+        // Session presence is known; "attached" here means present, but don't clear flags implicitly
+        const present = true;
+        this.updateFromStatus(session, status, present, tmux);
       } catch {}
     }
   }

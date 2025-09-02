@@ -36,7 +36,11 @@ export function createThrottledBatch<TArgs>(
     const now = Date.now();
     const delta = now - last;
     if (delta >= intervalMs && !running) {
-      void invoke(args);
+      // Fire and log any async errors explicitly
+      invoke(args).catch(err => {
+        // eslint-disable-next-line no-console
+        console.error('[throttle] runner failed:', err instanceof Error ? err.message : String(err));
+      });
     } else {
       queue.push(args);
       if (!timer) {
@@ -44,7 +48,10 @@ export function createThrottledBatch<TArgs>(
         timer = setTimeout(() => {
           timer = null;
           const merged = mergeQueue();
-          void invoke(merged);
+          invoke(merged).catch(err => {
+            // eslint-disable-next-line no-console
+            console.error('[throttle] runner failed (timer):', err instanceof Error ? err.message : String(err));
+          });
         }, wait);
       }
     }
@@ -52,4 +59,3 @@ export function createThrottledBatch<TArgs>(
 
   return (args: TArgs) => schedule(args);
 }
-

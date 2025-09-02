@@ -193,7 +193,7 @@ export function WorktreeProvider({
       });
     });
     
-    return results;
+    return results.filter(Boolean) as WorktreeInfo[];
   }, [gitService, tmuxService, worktrees]);
 
   const refresh = useCallback(async (refreshPRs: 'all' | 'visible' | 'none' = 'none') => {
@@ -304,7 +304,10 @@ export function WorktreeProvider({
           return {index: i, updated};
         });
         const merged = [...worktrees];
-        for (const r of results) merged[(r as any).index] = (r as any).updated;
+        for (const r of results) {
+          if (!r) continue;
+          merged[(r as any).index] = (r as any).updated;
+        }
         setWorktrees(merged);
       }
       setLastRefreshed(Date.now());

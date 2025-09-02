@@ -9,10 +9,17 @@ export async function mapLimit<T, R>(
     while (true) {
       const i = next++;
       if (i >= items.length) break;
-      results[i] = await worker(items[i], i);
+      try {
+        results[i] = await worker(items[i], i);
+      } catch (err) {
+        // Log error and continue with other items; leave hole undefined
+        // eslint-disable-next-line no-console
+        console.error('[mapLimit] worker failed at index', i, '-', err instanceof Error ? err.message : String(err));
+        // @ts-expect-error allow undefined to be placed; callers should guard
+        results[i] = undefined;
+      }
     }
   });
   await Promise.all(workers);
   return results;
 }
-

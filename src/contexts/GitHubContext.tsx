@@ -57,6 +57,7 @@ export function GitHubProvider({children, gitHubService: ghOverride, gitService:
   }, [gitOverride]);
   const cacheService = useRef(new PRStatusCacheService()).current;
   const refreshIntervalRef = useRef<NodeJS.Timeout>();
+  const REFRESH_MS = Math.max(1000, Number(process.env.PR_REFRESH_INTERVAL_MS || PR_REFRESH_DURATION));
 
   // Load cached PR data on mount
   useEffect(() => {
@@ -177,7 +178,7 @@ export function GitHubProvider({children, gitHubService: ghOverride, gitService:
   const throttledRefreshPR = useMemo(() => {
     type WT = {project: string; path: string; is_archived?: boolean};
     return createThrottledBatch<{worktrees: WT[]; visibleOnly: boolean}>(
-      PR_REFRESH_DURATION,
+      REFRESH_MS,
       async ({worktrees, visibleOnly}) => refreshPRStatusInternal(worktrees, visibleOnly),
       (pending) => {
         const map = new Map<string, WT>();
@@ -189,7 +190,7 @@ export function GitHubProvider({children, gitHubService: ghOverride, gitService:
         return {worktrees: Array.from(map.values()), visibleOnly};
       }
     );
-  }, [refreshPRStatusInternal]);
+  }, [refreshPRStatusInternal, REFRESH_MS]);
 
   // Auto-refresh PRs for visible worktrees (restart on visibility/strategy change)
   useEffect(() => {
@@ -204,23 +205,27 @@ export function GitHubProvider({children, gitHubService: ghOverride, gitService:
         }));
         throttledRefreshPR({worktrees: worktreesToRefresh, visibleOnly: false});
       }
-    }, PR_REFRESH_DURATION);
+    }, REFRESH_MS);
     return () => {
       if (refreshIntervalRef.current) clearInterval(refreshIntervalRef.current);
     };
-  }, [visibleWorktrees, cacheService, throttledRefreshPR]);
+  }, [visibleWorktrees, cacheService, throttledRefreshPR, REFRESH_MS]);
 
   // Immediately refresh stale PRs for the current visible set (no need to wait for the interval)
   useEffect(() => {
     if (!visibleWorktrees || visibleWorktrees.length === 0) return;
-    const paths = visibleWorktrees.filter(path => !cacheService.isValid(path));
-    if (paths.length === 0) return;
-    const worktreesToRefresh = paths.map(path => ({
-      project: 'visible-now',
-      path,
-      is_archived: false
-    }));
-    throttledRefreshPR({worktrees: worktreesToRefresh, visibleOnly: false});
+    // Debounce rapid page changes to avoid bursts
+    const handle = setTimeout(() => {
+      const paths = visibleWorktrees.filter(path => !cacheService.isValid(path));
+      if (paths.length === 0) return;
+      const worktreesToRefresh = paths.map(path => ({
+        project: 'visible-now',
+        path,
+        is_archived: false
+      }));
+      throttledRefreshPR({worktrees: worktreesToRefresh, visibleOnly: false});
+    }, 200);
+    return () => clearTimeout(handle);
   }, [visibleWorktrees, cacheService, throttledRefreshPR]);
 
   const refreshPRStatus = useCallback(async (
