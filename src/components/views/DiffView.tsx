@@ -1,13 +1,11 @@
-import React, {useEffect, useMemo, useState} from 'react';
-import {Box, Text, useInput, useStdin} from 'ink';
+import React, {useEffect, useMemo, useState, useRef} from 'react';
+import {Box, Text, useInput, useStdin, measureElement} from 'ink';
 import SyntaxHighlight from 'ink-syntax-highlight';
-import {runCommandAsync} from '../../utils.js';
-import {findBaseBranch} from '../../utils.js';
 import {useTerminalDimensions} from '../../hooks/useTerminalDimensions.js';
-import {BASE_BRANCH_CANDIDATES} from '../../constants.js';
 import {CommentStore} from '../../models.js';
 import {commentStoreManager} from '../../services/CommentStoreManager.js';
 import {TmuxService} from '../../services/TmuxService.js';
+import {GitService} from '../../services/GitService.js';
 import {runCommand} from '../../utils.js';
 import CommentInputDialog from '../dialogs/CommentInputDialog.js';
 import SessionWaitingDialog from '../dialogs/SessionWaitingDialog.js';
@@ -133,23 +131,12 @@ function getLanguageFromFileName(fileName: string | undefined): string {
   return languageMap[ext || ''] || 'plaintext';
 }
 
-async function loadDiff(worktreePath: string, diffType: 'full' | 'uncommitted' = 'full'): Promise<DiffLine[]> {
+async function loadDiff(worktreePath: string, diffType: 'full' | 'uncommitted' = 'full', gitService?: GitService): Promise<DiffLine[]> {
   const lines: DiffLine[] = [];
-  let diff: string | null = null;
+  const service = gitService || new GitService('');
   
-  if (diffType === 'uncommitted') {
-    // Show only uncommitted changes (working directory vs HEAD)
-    diff = await runCommandAsync(['git', '-C', worktreePath, 'diff', '--no-color', '--no-ext-diff', 'HEAD']);
-  } else {
-    // Show full diff against base branch (default behavior)
-    let target = 'HEAD~1';
-    const base = findBaseBranch(worktreePath, BASE_BRANCH_CANDIDATES);
-    if (base) {
-      const mb = await runCommandAsync(['git', '-C', worktreePath, 'merge-base', 'HEAD', base]);
-      if (mb) target = mb.trim();
-    }
-    diff = await runCommandAsync(['git', '-C', worktreePath, 'diff', '--no-color', '--no-ext-diff', target]);
-  }
+  // Get diff content using GitService
+  const diff = await service.getDiffContent(worktreePath, diffType);
   
   // Process main diff if it exists
   if (diff && diff.trim()) {
@@ -175,17 +162,21 @@ async function loadDiff(worktreePath: string, diffType: 'full' | 'uncommitted' =
       }
     }
   }
-  // Append untracked files
-  const untracked = await runCommandAsync(['git', '-C', worktreePath, 'ls-files', '--others', '--exclude-standard']);
-  if (untracked) {
-    for (const fp of untracked.split('\n').filter(Boolean)) {
-      lines.push({type: 'header', text: `📁 ${fp} (new file)`, fileName: fp, headerType: 'file'});
-      try {
-        const cat = await runCommandAsync(['bash', '-lc', `cd ${JSON.stringify(worktreePath)} && sed -n '1,200p' ${JSON.stringify(fp)}`]);
-        for (const l of (cat || '').split('\n').filter(Boolean)) lines.push({type: 'added', text: l, fileName: fp});
-      } catch {}
-    }
+  
+  // Append untracked files using GitService
+  const untrackedFiles = await service.getUntrackedFiles(worktreePath);
+  for (const fp of untrackedFiles) {
+    lines.push({type: 'header', text: `📁 ${fp} (new file)`, fileName: fp, headerType: 'file'});
+    try {
+      const content = await service.getFileContent(worktreePath, fp, 200);
+      if (content) {
+        for (const l of content.split('\n').filter(Boolean)) {
+          lines.push({type: 'added', text: l, fileName: fp});
+        }
+      }
+    } catch {}
   }
+  
   return lines;
 }
 
@@ -258,12 +249,12 @@ function convertToSideBySide(unifiedLines: DiffLine[]): SideBySideLine[] {
 }
 
 
-type Props = {worktreePath: string; title?: string; onClose: () => void; diffType?: 'full' | 'uncommitted'; onAttachToSession?: (sessionName: string) => void};
+type Props = {worktreePath: string; title?: string; onClose: () => void; diffType?: 'full' | 'uncommitted'; onAttachToSession?: (sessionName: string) => void; gitService?: GitService};
 
 type ViewMode = 'unified' | 'sidebyside';
 type WrapMode = 'truncate' | 'wrap';
 
-export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, diffType = 'full', onAttachToSession}: Props) {
+export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, diffType = 'full', onAttachToSession, gitService}: Props) {
   const {rows: terminalHeight, columns: terminalWidth} = useTerminalDimensions();
   const [lines, setLines] = useState<DiffLine[]>([]);
   const [sideBySideLines, setSideBySideLines] = useState<SideBySideLine[]>([]);
@@ -286,6 +277,10 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
   const [showUnsubmittedCommentsDialog, setShowUnsubmittedCommentsDialog] = useState(false);
   const [showFileTreeOverlay, setShowFileTreeOverlay] = useState(false);
   const [overlayHighlightedFile, setOverlayHighlightedFile] = useState<string>('');
+  
+  // Ref and state for measuring diff content height
+  const diffContentRef = useRef(null);
+  const [measuredDiffContentHeight, setMeasuredDiffContentHeight] = useState(1);
 
   // Map of unified view global line index -> per-file line index (0-based)
   const unifiedPerFileIndex = useMemo(() => computeUnifiedPerFileIndices(lines as any), [lines]);
@@ -314,7 +309,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
 
   useEffect(() => {
     (async () => {
-      const lns = await loadDiff(worktreePath, diffType);
+      const lns = await loadDiff(worktreePath, diffType, gitService);
       setLines(lns);
       setSideBySideLines(convertToSideBySide(lns));
       // Reset scroll position when loading new diff
@@ -322,7 +317,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       setTargetScrollRow(0);
       setSelectedLine(0);
     })();
-  }, [worktreePath, diffType]);
+  }, [worktreePath, diffType, gitService]);
 
   // Calculate dynamic sticky header count (0, 1, or 2 headers displayed)
   const stickyHeaderCount = useMemo(() => {
@@ -332,10 +327,11 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     return count;
   }, [currentFileHeader, currentHunkHeader]);
 
-  // Calculate page size dynamically - reserve space for title, help, sticky headers, and optional overlay area
-  const helpReservedRows = showFileTreeOverlay ? 0 : 1; // hide help when overlay shows
+  // Overlay area height is still needed for FileTreeOverlay
   const overlayAreaHeight = showFileTreeOverlay ? Math.max(6, Math.floor(terminalHeight / 2)) : 0;
-  const pageSize = Math.max(1, terminalHeight - 2 - stickyHeaderCount - helpReservedRows - overlayAreaHeight); // -1 title, -N sticky headers, -help, -overlay
+  
+  // Use measured diff content height as pageSize (with minimum of 5 for reasonable viewport)
+  const pageSize = Math.max(5, measuredDiffContentHeight);
 
   // Smooth scrolling animation
   useEffect(() => {
@@ -1030,6 +1026,14 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     const currentLines = viewMode === 'unified' ? lines : sideBySideLines;
     return viewport.visibleLines.map(lineIndex => currentLines[lineIndex]).filter(Boolean);
   }, [viewport, lines, sideBySideLines, viewMode]);
+
+  // Measure diff content height after rendering  
+  useEffect(() => {
+    if (diffContentRef.current) {
+      const { height } = measureElement(diffContentRef.current);
+      setMeasuredDiffContentHeight(height);
+    }
+  }, [showAllComments, commentStore.count, showFileTreeOverlay, lines, sideBySideLines, viewMode]);
 
   // Helper function to render syntax highlighted content
   const renderSyntaxHighlighted = (text: string, fileName: string | undefined, isSelected: boolean, diffColor?: string, lineType?: 'added'|'removed'|'context'|'header') => {
@@ -1742,7 +1746,11 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
         visibleLineIndex++;
       }
       
-        return renderedElements;
+        return (
+          <Box ref={diffContentRef} flexDirection="column">
+            {renderedElements}
+          </Box>
+        );
       })()}
       
       {showAllComments && commentStore.count > 0 && (

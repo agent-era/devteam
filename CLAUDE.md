@@ -224,23 +224,17 @@ tests/
   - Runs real app logic with in-memory fakes; avoids raw-mode/alt-screen quirks.
   - Fast and stable; preferred for most end-to-end flows.
 
-- **tests/e2e/terminal/** (terminal-oriented, Node runner):
-  - Uses Node scripts with Ink to verify real terminal rendering, avoiding Jest’s TTY/raw‑mode quirks.
-  - Renders real Ink components and providers with fakes and asserts on terminal frames.
-  - Command:
-    - `npm run test:terminal` — builds the project, compiles fakes, and runs terminal checks:
-      - `tests/e2e/terminal/run-smoke.mjs`: Ink <Text> smoke
-      - `tests/e2e/terminal/run-mainview-list.mjs`: MainView rows render
-      - `tests/e2e/terminal/run-app-full.mjs`: Full App providers render and list rows appear
-  - Note: These scripts import from `dist/` and `dist-tests`; the script runs both builds.
-  - Jest-based terminal tests were removed in favor of the Node runner; Jest E2E tests remain for app logic and flows.
+- **tests/e2e/terminal/** (terminal-oriented):
+  - Reserved for tests focused on terminal rendering behavior and Ink I/O.
+  - May require environment hints for stability (see `tests/setup.e2e.ts`).
+  - Keep polling windows short; avoid heavy reliance on stdin unless necessary.
+  - Current example: `app.real.list.test.tsx` kept isolated under `terminal/` due to its rendering focus.
 
 ### Running Tests
 ```bash
-npm test                    # Run all Jest tests (unit + E2E)
-npm run test:watch         # Jest watch mode
+npm test                    # Run all tests
+npm run test:watch         # Watch mode
 npm run typecheck          # Type checking only
-npm run test:terminal      # Run terminal rendering tests (Node runner)
 ```
 
 ## Adding Features

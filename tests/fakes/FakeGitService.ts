@@ -339,4 +339,27 @@ export class FakeGitService extends GitService {
     }
     return false;
   }
+
+  async getDiffContent(worktreePath: string, diffType: 'full' | 'uncommitted' = 'full'): Promise<string | null> {
+    // Return diff content from memory store if available
+    const diffContent = memoryStore.diffContent.get(worktreePath);
+    if (diffContent) {
+      return diffContent;
+    }
+    
+    // Return null if no diff content stored
+    return null;
+  }
+
+  async getUntrackedFiles(worktreePath: string): Promise<string[]> {
+    // For testing purposes, return empty array by default
+    // Tests can override this behavior by setting up specific untracked files in the store
+    return [];
+  }
+
+  async getFileContent(worktreePath: string, filePath: string, maxLines: number = 200): Promise<string | null> {
+    // For testing purposes, return mock content
+    // Tests can override this by setting up specific file content
+    return `// Mock content for ${filePath}\nconsole.log("Mock file content");`;
+  }
 }

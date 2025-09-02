@@ -495,4 +495,52 @@ export class GitService {
       fs.copyFileSync(src, dest);
     }
   }
+
+  async getDiffContent(worktreePath: string, diffType: 'full' | 'uncommitted' = 'full'): Promise<string | null> {
+    try {
+      let diff: string | null = null;
+      
+      if (diffType === 'uncommitted') {
+        // Show only uncommitted changes (working directory vs HEAD)
+        diff = await runCommandAsync(['git', '-C', worktreePath, 'diff', '--no-color', '--no-ext-diff', 'HEAD']);
+      } else {
+        // Show full diff against base branch (default behavior)
+        let target = 'HEAD~1';
+        const base = findBaseBranch(worktreePath, BASE_BRANCH_CANDIDATES);
+        if (base) {
+          const mb = await runCommandAsync(['git', '-C', worktreePath, 'merge-base', 'HEAD', base]);
+          if (mb) target = mb.trim();
+        }
+        diff = await runCommandAsync(['git', '-C', worktreePath, 'diff', '--no-color', '--no-ext-diff', target]);
+      }
+      
+      return diff;
+    } catch (error) {
+      logDebug('Failed to get diff content', {worktreePath, diffType, error});
+      return null;
+    }
+  }
+
+  async getUntrackedFiles(worktreePath: string): Promise<string[]> {
+    try {
+      const untracked = await runCommandAsync(['git', '-C', worktreePath, 'ls-files', '--others', '--exclude-standard']);
+      if (untracked) {
+        return untracked.split('\n').filter(Boolean);
+      }
+      return [];
+    } catch (error) {
+      logDebug('Failed to get untracked files', {worktreePath, error});
+      return [];
+    }
+  }
+
+  async getFileContent(worktreePath: string, filePath: string, maxLines: number = 200): Promise<string | null> {
+    try {
+      const content = await runCommandAsync(['bash', '-lc', `cd ${JSON.stringify(worktreePath)} && sed -n '1,${maxLines}p' ${JSON.stringify(filePath)}`]);
+      return content;
+    } catch (error) {
+      logDebug('Failed to get file content', {worktreePath, filePath, error});
+      return null;
+    }
+  }
 }

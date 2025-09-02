@@ -15,6 +15,7 @@ export interface MemoryStore {
     pr_title?: string;
   }>>;
   archivedWorktrees: Map<string, WorktreeInfo[]>;
+  diffContent: Map<string, string>; // Map worktree path -> diff content
   
   reset(): void;
 }
@@ -34,6 +35,7 @@ class InMemoryStore implements MemoryStore {
     pr_title?: string;
   }>>();
   archivedWorktrees = new Map<string, WorktreeInfo[]>();
+  diffContent = new Map<string, string>();
 
   reset() {
     this.projects.clear();
@@ -43,6 +45,7 @@ class InMemoryStore implements MemoryStore {
     this.sessions.clear();
     this.remoteBranches.clear();
     this.archivedWorktrees.clear();
+    this.diffContent.clear();
   }
 }
 
@@ -128,4 +131,11 @@ export function setupTestGitStatus(
   
   memoryStore.gitStatus.set(path, gitStatus);
   return gitStatus;
+}
+
+export function setupTestDiffContent(
+  path: string,
+  diffContent: string
+): void {
+  memoryStore.diffContent.set(path, diffContent);
 }
