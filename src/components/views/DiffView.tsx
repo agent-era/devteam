@@ -134,7 +134,6 @@ function getLanguageFromFileName(fileName: string | undefined): string {
 }
 
 async function loadDiff(worktreePath: string, diffType: 'full' | 'uncommitted' = 'full'): Promise<DiffLine[]> {
-  const lines: DiffLine[] = [];
   let diff: string | null = null;
   
   if (diffType === 'uncommitted') {
@@ -151,41 +150,75 @@ async function loadDiff(worktreePath: string, diffType: 'full' | 'uncommitted' =
     diff = await runCommandAsync(['git', '-C', worktreePath, 'diff', '--no-color', '--no-ext-diff', target]);
   }
   
+  // Collect files and their content
+  const fileContents = new Map<string, DiffLine[]>();
+  
   // Process main diff if it exists
   if (diff && diff.trim()) {
     const raw = diff.split('\n');
     let currentFileName = '';
+    let currentFileLines: DiffLine[] = [];
+    
     for (const line of raw) {
       if (line.startsWith('diff --git')) {
+        // Save previous file if it exists
+        if (currentFileName && currentFileLines.length > 0) {
+          fileContents.set(currentFileName, currentFileLines);
+        }
+        
+        // Start new file
         const parts = line.split(' ');
         const fp = parts[3]?.slice(2) || parts[2]?.slice(2) || '';
         currentFileName = fp;
-        lines.push({type: 'header', text: `📁 ${fp}`, fileName: fp, headerType: 'file'});
+        currentFileLines = [];
+        currentFileLines.push({type: 'header', text: `📁 ${fp}`, fileName: fp, headerType: 'file'});
       } else if (line.startsWith('@@')) {
         const ctx = line.replace(/^@@.*@@ ?/, '');
-        if (ctx) lines.push({type: 'header', text: `  ▼ ${ctx}`, fileName: currentFileName, headerType: 'hunk'});
+        if (ctx) currentFileLines.push({type: 'header', text: `  ▼ ${ctx}`, fileName: currentFileName, headerType: 'hunk'});
       } else if (line.startsWith('+') && !line.startsWith('+++')) {
-        lines.push({type: 'added', text: line.slice(1), fileName: currentFileName});
+        currentFileLines.push({type: 'added', text: line.slice(1), fileName: currentFileName});
       } else if (line.startsWith('-') && !line.startsWith('---')) {
-        lines.push({type: 'removed', text: line.slice(1), fileName: currentFileName});
+        currentFileLines.push({type: 'removed', text: line.slice(1), fileName: currentFileName});
       } else if (line.startsWith(' ')) {
-        lines.push({type: 'context', text: line.slice(1), fileName: currentFileName});
+        currentFileLines.push({type: 'context', text: line.slice(1), fileName: currentFileName});
       } else if (line === '') {
-        lines.push({type: 'context', text: ' ', fileName: currentFileName}); // Empty line gets a space so cursor is visible
+        currentFileLines.push({type: 'context', text: ' ', fileName: currentFileName}); // Empty line gets a space so cursor is visible
       }
     }
+    
+    // Save last file
+    if (currentFileName && currentFileLines.length > 0) {
+      fileContents.set(currentFileName, currentFileLines);
+    }
   }
-  // Append untracked files
+  
+  // Process untracked files
   const untracked = await runCommandAsync(['git', '-C', worktreePath, 'ls-files', '--others', '--exclude-standard']);
   if (untracked) {
     for (const fp of untracked.split('\n').filter(Boolean)) {
-      lines.push({type: 'header', text: `📁 ${fp} (new file)`, fileName: fp, headerType: 'file'});
+      const fileLines: DiffLine[] = [];
+      fileLines.push({type: 'header', text: `📁 ${fp} (new file)`, fileName: fp, headerType: 'file'});
       try {
         const cat = await runCommandAsync(['bash', '-lc', `cd ${JSON.stringify(worktreePath)} && sed -n '1,200p' ${JSON.stringify(fp)}`]);
-        for (const l of (cat || '').split('\n').filter(Boolean)) lines.push({type: 'added', text: l, fileName: fp});
+        for (const l of (cat || '').split('\n').filter(Boolean)) {
+          fileLines.push({type: 'added', text: l, fileName: fp});
+        }
       } catch {}
+      fileContents.set(fp, fileLines);
     }
   }
+  
+  // Sort files alphabetically and combine their content
+  const sortedFiles = Array.from(fileContents.keys()).sort();
+  const lines: DiffLine[] = [];
+  
+  for (const fileName of sortedFiles) {
+    const fileLines = fileContents.get(fileName);
+    if (fileLines) {
+      lines.push(...fileLines);
+    }
+  }
+  
   return lines;
 }
 
