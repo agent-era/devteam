@@ -6,7 +6,7 @@ import {PRStatusCacheService} from '../services/PRStatusCacheService.js';
 import {PR_REFRESH_DURATION} from '../constants.js';
 import {getProjectsDirectory} from '../config.js';
 import {logError, logDebug} from '../shared/utils/logger.js';
-// Inline simple throttle to avoid ESM test issues with p-throttle
+import {createThrottledBatch} from '../shared/utils/throttle.js';
 
 
 interface GitHubContextType {
@@ -177,48 +177,19 @@ export function GitHubProvider({children, gitHubService: ghOverride, gitService:
   // Throttle wrapper to avoid spamming GitHub; merges queued paths
   const throttledRefreshPR = useMemo(() => {
     type WT = {project: string; path: string; is_archived?: boolean};
-    let lastRunAt = 0;
-    let chain: Promise<void> = Promise.resolve();
-    const enqueue = (args: {worktrees: WT[]; visibleOnly: boolean}) => {
-      chain = chain.then(async () => {
-        const now = Date.now();
-        const waitMs = Math.max(0, lastRunAt + REFRESH_MS - now);
-        if (waitMs > 0) {
-          await new Promise(res => setTimeout(res, waitMs));
-        }
-        await refreshPRStatusInternal(args.worktrees, args.visibleOnly);
-        lastRunAt = Date.now();
-      }).catch(err => {
-        // eslint-disable-next-line no-console
-        console.error('[throttle] runner failed:', err instanceof Error ? err.message : String(err));
-      });
-    };
-
-    let pending: Array<{worktrees: WT[]; visibleOnly: boolean}> = [];
-    let scheduled = false;
-
-    const schedule = () => {
-      if (scheduled) return;
-      scheduled = true;
-      queueMicrotask(async () => {
-        scheduled = false;
-        // Merge pending batches by path and combine visibleOnly conservatively
+    return createThrottledBatch<{worktrees: WT[]; visibleOnly: boolean}>(
+      REFRESH_MS,
+      async ({worktrees, visibleOnly}) => refreshPRStatusInternal(worktrees, visibleOnly),
+      (pending) => {
         const map = new Map<string, WT>();
         let visibleOnly = true;
         for (const p of pending) {
           for (const wt of p.worktrees) map.set(wt.path, wt);
           if (!p.visibleOnly) visibleOnly = false;
         }
-        const args = {worktrees: Array.from(map.values()), visibleOnly};
-        pending = [];
-        enqueue(args);
-      });
-    };
-
-    return (args: {worktrees: WT[]; visibleOnly: boolean}) => {
-      pending.push(args);
-      schedule();
-    };
+        return {worktrees: Array.from(map.values()), visibleOnly};
+      }
+    );
   }, [refreshPRStatusInternal, REFRESH_MS]);
 
   // Auto-refresh PRs for visible worktrees (restart on visibility/strategy change)
