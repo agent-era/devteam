@@ -159,34 +159,40 @@ export function WorktreeProvider({
     
     // Concurrency-limit git + AI probes across all worktrees
     const results = await mapLimit(list, 6, async (w: any) => {
-      const key = `${w.project}/${w.feature}`;
-      const existing = existingWorktrees.get(key);
-      
-      // Run git status and claude status in parallel
-      const sessionName = tmuxService.sessionName(w.project, w.feature);
-      const attached = activeSessions.includes(sessionName);
-      
-      const [gitStatus, aiResult] = await Promise.all([
-        gitService.getGitStatus(w.path),
-        attached ? tmuxService.getAIStatus(sessionName) : Promise.resolve({tool: 'none' as const, status: 'not_running' as const})
-      ]);
-      
-      const sessionInfo = new SessionInfo({
-        session_name: sessionName,
-        attached,
-        ai_status: aiResult.status,
-        ai_tool: aiResult.tool
-      });
+      try {
+        const key = `${w.project}/${w.feature}`;
+        const existing = existingWorktrees.get(key);
 
-      return new WorktreeInfo({
-        project: w.project,
-        feature: w.feature,
-        path: w.path,
-        branch: w.branch,
-        git: gitStatus,
-        session: sessionInfo,
-        mtime: w.mtime || 0,
-      });
+        // Run git status and claude status in parallel
+        const sessionName = tmuxService.sessionName(w.project, w.feature);
+        const attached = activeSessions.includes(sessionName);
+
+        const [gitStatus, aiResult] = await Promise.all([
+          gitService.getGitStatus(w.path),
+          attached ? tmuxService.getAIStatus(sessionName) : Promise.resolve({tool: 'none' as const, status: 'not_running' as const})
+        ]);
+
+        const sessionInfo = new SessionInfo({
+          session_name: sessionName,
+          attached,
+          ai_status: aiResult.status,
+          ai_tool: aiResult.tool
+        });
+
+        return new WorktreeInfo({
+          project: w.project,
+          feature: w.feature,
+          path: w.path,
+          branch: w.branch,
+          git: gitStatus,
+          session: sessionInfo,
+          mtime: w.mtime || 0,
+        });
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error('[attachRuntimeData] worker failed -', err instanceof Error ? err.message : String(err));
+        return undefined as any;
+      }
     });
     
     return results.filter(Boolean) as WorktreeInfo[];
@@ -268,36 +274,42 @@ export function WorktreeProvider({
       const indices = Array.from({length: endIndex - startIndex}, (_, k) => startIndex + k);
       if (indices.length > 0) {
         const results = await mapLimit(indices, 3, async (i) => {
-          const wt = worktrees[i];
-          const sessionName = tmuxService.sessionName(wt.project, wt.feature);
-          const attached = activeSessions.includes(sessionName);
-          const [gitStatus, aiResult] = await Promise.all([
-            gitService.getGitStatus(wt.path),
-            attached ? tmuxService.getAIStatus(sessionName) : Promise.resolve({tool: 'none' as const, status: 'not_running' as const})
-          ]);
+          try {
+            const wt = worktrees[i];
+            const sessionName = tmuxService.sessionName(wt.project, wt.feature);
+            const attached = activeSessions.includes(sessionName);
+            const [gitStatus, aiResult] = await Promise.all([
+              gitService.getGitStatus(wt.path),
+              attached ? tmuxService.getAIStatus(sessionName) : Promise.resolve({tool: 'none' as const, status: 'not_running' as const})
+            ]);
 
-          // Detect push using same logic as pushed column (is_pushed transition)
-          const prevPushed = wt.git?.is_pushed === true;
-          const currPushed = gitStatus.is_pushed === true;
-          if (!prevPushed && currPushed) {
-            const pr = getPRStatus(wt.path);
-            if (pr && pr.state === 'OPEN' && refreshPRForWorktree) {
-              logDebug(`Detected push for ${wt.feature}, refreshing PR status`);
-              await refreshPRForWorktree(wt.path);
+            // Detect push using same logic as pushed column (is_pushed transition)
+            const prevPushed = wt.git?.is_pushed === true;
+            const currPushed = gitStatus.is_pushed === true;
+            if (!prevPushed && currPushed) {
+              const pr = getPRStatus(wt.path);
+              if (pr && pr.state === 'OPEN' && refreshPRForWorktree) {
+                logDebug(`Detected push for ${wt.feature}, refreshing PR status`);
+                await refreshPRForWorktree(wt.path);
+              }
             }
-          }
 
-          const updated = new WorktreeInfo({
-            ...wt,
-            git: gitStatus,
-            session: new SessionInfo({
-              session_name: sessionName,
-              attached,
-              ai_status: aiResult.status,
-              ai_tool: aiResult.tool
-            }),
-          });
-          return {index: i, updated};
+            const updated = new WorktreeInfo({
+              ...wt,
+              git: gitStatus,
+              session: new SessionInfo({
+                session_name: sessionName,
+                attached,
+                ai_status: aiResult.status,
+                ai_tool: aiResult.tool
+              }),
+            });
+            return {index: i, updated};
+          } catch (err) {
+            // eslint-disable-next-line no-console
+            console.error('[refreshVisibleStatus] worker failed -', err instanceof Error ? err.message : String(err));
+            return undefined as any;
+          }
         });
         const merged = [...worktrees];
         for (const r of results) {

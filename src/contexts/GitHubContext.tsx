@@ -6,7 +6,7 @@ import {PRStatusCacheService} from '../services/PRStatusCacheService.js';
 import {PR_REFRESH_DURATION} from '../constants.js';
 import {getProjectsDirectory} from '../config.js';
 import {logError, logDebug} from '../shared/utils/logger.js';
-import {createThrottledBatch} from '../shared/utils/throttle.js';
+import pThrottle from 'p-throttle';
 
 
 interface GitHubContextType {
@@ -177,19 +177,41 @@ export function GitHubProvider({children, gitHubService: ghOverride, gitService:
   // Throttle wrapper to avoid spamming GitHub; merges queued paths
   const throttledRefreshPR = useMemo(() => {
     type WT = {project: string; path: string; is_archived?: boolean};
-    return createThrottledBatch<{worktrees: WT[]; visibleOnly: boolean}>(
-      REFRESH_MS,
-      async ({worktrees, visibleOnly}) => refreshPRStatusInternal(worktrees, visibleOnly),
-      (pending) => {
+    const throttle = pThrottle({limit: 1, interval: REFRESH_MS});
+    const run = throttle(async (args: {worktrees: WT[]; visibleOnly: boolean}) => {
+      await refreshPRStatusInternal(args.worktrees, args.visibleOnly);
+    });
+
+    let pending: Array<{worktrees: WT[]; visibleOnly: boolean}> = [];
+    let scheduled = false;
+
+    const schedule = () => {
+      if (scheduled) return;
+      scheduled = true;
+      queueMicrotask(async () => {
+        scheduled = false;
+        // Merge pending batches by path and combine visibleOnly conservatively
         const map = new Map<string, WT>();
         let visibleOnly = true;
         for (const p of pending) {
           for (const wt of p.worktrees) map.set(wt.path, wt);
           if (!p.visibleOnly) visibleOnly = false;
         }
-        return {worktrees: Array.from(map.values()), visibleOnly};
-      }
-    );
+        const args = {worktrees: Array.from(map.values()), visibleOnly};
+        pending = [];
+        try {
+          await (run as any)(args);
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.error('[throttle] runner failed:', err instanceof Error ? err.message : String(err));
+        }
+      });
+    };
+
+    return (args: {worktrees: WT[]; visibleOnly: boolean}) => {
+      pending.push(args);
+      schedule();
+    };
   }, [refreshPRStatusInternal, REFRESH_MS]);
 
   // Auto-refresh PRs for visible worktrees (restart on visibility/strategy change)
