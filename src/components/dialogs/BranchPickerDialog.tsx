@@ -154,7 +154,7 @@ export default function BranchPickerDialog({branches, onSubmit, onCancel, onRefr
   // Add header row for column labels
   const header = (
     <Box marginBottom={0} flexDirection="row">
-      <Text color="gray">  </Text> {/* Space for selection indicator */}
+      <Text color="gray">  </Text>
       <Box width={columnWidths[0]} marginRight={1}>
         <Text color="gray" bold>BRANCH</Text>
       </Box>
