@@ -6,18 +6,22 @@ on:
     paths:
       - 'src/**'
       - 'tests/**' 
+      - 'tests/e2e/terminal/**'
       - 'package.json'
       - 'package-lock.json'
       - 'tsconfig.json'
+      - 'tsconfig.node-tests.json'
       - 'jest.config.js'
   push:
     branches: [ main ]
     paths:
       - 'src/**'
       - 'tests/**'
+      - 'tests/e2e/terminal/**'
       - 'package.json'
       - 'package-lock.json' 
       - 'tsconfig.json'
+      - 'tsconfig.node-tests.json'
       - 'jest.config.js'
 
 jobs:
@@ -43,6 +47,9 @@ jobs:
 
     - name: Run all tests
       run: npm test -- --coverage --watchAll=false
+
+    - name: Run terminal rendering tests (node:test)
+      run: npm run test:terminal
 
     - name: Upload coverage reports to Codecov
       uses: codecov/codecov-action@v4

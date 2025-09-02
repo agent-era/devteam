@@ -15,7 +15,8 @@
     "start": "node dist/index.js",
     "cli": "node dist/bin/dev-sessions.js",
     "test": "jest",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "test:terminal": "npm run build && tsc -p tsconfig.node-tests.json && node --test tests/e2e/terminal/*.test.mjs"
   },
   "dependencies": {
     "ink": "^5.2.1",

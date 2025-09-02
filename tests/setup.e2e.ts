@@ -18,6 +18,8 @@ global.console = {
 
 // Ignore raw mode support check so app doesn't exit in test
 process.env.E2E_IGNORE_RAWMODE = '1';
+// Force real ink-testing-library in E2E (bypass Jest manual mocks)
+process.env.E2E_REAL_RENDER = '1';
 // Ensure Ink doesn't think it's running in CI (which suppresses writes)
 try { delete (process.env as any).CI; } catch {}
 
