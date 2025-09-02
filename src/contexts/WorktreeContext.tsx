@@ -1,13 +1,15 @@
 import React, {createContext, useContext, useState, useCallback, useEffect, ReactNode, useMemo} from 'react';
 import path from 'node:path';
 import fs from 'node:fs';
-import {WorktreeInfo, GitStatus, SessionInfo, ProjectInfo, PRStatus} from '../models.js';
+import {WorktreeInfo, GitStatus, SessionInfo, ProjectInfo, PRStatus, MemorySeverity} from '../models.js';
 import {GitService} from '../services/GitService.js';
 import {TmuxService} from '../services/TmuxService.js';
+import {MemoryMonitorService, MemoryStatus} from '../services/MemoryMonitorService.js';
 import {
   CACHE_DURATION,
   AI_STATUS_REFRESH_DURATION,
   DIFF_STATUS_REFRESH_DURATION,
+  MEMORY_REFRESH_DURATION,
   DIR_BRANCHES_SUFFIX,
   DIR_ARCHIVED_SUFFIX,
   ARCHIVE_PREFIX,
@@ -41,6 +43,7 @@ interface WorktreeContextType {
   loading: boolean;
   lastRefreshed: number;
   selectedIndex: number;
+  memoryStatus: MemoryStatus | null;
   
   // Navigation
   selectWorktree: (index: number) => void;
@@ -83,17 +86,20 @@ interface WorktreeProviderProps {
   children: ReactNode;
   gitService?: GitService;
   tmuxService?: TmuxService;
+  memoryMonitorService?: MemoryMonitorService;
 }
 
 export function WorktreeProvider({
   children,
   gitService: gitServiceOverride,
   tmuxService: tmuxServiceOverride,
+  memoryMonitorService: memoryMonitorServiceOverride,
 }: WorktreeProviderProps) {
   const [worktrees, setWorktrees] = useState<WorktreeInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [lastRefreshed, setLastRefreshed] = useState(0);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [memoryStatus, setMemoryStatus] = useState<MemoryStatus | null>(null);
   const {isAnyDialogFocused} = useInputFocus();
   
   // Access GitHub context directly instead of through props
@@ -108,6 +114,10 @@ export function WorktreeProvider({
     if (tmuxServiceOverride) return tmuxServiceOverride;
     return new TmuxService();
   }, [tmuxServiceOverride]);
+  const memoryMonitorService: MemoryMonitorService = useMemo(() => {
+    if (memoryMonitorServiceOverride) return memoryMonitorServiceOverride;
+    return new MemoryMonitorService();
+  }, [memoryMonitorServiceOverride]);
   // Filesystem operations are routed through GitService methods (see CLAUDE.md)
 
   // Cache available AI tools on startup
@@ -373,6 +383,16 @@ export function WorktreeProvider({
       console.error('Failed to refresh PR status:', error);
     }
   }, [worktrees, refreshPRStatus, getPRStatus]);
+
+  const refreshMemoryStatus = useCallback(async () => {
+    try {
+      const status = await memoryMonitorService.getMemoryStatus();
+      setMemoryStatus(status);
+    } catch (error) {
+      console.error('Failed to refresh memory status:', error);
+    }
+  }, [memoryMonitorService]);
+
   // Operations
   const createFeature = useCallback(async (projectName: string, featureName: string): Promise<WorktreeInfo | null> => {
     setLoading(true);
@@ -796,6 +816,13 @@ export function WorktreeProvider({
     }
   }, [lastRefreshed, refresh]);
 
+  // Initial memory check on mount
+  useEffect(() => {
+    refreshMemoryStatus().catch(error => {
+      console.error('Initial memory status check failed:', error);
+    });
+  }, [refreshMemoryStatus]);
+
   useEffect(() => {
     const interval = setInterval(() => {
       // Skip AI status refresh if any dialog is focused to avoid interrupting typing
@@ -820,12 +847,25 @@ export function WorktreeProvider({
     return () => clearInterval(interval);
   }, [refresh, isAnyDialogFocused]);
 
+  useEffect(() => {
+    const interval = setInterval(() => {
+      // Skip memory status refresh if any dialog is focused to avoid interrupting typing
+      if (!isAnyDialogFocused) {
+        refreshMemoryStatus().catch(error => {
+          console.error('Memory status refresh failed:', error);
+        });
+      }
+    }, MEMORY_REFRESH_DURATION);
+    return () => clearInterval(interval);
+  }, [refreshMemoryStatus, isAnyDialogFocused]);
+
   const contextValue: WorktreeContextType = {
     // State
     worktrees,
     loading,
     lastRefreshed,
     selectedIndex,
+    memoryStatus,
     
     // Navigation
     selectWorktree,

@@ -1,6 +1,7 @@
 import React, {useMemo, useCallback} from 'react';
 import {Box, Text} from 'ink';
 import type {WorktreeInfo} from '../../models.js';
+import type {MemoryStatus} from '../../services/MemoryMonitorService.js';
 import {calculatePaginationInfo, calculatePageSize} from '../../utils/pagination.js';
 import {useTerminalDimensions} from '../../hooks/useTerminalDimensions.js';
 import {useColumnWidths} from './MainView/hooks/useColumnWidths.js';
@@ -25,6 +26,7 @@ interface Props {
   message?: string;
   page?: number;
   pageSize?: number;
+  memoryStatus?: MemoryStatus | null;
 }
 
 export default function MainView({
@@ -34,7 +36,8 @@ export default function MainView({
   prompt,
   message,
   page = 0,
-  pageSize = 20
+  pageSize = 20,
+  memoryStatus
 }: Props) {
   const {rows: terminalRows, columns: terminalWidth} = useTerminalDimensions();
   
@@ -65,6 +68,24 @@ export default function MainView({
   const getRowKey = useCallback((worktree: WorktreeInfo, index: number) => 
     getWorktreeKey(worktree, index), []
   );
+  
+  const renderMemoryWarning = useMemo(() => {
+    if (!memoryStatus || memoryStatus.severity === 'ok') {
+      return null;
+    }
+    
+    const color = memoryStatus.severity === 'critical' ? 'red' : 'yellow';
+    const symbol = memoryStatus.severity === 'critical' ? '⛔' : '⚠';
+    
+    return (
+      <Box marginBottom={1}>
+        <Text color={color} wrap="truncate">
+          {symbol} {memoryStatus.message}
+        </Text>
+      </Box>
+    );
+  }, [memoryStatus]);
+  
   if (mode === 'message') {
     return <MessageView message={message} />;
   }
@@ -82,6 +103,8 @@ export default function MainView({
       <Box marginBottom={1}>
         <Text color="magenta" wrap="truncate">{headerText}</Text>
       </Box>
+      
+      {renderMemoryWarning}
       
       <TableHeader columnWidths={columnWidths} />
       

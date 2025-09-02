@@ -3,6 +3,7 @@ import {AI_TOOLS} from './constants.js';
 
 export type AIStatus = 'not_running' | 'working' | 'waiting' | 'idle' | 'active';
 export type AITool = keyof typeof AI_TOOLS | 'none';
+export type MemorySeverity = 'ok' | 'warning' | 'critical';
 
 export class GitStatus {
   has_changes: boolean;

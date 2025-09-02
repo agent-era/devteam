@@ -13,6 +13,7 @@ export const AI_STATUS_REFRESH_DURATION = 2_000; // 2s AI status refresh
 export const DIFF_STATUS_REFRESH_DURATION = 2_000; // 2s diff status refresh
 export const GIT_REFRESH_DURATION = 5_000; // 5s git refresh
 export const PR_REFRESH_DURATION = 30_000; // 30s PR status refresh (non-merged only)
+export const MEMORY_REFRESH_DURATION = 2_000; // 2s memory status refresh (faster for testing)
 
 export const ENV_FILE = '.env.local';
 export const CLAUDE_SETTINGS_FILE = path.join('.claude', 'settings.local.json');

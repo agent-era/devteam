@@ -7,6 +7,7 @@ import {UIProvider} from '../../src/contexts/UIContext.js';
 import {FakeGitService} from '../fakes/FakeGitService.js';
 import {FakeTmuxService} from '../fakes/FakeTmuxService.js';
 import {FakeGitHubService} from '../fakes/FakeGitHubService.js';
+import {FakeMemoryMonitorService} from '../fakes/FakeMemoryMonitorService.js';
 import {memoryStore} from '../fakes/stores.js';
 import {calculatePageSize, calculatePaginationInfo} from '../../src/utils/pagination.js';
 
@@ -16,25 +17,27 @@ export interface TestAppProps {
   gitService?: FakeGitService;
   tmuxService?: FakeTmuxService;
   gitHubService?: FakeGitHubService;
+  memoryMonitorService?: FakeMemoryMonitorService;
 }
 
 // Create a custom WorktreeProvider for testing that accepts fake services
-function TestWorktreeProvider({children, gitService, tmuxService}: any) {
-  return h(WorktreeProvider, {gitService, tmuxService, children});
+function TestWorktreeProvider({children, gitService, tmuxService, memoryMonitorService}: any) {
+  return h(WorktreeProvider, {gitService, tmuxService, memoryMonitorService, children});
 }
 
 function TestGitHubProvider({children, gitHubService}: any) {
   return h(GitHubProvider, {gitHubService, children});
 }
 
-export function TestApp({gitService, tmuxService, gitHubService}: TestAppProps = {}) {
+export function TestApp({gitService, tmuxService, gitHubService, memoryMonitorService}: TestAppProps = {}) {
   const git = gitService || new FakeGitService();
   const tmux = tmuxService || new FakeTmuxService();
   const github = gitHubService || new FakeGitHubService();
+  const memory = memoryMonitorService || new FakeMemoryMonitorService();
 
   return h(
     TestWorktreeProvider,
-    {gitService: git, tmuxService: tmux},
+    {gitService: git, tmuxService: tmux, memoryMonitorService: memory},
     h(TestGitHubProvider, {gitHubService: github},
       h(UIProvider, null,
         h(App)
@@ -48,11 +51,13 @@ export function renderTestApp(props?: TestAppProps, options?: any) {
   const gitService = props?.gitService || new FakeGitService();
   const tmuxService = props?.tmuxService || new FakeTmuxService();
   const gitHubService = props?.gitHubService || new FakeGitHubService();
+  const memoryMonitorService = props?.memoryMonitorService || new FakeMemoryMonitorService();
   
   const services = {
     gitService,
     tmuxService,
     gitHubService,
+    memoryMonitorService,
     worktreeService: new (require('../fakes/FakeWorktreeService.js').FakeWorktreeService)(gitService, tmuxService)
   };
 

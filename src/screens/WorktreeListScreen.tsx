@@ -28,7 +28,7 @@ export default function WorktreeListScreen({
   onExecuteRun,
   onConfigureRun
 }: WorktreeListScreenProps) {
-  const {worktrees, selectedIndex, selectWorktree, refresh, forceRefreshVisible, attachSession, attachShellSession, needsToolSelection, lastRefreshed} = useWorktreeContext();
+  const {worktrees, selectedIndex, selectWorktree, refresh, forceRefreshVisible, attachSession, attachShellSession, needsToolSelection, lastRefreshed, memoryStatus} = useWorktreeContext();
   const {showAIToolSelection} = useUIContext();
   const pageSize = usePageSize();
   const [currentPage, setCurrentPage] = useState(0);
@@ -197,6 +197,7 @@ export default function WorktreeListScreen({
       onQuit={onQuit}
       page={currentPage}
       pageSize={pageSize}
+      memoryStatus={memoryStatus}
     />
   );
 }
