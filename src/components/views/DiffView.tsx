@@ -1,14 +1,13 @@
 import React, {useEffect, useMemo, useState} from 'react';
 import {Box, Text, useInput, useStdin} from 'ink';
 import SyntaxHighlight from 'ink-syntax-highlight';
-import {runCommandAsync} from '../../utils.js';
-import {findBaseBranch} from '../../utils.js';
+import {runCommandAsync, runCommand} from '../../shared/utils/commandExecutor.js';
+import {findBaseBranch} from '../../shared/utils/gitHelpers.js';
 import {useTerminalDimensions} from '../../hooks/useTerminalDimensions.js';
 import {BASE_BRANCH_CANDIDATES} from '../../constants.js';
 import {CommentStore} from '../../models.js';
 import {commentStoreManager} from '../../services/CommentStoreManager.js';
 import {TmuxService} from '../../services/TmuxService.js';
-import {runCommand} from '../../utils.js';
 import CommentInputDialog from '../dialogs/CommentInputDialog.js';
 import SessionWaitingDialog from '../dialogs/SessionWaitingDialog.js';
 import UnsubmittedCommentsDialog from '../dialogs/UnsubmittedCommentsDialog.js';
