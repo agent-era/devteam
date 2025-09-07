@@ -1,22 +1,52 @@
 {
-  "name": "tmux-session-manager",
-  "version": "0.1.0",
-  "description": "Tmux Session Manager for feature development (Node + Ink)",
+  "name": "@agent-era/devteam",
+  "version": "1.0.0",
+  "description": "A terminal-based developer AI manager for parallel feature development with Claude Code, Codex, and Gemini CLI",
+  "keywords": [
+    "tmux",
+    "git",
+    "worktree",
+    "development",
+    "agent-manager",
+    "cli",
+    "session-manager",
+    "feature-branches",
+    "claude",
+    "claude-code",
+    "codex",
+    "gemini"
+  ],
   "bin": {
-    "dev-sessions": "dist/bin/dev-sessions.js"
+    "devteam": "dist/bin/devteam.js"
   },
   "type": "module",
   "engines": {
     "node": ">=18"
   },
+  "files": [
+    "dist/**/*",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc -p .",
-    "typecheck": "npm install && tsc -p tsconfig.test.json",
+    "typecheck": "npm install && tsc --noEmit",
     "start": "node dist/index.js",
-    "cli": "node dist/bin/dev-sessions.js",
+    "cli": "node dist/bin/devteam.js",
     "test": "jest",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "prepublishOnly": "npm run build && npm run typecheck && npm test"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/agent-era/devteam.git"
+  },
+  "homepage": "https://github.com/agent-era/devteam#readme",
+  "bugs": {
+    "url": "https://github.com/agent-era/devteam/issues"
+  },
+  "author": "Agent Era",
+  "license": "MIT",
   "dependencies": {
     "ink": "^4.4.1",
     "react": "^18.3.1"
