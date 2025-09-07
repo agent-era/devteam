@@ -1,5 +1,5 @@
-import {commandExitCode, runCommandQuick, runCommandQuickAsync, runCommand, runInteractive} from '../utils.js';
-import {SESSION_PREFIX, CLAUDE_PATTERNS} from '../constants.js';
+import {commandExitCode, runCommandQuick, runCommandQuickAsync, runCommand, runInteractive, getCleanEnvironment} from '../utils.js';
+import {SESSION_PREFIX} from '../constants.js';
 import {logDebug} from '../shared/utils/logger.js';
 import {Timer} from '../shared/utils/timing.js';
 import {AIStatus, AITool} from '../models.js';
@@ -8,11 +8,19 @@ import {AIToolService} from './AIToolService.js';
 
 export class TmuxService {
   private aiToolService: AIToolService;
+  // Clean environment for tmux commands to avoid nvm conflicts
+  private _tmuxEnv: NodeJS.ProcessEnv | null = null;
 
   constructor(aiToolService?: AIToolService) {
     this.aiToolService = aiToolService || new AIToolService();
   }
 
+  private get tmuxEnv(): NodeJS.ProcessEnv {
+    if (!this._tmuxEnv) {
+      this._tmuxEnv = getCleanEnvironment();
+    }
+    return this._tmuxEnv;
+  }
   sessionName(project: string, feature: string): string {
     return `${SESSION_PREFIX}${project}-${feature}`;
   }
@@ -26,12 +34,12 @@ export class TmuxService {
   }
 
   hasSession(session: string): boolean {
-    const code = commandExitCode(['tmux', 'has-session', '-t', `=${session}`]);
+    const code = commandExitCode(['tmux', 'has-session', '-t', `=${session}`], undefined, this.tmuxEnv);
     return code === 0;
   }
 
   async listSessions(): Promise<string[]> {
-    const output = await runCommandQuickAsync(['tmux', 'list-sessions', '-F', '#S']);
+    const output = await runCommandQuickAsync(['tmux', 'list-sessions', '-F', '#S'], undefined, this.tmuxEnv);
     if (!output) return [];
     
     const sessions = output.split('\n').filter(Boolean);
@@ -40,7 +48,7 @@ export class TmuxService {
 
   async capturePane(session: string): Promise<string> {
     const target = await this.findAIPaneTarget(session) || `${session}:0.0`;
-    const output = await runCommandQuickAsync(['tmux', 'capture-pane', '-p', '-t', target, '-S', '-50']);
+    const output = await runCommandQuickAsync(['tmux', 'capture-pane', '-p', '-t', target, '-S', '-50'], undefined, this.tmuxEnv);
     
     return output || '';
   }
@@ -61,11 +69,11 @@ export class TmuxService {
 
 
   killSession(session: string): string {
-    return runCommandQuick(['tmux', 'kill-session', '-t', session]);
+    return runCommandQuick(['tmux', 'kill-session', '-t', session], undefined, this.tmuxEnv);
   }
 
   createSession(sessionName: string, cwd: string, autoExit: boolean = false): void {
-    runCommand(['tmux', 'new-session', '-ds', sessionName, '-c', cwd]);
+    runCommand(['tmux', 'new-session', '-ds', sessionName, '-c', cwd], { env: this.tmuxEnv });
     if (autoExit) {
       this.setSessionOption(sessionName, 'remain-on-exit', 'off');
     }
@@ -73,7 +81,7 @@ export class TmuxService {
 
   createSessionWithCommand(sessionName: string, cwd: string, command: string, autoExit: boolean = true): void {
     const shell = process.env.SHELL || '/bin/bash';
-    runCommand(['tmux', 'new-session', '-ds', sessionName, '-c', cwd, command || shell]);
+    runCommand(['tmux', 'new-session', '-ds', sessionName, '-c', cwd, command || shell], { env: this.tmuxEnv });
     if (autoExit) {
       this.setSessionOption(sessionName, 'remain-on-exit', 'off');
     }
@@ -93,13 +101,13 @@ export class TmuxService {
     
     if (executeCommand) {
       // Send as command and execute with Enter
-      runCommand(['tmux', 'send-keys', '-t', `${session}:0.0`, text, 'C-m']);
+      runCommand(['tmux', 'send-keys', '-t', `${session}:0.0`, text, 'C-m'], { env: this.tmuxEnv });
     } else if (addNewline) {
       // Send text with newline character
-      runCommand(['tmux', 'send-keys', '-t', `${session}:0.0`, text + '\n']);
+      runCommand(['tmux', 'send-keys', '-t', `${session}:0.0`, text + '\n'], { env: this.tmuxEnv });
     } else {
       // Send text as-is
-      runCommand(['tmux', 'send-keys', '-t', `${session}:0.0`, text]);
+      runCommand(['tmux', 'send-keys', '-t', `${session}:0.0`, text], { env: this.tmuxEnv });
     }
   }
 
@@ -119,13 +127,13 @@ export class TmuxService {
       this.sendText(session, line);
       if (endWithAltEnter) {
         // Use Alt+Enter for multi-line input (like Claude input)
-        runCommand(['tmux', 'send-keys', '-t', `${session}:0.0`, 'Escape', 'Enter']);
+        runCommand(['tmux', 'send-keys', '-t', `${session}:0.0`, 'Escape', 'Enter'], { env: this.tmuxEnv });
       }
     });
     
     if (endWithExecute) {
       // Final execute command
-      runCommand(['tmux', 'send-keys', '-t', `${session}:0.0`, 'C-m']);
+      runCommand(['tmux', 'send-keys', '-t', `${session}:0.0`, 'C-m'], { env: this.tmuxEnv });
     }
   }
 
@@ -135,7 +143,7 @@ export class TmuxService {
    * @param keys Key combination (e.g., 'Escape', 'Enter', 'C-m')
    */
   sendSpecialKeys(session: string, ...keys: string[]): void {
-    runCommand(['tmux', 'send-keys', '-t', `${session}:0.0`, ...keys]);
+    runCommand(['tmux', 'send-keys', '-t', `${session}:0.0`, ...keys], { env: this.tmuxEnv });
   }
 
   attachSessionInteractive(sessionName: string): void {
@@ -143,15 +151,15 @@ export class TmuxService {
   }
 
   setOption(option: string, value: string): void {
-    runCommand(['tmux', 'set-option', '-g', option, value]);
+    runCommand(['tmux', 'set-option', '-g', option, value], { env: this.tmuxEnv });
   }
 
   setSessionOption(session: string, option: string, value: string): void {
-    runCommand(['tmux', 'set-option', '-t', session, option, value]);
+    runCommand(['tmux', 'set-option', '-t', session, option, value], { env: this.tmuxEnv });
   }
 
   async listPanes(session: string): Promise<string> {
-    return await runCommandQuickAsync(['tmux', 'list-panes', '-t', `=${session}`, '-F', '#{window_index}.#{pane_index} #{pane_current_command}']) || '';
+    return await runCommandQuickAsync(['tmux', 'list-panes', '-t', `=${session}`, '-F', '#{window_index}.#{pane_index} #{pane_current_command}'], undefined, this.tmuxEnv) || '';
   }
 
   async cleanupOrphanedSessions(validWorktrees: string[]): Promise<void> {
