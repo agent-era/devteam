@@ -12,6 +12,7 @@ jest.mock('../../src/utils.js', () => ({
   runCommand: jest.fn(),
   commandExitCode: jest.fn(),
   runInteractive: jest.fn(),
+  getCleanEnvironment: jest.fn(() => ({ ...process.env, npm_config_prefix: undefined })),
 }));
 
 describe('AI Tool Switching', () => {
