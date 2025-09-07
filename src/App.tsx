@@ -264,15 +264,7 @@ function AppContent() {
             onCancel={showList}
             onSubmit={handleCreateFromBranch}
             onRefresh={() => {
-              if (branchProject) {
-                // Reload remote branches for the current project and refresh the list
-                getRemoteBranches(branchProject).then(branches => {
-                  showBranchListForProject(branchProject, branches);
-                }).catch(() => {
-                  // On error, keep current list but return to list view to avoid a stuck UI
-                  showList();
-                });
-              }
+              // TODO: Refresh branch list
             }}
           />
         </Box>
