@@ -14,12 +14,12 @@ export interface MemoryStatus {
 }
 
 export class MemoryMonitorService {
-  // Reasonable defaults for modern dev machines
-  // - Warning when free RAM < 4 GB or swap usage > 50%
-  // - Critical when free RAM < 2 GB or swap usage > 90%
-  private static readonly WARNING_RAM_THRESHOLD_GB = 4.0;
-  private static readonly CRITICAL_RAM_THRESHOLD_GB = 2.0;
-  private static readonly WARNING_SWAP_THRESHOLD = 50; // percent used
+  // Thresholds:
+  // - Warning when free RAM < 1 GB or swap usage > 75%
+  // - Critical when free RAM < 0.5 GB or swap usage > 90%
+  private static readonly WARNING_RAM_THRESHOLD_GB = 1.0;
+  private static readonly CRITICAL_RAM_THRESHOLD_GB = 0.5;
+  private static readonly WARNING_SWAP_THRESHOLD = 75; // percent used
   private static readonly CRITICAL_SWAP_THRESHOLD = 90; // percent used
 
   async getMemoryStatus(): Promise<MemoryStatus> {
