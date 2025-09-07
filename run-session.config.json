@@ -1,1 +1,0 @@
-{"command": "npm run cli", "env": {}, "setup": ["npm install", "npm run build"], "watch": true}

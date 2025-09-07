@@ -1,0 +1,9 @@
+{
+  "executionInstructions": {
+    "mainCommand": "npm run cli -- --dir ~/projects",
+    "preRunCommands": ["npm install", "npm run build"],
+    "environmentVariables": {},
+    "detachOnExit": false
+  },
+  "notes": "CLI-based tmux session manager built with TypeScript, React, and Ink. The 'npm run cli' command runs the compiled dev-sessions binary. Use 'npm test' to run Jest tests and 'npm run typecheck' for type checking. The app manages development sessions for feature branches across multiple projects with git worktrees and tmux integration."
+}
