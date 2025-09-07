@@ -26,13 +26,6 @@ export default function AIToolDialog({availableTools, currentTool, onSelect, onC
     }));
   }, [availableTools, currentTool]);
 
-  const defaultSelected = useMemo(() => {
-    if (currentTool && currentTool !== 'none') {
-      const idx = availableTools.indexOf(currentTool);
-      return idx >= 0 ? availableTools[idx] : availableTools[0];
-    }
-    return availableTools[0];
-  }, [availableTools, currentTool]);
 
   const handleSelect = (toolValue: string) => {
     onSelect(toolValue as keyof typeof AI_TOOLS);
@@ -65,11 +58,10 @@ export default function AIToolDialog({availableTools, currentTool, onSelect, onC
   return (
     <Box flexDirection="column">
       <Text color="cyan">Select AI Tool</Text>
-      <Text color="gray">j/k arrows to move, 1-9 quick select, Enter to confirm, ESC to cancel</Text>
+      <Text color="gray">j/k arrows to move, 1-9 quick select, Enter to launch, ESC to cancel</Text>
       <Text></Text>
       <Select
         options={options}
-        defaultValue={defaultSelected}
         onChange={handleSelect}
       />
     </Box>
