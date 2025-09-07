@@ -40,7 +40,7 @@ export default function MainView({
 
   // Measure-based calculation to ensure we don't render more rows than fit.
   const listRef = useRef<any>(null);
-  const [measuredPageSize, setMeasuredPageSize] = useState<number>(1);
+  const [measuredPageSize, setMeasuredPageSize] = useState<number>(Math.max(1, worktrees?.length || 1));
 
   const columnWidths = useColumnWidths(worktrees, terminalWidth, page, measuredPageSize);
   
