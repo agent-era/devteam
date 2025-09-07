@@ -64,8 +64,7 @@ Each feature gets three tmux sessions:
 
 The tool copies configuration files to new worktrees:
 - `.env.local` - Environment variables
-- `.claude/settings.local.json` - Claude AI settings
-- `CLAUDE.md` - Project documentation
+- `.claude/` - Creates a symlink to this
 
 ## Development
 
