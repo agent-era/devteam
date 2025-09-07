@@ -660,15 +660,16 @@ export function WorktreeProvider({
         tmuxService.sendText(sessionName, setupCmd, { executeCommand: true });
       }
       
-      // // Set environment variables if they exist (new: environmentVariables; legacy: env)
-      // const envVars = ((cfg as any).environmentVariables && typeof (cfg as any).environmentVariables === 'object')
-      //   ? (cfg as any).environmentVariables
-      //   : (((cfg as any).env && typeof (cfg as any).env === 'object') ? (cfg as any).env : undefined);
-      // if (envVars) {
-      //   for (const [key, value] of Object.entries(envVars)) {
-      //     tmuxService.sendText(sessionName, `export ${key}="${String(value)}"`, { executeCommand: true });
-      //   }
-      // }
+      // Set environment variables if they exist (new: environmentVariables; legacy: env)
+      const envVars = ((cfg as any).environmentVariables && typeof (cfg as any).environmentVariables === 'object')
+        ? (cfg as any).environmentVariables
+        : (((cfg as any).env && typeof (cfg as any).env === 'object') ? (cfg as any).env : undefined);
+      if (envVars) {
+        for (const [key, value] of Object.entries(envVars)) {
+          const safeVal = String(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+          tmuxService.sendText(sessionName, `export ${key}="${safeVal}"`, { executeCommand: true });
+        }
+      }
       
       // Run the main command (new: mainCommand; legacy: command)
       const command = (cfg as any).mainCommand || (cfg as any).command;
