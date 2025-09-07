@@ -3,7 +3,7 @@ import {Box, measureElement} from 'ink';
 import AnnotatedText from '../common/AnnotatedText.js';
 import type {WorktreeInfo} from '../../models.js';
 import type {MemoryStatus} from '../../services/MemoryMonitorService.js';
-import type {VersionInfo} from '../../services/VersionCheckService.js';
+import type {VersionInfo} from '../../services/versionTypes.js';
 import {calculatePaginationInfo} from '../../utils/pagination.js';
 import {useTerminalDimensions} from '../../hooks/useTerminalDimensions.js';
 import {useColumnWidths} from './MainView/hooks/useColumnWidths.js';
