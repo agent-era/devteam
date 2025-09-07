@@ -40,7 +40,7 @@ export function formatPushStatus(worktree: WorktreeInfo): string {
   return '↗';
 }
 
-export function getAISymbol(aiStatus: string, hasSession: boolean, aiTool?: string): string {
+export function getAISymbol(aiStatus: string, hasSession: boolean): string {
   // Get the base symbol
   let baseSymbol: string;
   
@@ -70,23 +70,12 @@ export function getAISymbol(aiStatus: string, hasSession: boolean, aiTool?: stri
     }
   }
   
-  // Add AI tool indicator
-  if (hasSession && aiTool && aiTool !== 'none') {
-    const toolIndicators: Record<string, string> = {
-      'claude': '[A]',  // Anthropic
-      'codex': '[O]',   // OpenAI
-      'gemini': '[G]'   // Google
-    };
-    const indicator = toolIndicators[aiTool] || '[?]';
-    return `${baseSymbol}${indicator}`;
-  }
-  
   return baseSymbol;
 }
 
 // Backward compatibility function
 export function getClaudeSymbol(claudeStatus: string, hasSession: boolean): string {
-  return getAISymbol(claudeStatus, hasSession, 'claude');
+  return getAISymbol(claudeStatus, hasSession);
 }
 
 export function formatPRStatus(pr: WorktreeInfo['pr']): string {
