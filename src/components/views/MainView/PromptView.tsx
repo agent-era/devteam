@@ -12,7 +12,7 @@ export const PromptView = memo<PromptViewProps>(({prompt}) => {
     <Box flexDirection="column">
       <Text color="cyan">{prompt?.title || ''}</Text>
       <Text>{prompt?.text || ''}</Text>
-      <Text color="gray">{prompt?.hint || ''}</Text>
+      <Text color="magenta">{prompt?.hint || ''}</Text>
     </Box>
   );
 });
