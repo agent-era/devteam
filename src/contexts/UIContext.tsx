@@ -4,7 +4,7 @@ import {WorktreeInfo} from '../models.js';
 
 type UIMode = 'list' | 'create' | 'confirmArchive' | 'help' | 
              'pickProjectForBranch' | 'pickBranch' | 'diff' | 'runConfig' | 
-             'runProgress' | 'runResults' | 'selectAITool';
+             'runProgress' | 'runResults' | 'selectAITool' | 'tmuxHint';
 
 interface UIContextType {
   // Current UI state values
@@ -22,6 +22,10 @@ interface UIContextType {
   runConfigResult: any | null;
   pendingWorktree: WorktreeInfo | null;
   
+  // One-time tmux hint dialog
+  tmuxHintShown: boolean;
+  tmuxHintWorktree: WorktreeInfo | null;
+  
   // UI navigation operations - self-documenting methods
   showList: () => void;
   showCreateFeature: (projects: any[]) => void;
@@ -34,6 +38,7 @@ interface UIContextType {
   showRunProgress: () => void;
   showRunResults: (result: any) => void;
   showAIToolSelection: (worktree: WorktreeInfo) => void;
+  showTmuxHintFor: (worktree: WorktreeInfo) => void;
   
   // Branch management
   setBranchList: (branches: any[]) => void;
@@ -41,6 +46,7 @@ interface UIContextType {
   
   // Application lifecycle
   requestExit: () => void;
+  markTmuxHintShown: () => void;
 }
 
 const UIContext = createContext<UIContextType | null>(null);
@@ -64,6 +70,9 @@ export function UIProvider({children}: UIProviderProps) {
   const [runPath, setRunPath] = useState<string | null>(null);
   const [runConfigResult, setRunConfigResult] = useState<any | null>(null);
   const [pendingWorktree, setPendingWorktree] = useState<WorktreeInfo | null>(null);
+  // Show tmux hint once per app run
+  const [tmuxHintShown, setTmuxHintShown] = useState<boolean>(false);
+  const [tmuxHintWorktree, setTmuxHintWorktree] = useState<WorktreeInfo | null>(null);
 
 
   const resetUIState = () => {
@@ -148,8 +157,20 @@ export function UIProvider({children}: UIProviderProps) {
     setPendingWorktree(worktree);
   };
 
+  const showTmuxHintFor = (worktree: WorktreeInfo) => {
+    // Only show if not already shown
+    if (tmuxHintShown) return;
+    setMode('tmuxHint');
+    setTmuxHintWorktree(worktree);
+  };
+
   const requestExit = () => {
     setShouldExit(true);
+  };
+
+  const markTmuxHintShown = () => {
+    setTmuxHintShown(true);
+    setTmuxHintWorktree(null);
   };
 
 
@@ -169,6 +190,10 @@ export function UIProvider({children}: UIProviderProps) {
     runConfigResult,
     pendingWorktree,
     
+    // One-time tmux hint
+    tmuxHintShown,
+    tmuxHintWorktree,
+    
     // Navigation methods
     showList,
     showCreateFeature,
@@ -181,12 +206,14 @@ export function UIProvider({children}: UIProviderProps) {
     showRunProgress,
     showRunResults,
     showAIToolSelection,
+    showTmuxHintFor,
     
     // Branch management
     setBranchList,
     setBranchProject,
     
-    requestExit
+    requestExit,
+    markTmuxHintShown
   };
 
   return (
