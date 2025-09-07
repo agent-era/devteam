@@ -1,4 +1,4 @@
-import {runCommandQuickAsync, runCommand} from '../utils.js';
+import {runCommandQuickAsync, runCommand} from '../shared/utils/commandExecutor.js';
 import {AI_TOOLS} from '../constants.js';
 import {AIStatus, AITool} from '../models.js';
 

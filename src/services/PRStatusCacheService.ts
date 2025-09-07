@@ -14,7 +14,7 @@ import {
   PR_TTL_UNKNOWN_MS,
   PR_TTL_FALLBACK_MS,
 } from '../constants.js';
-import {runCommandQuick} from '../utils.js';
+import {runCommandQuick} from '../shared/utils/commandExecutor.js';
 
 interface CacheEntry {
   data: any; // Raw data that will be used to reconstruct PRStatus

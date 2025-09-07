@@ -2,11 +2,11 @@ import {TmuxService} from '../../src/services/TmuxService.js';
 import {FakeWorktreeService} from '../fakes/FakeWorktreeService.js';
 import {FakeGitService} from '../fakes/FakeGitService.js';
 import {FakeTmuxService} from '../fakes/FakeTmuxService.js';
-import {runCommandQuickAsync, commandExitCode} from '../../src/utils.js';
+import {runCommandQuickAsync, commandExitCode} from '../../src/shared/utils/commandExecutor.js';
 import {memoryStore} from '../fakes/stores.js';
 import type {AITool} from '../../src/models.js';
 
-jest.mock('../../src/utils.js', () => ({
+jest.mock('../../src/shared/utils/commandExecutor.js', () => ({
   runCommandQuickAsync: jest.fn(),
   runCommandQuick: jest.fn(),
   runCommand: jest.fn(),

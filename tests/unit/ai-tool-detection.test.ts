@@ -2,15 +2,15 @@ import {TmuxService} from '../../src/services/TmuxService.js';
 import {AI_TOOLS} from '../../src/constants.js';
 
 // Mock the command execution functions
-jest.mock('../../src/utils.js', () => ({
-  ...jest.requireActual('../../src/utils.js'),
+jest.mock('../../src/shared/utils/commandExecutor.js', () => ({
+  ...jest.requireActual('../../src/shared/utils/commandExecutor.js'),
   runCommandQuickAsync: jest.fn(),
   runCommandQuick: jest.fn(),
   runCommand: jest.fn(),
   commandExitCode: jest.fn(),
 }));
 
-import {runCommandQuickAsync} from '../../src/utils.js';
+import {runCommandQuickAsync} from '../../src/shared/utils/commandExecutor.js';
 
 describe('AI Tool Detection', () => {
   let tmuxService: TmuxService;

@@ -3,12 +3,12 @@ import {PRStatusCacheService} from '../../src/services/PRStatusCacheService.js';
 import {PRStatus} from '../../src/models.js';
 
 // Mock the runCommandQuick at the module level
-jest.mock('../../src/utils.js', () => ({
-  ...(jest.requireActual('../../src/utils.js') as any),
+jest.mock('../../src/shared/utils/commandExecutor.js', () => ({
+  ...(jest.requireActual('../../src/shared/utils/commandExecutor.js') as any),
   runCommandQuick: jest.fn()
 }));
 
-import {runCommandQuick} from '../../src/utils.js';
+import {runCommandQuick} from '../../src/shared/utils/commandExecutor.js';
 const mockRunCommandQuick = runCommandQuick as jest.MockedFunction<typeof runCommandQuick>;
 
 describe('PR Cache Remote Commit Invalidation', () => {
