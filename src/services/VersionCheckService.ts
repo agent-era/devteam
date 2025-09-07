@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {PACKAGE_NAME} from '../constants.js';
 import {logDebug, logError} from '../shared/utils/logger.js';
 import type {VersionInfo} from './versionTypes.js';
@@ -13,6 +14,10 @@ export class VersionCheckService {
 
   async check(): Promise<VersionInfo | null> {
     try {
+      if (typeof (globalThis as any).fetch !== 'function') {
+        logDebug('Global fetch not available; skipping version check');
+        return null;
+      }
       const current = await this.getCurrentVersion();
       if (!current) return null;
 
@@ -40,6 +45,15 @@ export class VersionCheckService {
     // Prefer env-provided version (present in many npm-run contexts)
     const envVersion = process.env.npm_package_version || process.env.DEVTEAM_VERSION;
     if (envVersion) return envVersion;
+    // Try reading from this package's package.json (works for global/local install)
+    try {
+      // Avoid static import.meta syntax so Jest CJS parsing doesn't choke
+      const metaUrl = (Function('return import.meta.url') as () => string)();
+      const pkgPath = fileURLToPath(new URL('../../package.json', metaUrl));
+      const content = await fs.promises.readFile(pkgPath, 'utf-8');
+      const pkg = JSON.parse(content);
+      if (pkg?.version) return String(pkg.version);
+    } catch {}
     // Fallback: read package.json from current working directory
     try {
       const pkgPath = path.resolve(process.cwd(), 'package.json');
