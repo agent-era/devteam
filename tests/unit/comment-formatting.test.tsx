@@ -11,11 +11,11 @@ describe('Comment formatting for Claude prompts', () => {
         commentText: 'Good constant naming'
       }];
 
-      let prompt = "Please address the following code review comments:\\n\\n";
-      prompt += `File: src/test.ts\\n`;
-      prompt += `  Line 3: const value = 42;\\n`;
-      prompt += `  Comment: Good constant naming\\n`;
-      prompt += "\\n";
+      let prompt = "Please address the following code review comments:\n\n";
+      prompt += `File: src/test.ts\n`;
+      prompt += `  Line 3: const value = 42;\n`;
+      prompt += `  Comment: Good constant naming\n`;
+      prompt += "\n";
 
       expect(prompt).toContain('Line 3: const value = 42;');
       expect(prompt).toContain('Comment: Good constant naming');
@@ -29,11 +29,11 @@ describe('Comment formatting for Claude prompts', () => {
         commentText: 'Why was this removed?'
       }];
 
-      let prompt = "Please address the following code review comments:\\n\\n";
-      prompt += `File: src/test.ts\\n`;
-      prompt += `  Line content: const removed = 1;\\n`;
-      prompt += `  Comment: Why was this removed?\\n`;
-      prompt += "\\n";
+      let prompt = "Please address the following code review comments:\n\n";
+      prompt += `File: src/test.ts\n`;
+      prompt += `  Line content: const removed = 1;\n`;
+      prompt += `  Comment: Why was this removed?\n`;
+      prompt += "\n";
 
       expect(prompt).toContain('Line content: const removed = 1;');
       expect(prompt).toContain('Comment: Why was this removed?');
@@ -48,10 +48,10 @@ describe('Comment formatting for Claude prompts', () => {
         commentText: 'Review this new file structure'
       }];
 
-      let prompt = "Please address the following code review comments:\\n\\n";
-      prompt += `File: src/newfile.ts\\n`;
-      prompt += `  Comment: Review this new file structure\\n`;
-      prompt += "\\n";
+      let prompt = "Please address the following code review comments:\n\n";
+      prompt += `File: src/newfile.ts\n`;
+      prompt += `  Comment: Review this new file structure\n`;
+      prompt += "\n";
 
       expect(prompt).not.toContain('Line content:');
       expect(prompt).not.toContain('Line 1:');
@@ -80,7 +80,7 @@ describe('Comment formatting for Claude prompts', () => {
         }
       ];
 
-      let prompt = "Please address the following code review comments:\\n\\n";
+      let prompt = "Please address the following code review comments:\n\n";
       
       const commentsByFile: {[key: string]: typeof comments} = {};
       comments.forEach(comment => {
@@ -91,19 +91,19 @@ describe('Comment formatting for Claude prompts', () => {
       });
 
       Object.entries(commentsByFile).forEach(([fileName, fileComments]) => {
-        prompt += `File: ${fileName}\\n`;
+        prompt += `File: ${fileName}\n`;
         fileComments.forEach(comment => {
           if (comment.lineIndex !== undefined) {
             // Normal line with line number
-            prompt += `  Line ${comment.lineIndex + 1}: ${comment.lineText}\\n`;
+            prompt += `  Line ${comment.lineIndex + 1}: ${comment.lineText}\n`;
           } else if (comment.lineText && comment.lineText.trim().length > 0 && comment.lineText !== fileName) {
             // Removed line or other content - show line content without line number
-            prompt += `  Line content: ${comment.lineText}\\n`;
+            prompt += `  Line content: ${comment.lineText}\n`;
           }
           // For file headers (lineText == fileName), just show the comment
-          prompt += `  Comment: ${comment.commentText}\\n`;
+          prompt += `  Comment: ${comment.commentText}\n`;
         });
-        prompt += "\\n";
+        prompt += "\n";
       });
 
       // Verify different formatting for each comment type
@@ -168,3 +168,4 @@ describe('Comment formatting for Claude prompts', () => {
     });
   });
 });
+
