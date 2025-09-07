@@ -66,7 +66,7 @@ export const USE_EMOJI_SYMBOLS = false;
 // When true, wcwidth treats a small allowlist of such symbols as wide.
 export const AMBIGUOUS_EMOJI_ARE_WIDE = true;
 export const ASCII_SYMBOLS = {
-  NO_SESSION: 'o',
+  NO_SESSION: '-',
   IDLE: '✓',
   WORKING: '*',
   WAITING: '?',
