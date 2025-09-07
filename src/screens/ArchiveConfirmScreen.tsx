@@ -3,7 +3,6 @@ import {Box, Text, useInput, useStdin} from 'ink';
 import FullScreen from '../components/common/FullScreen.js';
 import {useWorktreeContext} from '../contexts/WorktreeContext.js';
 
-const h = React.createElement;
 
 interface ArchiveFeatureInfo {
   project: string;
@@ -48,17 +47,19 @@ export default function ArchiveConfirmScreen({
     }
   });
 
-  return h(FullScreen, null,
-    h(Box as any, {flexGrow: 1, alignItems: 'center', justifyContent: 'center'},
-      h(Box, {flexDirection: 'column', paddingX: 2},
-        h(Text, {bold: true, color: 'cyan'}, 'Archive Feature'),
-        h(Box, {marginTop: 1},
-          h(Text, null, `Archive ${featureInfo.project}/${featureInfo.feature}?`)
-        ),
-        h(Box, {marginTop: 1},
-          h(Text, {color: 'gray'}, 'Press y to confirm, n to cancel')
-        )
-      )
-    )
+  return (
+    <FullScreen>
+      <Box flexGrow={1} alignItems="center" justifyContent="center">
+        <Box flexDirection="column" paddingX={2}>
+          <Text bold color="cyan">Archive Feature</Text>
+          <Box marginTop={1}>
+            <Text>Archive {featureInfo.project}/{featureInfo.feature}?</Text>
+          </Box>
+          <Box marginTop={1}>
+            <Text color="magenta" wrap="truncate">Press y to confirm, n to cancel</Text>
+          </Box>
+        </Box>
+      </Box>
+    </FullScreen>
   );
 }

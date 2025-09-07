@@ -43,8 +43,11 @@ export function logWarn(message: string, data?: any): void {
   storeLogEntry(false, entry);
 }
 
-// Log debug function
+// Log debug function - only logs when DEBUG_LOGS environment variable is set
 export function logDebug(message: string, data?: any): void {
+  if (!process.env.DEBUG_LOGS) {
+    return; // Skip logging if DEBUG_LOGS is not set
+  }
   const entry = formatLogEntry('DEBUG', message, data);
   storeLogEntry(false, entry);
 }
@@ -94,6 +97,9 @@ function applyConsoleOverrides(): void {
   };
 
   console.debug = (...args: any[]) => {
+    if (!process.env.DEBUG_LOGS) {
+      return; // Skip logging if DEBUG_LOGS is not set
+    }
     const message = args.map(arg => 
       typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
     ).join(' ');

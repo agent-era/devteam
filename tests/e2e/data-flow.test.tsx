@@ -19,7 +19,7 @@ import {
 import {memoryStore} from '../fakes/stores.js';
 import {WorktreeInfo, GitStatus, PRStatus, SessionInfo} from '../../src/models.js';
 
-describe('Data Flow Integration E2E', () => {
+describe('Data Flow E2E', () => {
   beforeEach(() => {
     resetTestData();
   });

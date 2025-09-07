@@ -1,10 +1,10 @@
 import {GitService} from '../../src/services/GitService.js';
-import {GitStatus, ProjectInfo, PRStatus, WorktreeInfo} from '../../src/models.js';
+import {GitStatus, ProjectInfo, PRStatus, WorktreeInfo, SessionInfo} from '../../src/models.js';
 import {memoryStore} from './stores.js';
-import {BASE_PATH, DIR_BRANCHES_SUFFIX, DIR_ARCHIVED_SUFFIX} from '../../src/constants.js';
+import {DIR_BRANCHES_SUFFIX, DIR_ARCHIVED_SUFFIX} from '../../src/constants.js';
 
 export class FakeGitService extends GitService {
-  constructor(basePath: string = BASE_PATH) {
+  constructor(basePath: string = '/tmp/test-projects') {
     super(basePath);
   }
 
@@ -51,6 +51,15 @@ export class FakeGitService extends GitService {
       behind: 0,
       is_pushed: true,
     });
+  }
+
+  createProject(projectName: string): void {
+    if (!memoryStore.projects.has(projectName)) {
+      memoryStore.projects.set(projectName, new ProjectInfo({
+        name: projectName,
+        path: `/fake/projects/${projectName}`,
+      }));
+    }
   }
 
   createWorktree(project: string, featureName: string, branchName?: string): boolean {
@@ -245,6 +254,71 @@ export class FakeGitService extends GitService {
     memoryStore.archivedWorktrees.set(worktree.project, archived);
 
     return archivedPath;
+  }
+
+  // Unarchive a worktree (create fresh worktree from existing branch)
+  unarchiveWorktree(archivedPath: string): string {
+    // Check if unarchive should fail (for error testing)
+    if ((global as any).__mockGitShouldFail || (global as any).__mockUnarchiveShouldFail) {
+      throw new Error('Mock unarchive failure');
+    }
+
+    // Find the archived worktree
+    let archivedWorktree: any = null;
+    let project: string = '';
+    let archivedIndex: number = -1;
+    let archivedList: any[] = [];
+    
+    for (const [proj, list] of memoryStore.archivedWorktrees.entries()) {
+      const index = list.findIndex(w => w.path === archivedPath);
+      if (index >= 0) {
+        archivedWorktree = list[index];
+        project = proj;
+        archivedIndex = index;
+        archivedList = list;
+        break;
+      }
+    }
+    
+    if (!archivedWorktree) {
+      throw new Error('Archived worktree not found');
+    }
+
+    // Generate restored path (same as old logic)
+    const restoredPath = archivedPath
+      .replace(DIR_ARCHIVED_SUFFIX, DIR_BRANCHES_SUFFIX)
+      .replace(/archived-[0-9-]+_/, '');
+
+    // Check if restored path already exists
+    if (memoryStore.worktrees.has(restoredPath)) {
+      throw new Error(`Feature ${project}/${archivedWorktree.feature} already exists in active worktrees`);
+    }
+
+    // Verify branch exists (in real implementation this would check git branches)
+    // For fake service, we assume the branch exists since archive doesn't delete branches
+    
+    // Remove from archived (simulating removal of archived directory)
+    archivedList.splice(archivedIndex, 1);
+    memoryStore.archivedWorktrees.set(project, archivedList);
+
+    // Create fresh worktree (simulating git worktree add)
+    const restoredWorktree = new WorktreeInfo({
+      project: archivedWorktree.project,
+      feature: archivedWorktree.feature,
+      path: restoredPath,
+      branch: archivedWorktree.branch,
+      is_archived: false,
+      // Fresh worktree starts with clean git status
+      git: new GitStatus(),
+      session: new SessionInfo({
+        session_name: `dev-${project}-${archivedWorktree.feature}`,
+        attached: false,
+        claude_status: 'not_running'
+      })
+    });
+    
+    memoryStore.worktrees.set(restoredPath, restoredWorktree);
+    return restoredPath;
   }
 
   // Delete an archived worktree permanently

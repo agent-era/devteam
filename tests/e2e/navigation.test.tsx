@@ -351,6 +351,7 @@ describe('Navigation E2E', () => {
       expect(lastFrame()).toContain('my-project/feature-1');
     });
 
+
     test('should handle quit operation', async () => {
       setupProjectWithWorktrees('my-project', ['feature-1']);
       

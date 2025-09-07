@@ -317,7 +317,7 @@ describe('Run Configuration E2E', () => {
       await simulateTimeDelay(50);
       
       // Create main session
-      const mainSession = services.tmuxService.createSession('multi-session', 'all-sessions', 'idle');
+      const mainSession = services.tmuxService.createTestSession('multi-session', 'all-sessions', 'idle');
       expect(mainSession).toBe('dev-multi-session-all-sessions');
       
       // Create shell session

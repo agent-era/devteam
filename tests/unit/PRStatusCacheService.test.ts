@@ -156,4 +156,25 @@ describe('PRStatusCacheService', () => {
     cacheService.cleanup();
     expect(cacheService.getCachedPaths()).not.toContain(worktreePath);
   });
+
+  test('should invalidate multiple cache entries', () => {
+    const paths = ['/test/path1', '/test/path2', '/test/path3'];
+    const prStatus = new PRStatus({loadingStatus: 'exists', number: 123});
+
+    // Cache entries for all paths
+    paths.forEach(path => cacheService.set(path, prStatus));
+    
+    // Verify all entries are cached
+    paths.forEach(path => {
+      expect(cacheService.get(path)).toBeTruthy();
+    });
+
+    // Invalidate selected entries
+    cacheService.invalidateMultiple([paths[0], paths[2]]);
+
+    // Verify correct entries are invalidated
+    expect(cacheService.get(paths[0])).toBeNull(); // invalidated
+    expect(cacheService.get(paths[1])).toBeTruthy(); // still cached
+    expect(cacheService.get(paths[2])).toBeNull(); // invalidated
+  });
 });

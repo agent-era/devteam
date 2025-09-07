@@ -7,6 +7,7 @@ import {
   simulateTimeDelay,
   memoryStore,
 } from '../utils/testHelpers.js';
+import {SessionInfo} from '../../src/models.js';
 
 describe('UI Dialogs E2E', () => {
   beforeEach(() => {
@@ -188,11 +189,11 @@ describe('UI Dialogs E2E', () => {
       
       // Mock active session
       const sessionName = 'dev-session-cleanup-active-feature';
-      memoryStore.sessions.set(sessionName, {
+      memoryStore.sessions.set(sessionName, new SessionInfo({
         session_name: sessionName,
         attached: true,
         claude_status: 'working'
-      });
+      }));
       
       const {setUIMode, lastFrame} = renderTestApp();
       await simulateTimeDelay(50);

@@ -17,9 +17,14 @@ A CLI-based tmux session manager built with TypeScript, React, and Ink. This too
 
 #### 1. **Worktrees** 
 Git worktrees allow multiple branches to be checked out simultaneously in different directories. This app manages worktrees in a structured way:
-- Main projects: `~/projects/{project-name}/`
-- Feature branches: `~/projects/{project-name}-branches/{feature-name}/`
-- Archived features: `~/projects/{project-name}-archived/archived-{timestamp}_{feature-name}/`
+- Main projects: `{projects-directory}/{project-name}/`
+- Feature branches: `{projects-directory}/{project-name}-branches/{feature-name}/`
+- Archived features: `{projects-directory}/{project-name}-archived/archived-{timestamp}_{feature-name}/`
+
+The projects directory is configurable:
+- **CLI Argument**: `dev-sessions --dir /path/to/projects`
+- **Environment Variable**: `PROJECTS_DIR=/path/to/projects dev-sessions`
+- **Default**: Current working directory
 
 #### 2. **Tmux Sessions**
 Each worktree gets associated tmux sessions:
@@ -33,13 +38,12 @@ The app monitors Claude AI status in tmux panes:
 - Waiting: Shows numbered prompt (e.g., "1. ")
 - Idle: Shows standard prompt
 - Thinking: Shows thinking indicator
-
 ## Project Structure
 
 ```
 src/
 ├── index.ts                 # Entry point
-├── app.ts                  # App bootstrap (Ink render)
+├── bootstrap.tsx           # App bootstrap (Ink render)
 ├── App.tsx                 # Main React component
 ├── bin/                    # CLI binary
 │   └── dev-sessions.ts     # CLI executable
@@ -84,7 +88,6 @@ tests/
 │   ├── renderApp.tsx           # Test app rendering
 │   └── testHelpers.ts          # Setup helpers
 ├── unit/                  # Unit tests
-├── integration/           # Integration tests
 └── e2e/                   # End-to-end tests
 ```
 
@@ -97,15 +100,20 @@ tests/
    import {GitService} from '../services/GitService.js';
    ```
 
-2. **React Without JSX**: Use `React.createElement` via `h` helper
-   ```typescript
-   const h = React.createElement;
-   return h(Box, {flexDirection: 'column'}, 
-     h(Text, null, 'Hello')
+2. **JSX Syntax**: Use modern JSX syntax for React components
+   ```tsx
+   return (
+     <Box flexDirection="column">
+       <Text>Hello</Text>
+     </Box>
    );
    ```
 
-3. **Class Models**: Use classes with constructor initialization
+3. **File Extensions**: 
+   - `.ts` for non-React files (services, utils, models)
+   - `.tsx` for React components and contexts
+
+4. **Class Models**: Use classes with constructor initialization
    ```typescript
    export class WorktreeInfo {
      project: string;
@@ -118,7 +126,7 @@ tests/
    }
    ```
 
-4. **Service Pattern**: Services are classes with dependency injection
+5. **Service Pattern**: Services are classes with dependency injection
    ```typescript
    export class WorktreeService {
      constructor(
@@ -131,8 +139,8 @@ tests/
    }
    ```
 
-5. **Context Providers**: Use React Context for state + operations
-   ```typescript
+6. **Context Providers**: Use React Context for state + operations
+   ```tsx
    export function WorktreeProvider({children}) {
      const [worktrees, setWorktrees] = useState([]);
      const gitService = new GitService();
@@ -145,7 +153,11 @@ tests/
      };
      
      const value = { worktrees, createFeature, refresh };
-     return h(WorktreeContext.Provider, {value}, children);
+     return (
+       <WorktreeContext.Provider value={value}>
+         {children}
+       </WorktreeContext.Provider>
+     );
    }
    ```
 
@@ -185,7 +197,7 @@ tests/
 
 ### Test Structure
 
-1. **Unit Tests** (`tests/unit/`): Test services in isolation
+1. **Unit Tests** (`tests/unit/`): Test services and state logic in isolation
    ```typescript
    test('should create worktree', () => {
      const gitService = new FakeGitService();
@@ -194,32 +206,41 @@ tests/
    });
    ```
 
-2. **Integration Tests** (`tests/integration/`): Test service interactions
-   ```typescript
-   test('should create feature with session', () => {
-     const {result} = renderApp();
-     // Simulate user actions
-     result.rerender();
-     expect(memoryStore.sessions.size).toBe(1);
-   });
-   ```
+2. **E2E Tests** (`tests/e2e/`): Full user workflows and cross-service interactions
+  ```typescript
+  test('complete feature workflow', async () => {
+    const {result, stdin} = renderApp();
+    stdin.write('n'); // Create new
+    await delay(100);
+    stdin.write('\r'); // Select project
+    // ... continue workflow
+  });
+  ```
 
-3. **E2E Tests** (`tests/e2e/`): Full user workflows
-   ```typescript
-   test('complete feature workflow', async () => {
-     const {result, stdin} = renderApp();
-     stdin.write('n'); // Create new
-     await delay(100);
-     stdin.write('\r'); // Select project
-     // ... continue workflow
-   });
-   ```
+### E2E Flavors
+
+- **tests/e2e/** (mock-rendered):
+  - Uses `tests/utils/renderApp.tsx` (mock output driver) for deterministic frames.
+  - Runs real app logic with in-memory fakes; avoids raw-mode/alt-screen quirks.
+  - Fast and stable; preferred for most end-to-end flows.
+
+- **tests/e2e/terminal/** (terminal-oriented, Node runner):
+  - Uses Node scripts with Ink to verify real terminal rendering, avoiding Jest’s TTY/raw‑mode quirks.
+  - Renders real Ink components and providers with fakes and asserts on terminal frames.
+  - Command:
+    - `npm run test:terminal` — builds the project, compiles fakes, and runs terminal checks:
+      - `tests/e2e/terminal/run-smoke.mjs`: Ink <Text> smoke
+      - `tests/e2e/terminal/run-mainview-list.mjs`: MainView rows render
+      - `tests/e2e/terminal/run-app-full.mjs`: Full App providers render and list rows appear
+  - Note: These scripts import from `dist/` and `dist-tests`; the script runs both builds.
+  - Jest-based terminal tests were removed in favor of the Node runner; Jest E2E tests remain for app logic and flows.
 
 ### Running Tests
 ```bash
-npm test                    # Run all tests
-npm run test:watch         # Watch mode
+npm test                    # Run all Jest tests (unit + E2E)
+npm run test:watch         # Jest watch mode
 npm run typecheck          # Type checking only
+npm run test:terminal      # Run terminal rendering tests (Node runner)
 ```
 
 ## Adding Features
@@ -227,11 +248,9 @@ npm run typecheck          # Type checking only
 ### 1. New Dialog Component
 
 Create in `src/components/dialogs/`:
-```typescript
+```tsx
 import React from 'react';
 import {Box, Text} from 'ink';
-
-const h = React.createElement;
 
 interface MyDialogProps {
   title: string;
@@ -239,9 +258,11 @@ interface MyDialogProps {
 }
 
 export default function MyDialog({title, onClose}: MyDialogProps) {
-  return h(Box, {flexDirection: 'column'},
-    h(Text, null, title),
-    // Dialog content
+  return (
+    <Box flexDirection="column">
+      <Text>{title}</Text>
+      {/* Dialog content */}
+    </Box>
   );
 }
 ```
@@ -293,20 +314,20 @@ export function MyContextProvider({children}) {
 ### 4. New Screen (Using Contexts)
 
 Create in `src/screens/`:
-```typescript
+```tsx
 import React from 'react';
 import {Box} from 'ink';
 import {useMyContext} from '../contexts/MyContext.js';
 import {useUIContext} from '../contexts/UIContext.js';
 
-const h = React.createElement;
-
 export default function MyScreen() {
   const {data, loading, createItem} = useMyContext();
   const {showList} = useUIContext();
   
-  return h(Box, null, 
-    // Screen content that uses context state and operations
+  return (
+    <Box>
+      {/* Screen content that uses context state and operations */}
+    </Box>
   );
 }
 ```
@@ -492,8 +513,7 @@ npm link            # Install globally as 'dev-sessions'
 
 When adding features:
 - [ ] Add unit tests for new services
-- [ ] Add integration tests for service interactions
-- [ ] Add E2E tests for user workflows
+- [ ] Add E2E tests for user workflows and cross-service interactions
 - [ ] Update fake implementations
 - [ ] Verify TypeScript types compile
 - [ ] Test error cases and edge conditions

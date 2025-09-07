@@ -81,6 +81,7 @@ out
 # Nuxt.js build / generate output
 .nuxt
 dist
+dist-tests
 
 # Gatsby files
 .cache/
@@ -141,3 +142,4 @@ vite.config.ts.timestamp-*
 # claude
 .claude/
 .claude
+

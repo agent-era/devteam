@@ -1,4 +1,9 @@
 import {calculatePageSize} from './utils/pagination.js';
+import {AI_TOOLS} from './constants.js';
+
+export type AIStatus = 'not_running' | 'working' | 'waiting' | 'idle' | 'active';
+export type AITool = keyof typeof AI_TOOLS | 'none';
+export type MemorySeverity = 'ok' | 'warning' | 'critical';
 
 export class GitStatus {
   has_changes: boolean;
@@ -82,12 +87,27 @@ export class PRStatus {
 export class SessionInfo {
   session_name: string;
   attached: boolean;
-  claude_status: string;
+  ai_status: AIStatus;
+  ai_tool: AITool;
+  // Backward compatibility
+  get claude_status(): string {
+    return this.ai_status;
+  }
+  set claude_status(value: string) {
+    this.ai_status = value as AIStatus;
+  }
   constructor(init: Partial<SessionInfo> = {}) {
     this.session_name = '';
     this.attached = false;
-    this.claude_status = 'not_running';
+    this.ai_status = 'not_running';
+    this.ai_tool = 'none';
     Object.assign(this, init);
+    
+    // Handle backward compatibility during construction
+    if ('claude_status' in init && init.claude_status && !('ai_status' in init)) {
+      this.ai_status = init.claude_status as AIStatus;
+      this.ai_tool = 'claude';
+    }
   }
 }
 
@@ -102,8 +122,6 @@ export class WorktreeInfo {
   is_archived?: boolean;
   mtime?: number;
   last_commit_ts?: number;
-  idleStartTime?: number | null;
-  wasKilledIdle?: boolean;
   constructor(init: Partial<WorktreeInfo> = {}) {
     this.project = '';
     this.feature = '';
@@ -114,8 +132,6 @@ export class WorktreeInfo {
     this.is_archived = false;
     this.mtime = 0;
     this.last_commit_ts = 0;
-    this.idleStartTime = null;
-    this.wasKilledIdle = false;
     Object.assign(this, init);
   }
 
@@ -124,9 +140,9 @@ export class WorktreeInfo {
   }
 
   get needs_attention(): boolean {
-    const cs = (this.session?.claude_status || '').toLowerCase();
-    if (cs.includes('waiting')) return true;
-    if (cs.includes('working')) return false;
+    const aiStatus = this.session?.ai_status || 'not_running';
+    if (aiStatus === 'waiting') return true;
+    if (aiStatus === 'working') return false;
     if (this.git?.has_changes) return true;
     if ((this.git?.ahead || 0) > 0) return true;
     if (this.pr?.needs_attention) return true;
@@ -135,9 +151,9 @@ export class WorktreeInfo {
   }
 
   get action_priority(): number {
-    const cs = (this.session?.claude_status || '').toLowerCase();
-    if (cs.includes('waiting')) return 0;
-    if (cs.includes('working')) return 10;
+    const aiStatus = this.session?.ai_status || 'not_running';
+    if (aiStatus === 'waiting') return 0;
+    if (aiStatus === 'working') return 10;
     if (this.git?.has_changes) return 1;
     if ((this.git?.ahead || 0) > 0) return 2;
     if (this.pr?.needs_attention) return 3;
@@ -158,13 +174,13 @@ export class ProjectInfo {
 }
 
 export class DiffComment {
-  lineIndex: number;
+  lineIndex: number | undefined;
   fileName: string;
   lineText: string;
   commentText: string;
   timestamp: number;
   constructor(init: Partial<DiffComment> = {}) {
-    this.lineIndex = 0;
+    this.lineIndex = undefined;
     this.fileName = '';
     this.lineText = '';
     this.commentText = '';
@@ -179,7 +195,7 @@ export class CommentStore {
     this.comments = [];
   }
   
-  addComment(lineIndex: number, fileName: string, lineText: string, commentText: string): DiffComment {
+  addComment(lineIndex: number | undefined, fileName: string, lineText: string, commentText: string): DiffComment {
     // Remove existing comment for this line if any
     this.comments = this.comments.filter(c => c.lineIndex !== lineIndex || c.fileName !== fileName);
     
@@ -195,22 +211,31 @@ export class CommentStore {
     return comment;
   }
   
-  removeComment(lineIndex: number, fileName: string): boolean {
+  removeComment(lineIndex: number | undefined, fileName: string): boolean {
     const initialLength = this.comments.length;
     this.comments = this.comments.filter(c => !(c.lineIndex === lineIndex && c.fileName === fileName));
     return this.comments.length < initialLength;
   }
   
-  getComment(lineIndex: number, fileName: string): DiffComment | undefined {
+  getComment(lineIndex: number | undefined, fileName: string): DiffComment | undefined {
     return this.comments.find(c => c.lineIndex === lineIndex && c.fileName === fileName);
   }
   
-  hasComment(lineIndex: number, fileName: string): boolean {
+  hasComment(lineIndex: number | undefined, fileName: string): boolean {
     return this.comments.some(c => c.lineIndex === lineIndex && c.fileName === fileName);
   }
   
   getAllComments(): DiffComment[] {
-    return [...this.comments].sort((a, b) => a.lineIndex - b.lineIndex);
+    return [...this.comments].sort((a, b) => {
+      // Sort by fileName first, then by lineIndex (undefined lineIndex goes last)
+      if (a.fileName !== b.fileName) {
+        return a.fileName.localeCompare(b.fileName);
+      }
+      if (a.lineIndex === undefined && b.lineIndex === undefined) return 0;
+      if (a.lineIndex === undefined) return 1;
+      if (b.lineIndex === undefined) return -1;
+      return a.lineIndex - b.lineIndex;
+    });
   }
   
   clear(): void {

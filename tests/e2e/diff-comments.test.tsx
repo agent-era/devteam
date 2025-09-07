@@ -331,7 +331,7 @@ ${lines.join('\n')}`;
       await simulateTimeDelay(50);
       
       // Create Claude session
-      services.tmuxService.createSession('send-project', 'send-feature', 'idle');
+      services.tmuxService.createTestSession('send-project', 'send-feature', 'idle');
       
       // Simulate sending comments (this would be triggered by 's' key in diff view)
       const sessionName = 'dev-send-project-send-feature';
@@ -392,7 +392,7 @@ ${lines.join('\n')}`;
       // In real implementation, it would create the session first
       expect(() => {
         // This would be the diff view attempting to send comments
-        services.tmuxService.createSession('no-session', 'no-session-feature', 'idle');
+        services.tmuxService.createTestSession('no-session', 'no-session-feature', 'idle');
       }).not.toThrow();
     });
   });
@@ -472,7 +472,7 @@ ${lines.join('\n')}`;
     });
   });
 
-  describe('Diff View Integration', () => {
+  describe('Diff View Navigation', () => {
     test('should close diff view and return to main list', async () => {
       // Setup: Worktree in diff view
       setupBasicProject('close-project');

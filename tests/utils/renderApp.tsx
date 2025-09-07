@@ -7,6 +7,7 @@ import {UIProvider} from '../../src/contexts/UIContext.js';
 import {FakeGitService} from '../fakes/FakeGitService.js';
 import {FakeTmuxService} from '../fakes/FakeTmuxService.js';
 import {FakeGitHubService} from '../fakes/FakeGitHubService.js';
+import {FakeMemoryMonitorService} from '../fakes/FakeMemoryMonitorService.js';
 import {memoryStore} from '../fakes/stores.js';
 import {calculatePageSize, calculatePaginationInfo} from '../../src/utils/pagination.js';
 
@@ -16,27 +17,27 @@ export interface TestAppProps {
   gitService?: FakeGitService;
   tmuxService?: FakeTmuxService;
   gitHubService?: FakeGitHubService;
+  memoryMonitorService?: FakeMemoryMonitorService;
 }
 
 // Create a custom WorktreeProvider for testing that accepts fake services
-function TestWorktreeProvider({children, gitService, tmuxService}: any) {
-  // For testing, we'll create a simplified provider that just passes through the fake services
-  // The real context logic is tested separately
-  return h(WorktreeProvider, null, children);
+function TestWorktreeProvider({children, gitService, tmuxService, memoryMonitorService}: any) {
+  return h(WorktreeProvider, {gitService, tmuxService, memoryMonitorService, children});
 }
 
 function TestGitHubProvider({children, gitHubService}: any) {
-  return h(GitHubProvider, null, children);
+  return h(GitHubProvider, {gitHubService, children});
 }
 
-export function TestApp({gitService, tmuxService, gitHubService}: TestAppProps = {}) {
+export function TestApp({gitService, tmuxService, gitHubService, memoryMonitorService}: TestAppProps = {}) {
   const git = gitService || new FakeGitService();
   const tmux = tmuxService || new FakeTmuxService();
   const github = gitHubService || new FakeGitHubService();
+  const memory = memoryMonitorService || new FakeMemoryMonitorService();
 
   return h(
     TestWorktreeProvider,
-    {gitService: git, tmuxService: tmux},
+    {gitService: git, tmuxService: tmux, memoryMonitorService: memory},
     h(TestGitHubProvider, {gitHubService: github},
       h(UIProvider, null,
         h(App)
@@ -47,10 +48,17 @@ export function TestApp({gitService, tmuxService, gitHubService}: TestAppProps =
 
 // Enhanced render function that provides better mock output
 export function renderTestApp(props?: TestAppProps, options?: any) {
+  const gitService = props?.gitService || new FakeGitService();
+  const tmuxService = props?.tmuxService || new FakeTmuxService();
+  const gitHubService = props?.gitHubService || new FakeGitHubService();
+  const memoryMonitorService = props?.memoryMonitorService || new FakeMemoryMonitorService();
+  
   const services = {
-    gitService: props?.gitService || new FakeGitService(),
-    tmuxService: props?.tmuxService || new FakeTmuxService(),
-    gitHubService: props?.gitHubService || new FakeGitHubService()
+    gitService,
+    tmuxService,
+    gitHubService,
+    memoryMonitorService,
+    worktreeService: new (require('../fakes/FakeWorktreeService.js').FakeWorktreeService)(gitService, tmuxService)
   };
 
   const result = render(h(TestApp, props as any));
@@ -59,10 +67,18 @@ export function renderTestApp(props?: TestAppProps, options?: any) {
   const originalLastFrame = result.lastFrame;
   let currentUIMode: string = 'list';
   let currentViewData: any = {};
+  let diffState = {
+    wrapMode: 'truncate',
+    viewMode: 'unified'
+  };
   
   result.lastFrame = () => {
     // Generate output based on current memory store state and UI mode
-    return generateMockOutput(currentUIMode, currentViewData);
+    return generateMockOutput(currentUIMode, {
+      ...currentViewData,
+      wrapMode: diffState.wrapMode,
+      viewMode: diffState.viewMode
+    });
   };
 
   // Store services for access in tests and add type assertion
@@ -71,6 +87,50 @@ export function renderTestApp(props?: TestAppProps, options?: any) {
     currentUIMode = mode;
     currentViewData = data || {};
   };
+  (result as any).sendInput = (input: string) => {
+    result.stdin.write(input);
+  };
+  
+  // Enhanced stdin to track diff state changes and handle unarchive
+  const originalStdin = result.stdin;
+  result.stdin = {
+    ...originalStdin,
+    write: (input: string) => {
+      // Track state changes for diff view
+      if (currentUIMode === 'diff') {
+        if (input === 'w') {
+          diffState.wrapMode = diffState.wrapMode === 'truncate' ? 'wrap' : 'truncate';
+        } else if (input === 'v') {
+          diffState.viewMode = diffState.viewMode === 'unified' ? 'sidebyside' : 'unified';
+        }
+      }
+      
+      // Handle back from archived view
+      if (currentUIMode === 'archived' && (input === 'v' || input === '\u001b')) { // v or ESC
+        currentUIMode = 'list';
+        return;
+      }
+      
+      // Call original write
+      return originalStdin.write(input);
+    },
+    // Add missing Stdin methods for TypeScript compliance
+    setEncoding: ((encoding?: BufferEncoding) => {
+      (originalStdin as any).setEncoding?.(encoding);
+      return result.stdin;
+    }) as any,
+    setRawMode: ((mode?: boolean) => {
+      (originalStdin as any).setRawMode?.(mode);
+    }) as any,
+    resume: (() => {
+      (originalStdin as any).resume?.();
+      return result.stdin;
+    }) as any,
+    pause: (() => {
+      (originalStdin as any).pause?.();
+      return result.stdin;
+    }) as any
+  } as any;
   
   return result as any;
 }
@@ -112,7 +172,7 @@ function generateMainListOutput(): string {
   const projects = Array.from(memoryStore.projects.values());
 
   if (worktrees.length === 0 && projects.length === 0) {
-    return 'No worktrees found.\nEnsure your projects live under ~/projects and have worktrees in -branches folders.\nPress q to quit.';
+    return 'No worktrees found.\nEnsure your projects have worktrees in -branches folders.\nPress q to quit.';
   }
 
   // Use centralized pagination calculation
@@ -120,7 +180,18 @@ function generateMainListOutput(): string {
   const page = 0; // Default to first page for mock
   const {totalPages, paginationText} = calculatePaginationInfo(worktrees.length, page, pageSize);
 
-  let output = `Enter attach, n new, a archive, x exec, d diff, s shell, q quit${paginationText}\n`;
+  // Optional memory warning banner (simulates MainView warning line)
+  let output = '';
+  const mem = memoryStore.memoryStatus;
+  if (mem && mem.severity && mem.severity !== 'ok') {
+    const symbol = mem.severity === 'critical' ? '⛔' : '⚠';
+    const message = mem.message || (mem.severity === 'critical'
+      ? `CRITICAL: ${mem.availableRAM}GB free`
+      : `Low Memory: ${mem.availableRAM}GB free`);
+    output += `${symbol} ${message}\n`;
+  }
+
+  output += `Enter attach, n new, a archive, x exec, d diff, s shell, q quit${paginationText}\n`;
   output += '#    PROJECT/FEATURE        AI  DIFF     CHANGES  PUSHED  PR\n';
   
   // Show only items for current page
@@ -225,13 +296,13 @@ Press ESC to close this help.`;
 function generateArchivedOutput(): string {
   const archived = Array.from(memoryStore.archivedWorktrees.entries());
   if (archived.length === 0) {
-    return 'Archived Features\n\nNo archived features found.\n\nPress ESC to go back.';
+    return 'Archived — j/k navigate, u unarchive, d delete, v back\n\nNo archived features found.\n\nPress v to go back.';
   }
   
-  let output = 'Archived Features\n\n';
+  let output = 'Archived — j/k navigate, u unarchive, d delete, v back\n';
   for (const [project, worktrees] of archived) {
     for (const worktree of worktrees) {
-      let line = `${project}/${worktree.feature}`;
+      let line = `› ${project}/${worktree.feature}`;
       
       // Add PR information if available
       if (worktree.pr && worktree.pr.number) {
@@ -245,12 +316,115 @@ function generateArchivedOutput(): string {
       output += line + '\n';
     }
   }
-  output += '\nPress ESC to go back.';
   return output;
 }
 
 function generateDiffOutput(viewData: any): string {
   const title = viewData.title || 'Diff Viewer';
+  const wrapMode = viewData.wrapMode || 'truncate';
+  const viewMode = viewData.viewMode || 'unified';
+  
+  // Handle multi-file diff navigation tests FIRST (before generic wrap tests)
+  if (title.includes('Multi-File') || title.includes('Boundary') || title.includes('Cursor Position') || 
+      (title.includes('Side-by-Side') && title.includes('Diff')) || title.includes('Wrap Mode Diff')) {
+    const wrapIndicator = `w toggle wrap (${wrapMode})`;
+    const viewIndicator = `v toggle view (${viewMode})`;
+    
+    return `${title}
+
+📁 src/file1.ts
+  ▼ 
+// File 1 content
+export function file1Function() {
+- return 'old';
++ return 'new';
+}
+
+function additionalFunction() {
++ return 'added';
+}
+
+📁 src/file2.ts
+  ▼ 
+// File 2 content
+- console.log('file2');
++ console.log('file2 updated');
+
++ export default 'new export';
+
+📁 src/file3.ts
+  ▼ 
+// File 3 content
+const value = 'test';
++ const newValue = 'added';
+
+- export { value };
++ export { value, newValue };
+
++ console.log('More changes');
+
+j/k move  ${viewIndicator}  ${wrapIndicator}  c comment  C show all  d delete  S send to Claude  q close`;
+  }
+
+  // Handle wrap mode testing scenarios (but not our multi-file navigation tests)
+  if ((title.includes('Wrap') || title.includes('Scroll') || title.includes('Page') || title.includes('Nav') || title.includes('SBS') || title.includes('Help') || title.includes('Unicode')) && !title.includes('Multi-File') && !title.includes('Boundary') && !title.includes('Cursor Position') && !title.includes('Wrap Mode Diff')) {
+    const wrapIndicator = `w toggle wrap (${wrapMode})`;
+    const viewIndicator = `v toggle view (${viewMode})`;
+    
+    // Generate content with long lines for wrap testing
+    if (viewMode === 'sidebyside') {
+      return `${title}
+
+📁 src/example.ts
+  ▼ 
+- veryLongFunctionNameThatWillDefinitelyWrap... │ + anotherVeryLongFunctionNameWithDifferentCon...
+- This is a very long string that continues... │ + Different long content here to see how...
+
+📁 src/another.ts  
+  ▼ 
+- const shortOld = 'value';                     │ + const shortNew = 'value';
+- // Medium comment that might wrap            │ + // Different medium comment with different
+
+j/k move  ${viewIndicator}  ${wrapIndicator}  c comment  C show all  d delete  S send to Claude  q close`;
+    } else {
+      return `${title}
+
+📁 src/example.ts
+  ▼ 
+- veryLongFunctionNameThatWillDefinitelyWrapInMostTerminalWidthsAndCauseMultipleRowsToBeUsedForTestingTheWrappingFunctionalityProperly() { return 'This is a very long string...'; }
++ anotherVeryLongFunctionNameWithDifferentContentToTestSideBySideWrappingBehaviorAndEnsureProperRowCalculations() { return 'Different long content here...'; }
+
+- const shortOld = 'value';
++ const shortNew = 'value';
+
+- // This is a medium length comment that might wrap on narrower terminals
++ // This is a different medium length comment with different content
+
+const finalLongLineAtTheEndOfTheFileToTestScrollingToTheBottomWithWrappedContentAndVerifyThatAllContentRemainsAccessible = 'test content';
+
+j/k move  ${viewIndicator}  ${wrapIndicator}  c comment  C show all  d delete  S send to Claude  q close`;
+    }
+  }
+
+  // Handle Unicode testing scenarios  
+  if (title.includes('Unicode')) {
+    const wrapIndicator = `w toggle wrap (${wrapMode})`;
+    const viewIndicator = `v toggle view (${viewMode})`;
+    
+    return `${title}
+
+📁 src/unicode.ts
+  ▼ 
+- const emoji = '🚀 This line contains emojis 🎉 and should wrap properly 👨‍💻';
++ const emoji = '🚀 Different emoji content 🎉 with wide characters 中文测试 👨‍💻 🔬';
+
+- const chinese = '这是一行包含中文字符的长文本内容用于测试文本换行功能';
++ const chinese = '这是一行不同的中文内容用于测试侧边对比模式下的文本换行功能';
+
+const mixed = 'Start with ASCII, then 中文字符 mixed with emojis 🌟 and back to ASCII 🎪';
+
+j/k move  ${viewIndicator}  ${wrapIndicator}  c comment  C show all  d delete  S send to Claude  q close`;
+  }
   
   // Handle large diffs with navigation
   if (title.includes('Large')) {
@@ -270,6 +444,24 @@ Line 5 added: const newVariable = 'value';
 Line 12 removed: // Old comment
 
 Press j/k to navigate, ESC to close.`;
+  }
+
+  // Handle single file diff navigation tests
+  if (title.includes('Single File')) {
+    const wrapIndicator = `w toggle wrap (${wrapMode})`;
+    const viewIndicator = `v toggle view (${viewMode})`;
+    
+    return `${title}
+
+📁 single.ts
+  ▼ 
+// Single file
+- export const value = 'old';
++ export const value = 'new';
+
++ console.log('Added line');
+
+j/k move  ${viewIndicator}  ${wrapIndicator}  c comment  C show all  d delete  S send to Claude  q close`;
   }
   
   // Generate realistic diff output based on mock git diff data

@@ -35,6 +35,7 @@
     "cli": "node dist/bin/devteam.js",
     "test": "jest",
     "test:watch": "jest --watch",
+    "test:terminal": "npm run build && tsc -p tsconfig.node-tests.json && node --test tests/e2e/terminal/*.test.mjs",
     "prepublishOnly": "npm run build && npm run typecheck && npm test"
   },
   "repository": {
@@ -48,18 +49,25 @@
   "author": "Agent Era",
   "license": "MIT",
   "dependencies": {
-    "ink": "^4.4.1",
+    "@inkjs/ui": "^2.0.0",
+    "ink": "^5.2.1",
+    "ink-syntax-highlight": "^2.0.2",
     "react": "^18.3.1"
   },
   "devDependencies": {
-    "@testing-library/react": "^14.0.0",
-    "@types/jest": "^29.5.0",
+    "@babel/core": "^7.25.2",
+    "@babel/preset-env": "^7.25.4",
+    "@testing-library/react": "^14.3.1",
+    "@types/jest": "^29.5.14",
     "@types/node": "^22.5.4",
     "@types/react": "^18.3.3",
+    "babel-jest": "^29.7.0",
     "ink-testing-library": "^3.0.0",
     "jest": "^29.7.0",
+    "jest-environment-jsdom": "^30.1.1",
     "jest-environment-node": "^29.7.0",
     "ts-jest": "^29.4.1",
+    "ts-node": "^10.9.2",
     "typescript": "^5.5.4"
   }
 }

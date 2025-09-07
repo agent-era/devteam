@@ -1,16 +1,18 @@
-import React, {useState} from 'react';
+import React, {useState, useEffect} from 'react';
 import {Box} from 'ink';
 import MainView from '../components/views/MainView.js';
 import {useWorktreeContext} from '../contexts/WorktreeContext.js';
+import {useGitHubContext} from '../contexts/GitHubContext.js';
+import {useInputFocus} from '../contexts/InputFocusContext.js';
+import {useUIContext} from '../contexts/UIContext.js';
 import {useKeyboardShortcuts} from '../hooks/useKeyboardShortcuts.js';
-import {usePageSize} from '../hooks/usePagination.js';
+// Page size is measured directly in MainView to avoid heuristics
+import {VISIBLE_STATUS_REFRESH_DURATION} from '../constants.js';
 
-const h = React.createElement;
 
 interface WorktreeListScreenProps {
   onCreateFeature: () => void;
   onArchiveFeature: () => void;
-  onViewArchived: () => void;
   onHelp: () => void;
   onBranch: () => void;
   onDiff: (type: 'full' | 'uncommitted') => void;
@@ -22,7 +24,6 @@ interface WorktreeListScreenProps {
 export default function WorktreeListScreen({
   onCreateFeature,
   onArchiveFeature,
-  onViewArchived,
   onHelp,
   onBranch,
   onDiff,
@@ -30,9 +31,40 @@ export default function WorktreeListScreen({
   onExecuteRun,
   onConfigureRun
 }: WorktreeListScreenProps) {
-  const {worktrees, selectedIndex, selectWorktree, refresh, attachSession, attachShellSession} = useWorktreeContext();
-  const pageSize = usePageSize();
+  const {worktrees, selectedIndex, selectWorktree, refresh, refreshVisibleStatus, forceRefreshVisible, attachSession, attachShellSession, needsToolSelection, lastRefreshed, memoryStatus} = useWorktreeContext();
+  const {setVisibleWorktrees} = useGitHubContext();
+  const {isAnyDialogFocused} = useInputFocus();
+  const {showAIToolSelection} = useUIContext();
+  const [pageSize, setPageSize] = useState(1);
   const [currentPage, setCurrentPage] = useState(0);
+
+  // Refresh data when component mounts, but only if data is missing or very stale
+  useEffect(() => {
+    const isDataStale = !lastRefreshed || (Date.now() - lastRefreshed > 30000); // 30 seconds
+    const isDataEmpty = !worktrees || worktrees.length === 0;
+    
+    if (isDataEmpty || isDataStale) {
+      refresh('none').catch(() => {});
+    }
+  }, []); // Only on mount
+
+  // Keep GitHub context informed of which worktrees are visible (current page)
+  useEffect(() => {
+    const startIndex = currentPage * pageSize;
+    const endIndex = Math.min(startIndex + pageSize, worktrees.length);
+    const visiblePaths = worktrees.slice(startIndex, endIndex).map(w => w.path);
+    setVisibleWorktrees(visiblePaths);
+  }, [worktrees, currentPage, pageSize, setVisibleWorktrees]);
+
+  // Single loop to refresh git+AI status for visible rows only
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (!isAnyDialogFocused) {
+        refreshVisibleStatus(currentPage, pageSize).catch(() => {});
+      }
+    }, VISIBLE_STATUS_REFRESH_DURATION);
+    return () => clearInterval(interval);
+  }, [currentPage, pageSize, refreshVisibleStatus, isAnyDialogFocused]);
 
   const handleMove = (delta: number) => {
     const nextIndex = selectedIndex + delta;
@@ -67,17 +99,27 @@ export default function WorktreeListScreen({
     }
   };
 
-  const handleSelect = () => {
+  const handleSelect = async () => {
     const selectedWorktree = worktrees[selectedIndex];
     if (!selectedWorktree) return;
     
     try {
-      attachSession(selectedWorktree);
-    } catch {}
-    
-    refresh().catch(error => {
-      console.error('Refresh after attach failed:', error);
-    });
+      // Check if tool selection is needed
+      const needsSelection = await needsToolSelection(selectedWorktree);
+      
+      if (needsSelection) {
+        // Show AI tool selection dialog
+        showAIToolSelection(selectedWorktree);
+      } else {
+        // Proceed with session attachment
+        attachSession(selectedWorktree);
+        refresh().catch(error => {
+          console.error('Refresh after attach failed:', error);
+        });
+      }
+    } catch (error) {
+      console.error('Failed to handle selection:', error);
+    }
   };
 
   const handleShell = () => {
@@ -108,31 +150,39 @@ export default function WorktreeListScreen({
   };
 
   const handlePreviousPage = () => {
-    const totalPages = Math.max(1, Math.ceil(worktrees.length / pageSize));
-    const newPage = currentPage > 0 ? currentPage - 1 : totalPages - 1;
+    // Always move by half a page, regardless of total pages
+    const halfPageSize = Math.floor(pageSize / 2);
+    const newIndex = Math.max(0, selectedIndex - halfPageSize);
+    const newPage = Math.floor(newIndex / pageSize);
     setCurrentPage(newPage);
-    selectWorktree(newPage * pageSize);
+    selectWorktree(newIndex);
   };
 
   const handleNextPage = () => {
-    const totalPages = Math.max(1, Math.ceil(worktrees.length / pageSize));
-    const newPage = (currentPage + 1) % totalPages;
+    // Always move by half a page, regardless of total pages
+    const halfPageSize = Math.floor(pageSize / 2);
+    const newIndex = Math.min(worktrees.length - 1, selectedIndex + halfPageSize);
+    const newPage = Math.floor(newIndex / pageSize);
     setCurrentPage(newPage);
-    selectWorktree(newPage * pageSize);
+    selectWorktree(newIndex);
   };
 
   const handleRefresh = async () => {
-    // Full refresh: worktrees and PR status for visible items only
-    await refresh('visible');
+    // Force refresh visible PRs, ignoring cache TTLs
+    await forceRefreshVisible(currentPage, pageSize);
   };
 
   const handleJumpToFirst = () => {
+    setCurrentPage(0);  // First item is always on page 0
     selectWorktree(0);
   };
 
   const handleJumpToLast = () => {
     if (worktrees.length > 0) {
-      selectWorktree(worktrees.length - 1);
+      const lastIndex = worktrees.length - 1;
+      const lastPage = Math.floor(lastIndex / pageSize);
+      setCurrentPage(lastPage);  // Navigate to the page containing the last item
+      selectWorktree(lastIndex);
     }
   };
 
@@ -142,7 +192,6 @@ export default function WorktreeListScreen({
     onCreate: onCreateFeature,
     onArchive: onArchiveFeature,
     onRefresh: handleRefresh,
-    onViewArchived: onViewArchived,
     onHelp: onHelp,
     onBranch: onBranch,
     onShell: handleShell,
@@ -162,13 +211,16 @@ export default function WorktreeListScreen({
     totalItems: worktrees.length
   });
 
-  return h(MainView, {
-    worktrees,
-    selectedIndex,
-    onMove: handleMove,
-    onSelect: handleSelect,
-    onQuit,
-    page: currentPage,
-    pageSize,
-  });
+  return (
+    <MainView
+      worktrees={worktrees}
+      selectedIndex={selectedIndex}
+      onMove={handleMove}
+      onSelect={handleSelect}
+      onQuit={onQuit}
+      page={currentPage}
+      onMeasuredPageSize={setPageSize}
+      memoryStatus={memoryStatus}
+    />
+  );
 }

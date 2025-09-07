@@ -2,28 +2,23 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {GitStatus, ProjectInfo} from '../models.js';
 import {
-  BASE_PATH,
   BASE_BRANCH_CANDIDATES,
   DIR_BRANCHES_SUFFIX,
   DIR_ARCHIVED_SUFFIX,
+  ENV_FILE,
+  RUN_CONFIG_FILE,
 } from '../constants.js';
-import {
-  runCommand,
-  runCommandQuick,
-  runCommandAsync,
-  runCommandQuickAsync,
-  parseGitShortstat,
-  findBaseBranch,
-  ensureDirectory,
-  formatTimeAgo,
-} from '../utils.js';
-import {logInfo, logDebug} from '../shared/utils/logger.js';
+import { runCommand, runCommandQuick, runCommandAsync, runCommandQuickAsync } from '../shared/utils/commandExecutor.js';
+import { parseGitShortstat, findBaseBranch } from '../shared/utils/gitHelpers.js';
+import { ensureDirectory } from '../shared/utils/fileSystem.js';
+import { formatTimeAgo } from '../shared/utils/formatting.js';
+import {logDebug} from '../shared/utils/logger.js';
 import {Timer} from '../shared/utils/timing.js';
 
 export class GitService {
   basePath: string;
 
-  constructor(basePath: string = BASE_PATH) {
+  constructor(basePath: string) {
     this.basePath = basePath;
   }
 
@@ -48,7 +43,7 @@ export class GitService {
       .sort((a, b) => a.name.localeCompare(b.name));
     
     const timing = timer.elapsed();
-    logInfo(`[Project.Discovery] Found ${projects.length} projects in ${timing.formatted}`);
+    logDebug(`[Project.Discovery] Found ${projects.length} projects in ${timing.formatted}`);
     
     return projects;
   }
@@ -107,7 +102,7 @@ export class GitService {
     worktrees.sort((a, b) => b.mtime - a.mtime);
     
     const timing = timer.elapsed();
-    logInfo(`[Worktree.Collection] ${project.name}: ${worktrees.length} worktrees in ${timing.formatted}`);
+    logDebug(`[Worktree.Collection] ${project.name}: ${worktrees.length} worktrees in ${timing.formatted}`);
     
     return worktrees;
   }
@@ -156,8 +151,18 @@ export class GitService {
     ensureDirectory(branchesDir);
     if (fs.existsSync(worktreePath)) return false;
     
+    // Fetch latest changes from origin
+    runCommand(['git', '-C', mainRepo, 'fetch', 'origin'], {timeout: 30000});
+    
+    // Find the base branch (main or master)
+    const baseBranch = findBaseBranch(mainRepo, BASE_BRANCH_CANDIDATES);
+    if (!baseBranch) return false;
+    
+    // Ensure we use the origin version of the base branch
+    const originBase = baseBranch.startsWith('origin/') ? baseBranch : `origin/${baseBranch}`;
+    
     const branch = branchName || `feature/${featureName}`;
-    runCommand(['git', '-C', mainRepo, 'worktree', 'add', worktreePath, '-b', branch], {timeout: 30000});
+    runCommand(['git', '-C', mainRepo, 'worktree', 'add', worktreePath, '-b', branch, originBase], {timeout: 30000});
     return fs.existsSync(worktreePath);
   }
 
@@ -205,49 +210,7 @@ export class GitService {
     return branches;
   }
 
-  getArchivedForProject(project: ProjectInfo): Array<{
-    project: string; 
-    feature: string; 
-    path: string; 
-    branch: string; 
-    archived_date?: string; 
-    is_archived: boolean; 
-    mtime: number
-  }> {
-    const archived: Array<{
-      project: string; 
-      feature: string; 
-      path: string; 
-      branch: string; 
-      archived_date?: string; 
-      is_archived: boolean; 
-      mtime: number
-    }> = [];
-    
-    const archivedRoot = path.join(this.basePath, `${project.name}${DIR_ARCHIVED_SUFFIX}`);
-    if (!fs.existsSync(archivedRoot)) return archived;
-
-    for (const entry of fs.readdirSync(archivedRoot, {withFileTypes: true})) {
-      if (!entry.isDirectory()) continue;
-      
-      const entryPath = path.join(archivedRoot, entry.name);
-      const mtime = fs.statSync(entryPath).mtimeMs;
-      const {feature, archived_date} = this.parseArchivedName(entry.name);
-      
-      archived.push({
-        project: project.name,
-        feature: feature || entry.name,
-        path: entryPath,
-        branch: 'archived',
-        archived_date,
-        is_archived: true,
-        mtime,
-      });
-    }
-    
-    archived.sort((a, b) => (b.mtime || 0) - (a.mtime || 0));
-    return archived;
-  }
+  // getArchivedForProject removed with archived UI
 
 
   // Private helper methods
@@ -370,29 +333,7 @@ export class GitService {
     return ts ? Number(ts.trim()) : 0;
   }
 
-  private parseArchivedName(name: string): {feature: string; archived_date?: string} {
-    if (name.startsWith('archived-')) {
-      const rest = name.slice('archived-'.length);
-      const underscoreIdx = rest.indexOf('_');
-      if (underscoreIdx > 0) {
-        return {
-          feature: rest.slice(underscoreIdx + 1),
-          archived_date: rest.slice(0, underscoreIdx)
-        };
-      } else {
-        const parts = rest.split('-');
-        if (parts.length >= 3) {
-          return {
-            feature: parts.slice(0, -2).join('-'),
-            archived_date: parts.slice(-2).join('-')
-          };
-        } else {
-          return {feature: rest};
-        }
-      }
-    }
-    return {feature: name};
-  }
+  // parseArchivedName removed with archived UI
 
   getWorktreeBranchMapping(repoPath: string): Record<string, string> {
     const wtInfo = runCommandQuick(['git', '-C', repoPath, 'worktree', 'list', '--porcelain']);
@@ -468,6 +409,80 @@ export class GitService {
       } catch {
         return [];
       }
+    }
+  }
+
+  // Filesystem-related helpers for run configuration and project setup
+  hasRunConfig(project: string): boolean {
+    const projectPath = path.join(this.basePath, project);
+    const configPath = path.join(projectPath, RUN_CONFIG_FILE);
+    return fs.existsSync(configPath);
+  }
+
+  readRunConfig(project: string): string {
+    const projectPath = path.join(this.basePath, project);
+    const configPath = path.join(projectPath, RUN_CONFIG_FILE);
+    return fs.readFileSync(configPath, 'utf8');
+  }
+
+  writeRunConfig(project: string, content: string): void {
+    const projectPath = path.join(this.basePath, project);
+    const configPath = path.join(projectPath, RUN_CONFIG_FILE);
+    // Ensure parent directory exists for .devteam/config.json
+    const dir = path.dirname(configPath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, {recursive: true});
+    fs.writeFileSync(configPath, content);
+  }
+
+  copyEnvironmentFile(project: string, worktreePath: string): void {
+    const projectPath = path.join(this.basePath, project);
+    const envSrc = path.join(projectPath, ENV_FILE);
+    const envDst = path.join(worktreePath, ENV_FILE);
+    if (fs.existsSync(envSrc)) {
+      const dir = path.dirname(envDst);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, {recursive: true});
+      fs.copyFileSync(envSrc, envDst);
+    }
+  }
+
+  linkClaudeSettings(project: string, worktreePath: string): void {
+    const projectPath = path.join(this.basePath, project);
+    const claudeDirSrc = path.join(projectPath, '.claude');
+    const claudeDirDst = path.join(worktreePath, '.claude');
+    if (fs.existsSync(claudeDirSrc)) {
+      // Replace destination with a symlink to project .claude
+      try { fs.rmSync(claudeDirDst, {recursive: true, force: true}); } catch {}
+      fs.symlinkSync(claudeDirSrc, claudeDirDst, 'dir');
+    }
+  }
+
+  
+
+  archiveWorktree(project: string, sourcePath: string, archivedDest: string): void {
+    try {
+      fs.renameSync(sourcePath, archivedDest);
+    } catch {
+      // Fallback: copy then remove
+      this.copyRecursive(sourcePath, archivedDest);
+      fs.rmSync(sourcePath, {recursive: true, force: true});
+    }
+  }
+
+  pruneWorktreeReferences(project: string): void {
+    const projectPath = path.join(this.basePath, project);
+    runCommand(['git', '-C', projectPath, 'worktree', 'prune']);
+  }
+
+  private copyRecursive(src: string, dest: string): void {
+    if (!fs.existsSync(src)) return;
+    const stat = fs.statSync(src);
+    if (stat.isDirectory()) {
+      if (!fs.existsSync(dest)) fs.mkdirSync(dest, {recursive: true});
+      for (const entry of fs.readdirSync(src)) {
+        this.copyRecursive(path.join(src, entry), path.join(dest, entry));
+      }
+    } else if (stat.isFile()) {
+      fs.copyFileSync(src, dest);
     }
   }
 }

@@ -1,11 +1,10 @@
 import React, {createContext, useContext, useState, ReactNode} from 'react';
 import {WorktreeInfo} from '../models.js';
 
-const h = React.createElement;
 
-type UIMode = 'list' | 'create' | 'confirmArchive' | 'archived' | 'help' | 
+type UIMode = 'list' | 'create' | 'confirmArchive' | 'help' | 
              'pickProjectForBranch' | 'pickBranch' | 'diff' | 'runConfig' | 
-             'runProgress' | 'runResults';
+             'runProgress' | 'runResults' | 'selectAITool';
 
 interface UIContextType {
   // Current UI state values
@@ -21,12 +20,12 @@ interface UIContextType {
   runFeature: string | null;
   runPath: string | null;
   runConfigResult: any | null;
+  pendingWorktree: WorktreeInfo | null;
   
   // UI navigation operations - self-documenting methods
   showList: () => void;
   showCreateFeature: (projects: any[]) => void;
   showArchiveConfirmation: (worktree: WorktreeInfo) => void;
-  showArchivedView: () => void;
   showHelp: () => void;
   showBranchPicker: (projects: any[], defaultProject?: string) => void;
   showBranchListForProject: (project: string, branches: any[]) => void;
@@ -34,6 +33,7 @@ interface UIContextType {
   showRunConfig: (project: string, feature: string, path: string) => void;
   showRunProgress: () => void;
   showRunResults: (result: any) => void;
+  showAIToolSelection: (worktree: WorktreeInfo) => void;
   
   // Branch management
   setBranchList: (branches: any[]) => void;
@@ -63,6 +63,7 @@ export function UIProvider({children}: UIProviderProps) {
   const [runFeature, setRunFeature] = useState<string | null>(null);
   const [runPath, setRunPath] = useState<string | null>(null);
   const [runConfigResult, setRunConfigResult] = useState<any | null>(null);
+  const [pendingWorktree, setPendingWorktree] = useState<WorktreeInfo | null>(null);
 
 
   const resetUIState = () => {
@@ -72,10 +73,12 @@ export function UIProvider({children}: UIProviderProps) {
     setBranchProject(null);
     setBranchList([]);
     setDiffWorktree(null);
+    setDiffType('full'); // Reset diff type to default
     setRunProject(null);
     setRunFeature(null);
     setRunPath(null);
     setRunConfigResult(null);
+    setPendingWorktree(null);
   };
 
   // UI Navigation Operations - Self-documenting and encapsulated
@@ -95,10 +98,6 @@ export function UIProvider({children}: UIProviderProps) {
       feature: worktree.feature,
       path: worktree.path
     });
-  };
-
-  const showArchivedView = () => {
-    setMode('archived');
   };
 
   const showHelp = () => {
@@ -144,6 +143,11 @@ export function UIProvider({children}: UIProviderProps) {
     setRunConfigResult(result);
   };
 
+  const showAIToolSelection = (worktree: WorktreeInfo) => {
+    setMode('selectAITool');
+    setPendingWorktree(worktree);
+  };
+
   const requestExit = () => {
     setShouldExit(true);
   };
@@ -163,12 +167,12 @@ export function UIProvider({children}: UIProviderProps) {
     runFeature,
     runPath,
     runConfigResult,
+    pendingWorktree,
     
     // Navigation methods
     showList,
     showCreateFeature,
     showArchiveConfirmation,
-    showArchivedView,
     showHelp,
     showBranchPicker,
     showBranchListForProject,
@@ -176,6 +180,7 @@ export function UIProvider({children}: UIProviderProps) {
     showRunConfig,
     showRunProgress,
     showRunResults,
+    showAIToolSelection,
     
     // Branch management
     setBranchList,
@@ -184,7 +189,11 @@ export function UIProvider({children}: UIProviderProps) {
     requestExit
   };
 
-  return h(UIContext.Provider, {value: contextValue}, children);
+  return (
+    <UIContext.Provider value={contextValue}>
+      {children}
+    </UIContext.Provider>
+  );
 }
 
 export function useUIContext(): UIContextType {

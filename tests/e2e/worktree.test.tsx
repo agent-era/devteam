@@ -1,5 +1,6 @@
 import {describe, beforeEach, test, expect, jest} from '@jest/globals';
 import {renderTestApp} from '../utils/renderApp.js';
+import {WorktreeInfo} from '../../src/models.js';
 import {
   resetTestData,
   setupBasicProject,
@@ -272,6 +273,93 @@ describe('Worktree Management E2E', () => {
       // Archived item should be deleted from memory
       expect(memoryStore.archivedWorktrees.get('my-project')).toHaveLength(0);
     });
+
+    test('should unarchive worktrees back to active state', async () => {
+      // Setup: Project with archived worktree
+      const project = setupBasicProject('my-project');
+      const worktree = setupTestWorktree('my-project', 'test-feature');
+      
+      // Move worktree to archived state
+      memoryStore.worktrees.delete(worktree.path);
+      const archived = memoryStore.archivedWorktrees.get('my-project') || [];
+      const archivedWorktree = new WorktreeInfo({
+        ...worktree,
+        path: worktree.path.replace('-branches', '-archived').replace('test-feature', 'archived-123456_test-feature'),
+        is_archived: true
+      });
+      archived.push(archivedWorktree);
+      memoryStore.archivedWorktrees.set('my-project', archived);
+
+      const {services} = renderTestApp();
+
+      // Verify archived state
+      expect(memoryStore.archivedWorktrees.get('my-project')).toHaveLength(1);
+      expect(memoryStore.worktrees.has(worktree.path)).toBe(false);
+
+      // Unarchive through service layer (simulating the unarchive functionality)
+      const restoredPath = services.gitService.unarchiveWorktree(archivedWorktree.path);
+
+      // Verify unarchive operation
+      expect(restoredPath).toBe(worktree.path);
+      expect(memoryStore.worktrees.has(worktree.path)).toBe(true);
+      expect(memoryStore.archivedWorktrees.get('my-project')).toHaveLength(0);
+
+      // Verify worktree is restored with correct properties
+      const restoredWorktree = memoryStore.worktrees.get(worktree.path);
+      expect(restoredWorktree?.project).toBe('my-project');
+      expect(restoredWorktree?.feature).toBe('test-feature');
+      expect(restoredWorktree?.is_archived).toBe(false);
+    });
+
+    test('should handle unarchive errors gracefully', async () => {
+      const {services} = renderTestApp();
+
+      // Enable mock failure
+      (global as any).__mockUnarchiveShouldFail = true;
+
+      // Try to unarchive non-existent archived worktree
+      expect(() => {
+        services.gitService.unarchiveWorktree('/fake/archived/path');
+      }).toThrow('Mock unarchive failure');
+
+      // Clean up
+      (global as any).__mockUnarchiveShouldFail = false;
+
+      // Try to unarchive worktree that doesn't exist
+      expect(() => {
+        services.gitService.unarchiveWorktree('/fake/nonexistent/path');
+      }).toThrow('Archived worktree not found');
+    });
+
+    test('should prevent unarchive when active feature already exists', async () => {
+      // Setup: Active worktree and archived worktree with same feature name
+      const project = setupBasicProject('my-project');
+      const activeWorktree = setupTestWorktree('my-project', 'duplicate-feature');
+      
+      // Create archived version
+      const archivedWorktree = new WorktreeInfo({
+        project: 'my-project',
+        feature: 'duplicate-feature',
+        path: '/fake/projects/my-project-archived/archived-123456_duplicate-feature',
+        branch: 'feature/duplicate-feature',
+        is_archived: true
+      });
+      
+      const archived = memoryStore.archivedWorktrees.get('my-project') || [];
+      archived.push(archivedWorktree);
+      memoryStore.archivedWorktrees.set('my-project', archived);
+
+      const {services} = renderTestApp();
+
+      // Try to unarchive when active feature exists
+      expect(() => {
+        services.gitService.unarchiveWorktree(archivedWorktree.path);
+      }).toThrow('Feature my-project/duplicate-feature already exists in active worktrees');
+
+      // Verify neither worktree was affected
+      expect(memoryStore.worktrees.has(activeWorktree.path)).toBe(true);
+      expect(memoryStore.archivedWorktrees.get('my-project')).toHaveLength(1);
+    });
   });
 
   describe('Session Operations', () => {
@@ -285,7 +373,7 @@ describe('Worktree Management E2E', () => {
       expect(lastFrame()).toContain('my-project/feature-1');
       
       // Create and attach session through service
-      const sessionName = services.tmuxService.createSession('my-project', 'feature-1', 'working');
+      const sessionName = services.tmuxService.createTestSession('my-project', 'feature-1', 'working');
 
       // Should create and attach session
       expectSessionInMemory(sessionName);

@@ -1,4 +1,5 @@
 import {ProjectInfo, WorktreeInfo, GitStatus, PRStatus, SessionInfo} from '../../src/models.js';
+import {MemoryStatus} from '../../src/services/MemoryMonitorService.js';
 
 export interface MemoryStore {
   projects: Map<string, ProjectInfo>;
@@ -15,6 +16,7 @@ export interface MemoryStore {
     pr_title?: string;
   }>>;
   archivedWorktrees: Map<string, WorktreeInfo[]>;
+  memoryStatus: MemoryStatus | null;
   
   reset(): void;
 }
@@ -34,6 +36,7 @@ class InMemoryStore implements MemoryStore {
     pr_title?: string;
   }>>();
   archivedWorktrees = new Map<string, WorktreeInfo[]>();
+  memoryStatus: MemoryStatus | null = null;
 
   reset() {
     this.projects.clear();
@@ -43,6 +46,7 @@ class InMemoryStore implements MemoryStore {
     this.sessions.clear();
     this.remoteBranches.clear();
     this.archivedWorktrees.clear();
+    this.memoryStatus = null;
   }
 }
 

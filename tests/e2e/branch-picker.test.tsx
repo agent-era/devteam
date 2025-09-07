@@ -221,7 +221,7 @@ describe('Branch Picker E2E', () => {
       await simulateTimeDelay(100);
       
       // Create session for the new worktree (simulates auto-attach behavior)
-      const sessionName = services.tmuxService.createSession('auto-attach', 'auto-session', 'idle');
+      const sessionName = services.tmuxService.createTestSession('auto-attach', 'auto-session', 'idle');
       expect(sessionName).toBe('dev-auto-attach-auto-session');
       
       // Verify session was created and attached
@@ -261,7 +261,7 @@ describe('Branch Picker E2E', () => {
     });
   });
 
-  describe('Branch Picker Integration with Main App', () => {
+  describe('Branch Picker with Main App', () => {
     test('should open branch picker from main view with b key', async () => {
       // Setup: Main view with existing worktree
       setupProjectWithWorktrees('picker-integration', ['current-feature']);

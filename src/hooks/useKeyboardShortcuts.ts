@@ -8,7 +8,6 @@ export interface KeyboardActions {
   onCreate?: () => void;
   onArchive?: () => void;
   onRefresh?: () => void;
-  onViewArchived?: () => void;
   onHelp?: () => void;
   onBranch?: () => void;
   onShell?: () => void;
@@ -22,6 +21,7 @@ export interface KeyboardActions {
   onNumberSelect?: (number: number) => void;
   onExecuteRun?: () => void;
   onConfigureRun?: () => void;
+  onToolSwitch?: () => void;
 }
 
 export interface KeyboardShortcutsOptions {
@@ -79,7 +79,6 @@ export function useKeyboardShortcuts(
       else if (input === 'n') actions.onCreate?.();
       else if (input === 'a') actions.onArchive?.();
       else if (input === 'r') actions.onRefresh?.();
-      else if (input === 'v') actions.onViewArchived?.();
       else if (input === '?') actions.onHelp?.();
       else if (input === 'b') actions.onBranch?.();
       else if (input === 's') actions.onShell?.();
@@ -87,6 +86,7 @@ export function useKeyboardShortcuts(
       else if (input === 'D') actions.onDiffUncommitted?.();
       else if (input === 'x') actions.onExecuteRun?.();
       else if (input === 'X') actions.onConfigureRun?.();
+      else if (input === 't') actions.onToolSwitch?.();
 
       // Pagination
       else if (input === '<' || input === ',') actions.onPreviousPage?.();
