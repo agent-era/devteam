@@ -4,7 +4,7 @@ import {WorktreeInfo, GitStatus, SessionInfo, ProjectInfo} from '../models.js';
 import {GitService} from '../services/GitService.js';
 import {TmuxService} from '../services/TmuxService.js';
 import {MemoryMonitorService, MemoryStatus} from '../services/MemoryMonitorService.js';
-import {VersionCheckService, VersionInfo} from '../services/VersionCheckService.js';
+import type {VersionInfo} from '../services/versionTypes.js';
 import {mapLimit} from '../shared/utils/concurrency.js';
 import {
   CACHE_DURATION,
@@ -92,7 +92,7 @@ interface WorktreeProviderProps {
   gitService?: GitService;
   tmuxService?: TmuxService;
   memoryMonitorService?: MemoryMonitorService;
-  versionCheckService?: VersionCheckService;
+  versionCheckService?: any;
 }
 
 export function WorktreeProvider({
@@ -126,10 +126,7 @@ export function WorktreeProvider({
     if (memoryMonitorServiceOverride) return memoryMonitorServiceOverride;
     return new MemoryMonitorService();
   }, [memoryMonitorServiceOverride]);
-  const versionCheckService: VersionCheckService = useMemo(() => {
-    if (versionCheckServiceOverride) return versionCheckServiceOverride;
-    return new VersionCheckService();
-  }, [versionCheckServiceOverride]);
+  const versionServiceRef = React.useRef<any>(versionCheckServiceOverride || null);
   const refreshingVisibleRef = React.useRef(false);
   const lastSessionsRef = React.useRef<string[] | null>(null);
   const lastSessionsAtRef = React.useRef<number>(0);
@@ -351,17 +348,19 @@ export function WorktreeProvider({
   }, [memoryMonitorService]);
 
   const refreshVersionInfo = useCallback(async () => {
+    // Skip in test environments to avoid network and module-loading overhead
+    if (process.env.JEST_WORKER_ID) return;
     try {
-      const info = await versionCheckService.check();
-      if (info && info.hasUpdate) {
-        setVersionInfo(info);
-      } else {
-        setVersionInfo(null);
+      if (!versionServiceRef.current) {
+        const mod = await import('../services/VersionCheckService.js');
+        versionServiceRef.current = new mod.VersionCheckService();
       }
+      const info = await versionServiceRef.current.check();
+      if (info && info.hasUpdate) setVersionInfo(info); else setVersionInfo(null);
     } catch (error) {
       console.error('Failed to check latest version:', error);
     }
-  }, [versionCheckService]);
+  }, []);
   
   // Operations
   const createFeature = useCallback(async (projectName: string, featureName: string): Promise<WorktreeInfo | null> => {

@@ -1,16 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import {fileURLToPath} from 'node:url';
 import {PACKAGE_NAME} from '../constants.js';
 import {logDebug, logError} from '../shared/utils/logger.js';
-
-export interface VersionInfo {
-  current: string;
-  latest: string;
-  hasUpdate: boolean;
-  whatsNew?: string;
-  url: string;
-}
+import type {VersionInfo} from './versionTypes.js';
 
 export class VersionCheckService {
   private packageName: string;
@@ -45,13 +37,15 @@ export class VersionCheckService {
   }
 
   private async getCurrentVersion(): Promise<string> {
+    // Prefer env-provided version (present in many npm-run contexts)
+    const envVersion = process.env.npm_package_version || process.env.DEVTEAM_VERSION;
+    if (envVersion) return envVersion;
+    // Fallback: read package.json from current working directory
     try {
-      const dirname = path.dirname(fileURLToPath(import.meta.url));
-      // dist/services -> package.json is two levels up
-      const pkgPath = path.resolve(dirname, '../../package.json');
+      const pkgPath = path.resolve(process.cwd(), 'package.json');
       const content = await fs.promises.readFile(pkgPath, 'utf-8');
       const pkg = JSON.parse(content);
-      return pkg.version as string;
+      return String(pkg.version || '');
     } catch (err) {
       logError('Failed to read current version from package.json', err);
       return '';
