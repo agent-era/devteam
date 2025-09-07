@@ -785,7 +785,8 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       
       if (sessionExists) {
         // IMPORTANT: Refresh status right before checking
-        const claudeStatus = await tmuxService.getClaudeStatus(sessionName);
+        const aiStatus = await tmuxService.getAIStatus(sessionName);
+        const claudeStatus = aiStatus.status;
         
         if (claudeStatus === 'waiting') {
           // Claude is waiting for a response - can't accept new input
