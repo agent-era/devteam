@@ -11,6 +11,7 @@ import ProgressDialog from './components/dialogs/ProgressDialog.js';
 import ConfigResultsDialog from './components/dialogs/ConfigResultsDialog.js';
 import AIToolDialog from './components/dialogs/AIToolDialog.js';
 import TmuxDetachHintDialog from './components/dialogs/TmuxDetachHintDialog.js';
+import NoProjectsDialog from './components/dialogs/NoProjectsDialog.js';
 
 import WorktreeListScreen from './screens/WorktreeListScreen.js';
 import CreateFeatureScreen from './screens/CreateFeatureScreen.js';
@@ -82,6 +83,7 @@ function AppContent() {
     showRunProgress,
     showRunResults,
     showAIToolSelection,
+    showNoProjectsDialog,
     requestExit
   } = useUIContext();
 
@@ -92,6 +94,21 @@ function AppContent() {
       exit();
     }
   }, [isRawModeSupported, exit]);
+
+  // On startup: if no projects discovered, show dialog and wait for exit
+  useEffect(() => {
+    try {
+      const projects = discoverProjects();
+      if (!projects || projects.length === 0) {
+        showNoProjectsDialog();
+      }
+    } catch {
+      // If discovery throws, still show the dialog
+      showNoProjectsDialog();
+    }
+    // Run once on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Handle explicit quit
   useEffect(() => {
@@ -108,7 +125,10 @@ function AppContent() {
   // Operations simplified to use contexts
   const handleCreateFeature = () => {
     const projects = discoverProjects();
-    if (!projects.length) return;
+    if (!projects.length) {
+      showNoProjectsDialog();
+      return;
+    }
     showCreateFeature(projects);
   };
 
@@ -121,7 +141,10 @@ function AppContent() {
 
   const handleBranch = () => {
     const projects = discoverProjects();
-    if (!projects.length) return;
+    if (!projects.length) {
+      showNoProjectsDialog();
+      return;
+    }
     
     const defaultProject = getSelectedWorktree()?.project || projects[0].name;
     showBranchPicker(projects, defaultProject);
@@ -393,6 +416,16 @@ function AppContent() {
               }
             }}
           />
+        </Box>
+      </FullScreen>
+    );
+  }
+
+  if (mode === 'noProjects') {
+    return (
+      <FullScreen>
+        <Box flexGrow={1} alignItems="center" justifyContent="center">
+          <NoProjectsDialog onExit={requestExit} />
         </Box>
       </FullScreen>
     );

@@ -5,7 +5,8 @@ import type {AITool} from '../models.js';
 
 type UIMode = 'list' | 'create' | 'confirmArchive' | 'help' | 
              'pickProjectForBranch' | 'pickBranch' | 'diff' | 'runConfig' | 
-             'runProgress' | 'runResults' | 'selectAITool' | 'tmuxHint';
+             'runProgress' | 'runResults' | 'selectAITool' | 'tmuxHint' |
+             'noProjects';
 
 interface UIContextType {
   // Current UI state values
@@ -41,6 +42,7 @@ interface UIContextType {
   showRunResults: (result: any) => void;
   showAIToolSelection: (worktree: WorktreeInfo) => void;
   showTmuxHintFor: (worktree: WorktreeInfo, tool?: AITool) => void;
+  showNoProjectsDialog: () => void;
   
   // Branch management
   setBranchList: (branches: any[]) => void;
@@ -168,6 +170,10 @@ export function UIProvider({children}: UIProviderProps) {
     setTmuxHintTool(tool || null);
   };
 
+  const showNoProjectsDialog = () => {
+    setMode('noProjects');
+  };
+
   const requestExit = () => {
     setShouldExit(true);
   };
@@ -213,6 +219,7 @@ export function UIProvider({children}: UIProviderProps) {
     showRunResults,
     showAIToolSelection,
     showTmuxHintFor,
+    showNoProjectsDialog,
     
     // Branch management
     setBranchList,
