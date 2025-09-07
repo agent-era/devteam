@@ -12,26 +12,29 @@ interface TerminalDimensions {
  */
 export function useTerminalDimensions(): TerminalDimensions {
   const {stdout} = useStdout();
-  
+
   const [dimensions, setDimensions] = useState<TerminalDimensions>(() => ({
-    columns: stdout?.columns || process.stdout.columns || 80,
-    rows: stdout?.rows || process.stdout.rows || 24
+    columns: stdout?.columns || 80,
+    rows: stdout?.rows || 24
   }));
 
   useEffect(() => {
+    if (!stdout) return;
     const updateDimensions = () => {
       setDimensions({
-        columns: stdout?.columns || process.stdout.columns || 80,
-        rows: stdout?.rows || process.stdout.rows || 24
+        columns: stdout.columns || 80,
+        rows: stdout.rows || 24
       });
     };
 
-    // Listen for resize events
-    process.stdout.on('resize', updateDimensions);
-    
-    // Cleanup
+    // Initialize from current stdout and listen for resize on the Ink stdout stream
+    updateDimensions();
+    // @ts-ignore - node streams may support 'resize' event
+    stdout.on?.('resize', updateDimensions);
+
     return () => {
-      process.stdout.off('resize', updateDimensions);
+      // @ts-ignore
+      stdout.off?.('resize', updateDimensions);
     };
   }, [stdout]);
 
