@@ -1,5 +1,6 @@
 import React from 'react';
 import {Box, Text, useInput} from 'ink';
+import AnnotatedText from '../common/AnnotatedText.js';
 
 type Props = {
   commentCount: number;
@@ -22,9 +23,9 @@ export default function UnsubmittedCommentsDialog({commentCount, onSubmit, onExi
       <Text></Text>
       <Text>What would you like to do?</Text>
       <Text></Text>
-      <Text color="green">S - Submit comments to Claude</Text>
-      <Text color="blue">q - Exit without submitting (comments will be kept)</Text>
-      <Text color="gray">ESC - Cancel (return to diff view)</Text>
+      <AnnotatedText color="green" text={'[S]ubmit comments to Claude'} />
+      <AnnotatedText color="blue" text={'[q] exit without submitting (comments will be kept)'} />
+      <AnnotatedText color="magenta" wrap="truncate" text={'[esc] cancel (return to diff view)'} />
     </Box>
   );
 }
