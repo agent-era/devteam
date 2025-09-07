@@ -1,5 +1,6 @@
 import React, {useMemo} from 'react';
 import {Box, Text} from 'ink';
+import AnnotatedText from '../common/AnnotatedText.js';
 import {stringDisplayWidth, truncateDisplay, padEndDisplay} from '../../shared/utils/formatting.js';
 
 type Props = {
@@ -120,7 +121,7 @@ export default function FileTreeOverlay({files, highlightedFile, maxWidth, maxHe
           })}
         </Box>
         <Box paddingX={1}>
-          <Text color="gray">Shift+↑/↓ to navigate files</Text>
+          <AnnotatedText color="magenta" wrap="truncate" text={'[shift]+[↑]/[↓] navigate files'} />
         </Box>
       </Box>
     </Box>

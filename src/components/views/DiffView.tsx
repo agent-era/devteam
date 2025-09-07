@@ -13,6 +13,7 @@ import SessionWaitingDialog from '../dialogs/SessionWaitingDialog.js';
 import UnsubmittedCommentsDialog from '../dialogs/UnsubmittedCommentsDialog.js';
 import FileTreeOverlay from '../dialogs/FileTreeOverlay.js';
 import {truncateDisplay, padEndDisplay, stringDisplayWidth} from '../../shared/utils/formatting.js';
+import AnnotatedText from '../common/AnnotatedText.js';
 import {LineWrapper} from '../../shared/utils/lineWrapper.js';
 import {ViewportCalculator} from '../../shared/utils/viewport.js';
 import {computeUnifiedPerFileIndices, computeSideBySidePerFileIndices} from '../../shared/utils/diffLineIndex.js';
@@ -1720,9 +1721,11 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       )}
       
       {!showFileTreeOverlay && (
-        <Text color="gray">
-          {truncateDisplay(`j/k move  v toggle view (${viewMode})  w toggle wrap (${wrapMode})  c comment  C show all  d delete  S send to Claude  q close`, terminalWidth)}
-        </Text>
+        <AnnotatedText
+          color="magenta"
+          wrap="truncate"
+          text={truncateDisplay(`[j]/[k] move  toggle [v]iew (${viewMode})  toggle [w]rap (${wrapMode})  [c]omment  [C] show all  [d]elete  [S]end to Claude  [q] close`, terminalWidth)}
+        />
       )}
       
       {/* Bottom-left overlay while keeping diff visible */}

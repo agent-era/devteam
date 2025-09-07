@@ -1,7 +1,8 @@
-import React, {useMemo, useCallback} from 'react';
-import {Box, Text} from 'ink';
+import React, {useMemo, useCallback, useRef, useEffect, useState} from 'react';
+import {Box, measureElement} from 'ink';
+import AnnotatedText from '../common/AnnotatedText.js';
 import type {WorktreeInfo} from '../../models.js';
-import {calculatePaginationInfo, calculatePageSize} from '../../utils/pagination.js';
+import {calculatePaginationInfo} from '../../utils/pagination.js';
 import {useTerminalDimensions} from '../../hooks/useTerminalDimensions.js';
 import {useColumnWidths} from './MainView/hooks/useColumnWidths.js';
 import {WorktreeRow} from './MainView/WorktreeRow.js';
@@ -24,7 +25,7 @@ interface Props {
   prompt?: Prompt;
   message?: string;
   page?: number;
-  pageSize?: number;
+  onMeasuredPageSize?: (pageSize: number) => void;
 }
 
 export default function MainView({
@@ -34,37 +35,55 @@ export default function MainView({
   prompt,
   message,
   page = 0,
-  pageSize = 20
+  onMeasuredPageSize
 }: Props) {
   const {rows: terminalRows, columns: terminalWidth} = useTerminalDimensions();
-  
-  // FullScreen intentionally leaves one row free to avoid bottom-line scroll.
-  const effectiveRows = Math.max(1, terminalRows - 1);
-  const maxVisibleRows = calculatePageSize(effectiveRows, terminalWidth);
 
-  const columnWidths = useColumnWidths(worktrees, terminalWidth, page, pageSize);
+  // Measure-based calculation to ensure we don't render more rows than fit.
+  const listRef = useRef<any>(null);
+  const [measuredPageSize, setMeasuredPageSize] = useState<number>(Math.max(1, worktrees?.length || 1));
+
+  const columnWidths = useColumnWidths(worktrees, terminalWidth, page, measuredPageSize);
   
+  // Use measured page size for pagination info to align with what's rendered
   const paginationInfo = useMemo(() => 
     // Keep pagination info based on requested pageSize for stability
-    calculatePaginationInfo(worktrees.length, page, pageSize),
-    [worktrees.length, page, pageSize]
+    calculatePaginationInfo(worktrees.length, page, measuredPageSize),
+    [worktrees.length, page, measuredPageSize]
   );
   
   const pageItems = useMemo(() => {
     if (!worktrees || worktrees.length === 0) return [];
-    const start = page * pageSize;
-    return worktrees.slice(start, start + pageSize);
-  }, [worktrees, page, pageSize]);
+    const start = page * measuredPageSize;
+    // Clamp to the measured page size to avoid rendering more rows than fit
+    return worktrees.slice(start, start + measuredPageSize);
+  }, [worktrees, page, measuredPageSize]);
   
   const headerText = useMemo(() => {
-    // Keep header compact and single-line to avoid wrapping
-    // Pagination details are shown in the footer when applicable
-    return 'Enter attach, n new, a archive, x exec, d diff, s shell, q quit';
+    // Standardized shortcut notation; embed keys in words when possible
+    return '[enter] attach, [n]ew, [a]rchive, e[x]ec, [d]iff, [s]hell, [q]uit';
   }, []);
   
   const getRowKey = useCallback((worktree: WorktreeInfo, index: number) => 
     getWorktreeKey(worktree, index), []
   );
+
+  // After render and on resize, measure the list container height to determine how many rows fit
+  useEffect(() => {
+    const measureAndUpdate = () => {
+      const h = listRef.current ? measureElement(listRef.current).height : 0;
+      if (h > 0 && h !== measuredPageSize) {
+        setMeasuredPageSize(h);
+        onMeasuredPageSize?.(h);
+      }
+    };
+    // Measure now and on next tick to ensure Yoga layout has settled
+    measureAndUpdate();
+    const t = setTimeout(measureAndUpdate, 0);
+    return () => clearTimeout(t);
+    // Re-measure when terminal size changes or item count might affect footer visibility
+  }, [terminalRows, terminalWidth, worktrees.length, onMeasuredPageSize]);
+
   if (mode === 'message') {
     return <MessageView message={message} />;
   }
@@ -76,30 +95,33 @@ export default function MainView({
   if (!worktrees.length) {
     return <EmptyState />;
   }
-  
+
   return (
-    <Box flexDirection="column">
-      <Box marginBottom={1}>
-        <Text color="magenta" wrap="truncate">{headerText}</Text>
-      </Box>
+    <Box flexDirection="column" flexGrow={1}>
       
       <TableHeader columnWidths={columnWidths} />
+
+      <Box ref={listRef} flexDirection="column" flexGrow={1}>
+        {pageItems.map((worktree, index) => {
+          const globalIndex = page * measuredPageSize + index;
+          const isSelected = globalIndex === selectedIndex;
+          
+          return (
+            <WorktreeRow
+              key={getRowKey(worktree, index)}
+              worktree={worktree}
+              index={index}
+              globalIndex={globalIndex}
+              selected={isSelected}
+              columnWidths={columnWidths}
+            />
+          );
+        })}
+      </Box>
       
-      {pageItems.map((worktree, index) => {
-        const globalIndex = page * pageSize + index;
-        const isSelected = globalIndex === selectedIndex;
-        
-        return (
-          <WorktreeRow
-            key={getRowKey(worktree, index)}
-            worktree={worktree}
-            index={index}
-            globalIndex={globalIndex}
-            selected={isSelected}
-            columnWidths={columnWidths}
-          />
-        );
-      })}
+      <Box marginTop={1}>
+        <AnnotatedText color="magenta" wrap="truncate" text={headerText} />
+      </Box>
       
       <PaginationFooter
         totalPages={paginationInfo.totalPages}

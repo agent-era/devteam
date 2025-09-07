@@ -1,5 +1,6 @@
 import React from 'react';
 import {Box, Text, useInput, useStdin} from 'ink';
+import AnnotatedText from '../common/AnnotatedText.js';
 import {generateHelpSections} from '../../constants.js';
 import {getProjectsDirectory} from '../../config.js';
 
@@ -14,13 +15,10 @@ export default function HelpOverlay({onClose}: Props) {
   
   return (
     <Box flexDirection="column">
-      <Text color="cyan">Help</Text>
-      {helpSections.map((line, i) => 
-        <Text key={i} color={line.endsWith(':') ? 'magenta' : undefined}>
-          {line}
-        </Text>
-      )}
+      <Text color="magenta" wrap="truncate">Help</Text>
+      {helpSections.map((line, i) => (
+        <AnnotatedText key={i} color={line.trim() ? 'magenta' : undefined} wrap="truncate" text={line} />
+      ))}
     </Box>
   );
 }
-

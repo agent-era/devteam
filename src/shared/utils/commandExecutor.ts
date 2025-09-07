@@ -1,76 +1,71 @@
 import {execFileSync, spawnSync, execFile} from 'child_process';
 import {SUBPROCESS_SHORT_TIMEOUT, SUBPROCESS_TIMEOUT, AI_TOOLS} from '../../constants.js';
 
-// Clean environment for tmux commands to fix nvm compatibility
-function getCleanEnvironment(): NodeJS.ProcessEnv {
-  const cleanEnv = {...process.env};
-  // Remove npm_config_prefix that npm link sets, which conflicts with nvm
-  delete cleanEnv.npm_config_prefix;
-  return cleanEnv;
-}
-
-export function runCommand(args: string[], opts: {timeout?: number; cwd?: string} = {}): string {
+// Consolidated command executors (sync + async) with options
+export function runCommand(
+  args: string[],
+  opts: { timeout?: number; cwd?: string; env?: NodeJS.ProcessEnv } = {}
+): string {
   try {
-    // Clean environment for tmux commands to fix nvm compatibility
-    const env = args[0] === 'tmux' ? getCleanEnvironment() : process.env;
-    
     const output = execFileSync(args[0], args.slice(1), {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
       timeout: opts.timeout ?? SUBPROCESS_TIMEOUT,
       cwd: opts.cwd,
-      env,
+      env: opts.env ?? process.env,
     });
-    
-    return output.trim();
-  } catch (e) {
-    return '';
-  }
-}
-
-export function runCommandQuick(args: string[], cwd?: string): string {
-  try {
-    // Clean environment for tmux commands to fix nvm compatibility
-    const env = args[0] === 'tmux' ? getCleanEnvironment() : process.env;
-    
-    const output = execFileSync(args[0], args.slice(1), {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-      timeout: SUBPROCESS_SHORT_TIMEOUT,
-      cwd,
-      env,
-    });
-    
     return output.trim();
   } catch {
     return '';
   }
 }
 
-export function runCommandAsync(args: string[], opts: {timeout?: number; cwd?: string} = {}): Promise<string> {
+export function runCommandAsync(
+  args: string[],
+  opts: { timeout?: number; cwd?: string; env?: NodeJS.ProcessEnv } = {}
+): Promise<string> {
   return new Promise((resolve) => {
     try {
-      execFile(args[0], args.slice(1), {
-        encoding: 'utf8' as any,
-        timeout: opts.timeout ?? SUBPROCESS_TIMEOUT,
-        cwd: opts.cwd,
-        maxBuffer: 10 * 1024 * 1024,
-      }, (err, stdout) => {
-        if (err) return resolve('');
-        resolve((stdout || '').toString().trim());
-      });
+      execFile(
+        args[0],
+        args.slice(1),
+        {
+          encoding: 'utf8' as any,
+          timeout: opts.timeout ?? SUBPROCESS_TIMEOUT,
+          cwd: opts.cwd,
+          env: opts.env ?? process.env,
+          maxBuffer: 10 * 1024 * 1024,
+        },
+        (err, stdout) => {
+          if (err) return resolve('');
+          resolve((stdout || '').toString().trim());
+        }
+      );
     } catch {
       resolve('');
     }
   });
 }
 
-export function runCommandQuickAsync(args: string[], cwd?: string): Promise<string> {
-  return runCommandAsync(args, {timeout: SUBPROCESS_SHORT_TIMEOUT, cwd});
+// Clean environment for tmux commands to fix nvm compatibility
+export function getCleanEnvironment(): NodeJS.ProcessEnv {
+  const cleanEnv = {...process.env};
+  // Remove npm_config_prefix that npm link sets, which conflicts with nvm
+  delete cleanEnv.npm_config_prefix;
+  return cleanEnv;
 }
 
-export function commandExitCode(args: string[], cwd?: string): number {
-  const result = spawnSync(args[0], args.slice(1), {cwd, stdio: 'ignore'});
+// Backward-compatible wrappers to reduce duplication
+export function runCommandQuick(args: string[], cwd?: string, env?: NodeJS.ProcessEnv): string {
+  return runCommand(args, { timeout: SUBPROCESS_SHORT_TIMEOUT, cwd, env });
+}
+
+export function runCommandQuickAsync(args: string[], cwd?: string, env?: NodeJS.ProcessEnv): Promise<string> {
+  return runCommandAsync(args, { timeout: SUBPROCESS_SHORT_TIMEOUT, cwd, env });
+}
+
+export function commandExitCode(args: string[], cwd?: string, env?: NodeJS.ProcessEnv): number {
+  const result = spawnSync(args[0], args.slice(1), {cwd, env: env ?? process.env, stdio: 'ignore'});
   return result.status ?? 1;
 }
 

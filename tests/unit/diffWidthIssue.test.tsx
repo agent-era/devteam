@@ -42,7 +42,7 @@ describe('DiffView Width Calculation Issue', () => {
     
     const newApproachOutput = leadingSpace + syntaxHighlightedText + padding;
     
-    console.log(`\\nNew approach (our branch):`);
+    console.log(`\nNew approach (our branch):`);
     console.log(`  Truncated text: "${truncatedText}" (${truncatedText.length} chars, ${stringDisplayWidth(truncatedText)} display width)`);
     console.log(`  Leading space: 1 char`);
     console.log(`  Padding: ${paddingChars} chars`);
@@ -53,7 +53,7 @@ describe('DiffView Width Calculation Issue', () => {
     const oldWidth = stringDisplayWidth(oldApproachOutput);
     const newWidth = stringDisplayWidth(newApproachOutput);
     
-    console.log(`\\nComparison:`);
+    console.log(`\nComparison:`);
     console.log(`  Old width: ${oldWidth} (${oldWidth === paneWidth ? 'CORRECT' : 'WRONG'})`);
     console.log(`  New width: ${newWidth} (${newWidth === paneWidth ? 'CORRECT' : 'WRONG'})`);
     
@@ -70,7 +70,7 @@ describe('DiffView Width Calculation Issue', () => {
     const widePaddingChars = Math.max(0, paneWidth - stringDisplayWidth(wideTruncated) - 1);
     const wideNewOutput = ' ' + wideTruncated + ' '.repeat(widePaddingChars);
     
-    console.log(`\\nWide character test:`);
+    console.log(`\nWide character test:`);
     console.log(`  Wide text: "${wideText}"`);
     console.log(`  Old approach width: ${stringDisplayWidth(wideOldOutput)} (${stringDisplayWidth(wideOldOutput) === paneWidth ? 'CORRECT' : 'WRONG'})`);
     console.log(`  New approach width: ${stringDisplayWidth(wideNewOutput)} (${stringDisplayWidth(wideNewOutput) === paneWidth ? 'CORRECT' : 'WRONG'})`);
@@ -95,7 +95,7 @@ describe('DiffView Width Calculation Issue', () => {
     // Line 1213 in DiffView.ts for syntax highlighting:
     const truncatedText = truncateDisplay(rightFullText, paneWidth - 1); // 38 chars for syntax
     
-    console.log(`\\nInconsistency in current code:`);
+    console.log(`\nInconsistency in current code:`);
     console.log(`  Original text: "${rightFullText}"`);
     console.log(`  Non-syntax truncation (paneWidth - 2): "${rightText}" (${stringDisplayWidth(rightText)} display chars)`);
     console.log(`  Syntax truncation (paneWidth - 1): "${truncatedText}" (${stringDisplayWidth(truncatedText)} display chars)`);
@@ -110,7 +110,7 @@ describe('DiffView Width Calculation Issue', () => {
     const padding = ' '.repeat(Math.max(0, paneWidth - stringDisplayWidth(truncatedText) - 1));
     const syntaxOutput = leadingSpace + syntaxText + padding;
     
-    console.log(`\\nFinal outputs:`);
+    console.log(`\nFinal outputs:`);
     console.log(`  Non-syntax: "${nonSyntaxOutput}" (${stringDisplayWidth(nonSyntaxOutput)} chars)`);
     console.log(`  Syntax:     "${syntaxOutput}" (${stringDisplayWidth(syntaxOutput)} chars)`);
     
@@ -119,7 +119,7 @@ describe('DiffView Width Calculation Issue', () => {
     const syntaxWidth = stringDisplayWidth(syntaxOutput);
     
     if (nonSyntaxWidth !== syntaxWidth) {
-      console.log(`\\nPROBLEM CONFIRMED: Width difference of ${syntaxWidth - nonSyntaxWidth} characters!`);
+      console.log(`\nPROBLEM CONFIRMED: Width difference of ${syntaxWidth - nonSyntaxWidth} characters!`);
       console.log(`This is the off-by-one error mentioned by the user.`);
     }
     
@@ -128,3 +128,4 @@ describe('DiffView Width Calculation Issue', () => {
     expect(syntaxWidth).toBe(paneWidth);
   });
 });
+

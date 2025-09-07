@@ -1,5 +1,6 @@
 import React, {useEffect, useMemo, useState, useRef} from 'react';
 import {Box, Text, useInput, useStdin} from 'ink';
+import AnnotatedText from '../common/AnnotatedText.js';
 import type {ProjectInfo} from '../../models.js';
 import {kebabCase, truncateText} from '../../shared/utils/formatting.js';
 import {validateFeatureName} from '../../shared/utils/validation.js';
@@ -106,7 +107,7 @@ const CreateFeatureDialog = React.memo(function CreateFeatureDialog({projects, d
     return (
       <Box flexDirection="column">
         <Text color="cyan">Create Feature — Select Project</Text>
-        <Text color="gray">Type to filter, arrows or j/k to move, Enter select, ESC cancel</Text>
+        <AnnotatedText color="magenta" wrap="truncate" text={"Type to filter, [j]/[k] move, [1]–[9] quick select, [enter] select, [esc] cancel"} />
         <Box flexDirection="row">
           <Text color="gray">Filter: </Text>
           <Text>{filter || ' '}</Text>

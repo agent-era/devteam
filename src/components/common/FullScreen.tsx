@@ -23,13 +23,16 @@ function useAltScreen(enabled: boolean) {
 export default function FullScreen(props: {children: any; enableAltScreen?: boolean}) {
   const {enableAltScreen = true} = props;
   const {stdout} = useStdout();
-  const [dims, setDims] = useState<{columns: number; rows: number}>(() => ({columns: process.stdout.columns || 80, rows: process.stdout.rows || 24}));
+  const [dims, setDims] = useState<{columns: number; rows: number}>(() => ({columns: stdout?.columns || 80, rows: stdout?.rows || 24}));
   useAltScreen(enableAltScreen);
 
   useEffect(() => {
     if (!stdout) return;
-    const onResize = () => setDims({columns: process.stdout.columns || 80, rows: process.stdout.rows || 24});
-    stdout.on('resize', onResize);
+    const onResize = () => setDims({columns: stdout.columns || 80, rows: stdout.rows || 24});
+    // Initialize immediately and then listen for further changes
+    onResize();
+    // @ts-ignore 'resize' exists on TTY streams
+    stdout.on?.('resize', onResize);
     return () => { stdout.off?.('resize', onResize as any); };
   }, [stdout]);
 

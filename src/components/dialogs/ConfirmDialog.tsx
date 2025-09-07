@@ -1,5 +1,6 @@
 import React from 'react';
 import {Box, Text, useInput, useStdin} from 'ink';
+import AnnotatedText from '../common/AnnotatedText.js';
 
 type Props = {
   title?: string;
@@ -19,8 +20,7 @@ export default function ConfirmDialog({title, message, confirmKey = 'y', cancelK
     <Box flexDirection="column">
       {title ? <Text color="cyan">{title}</Text> : null}
       <Text>{message}</Text>
-      <Text color="gray">Press {confirmKey} to confirm, {cancelKey} to cancel</Text>
+      <AnnotatedText color="magenta" wrap="truncate" text={`[${confirmKey}] confirm, [${cancelKey}] cancel`} />
     </Box>
   );
 }
-

@@ -1,5 +1,6 @@
 import React, {useEffect, useMemo, useState} from 'react';
 import {Box, Text, useInput, useStdin} from 'ink';
+import AnnotatedText from '../common/AnnotatedText.js';
 import {fitDisplay, padStartDisplay, stringDisplayWidth} from '../../shared/utils/formatting.js';
 import {useTerminalDimensions} from '../../hooks/useTerminalDimensions.js';
 
@@ -179,9 +180,7 @@ export default function BranchPickerDialog({branches, onSubmit, onCancel, onRefr
   return (
     <Box flexDirection="column">
       <Text color="cyan">Create from Remote Branch</Text>
-      <Text color="gray">
-        {`Type to filter, j/k arrows, PgUp/PgDn, 1-9 jump, r refresh, Enter select, ESC cancel  [${Math.floor(selected / pageSize) + 1}/${Math.max(1, Math.ceil(filtered.length / pageSize))}]`}
-      </Text>
+      <AnnotatedText color="magenta" wrap="truncate" text={`Type to filter, [j]/[k] move, [PgUp]/[PgDn], [1]–[9] jump, [r]efresh, [enter] select, [esc] cancel  [${Math.floor(selected / pageSize) + 1}/${Math.max(1, Math.ceil(filtered.length / pageSize))}]`} />
       <Box flexDirection="row">
         <Text color="gray">Filter: </Text>
         <Text>{filter || ' '}</Text>

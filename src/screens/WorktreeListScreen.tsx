@@ -6,7 +6,7 @@ import {useGitHubContext} from '../contexts/GitHubContext.js';
 import {useInputFocus} from '../contexts/InputFocusContext.js';
 import {useUIContext} from '../contexts/UIContext.js';
 import {useKeyboardShortcuts} from '../hooks/useKeyboardShortcuts.js';
-import {usePageSize} from '../hooks/usePagination.js';
+// Page size is measured directly in MainView to avoid heuristics
 import {VISIBLE_STATUS_REFRESH_DURATION} from '../constants.js';
 
 
@@ -35,7 +35,7 @@ export default function WorktreeListScreen({
   const {setVisibleWorktrees} = useGitHubContext();
   const {isAnyDialogFocused} = useInputFocus();
   const {showAIToolSelection} = useUIContext();
-  const pageSize = usePageSize();
+  const [pageSize, setPageSize] = useState(1);
   const [currentPage, setCurrentPage] = useState(0);
 
   // Refresh data when component mounts, but only if data is missing or very stale
@@ -219,7 +219,7 @@ export default function WorktreeListScreen({
       onSelect={handleSelect}
       onQuit={onQuit}
       page={currentPage}
-      pageSize={pageSize}
+      onMeasuredPageSize={setPageSize}
     />
   );
 }
