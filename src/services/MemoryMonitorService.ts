@@ -1,5 +1,4 @@
 import fs from 'node:fs';
-import os from 'node:os';
 import {logError, logDebug} from '../shared/utils/logger.js';
 
 export type MemorySeverity = 'ok' | 'warning' | 'critical';
@@ -27,7 +26,15 @@ export class MemoryMonitorService {
       if (process.platform === 'linux') {
         return await this.getLinuxMemoryStatus();
       } else {
-        return this.getCrossPlatformMemoryStatus();
+        // Non-Linux platforms: no-op (do not warn)
+        // Intentionally avoid platform-specific implementations here.
+        return {
+          availableRAM: 0,
+          usedRAM: 0,
+          totalRAM: 0,
+          swapUsedPercent: 0,
+          severity: 'ok'
+        };
       }
     } catch (error) {
       logError('Failed to get memory status', error);
@@ -101,34 +108,6 @@ export class MemoryMonitorService {
     }
 
     logDebug('Memory status', status);
-    return status;
-  }
-
-  private getCrossPlatformMemoryStatus(): MemoryStatus {
-    // Fallback using Node.js built-in APIs (less detailed)
-    const totalRAM = os.totalmem() / 1024 / 1024 / 1024; // Convert to GB
-    const freeRAM = os.freemem() / 1024 / 1024 / 1024; // Convert to GB
-    const usedRAM = totalRAM - freeRAM;
-    
-    // Note: Cross-platform doesn't give us swap info easily
-    const status: MemoryStatus = {
-      availableRAM: Math.round(freeRAM * 100) / 100,
-      usedRAM: Math.round(usedRAM * 100) / 100,
-      totalRAM: Math.round(totalRAM * 100) / 100,
-      swapUsedPercent: 0, // Unknown on non-Linux
-      severity: 'ok'
-    };
-
-    // Only check RAM thresholds since we don't have swap info
-    if (freeRAM < MemoryMonitorService.CRITICAL_RAM_THRESHOLD_GB) {
-      status.severity = 'critical';
-      status.message = `CRITICAL: ${status.availableRAM}GB free - Sessions may crash!`;
-    } else if (freeRAM < MemoryMonitorService.WARNING_RAM_THRESHOLD_GB) {
-      status.severity = 'warning';
-      status.message = `Low Memory: ${status.availableRAM}GB free`;
-    }
-
-    logDebug('Memory status (cross-platform)', status);
     return status;
   }
 }
