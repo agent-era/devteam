@@ -3,6 +3,7 @@ import {Box, measureElement} from 'ink';
 import AnnotatedText from '../common/AnnotatedText.js';
 import type {WorktreeInfo} from '../../models.js';
 import type {MemoryStatus} from '../../services/MemoryMonitorService.js';
+import type {VersionInfo} from '../../services/versionTypes.js';
 import {calculatePaginationInfo} from '../../utils/pagination.js';
 import {useTerminalDimensions} from '../../hooks/useTerminalDimensions.js';
 import {useColumnWidths} from './MainView/hooks/useColumnWidths.js';
@@ -28,6 +29,7 @@ interface Props {
   page?: number;
   onMeasuredPageSize?: (pageSize: number) => void;
   memoryStatus?: MemoryStatus | null;
+  versionInfo?: VersionInfo | null;
 }
 
 export default function MainView({
@@ -38,7 +40,8 @@ export default function MainView({
   message,
   page = 0,
   onMeasuredPageSize,
-  memoryStatus
+  memoryStatus,
+  versionInfo
 }: Props) {
   const {rows: terminalRows, columns: terminalWidth} = useTerminalDimensions();
 
@@ -81,6 +84,18 @@ export default function MainView({
     );
   }, [memoryStatus]);
 
+  const renderUpdateBanner = useMemo(() => {
+    if (!versionInfo || !versionInfo.hasUpdate) return null;
+    const whats = versionInfo.whatsNew ? ` — ${versionInfo.whatsNew}` : '';
+    const cmd = 'npm install -g @agent-era/devteam';
+    const text = `⬆ Update available: v${versionInfo.current} → v${versionInfo.latest}${whats} — press [u] to update (runs: ${cmd})`;
+    return (
+      <Box marginBottom={1}>
+        <AnnotatedText color="cyan" wrap="truncate" text={text} />
+      </Box>
+    );
+  }, [versionInfo]);
+
   // After render and on resize, measure the list container height to determine how many rows fit
   useEffect(() => {
     const measureAndUpdate = () => {
@@ -111,6 +126,7 @@ export default function MainView({
 
   return (
     <Box flexDirection="column" flexGrow={1}>
+      {renderUpdateBanner}
       {renderMemoryWarning}
       <TableHeader columnWidths={columnWidths} />
       <Box ref={listRef} flexDirection="column" flexGrow={1}>
@@ -140,4 +156,3 @@ export default function MainView({
     </Box>
   );
 }
-
