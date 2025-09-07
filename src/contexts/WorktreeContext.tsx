@@ -15,15 +15,9 @@ import {
   TMUX_DISPLAY_TIME,
 } from '../constants.js';
 import {getProjectsDirectory} from '../config.js';
-import {
-  ensureDirectory,
-  runCommand,
-  runCommandQuick,
-  copyWithIgnore,
-  generateTimestamp,
-  runClaudeSync,
-  detectAvailableAITools
-} from '../utils.js';
+import {ensureDirectory, copyWithIgnore} from '../shared/utils/fileSystem.js';
+import {generateTimestamp} from '../shared/utils/formatting.js';
+import {runClaudeSync, detectAvailableAITools} from '../shared/utils/commandExecutor.js';
 import {AI_TOOLS} from '../constants.js';
 import type {AITool} from '../models.js';
 import {useInputFocus} from './InputFocusContext.js';

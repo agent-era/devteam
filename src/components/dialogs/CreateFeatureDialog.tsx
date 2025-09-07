@@ -1,7 +1,8 @@
 import React, {useEffect, useMemo, useState, useRef} from 'react';
 import {Box, Text, useInput, useStdin} from 'ink';
 import type {ProjectInfo} from '../../models.js';
-import {kebabCase, validateFeatureName, truncateText} from '../../utils.js';
+import {kebabCase, truncateText} from '../../shared/utils/formatting.js';
+import {validateFeatureName} from '../../shared/utils/validation.js';
 import {TextInput} from '@inkjs/ui';
 import {useInputFocus} from '../../contexts/InputFocusContext.js';
 

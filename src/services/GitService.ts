@@ -8,16 +8,10 @@ import {
   ENV_FILE,
   RUN_CONFIG_FILE,
 } from '../constants.js';
-import {
-  runCommand,
-  runCommandQuick,
-  runCommandAsync,
-  runCommandQuickAsync,
-  parseGitShortstat,
-  findBaseBranch,
-  ensureDirectory,
-  formatTimeAgo,
-} from '../utils.js';
+import { runCommand, runCommandQuick, runCommandAsync, runCommandQuickAsync } from '../shared/utils/commandExecutor.js';
+import { parseGitShortstat, findBaseBranch } from '../shared/utils/gitHelpers.js';
+import { ensureDirectory } from '../shared/utils/fileSystem.js';
+import { formatTimeAgo } from '../shared/utils/formatting.js';
 import {logDebug} from '../shared/utils/logger.js';
 import {Timer} from '../shared/utils/timing.js';
 

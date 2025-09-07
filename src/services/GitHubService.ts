@@ -1,5 +1,5 @@
 import {PRStatus} from '../models.js';
-import {runCommand, runCommandAsync, runCommandQuick, runCommandQuickAsync} from '../utils.js';
+import {runCommand, runCommandAsync, runCommandQuick, runCommandQuickAsync} from '../shared/utils/commandExecutor.js';
 import {logDebug} from '../shared/utils/logger.js';
 import {Timer} from '../shared/utils/timing.js';
 

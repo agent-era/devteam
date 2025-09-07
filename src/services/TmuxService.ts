@@ -1,4 +1,4 @@
-import {commandExitCode, runCommandQuick, runCommandQuickAsync, runCommand, runInteractive} from '../utils.js';
+import {commandExitCode, runCommandQuick, runCommandQuickAsync, runCommand, runInteractive} from '../shared/utils/commandExecutor.js';
 import {SESSION_PREFIX, CLAUDE_PATTERNS, AI_TOOLS} from '../constants.js';
 import {logDebug} from '../shared/utils/logger.js';
 import {Timer} from '../shared/utils/timing.js';
