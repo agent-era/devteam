@@ -67,6 +67,7 @@ function AppContent() {
     // tmux hint
     tmuxHintShown,
     tmuxHintWorktree,
+    tmuxHintTool,
     showTmuxHintFor,
     markTmuxHintShown,
     showList,
@@ -358,7 +359,7 @@ function AppContent() {
               // Attach session with selected tool, but show tmux hint once
               try {
                 if (!tmuxHintShown) {
-                  showTmuxHintFor(wt);
+                  showTmuxHintFor(wt, tool);
                 } else {
                   await attachSession(wt, tool);
                 }
@@ -380,11 +381,12 @@ function AppContent() {
           <TmuxDetachHintDialog
             onContinue={async () => {
               const wt = tmuxHintWorktree;
+              const tool = tmuxHintTool || undefined;
               markTmuxHintShown();
               showList();
               if (wt) {
                 try {
-                  await attachSession(wt);
+                  await attachSession(wt, tool);
                 } catch (error) {
                   console.error('Failed to attach after tmux hint:', error);
                 }

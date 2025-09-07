@@ -7,9 +7,7 @@ type Props = {
 
 export default function TmuxDetachHintDialog({onContinue}: Props) {
   useInput((input, key) => {
-    if (key.return || key.escape || !!input) {
-      onContinue();
-    }
+    if (input === 'c' || input === 'C') onContinue();
   });
 
   return (
@@ -28,8 +26,7 @@ export default function TmuxDetachHintDialog({onContinue}: Props) {
         To detach and return here: <Text bold>Ctrl+b</Text>, then release Ctrl, then press <Text bold>d</Text>.
       </Text>
       <Box marginTop={1} />
-      <Text color="magenta">Press Enter to continue and attach</Text>
+      <Text color="magenta">Press [c] to continue and attach</Text>
     </Box>
   );
 }
-

@@ -1,5 +1,6 @@
 import React, {createContext, useContext, useState, ReactNode} from 'react';
 import {WorktreeInfo} from '../models.js';
+import type {AITool} from '../models.js';
 
 
 type UIMode = 'list' | 'create' | 'confirmArchive' | 'help' | 
@@ -25,6 +26,7 @@ interface UIContextType {
   // One-time tmux hint dialog
   tmuxHintShown: boolean;
   tmuxHintWorktree: WorktreeInfo | null;
+  tmuxHintTool: AITool | null;
   
   // UI navigation operations - self-documenting methods
   showList: () => void;
@@ -38,7 +40,7 @@ interface UIContextType {
   showRunProgress: () => void;
   showRunResults: (result: any) => void;
   showAIToolSelection: (worktree: WorktreeInfo) => void;
-  showTmuxHintFor: (worktree: WorktreeInfo) => void;
+  showTmuxHintFor: (worktree: WorktreeInfo, tool?: AITool) => void;
   
   // Branch management
   setBranchList: (branches: any[]) => void;
@@ -73,6 +75,7 @@ export function UIProvider({children}: UIProviderProps) {
   // Show tmux hint once per app run
   const [tmuxHintShown, setTmuxHintShown] = useState<boolean>(false);
   const [tmuxHintWorktree, setTmuxHintWorktree] = useState<WorktreeInfo | null>(null);
+  const [tmuxHintTool, setTmuxHintTool] = useState<AITool | null>(null);
 
 
   const resetUIState = () => {
@@ -157,11 +160,12 @@ export function UIProvider({children}: UIProviderProps) {
     setPendingWorktree(worktree);
   };
 
-  const showTmuxHintFor = (worktree: WorktreeInfo) => {
+  const showTmuxHintFor = (worktree: WorktreeInfo, tool?: AITool) => {
     // Only show if not already shown
     if (tmuxHintShown) return;
     setMode('tmuxHint');
     setTmuxHintWorktree(worktree);
+    setTmuxHintTool(tool || null);
   };
 
   const requestExit = () => {
@@ -171,6 +175,7 @@ export function UIProvider({children}: UIProviderProps) {
   const markTmuxHintShown = () => {
     setTmuxHintShown(true);
     setTmuxHintWorktree(null);
+    setTmuxHintTool(null);
   };
 
 
@@ -193,6 +198,7 @@ export function UIProvider({children}: UIProviderProps) {
     // One-time tmux hint
     tmuxHintShown,
     tmuxHintWorktree,
+    tmuxHintTool,
     
     // Navigation methods
     showList,
