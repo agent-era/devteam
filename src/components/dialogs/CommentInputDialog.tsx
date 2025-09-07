@@ -1,5 +1,6 @@
 import React, {useState, useRef, useEffect} from 'react';
 import {Box, Text, useInput} from 'ink';
+import AnnotatedText from '../common/AnnotatedText.js';
 import {TextInput} from '@inkjs/ui';
 import {useInputFocus} from '../../contexts/InputFocusContext.js';
 
@@ -73,9 +74,7 @@ const CommentInputDialog = React.memo(function CommentInputDialog({fileName, lin
           onChange={handleChange}
         />
       </Box>
-      <Text color="gray">
-        Enter: Save  Shift+Enter: New Line  Esc: Cancel
-      </Text>
+      <AnnotatedText color="magenta" wrap="truncate" text={'[enter] save  [shift]+[enter] new line  [esc] cancel'} />
     </Box>
   );
 });

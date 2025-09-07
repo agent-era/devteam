@@ -40,9 +40,9 @@ export default function RunConfigDialog({project, configPath, claudePrompt, onCa
       </Box>
       <Text></Text>
       <Box justifyContent="space-around">
-        <Text color="green">[Y]es</Text>
-        <Text color="red">[N]o</Text>
-        <Text color="gray">[ESC] Cancel</Text>
+        <Text color="green" wrap="truncate">[Y]es</Text>
+        <Text color="red" wrap="truncate">[N]o</Text>
+        <Text color="magenta" wrap="truncate">[ESC] Cancel</Text>
       </Box>
     </Box>
   );

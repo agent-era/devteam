@@ -1,5 +1,6 @@
 import React, {useMemo, useCallback, useRef, useEffect, useState} from 'react';
-import {Box, Text, measureElement} from 'ink';
+import {Box, measureElement} from 'ink';
+import AnnotatedText from '../common/AnnotatedText.js';
 import type {WorktreeInfo} from '../../models.js';
 import {calculatePaginationInfo} from '../../utils/pagination.js';
 import {useTerminalDimensions} from '../../hooks/useTerminalDimensions.js';
@@ -59,9 +60,8 @@ export default function MainView({
   }, [worktrees, page, measuredPageSize]);
   
   const headerText = useMemo(() => {
-    // Keep header compact and single-line to avoid wrapping
-    // Pagination details are shown in the footer when applicable
-    return 'Enter attach, n new, a archive, x exec, d diff, s shell, q quit';
+    // Standardized shortcut notation; embed keys in words when possible
+    return '[enter] attach, [n]ew, [a]rchive, e[x]ec, [d]iff, [s]hell, [q]uit';
   }, []);
   
   const getRowKey = useCallback((worktree: WorktreeInfo, index: number) => 
@@ -98,9 +98,6 @@ export default function MainView({
 
   return (
     <Box flexDirection="column" flexGrow={1}>
-      <Box marginBottom={1}>
-        <Text color="magenta" wrap="truncate">{headerText}</Text>
-      </Box>
       
       <TableHeader columnWidths={columnWidths} />
 
@@ -120,6 +117,10 @@ export default function MainView({
             />
           );
         })}
+      </Box>
+      
+      <Box marginTop={1}>
+        <AnnotatedText color="magenta" wrap="truncate" text={headerText} />
       </Box>
       
       <PaginationFooter

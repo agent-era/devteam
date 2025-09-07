@@ -109,3 +109,4 @@ describe('Comment line mapping and indexing', () => {
     });
   });
 });
+
