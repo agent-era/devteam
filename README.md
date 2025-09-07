@@ -14,6 +14,12 @@ npm i -g @agent-era/devteam
 
 This installs the `devteam` command.
 
+Or run the provided installer script from a clone of this repo:
+
+```
+./install.sh
+```
+
 ## Usage
 
 Run the TUI in the top-level directory that you keep your git projects in:
@@ -66,3 +72,11 @@ npm publish --access public
 ```
 
 Note: `prepublishOnly` runs the build to ensure `dist/` is included in the published tarball.
+
+Convenience scripts:
+
+```
+npm run release:patch  # bump patch + publish
+npm run release:minor  # bump minor + publish
+npm run release:major  # bump major + publish
+```

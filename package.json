@@ -17,7 +17,10 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:terminal": "npm run build && tsc -p tsconfig.node-tests.json && node --test tests/e2e/terminal/*.test.mjs",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "release:patch": "npm ci && npm version patch && npm publish --access public",
+    "release:minor": "npm ci && npm version minor && npm publish --access public",
+    "release:major": "npm ci && npm version major && npm publish --access public"
   },
   "repository": {
     "type": "git",
