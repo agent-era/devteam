@@ -334,8 +334,9 @@ dev-project3-feature3:33333`);
         return Promise.resolve('');
       });
 
-      const detectAll = jest.spyOn(tmuxService as any, 'detectAllSessionAITools');
-      const result = await (tmuxService as any).detectAllSessionAITools();
+      // Access the aiToolService from the tmuxService
+      const aiToolService = (tmuxService as any).aiToolService;
+      const result = await aiToolService.detectAllSessionAITools();
       
       expect(result.get('dev-project1-feature1')).toBe('claude');
       expect(result.get('dev-project2-feature2')).toBe('codex');
