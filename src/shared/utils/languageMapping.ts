@@ -2,6 +2,7 @@
 
 export const LANGUAGE_MAP: Record<string, string> = {
   js: 'javascript',
+  mjs: 'javascript',
   jsx: 'javascript',
   ts: 'typescript',
   tsx: 'typescript',
@@ -106,4 +107,3 @@ export function getLanguageFromFileName(fileName: string | undefined): string {
 
   return LANGUAGE_MAP[ext || ''] || 'plaintext';
 }
-
