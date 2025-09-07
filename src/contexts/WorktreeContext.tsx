@@ -647,30 +647,42 @@ export function WorktreeProvider({
     
     try {
       const configContent = gitService.readRunConfig(project);
-      const config = JSON.parse(configContent);
+      const raw = JSON.parse(configContent);
+      const cfg = (raw && typeof raw === 'object' && (raw as any).executionInstructions)
+        ? (raw as any).executionInstructions
+        : raw;
       
-      // Run setup commands if they exist
-      if (config.setup && Array.isArray(config.setup)) {
-        for (const setupCmd of config.setup) {
-          tmuxService.sendText(sessionName, setupCmd, { executeCommand: true });
-        }
+      // Run setup commands if they exist (new: preRunCommands; legacy: setup)
+      const preRun = Array.isArray((cfg as any).preRunCommands)
+        ? (cfg as any).preRunCommands
+        : (Array.isArray((cfg as any).setup) ? (cfg as any).setup : []);
+      for (const setupCmd of preRun) {
+        tmuxService.sendText(sessionName, setupCmd, { executeCommand: true });
       }
       
-      // // Set environment variables if they exist
-      // if (config.env && typeof config.env === 'object') {
-      //   for (const [key, value] of Object.entries(config.env)) {
-      //     tmuxService.sendText(sessionName, `export ${key}="${value}"`, { executeCommand: true });
+      // // Set environment variables if they exist (new: environmentVariables; legacy: env)
+      // const envVars = ((cfg as any).environmentVariables && typeof (cfg as any).environmentVariables === 'object')
+      //   ? (cfg as any).environmentVariables
+      //   : (((cfg as any).env && typeof (cfg as any).env === 'object') ? (cfg as any).env : undefined);
+      // if (envVars) {
+      //   for (const [key, value] of Object.entries(envVars)) {
+      //     tmuxService.sendText(sessionName, `export ${key}="${String(value)}"`, { executeCommand: true });
       //   }
       // }
       
-      // Run the main command
-      if (config.command) {
-        if (config.watch === false) {
-          // For non-watch commands (builds, tests), use exec to replace bash and exit when command finishes
-          tmuxService.sendText(sessionName, `exec ${config.command}`, { executeCommand: true });
+      // Run the main command (new: mainCommand; legacy: command)
+      const command = (cfg as any).mainCommand || (cfg as any).command;
+      const isLongRunning = (typeof (cfg as any).isLongRunning === 'boolean')
+        ? (cfg as any).isLongRunning
+        : (((cfg as any).watch === false) ? false : true);
+
+      if (command) {
+        if (!isLongRunning) {
+          // For non-long-running commands (builds, tests), replace shell and exit when finished
+          tmuxService.sendText(sessionName, `exec ${command}`, { executeCommand: true });
         } else {
-          // For watch commands (servers, dev), keep session alive after command exits
-          tmuxService.sendText(sessionName, config.command, { executeCommand: true });
+          // For long-running commands (servers, dev), keep session alive
+          tmuxService.sendText(sessionName, command, { executeCommand: true });
         }
       }
     } catch (error) {

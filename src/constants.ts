@@ -229,12 +229,21 @@ export const RUN_CONFIG_CLAUDE_PROMPT = `Analyze this project directory and gene
 CRITICAL: Your response must be ONLY the JSON object. Do NOT use markdown code blocks or any formatting.
 
 Example of what to output:
-{"command": "npm start", "env": {}, "setup": [], "watch": true}
+{
+  "executionInstructions": {
+    "mainCommand": "npm start",
+    "preRunCommands": ["npm install"],
+    "environmentVariables": {},
+    "isLongRunning": true
+  },
+  "notes": "Optional: add any tips the developer should know."
+}
 
 Fill in values based on the project files you see:
-- "command": main run command (e.g. "npm run dev", "python app.py")
-- "env": object with environment variables (usually empty {})
-- "setup": array of setup commands (e.g. ["npm install"])
-- "watch": true for servers/long-running, false for build/test commands
+- "executionInstructions.mainCommand": primary run command (e.g. "npm run dev", "python app.py")
+- "executionInstructions.preRunCommands": commands to run before the main command (e.g. ["npm install"]) 
+- "executionInstructions.environmentVariables": key/value env vars needed by the app (often {})
+- "executionInstructions.isLongRunning": true for servers/dev loops; false for one-shot tasks (build/test)
+- "notes": optional free-form guidance for humans reading the file
 
 Your response must start with { and end with } - nothing else.`;
