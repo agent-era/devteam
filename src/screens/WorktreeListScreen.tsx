@@ -34,7 +34,7 @@ export default function WorktreeListScreen({
   const {worktrees, selectedIndex, selectWorktree, refresh, refreshVisibleStatus, forceRefreshVisible, attachSession, attachShellSession, needsToolSelection, lastRefreshed, memoryStatus} = useWorktreeContext();
   const {setVisibleWorktrees} = useGitHubContext();
   const {isAnyDialogFocused} = useInputFocus();
-  const {showAIToolSelection} = useUIContext();
+  const {showAIToolSelection, tmuxHintShown, showTmuxHintFor} = useUIContext();
   const [pageSize, setPageSize] = useState(1);
   const [currentPage, setCurrentPage] = useState(0);
 
@@ -112,6 +112,10 @@ export default function WorktreeListScreen({
         showAIToolSelection(selectedWorktree);
       } else {
         // Proceed with session attachment
+        if (!tmuxHintShown) {
+          showTmuxHintFor(selectedWorktree);
+          return;
+        }
         attachSession(selectedWorktree);
         refresh().catch(error => {
           console.error('Refresh after attach failed:', error);
