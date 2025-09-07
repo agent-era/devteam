@@ -14,7 +14,7 @@ export const DIFF_STATUS_REFRESH_DURATION = 2_000; // 2s diff status refresh
 export const GIT_REFRESH_DURATION = 5_000; // 5s git refresh
 export const PR_REFRESH_DURATION = 5_000; // 5s PR status refresh (visible + stale only)
 export const VISIBLE_STATUS_REFRESH_DURATION = 2_000; // 2s visible rows git+AI refresh
-export const MEMORY_REFRESH_DURATION = 2_000; // 2s memory status refresh (RAM warning)
+export const MEMORY_REFRESH_DURATION = 20_000; // 20s memory status refresh (RAM warning)
 
 // Time helpers
 export const SECOND_MS = 1_000;
