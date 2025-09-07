@@ -96,7 +96,9 @@ async function loadDiff(worktreePath: string, diffType: 'full' | 'uncommitted' =
       fileLines.push({type: 'header', text: `📁 ${fp} (new file)`, fileName: fp, headerType: 'file'});
       try {
         const cat = await runCommandAsync(['bash', '-lc', `cd ${JSON.stringify(worktreePath)} && sed -n '1,200p' ${JSON.stringify(fp)}`]);
-        for (const l of (cat || '').split('\n').filter(Boolean)) {
+        // Preserve blank lines in new files (do not filter Boolean)
+        for (const l of (cat || '').split('\n')) {
+          // Keep all lines including empty ones to faithfully render blank lines
           fileLines.push({type: 'added', text: l, fileName: fp});
         }
       } catch {}
