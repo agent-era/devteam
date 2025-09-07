@@ -1,5 +1,5 @@
 import {useMemo} from 'react';
-import type {WorktreeInfo} from '../../../../models.js';
+import type {WorktreeInfo, PRStatus} from '../../../../models.js';
 
 export interface HighlightInfo {
   columnIndex: number;
@@ -23,10 +23,9 @@ const COLORS = {
   GREEN: 'green'     // Ready/good state
 } as const;
 
-export function useHighlightPriority(worktree: WorktreeInfo): HighlightInfo | null {
+export function useHighlightPriority(worktree: WorktreeInfo, pr: PRStatus | undefined | null): HighlightInfo | null {
   return useMemo(() => {
     const cs = (worktree.session?.claude_status || '').toLowerCase();
-    const pr = worktree.pr;
     
     // Skip all highlighting if agent is working/thinking or PR is merged (dimmed)
     const isDimmed = pr?.is_merged === true || pr?.state === 'MERGED';
@@ -120,5 +119,5 @@ export function useHighlightPriority(worktree: WorktreeInfo): HighlightInfo | nu
     
     // No highlighting needed
     return null;
-  }, [worktree]);
+  }, [worktree, pr]);
 }

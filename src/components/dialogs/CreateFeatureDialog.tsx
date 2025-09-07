@@ -1,8 +1,11 @@
 import React, {useEffect, useMemo, useState, useRef} from 'react';
 import {Box, Text, useInput, useStdin} from 'ink';
+import AnnotatedText from '../common/AnnotatedText.js';
 import type {ProjectInfo} from '../../models.js';
-import {kebabCase, validateFeatureName, truncateText} from '../../utils.js';
-import TextInputAdapter, {type TextInputAdapterRef} from '../common/TextInputAdapter.js';
+import {kebabCase, truncateText} from '../../shared/utils/formatting.js';
+import {validateFeatureName} from '../../shared/utils/validation.js';
+import {TextInput} from '@inkjs/ui';
+import {useInputFocus} from '../../contexts/InputFocusContext.js';
 
 type Props = {
   projects: ProjectInfo[];
@@ -16,7 +19,13 @@ const CreateFeatureDialog = React.memo(function CreateFeatureDialog({projects, d
   const [filter, setFilter] = useState('');
   const [selected, setSelected] = useState(() => Math.max(0, projects.findIndex(p => p.name === defaultProject)));
   const [featureName, setFeatureName] = useState('');
-  const featureInputRef = useRef<TextInputAdapterRef>(null);
+  const featureInputRef = useRef(null);
+  const {requestFocus, releaseFocus} = useInputFocus();
+
+  useEffect(() => {
+    requestFocus('create-feature-dialog');
+    return () => releaseFocus('create-feature-dialog');
+  }, [requestFocus, releaseFocus]);
 
   const filtered = useMemo(() => {
     const f = filter.toLowerCase();
@@ -98,7 +107,7 @@ const CreateFeatureDialog = React.memo(function CreateFeatureDialog({projects, d
     return (
       <Box flexDirection="column">
         <Text color="cyan">Create Feature — Select Project</Text>
-        <Text color="gray">Type to filter, arrows or j/k to move, Enter select, ESC cancel</Text>
+        <AnnotatedText color="magenta" wrap="truncate" text={"Type to filter, [j]/[k] move, [1]–[9] quick select, [enter] select, [esc] cancel"} />
         <Box flexDirection="row">
           <Text color="gray">Filter: </Text>
           <Text>{filter || ' '}</Text>
@@ -115,16 +124,13 @@ const CreateFeatureDialog = React.memo(function CreateFeatureDialog({projects, d
     <Box flexDirection="column">
       <Text color="cyan">Create Feature — {filtered[selected]?.name || ''}</Text>
       <Text>Enter feature name (kebab-case suggested), ESC back</Text>
-      <TextInputAdapter
-        ref={featureInputRef}
+      <TextInput
         placeholder=" "
         onSubmit={handleFeatureNameSubmit}
         onChange={handleFeatureNameChange}
-        focusId="create-feature-dialog"
       />
     </Box>
   );
 });
 
 export default CreateFeatureDialog;
-

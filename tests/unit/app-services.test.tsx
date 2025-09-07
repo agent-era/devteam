@@ -178,7 +178,8 @@ describe('App Services E2E', () => {
       // Verify session status
       const sessionName = tmuxService.sessionName('status-test', 'status-feature');
       expect(tmuxService.hasSession(sessionName)).toBe(true);
-      expect(await tmuxService.getClaudeStatus(sessionName)).toBe('working');
+      const aiStatus = await tmuxService.getAIStatus(sessionName);
+      expect(aiStatus.status).toBe('working');
       
       // Verify PR data through GitHub service
       const gitHubService = new FakeGitHubService();
@@ -199,16 +200,20 @@ describe('App Services E2E', () => {
       const sessionName = tmuxService.createTestSession('session-test', 'test-feature', 'idle')!;
       
       // Test status transitions
-      expect(await tmuxService.getClaudeStatus(sessionName)).toBe('idle');
+      const aiStatus1 = await tmuxService.getAIStatus(sessionName);
+      expect(aiStatus1.status).toBe('idle');
       
-      tmuxService.updateClaudeStatus(sessionName, 'working');
-      expect(await tmuxService.getClaudeStatus(sessionName)).toBe('working');
+      tmuxService.setAIStatus(sessionName, 'working');
+      const aiStatus2 = await tmuxService.getAIStatus(sessionName);
+      expect(aiStatus2.status).toBe('working');
       
-      tmuxService.updateClaudeStatus(sessionName, 'waiting');
-      expect(await tmuxService.getClaudeStatus(sessionName)).toBe('waiting');
+      tmuxService.setAIStatus(sessionName, 'waiting');
+      const aiStatus3 = await tmuxService.getAIStatus(sessionName);
+      expect(aiStatus3.status).toBe('waiting');
       
-      tmuxService.updateClaudeStatus(sessionName, 'idle');
-      expect(await tmuxService.getClaudeStatus(sessionName)).toBe('idle');
+      tmuxService.setAIStatus(sessionName, 'idle');
+      const aiStatus4 = await tmuxService.getAIStatus(sessionName);
+      expect(aiStatus4.status).toBe('idle');
       
       // Verify session capture provides appropriate output
       const output = await tmuxService.capturePane(sessionName);
@@ -281,7 +286,8 @@ describe('App Services E2E', () => {
       const tmuxService = new FakeTmuxService();
       
       expect(tmuxService.hasSession('non-existent')).toBe(false);
-      expect(await tmuxService.getClaudeStatus('non-existent')).toBe('not_running');
+      const aiStatus = await tmuxService.getAIStatus('non-existent');
+      expect(aiStatus.status).toBe('not_running');
       
       const output = await tmuxService.capturePane('non-existent');
       expect(output).toBe('');
@@ -443,3 +449,4 @@ describe('App Services E2E', () => {
   });
 
 });
+

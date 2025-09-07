@@ -12,8 +12,15 @@ export const CACHE_DURATION = 30_000; // 30s full refresh
 export const AI_STATUS_REFRESH_DURATION = 2_000; // 2s AI status refresh
 export const DIFF_STATUS_REFRESH_DURATION = 2_000; // 2s diff status refresh
 export const GIT_REFRESH_DURATION = 5_000; // 5s git refresh
-export const PR_REFRESH_DURATION = 30_000; // 30s PR status refresh (non-merged only)
-export const MEMORY_REFRESH_DURATION = 2_000; // 2s memory status refresh (faster for testing)
+export const PR_REFRESH_DURATION = 5_000; // 5s PR status refresh (visible + stale only)
+export const VISIBLE_STATUS_REFRESH_DURATION = 2_000; // 2s visible rows git+AI refresh
+export const MEMORY_REFRESH_DURATION = 2_000; // 2s memory status refresh (RAM warning)
+
+// Time helpers
+export const SECOND_MS = 1_000;
+export const MINUTE_MS = 60_000;
+export const HOUR_MS = 60 * MINUTE_MS;
+export const DAY_MS = 24 * HOUR_MS;
 
 export const ENV_FILE = '.env.local';
 export const CLAUDE_SETTINGS_FILE = path.join('.claude', 'settings.local.json');
@@ -60,7 +67,7 @@ export const USE_EMOJI_SYMBOLS = false;
 // When true, wcwidth treats a small allowlist of such symbols as wide.
 export const AMBIGUOUS_EMOJI_ARE_WIDE = true;
 export const ASCII_SYMBOLS = {
-  NO_SESSION: 'o',
+  NO_SESSION: '-',
   IDLE: '✓',
   WORKING: '*',
   WAITING: '?',
@@ -127,6 +134,18 @@ export const SUBPROCESS_SHORT_TIMEOUT = 5_000;
 // 0 disables message display entirely in supported tmux versions
 export const TMUX_DISPLAY_TIME = 0;
 
+// PR cache TTLs (ms)
+export const PR_TTL_MERGED_MS = 365 * DAY_MS;
+export const PR_TTL_NO_PR_MS = 30 * SECOND_MS;
+export const PR_TTL_ERROR_MS = 60 * SECOND_MS;
+export const PR_TTL_CHECKS_FAIL_MS = 2 * MINUTE_MS;
+export const PR_TTL_CHECKS_PENDING_MS = 5 * SECOND_MS;
+export const PR_TTL_PASSING_OPEN_MS = 30 * SECOND_MS;
+export const PR_TTL_OPEN_MS = 5 * MINUTE_MS;
+export const PR_TTL_CLOSED_MS = HOUR_MS;
+export const PR_TTL_UNKNOWN_MS = 10 * MINUTE_MS;
+export const PR_TTL_FALLBACK_MS = 5 * MINUTE_MS;
+
 /**
  * Generate help sections with dynamic projects directory path
  */
@@ -134,43 +153,43 @@ export function generateHelpSections(projectsDir: string): string[] {
   return [
     '',
     'NAVIGATION:',
-    '  ↑/↓, j/k    Navigate list',
-    '  PgUp/PgDn   Previous/next page',
-    '  < / >       Previous/next page',
-    '  1-9         Select item on current page',
-    '  Enter       Open/create session',
+    '  [↑]/[↓], [j]/[k]  navigate list',
+    '  [PgUp]/[PgDn]     previous/next page',
+    '  [<]/[>]           previous/next page',
+    '  [1]–[9]           select item on current page',
+    '  [enter]           open/create session',
     '',
     'ACTIVE VIEW:',
-    '  n           Create new feature and activate',
-    '  b           Create from existing branch',
-    '  a           Archive selected feature',
-    '  s           Open shell in worktree',
-    '  x           Execute/run program in worktree',
-    '  X           Create/update run config with Claude',
-    '  t           Switch AI tool for session',
+    '  [n]ew         feature and activate',
+    '  create from existing [b]ranch',
+    '  [a]rchive     selected feature',
+    '  open [s]hell in worktree',
+    '  e[x]ec        program in worktree',
+    '  [X]           create/update run config with Claude',
+    '  AI [t]ool     switch for session',
     '',
     'NEW FEATURE DIALOG:',
-    '  Type        Filter projects',
-    '  ↑/↓, j/k    Navigate filtered list',
-    '  1-9         Quick select by number',
-    '  Enter       Select project',
-    '  ESC         Cancel',
+    '  Type        filter projects',
+    '  [↑]/[↓], [j]/[k]  navigate filtered list',
+    '  [1]–[9]           quick select by number',
+    '  [enter]           select project',
+    '  [esc]             cancel',
     '',
     // Archived view removed; archived items remain on disk
     '',
     'TMUX:',
-    '  Ctrl+b, d   Detach from session',
+    '  Ctrl+b, d   detach from session',
     '',
   'OTHER:',
-    '  Restore:    Use b to create from branch; check -archived/ for uncommitted diffs',
-  '  r           Refresh list',
-  '  ?           Show this help',
-  '  q           Quit manager',
+    '  Restore:    use [b] to create from branch; check -archived/ for uncommitted diffs',
+  '  [r]efresh     list',
+  '  [?]           show this help',
+  '  [q]uit        manager',
     '',
     'CONFIGURATION:',
-    '  --dir PATH  Specify projects directory',
-    '  PROJECTS_DIR  Environment variable for projects directory',
-    '  Default:    Current working directory',
+    '  --dir PATH  specify projects directory',
+    '  PROJECTS_DIR  environment variable for projects directory',
+    '  Default:    current working directory',
     '',
     'FILES:',
     `  Active:     ${projectsDir}/{project}-branches/`,

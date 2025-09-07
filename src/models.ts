@@ -122,8 +122,6 @@ export class WorktreeInfo {
   is_archived?: boolean;
   mtime?: number;
   last_commit_ts?: number;
-  idleStartTime?: number | null;
-  wasKilledIdle?: boolean;
   constructor(init: Partial<WorktreeInfo> = {}) {
     this.project = '';
     this.feature = '';
@@ -134,8 +132,6 @@ export class WorktreeInfo {
     this.is_archived = false;
     this.mtime = 0;
     this.last_commit_ts = 0;
-    this.idleStartTime = null;
-    this.wasKilledIdle = false;
     Object.assign(this, init);
   }
 
@@ -178,13 +174,13 @@ export class ProjectInfo {
 }
 
 export class DiffComment {
-  lineIndex: number;
+  lineIndex: number | undefined;
   fileName: string;
   lineText: string;
   commentText: string;
   timestamp: number;
   constructor(init: Partial<DiffComment> = {}) {
-    this.lineIndex = 0;
+    this.lineIndex = undefined;
     this.fileName = '';
     this.lineText = '';
     this.commentText = '';
@@ -199,7 +195,7 @@ export class CommentStore {
     this.comments = [];
   }
   
-  addComment(lineIndex: number, fileName: string, lineText: string, commentText: string): DiffComment {
+  addComment(lineIndex: number | undefined, fileName: string, lineText: string, commentText: string): DiffComment {
     // Remove existing comment for this line if any
     this.comments = this.comments.filter(c => c.lineIndex !== lineIndex || c.fileName !== fileName);
     
@@ -215,22 +211,31 @@ export class CommentStore {
     return comment;
   }
   
-  removeComment(lineIndex: number, fileName: string): boolean {
+  removeComment(lineIndex: number | undefined, fileName: string): boolean {
     const initialLength = this.comments.length;
     this.comments = this.comments.filter(c => !(c.lineIndex === lineIndex && c.fileName === fileName));
     return this.comments.length < initialLength;
   }
   
-  getComment(lineIndex: number, fileName: string): DiffComment | undefined {
+  getComment(lineIndex: number | undefined, fileName: string): DiffComment | undefined {
     return this.comments.find(c => c.lineIndex === lineIndex && c.fileName === fileName);
   }
   
-  hasComment(lineIndex: number, fileName: string): boolean {
+  hasComment(lineIndex: number | undefined, fileName: string): boolean {
     return this.comments.some(c => c.lineIndex === lineIndex && c.fileName === fileName);
   }
   
   getAllComments(): DiffComment[] {
-    return [...this.comments].sort((a, b) => a.lineIndex - b.lineIndex);
+    return [...this.comments].sort((a, b) => {
+      // Sort by fileName first, then by lineIndex (undefined lineIndex goes last)
+      if (a.fileName !== b.fileName) {
+        return a.fileName.localeCompare(b.fileName);
+      }
+      if (a.lineIndex === undefined && b.lineIndex === undefined) return 0;
+      if (a.lineIndex === undefined) return 1;
+      if (b.lineIndex === undefined) return -1;
+      return a.lineIndex - b.lineIndex;
+    });
   }
   
   clear(): void {

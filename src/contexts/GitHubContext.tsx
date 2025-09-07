@@ -6,6 +6,7 @@ import {PRStatusCacheService} from '../services/PRStatusCacheService.js';
 import {PR_REFRESH_DURATION} from '../constants.js';
 import {getProjectsDirectory} from '../config.js';
 import {logError, logDebug} from '../shared/utils/logger.js';
+import {createThrottledBatch} from '../shared/utils/throttle.js';
 
 
 interface GitHubContextType {
@@ -56,6 +57,7 @@ export function GitHubProvider({children, gitHubService: ghOverride, gitService:
   }, [gitOverride]);
   const cacheService = useRef(new PRStatusCacheService()).current;
   const refreshIntervalRef = useRef<NodeJS.Timeout>();
+  const REFRESH_MS = Math.max(1000, Number(process.env.PR_REFRESH_INTERVAL_MS || PR_REFRESH_DURATION));
 
   // Load cached PR data on mount
   useEffect(() => {
@@ -74,9 +76,6 @@ export function GitHubProvider({children, gitHubService: ghOverride, gitService:
       setLastUpdated(Date.now());
     }
 
-    // Start automatic refresh cycle
-    startAutoRefresh();
-
     return () => {
       if (refreshIntervalRef.current) {
         clearInterval(refreshIntervalRef.current);
@@ -84,30 +83,7 @@ export function GitHubProvider({children, gitHubService: ghOverride, gitService:
     };
   }, [cacheService]);
 
-  const startAutoRefresh = useCallback(() => {
-    if (refreshIntervalRef.current) {
-      clearInterval(refreshIntervalRef.current);
-    }
-
-    refreshIntervalRef.current = setInterval(() => {
-      // Auto-refresh only for non-merged PRs that need updates
-      const paths = Object.keys(pullRequests).filter(path => {
-        const pr = pullRequests[path];
-        return pr && !pr.is_merged && !cacheService.isValid(path);
-      });
-
-      if (paths.length > 0) {
-        // Create minimal worktree objects for refresh
-        const worktreesToRefresh = paths.map(path => ({
-          project: 'auto-refresh',
-          path,
-          is_archived: false
-        }));
-        
-        refreshPRStatusInternal(worktreesToRefresh, false);
-      }
-    }, PR_REFRESH_DURATION);
-  }, [pullRequests, cacheService]);
+  // startAutoRefresh defined after refreshPRStatusInternal
 
   const refreshPRStatusInternal = useCallback(async (
     worktrees: Array<{project: string; path: string; is_archived?: boolean}>,
@@ -197,6 +173,60 @@ export function GitHubProvider({children, gitHubService: ghOverride, gitService:
       setLoading(false);
     }
   }, [loading, gitHubService, cacheService, visibleWorktrees]);
+
+  // Throttle wrapper to avoid spamming GitHub; merges queued paths
+  const throttledRefreshPR = useMemo(() => {
+    type WT = {project: string; path: string; is_archived?: boolean};
+    return createThrottledBatch<{worktrees: WT[]; visibleOnly: boolean}>(
+      REFRESH_MS,
+      async ({worktrees, visibleOnly}) => refreshPRStatusInternal(worktrees, visibleOnly),
+      (pending) => {
+        const map = new Map<string, WT>();
+        let visibleOnly = true;
+        for (const p of pending) {
+          for (const wt of p.worktrees) map.set(wt.path, wt);
+          if (!p.visibleOnly) visibleOnly = false;
+        }
+        return {worktrees: Array.from(map.values()), visibleOnly};
+      }
+    );
+  }, [refreshPRStatusInternal, REFRESH_MS]);
+
+  // Auto-refresh PRs for visible worktrees (restart on visibility/strategy change)
+  useEffect(() => {
+    if (refreshIntervalRef.current) clearInterval(refreshIntervalRef.current);
+    refreshIntervalRef.current = setInterval(() => {
+      const paths = visibleWorktrees.filter(path => !cacheService.isValid(path));
+      if (paths.length > 0) {
+        const worktreesToRefresh = paths.map(path => ({
+          project: 'auto-refresh',
+          path,
+          is_archived: false
+        }));
+        throttledRefreshPR({worktrees: worktreesToRefresh, visibleOnly: false});
+      }
+    }, REFRESH_MS);
+    return () => {
+      if (refreshIntervalRef.current) clearInterval(refreshIntervalRef.current);
+    };
+  }, [visibleWorktrees, cacheService, throttledRefreshPR, REFRESH_MS]);
+
+  // Immediately refresh stale PRs for the current visible set (no need to wait for the interval)
+  useEffect(() => {
+    if (!visibleWorktrees || visibleWorktrees.length === 0) return;
+    // Debounce rapid page changes to avoid bursts
+    const handle = setTimeout(() => {
+      const paths = visibleWorktrees.filter(path => !cacheService.isValid(path));
+      if (paths.length === 0) return;
+      const worktreesToRefresh = paths.map(path => ({
+        project: 'visible-now',
+        path,
+        is_archived: false
+      }));
+      throttledRefreshPR({worktrees: worktreesToRefresh, visibleOnly: false});
+    }, 200);
+    return () => clearTimeout(handle);
+  }, [visibleWorktrees, cacheService, throttledRefreshPR]);
 
   const refreshPRStatus = useCallback(async (
     worktrees: WorktreeInfo[], 

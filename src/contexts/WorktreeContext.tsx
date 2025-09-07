@@ -1,14 +1,12 @@
 import React, {createContext, useContext, useState, useCallback, useEffect, ReactNode, useMemo} from 'react';
 import path from 'node:path';
-import fs from 'node:fs';
-import {WorktreeInfo, GitStatus, SessionInfo, ProjectInfo, PRStatus, MemorySeverity} from '../models.js';
+import {WorktreeInfo, GitStatus, SessionInfo, ProjectInfo} from '../models.js';
 import {GitService} from '../services/GitService.js';
 import {TmuxService} from '../services/TmuxService.js';
 import {MemoryMonitorService, MemoryStatus} from '../services/MemoryMonitorService.js';
+import {mapLimit} from '../shared/utils/concurrency.js';
 import {
   CACHE_DURATION,
-  AI_STATUS_REFRESH_DURATION,
-  DIFF_STATUS_REFRESH_DURATION,
   MEMORY_REFRESH_DURATION,
   DIR_BRANCHES_SUFFIX,
   DIR_ARCHIVED_SUFFIX,
@@ -20,15 +18,9 @@ import {
   TMUX_DISPLAY_TIME,
 } from '../constants.js';
 import {getProjectsDirectory} from '../config.js';
-import {
-  ensureDirectory,
-  runCommand,
-  runCommandQuick,
-  copyWithIgnore,
-  generateTimestamp,
-  runClaudeSync,
-  detectAvailableAITools
-} from '../utils.js';
+import {ensureDirectory, copyWithIgnore} from '../shared/utils/fileSystem.js';
+import {generateTimestamp} from '../shared/utils/formatting.js';
+import {runClaudeSync, detectAvailableAITools, runCommandQuick} from '../shared/utils/commandExecutor.js';
 import {AI_TOOLS} from '../constants.js';
 import type {AITool} from '../models.js';
 import {useInputFocus} from './InputFocusContext.js';
@@ -51,9 +43,8 @@ interface WorktreeContextType {
   
   // Data operations
   refresh: (refreshPRs?: 'all' | 'visible' | 'none') => Promise<void>;
+  refreshVisibleStatus: (currentPage: number, pageSize: number) => Promise<void>;
   forceRefreshVisible: (currentPage: number, pageSize: number) => Promise<void>;
-  refreshSelected: () => void;
-  refreshPRSelective: () => Promise<void>;
   
   // Worktree operations
   createFeature: (projectName: string, featureName: string) => Promise<WorktreeInfo | null>;
@@ -81,6 +72,17 @@ interface WorktreeContextType {
 }
 
 const WorktreeContext = createContext<WorktreeContextType | null>(null);
+
+// Extracted decision helper for testability and clarity
+export function shouldPromptForAITool(
+  availableTools: (keyof typeof AI_TOOLS)[],
+  sessionExists: boolean,
+  worktreeTool?: AITool | null
+): boolean {
+  if (sessionExists) return false;
+  if (worktreeTool && worktreeTool !== 'none') return false;
+  return availableTools.length > 1;
+}
 
 interface WorktreeProviderProps {
   children: ReactNode;
@@ -118,6 +120,9 @@ export function WorktreeProvider({
     if (memoryMonitorServiceOverride) return memoryMonitorServiceOverride;
     return new MemoryMonitorService();
   }, [memoryMonitorServiceOverride]);
+  const refreshingVisibleRef = React.useRef(false);
+  const lastSessionsRef = React.useRef<string[] | null>(null);
+  const lastSessionsAtRef = React.useRef<number>(0);
   // Filesystem operations are routed through GitService methods (see CLAUDE.md)
 
   // Cache available AI tools on startup
@@ -131,13 +136,10 @@ export function WorktreeProvider({
     mtime?: number
   }>> => {
     const projects = gitService.discoverProjects();
-    
-    // Run worktree collection for all projects in parallel
-    const allWorktreePromises = projects.map(project => 
+    // Limit concurrent project scans to reduce fs/process load
+    const allWorktrees = await mapLimit(projects, 4, async (project) => 
       gitService.getWorktreesForProject(project)
     );
-    
-    const allWorktrees = await Promise.all(allWorktreePromises);
     
     // Flatten the results
     const rows = [];
@@ -153,84 +155,55 @@ export function WorktreeProvider({
     feature: string; 
     path: string; 
     branch: string
-  }>, getPRStatus?: (path: string) => PRStatus): Promise<WorktreeInfo[]> => {
+  }>): Promise<WorktreeInfo[]> => {
     // Get existing worktrees to preserve idle timers and kill flags
     const existingWorktrees = new Map(worktrees.map(w => [`${w.project}/${w.feature}`, w]));
     
     // Get tmux sessions once for all worktrees
     const activeSessions = await tmuxService.listSessions();
     
-    // Create promises for all git status and claude status checks
-    const promises = list.map(async (w: any) => {
-      const key = `${w.project}/${w.feature}`;
-      const existing = existingWorktrees.get(key);
-      
-      // Run git status and claude status in parallel
-      const sessionName = tmuxService.sessionName(w.project, w.feature);
-      const attached = activeSessions.includes(sessionName);
-      
-      const [gitStatus, aiResult] = await Promise.all([
-        gitService.getGitStatus(w.path),
-        attached ? tmuxService.getAIStatus(sessionName) : Promise.resolve({tool: 'none' as const, status: 'not_running' as const})
-      ]);
-      
-      // Track idle time for ALL worktrees and kill after 30 minutes
-      let idleStartTime = existing?.idleStartTime;
-      let wasKilledIdle = existing?.wasKilledIdle || false;
-      
-      if (aiResult.status === 'idle') {
-        if (!idleStartTime) {
-          idleStartTime = Date.now();
-        }
-        const idleMinutes = (Date.now() - idleStartTime) / 60000;
-        
-        if (idleMinutes > 30) {
-          // Kill idle session to free memory and mark it as killed
-          tmuxService.killSession(sessionName);
-          idleStartTime = null;
-          wasKilledIdle = true;
-        }
-      } else {
-        idleStartTime = null; // Reset when not idle
-        // Keep wasKilledIdle flag until session is recreated
-      }
-      
-      // Reset wasKilledIdle flag if session is now active (was recreated)
-      if (attached && wasKilledIdle) {
-        wasKilledIdle = false;
-      }
-      
-      const sessionInfo = new SessionInfo({
-        session_name: sessionName,
-        attached,
-        ai_status: aiResult.status,
-        ai_tool: aiResult.tool
-      });
+    // Concurrency-limit git + AI probes across all worktrees
+    const results = await mapLimit(list, 6, async (w: any) => {
+      try {
+        const key = `${w.project}/${w.feature}`;
+        const existing = existingWorktrees.get(key);
 
-      // Get PR status if available, otherwise create with 'not_checked' status
-      const prStatus = getPRStatus ? getPRStatus(w.path) : new PRStatus({ loadingStatus: 'not_checked' });
-      
-      return new WorktreeInfo({
-        project: w.project,
-        feature: w.feature,
-        path: w.path,
-        branch: w.branch,
-        git: gitStatus,
-        session: sessionInfo,
-        idleStartTime,
-        wasKilledIdle,
-        pr: prStatus,
-        mtime: w.mtime || 0,
-      });
+        // Run git status and claude status in parallel
+        const sessionName = tmuxService.sessionName(w.project, w.feature);
+        const attached = activeSessions.includes(sessionName);
+
+        const [gitStatus, aiResult] = await Promise.all([
+          gitService.getGitStatus(w.path),
+          attached ? tmuxService.getAIStatus(sessionName) : Promise.resolve({tool: 'none' as const, status: 'not_running' as const})
+        ]);
+
+        const sessionInfo = new SessionInfo({
+          session_name: sessionName,
+          attached,
+          ai_status: aiResult.status,
+          ai_tool: aiResult.tool
+        });
+
+        return new WorktreeInfo({
+          project: w.project,
+          feature: w.feature,
+          path: w.path,
+          branch: w.branch,
+          git: gitStatus,
+          session: sessionInfo,
+          mtime: w.mtime || 0,
+        });
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error('[attachRuntimeData] worker failed -', err instanceof Error ? err.message : String(err));
+        return undefined as any;
+      }
     });
     
-    // Wait for all worktree data to be processed in parallel
-    const result = await Promise.all(promises);
-    
-    return result;
+    return results.filter(Boolean) as WorktreeInfo[];
   }, [gitService, tmuxService, worktrees]);
 
-  const refresh = useCallback(async (refreshPRs: 'all' | 'visible' | 'none' = 'all') => {
+  const refresh = useCallback(async (refreshPRs: 'all' | 'visible' | 'none' = 'none') => {
     if (loading) {
       logDebug(`[Refresh.Full] Skipped - already loading`);
       return;
@@ -243,28 +216,10 @@ export function WorktreeProvider({
       logDebug(`[Refresh.Full] Starting complete refresh`);
       
       const rawList = await collectWorktrees();
-      const enrichedList = await attachRuntimeData(rawList, getPRStatus);
+      const enrichedList = await attachRuntimeData(rawList);
       setWorktrees(enrichedList);
       setLastRefreshed(Date.now());
-      
-      // Signal visible worktrees to GitHub context for selective refresh
-      if (setVisibleWorktrees) {
-        const visiblePaths = enrichedList.map(wt => wt.path);
-        setVisibleWorktrees(visiblePaths);
-        }
-      
-      // Refresh PR status based on parameter
-      if (refreshPRStatus && refreshPRs !== 'none') {
-        const visibleOnly = refreshPRs === 'visible';
-        await refreshPRStatus(enrichedList, visibleOnly);
-        
-        // Update worktrees with fresh PR data after refresh completes
-        const updatedWorktrees = enrichedList.map(wt => new WorktreeInfo({
-          ...wt,
-          pr: getPRStatus(wt.path)
-        }));
-        setWorktrees(updatedWorktrees);
-      }
+
       
       const timing = timer.elapsed();
       logDebug(`[Refresh.Full] Complete: ${enrichedList.length} worktrees in ${timing.formatted}`);
@@ -293,96 +248,88 @@ export function WorktreeProvider({
     try {
       // Force refresh visible PRs by invalidating their cache first
       await forceRefreshVisiblePRs(visibleWorktrees);
-      
-      // Update worktrees with fresh PR data
-      const updatedWorktrees = [...worktrees];
-      for (let i = startIndex; i < endIndex; i++) {
-        if (updatedWorktrees[i]) {
-          updatedWorktrees[i] = new WorktreeInfo({
-            ...updatedWorktrees[i],
-            pr: getPRStatus(updatedWorktrees[i].path)
-          });
-        }
-      }
-      setWorktrees(updatedWorktrees);
+      // No need to update worktrees array here; rows read PRs from context
       setLastRefreshed(Date.now());
     } catch (error) {
       console.error('Failed to force refresh visible PRs:', error);
     }
-  }, [loading, worktrees, forceRefreshVisiblePRs, getPRStatus]);
+  }, [loading, worktrees, forceRefreshVisiblePRs]);
 
-  const refreshSelected = useCallback(async () => {
-    const selected = worktrees[selectedIndex];
-    if (!selected) return;
-    
+  const refreshVisibleStatus = useCallback(async (currentPage: number, pageSize: number) => {
+    if (worktrees.length === 0) return;
+
+    // Calculate visible worktrees based on pagination
+    const startIndex = currentPage * pageSize;
+    const endIndex = Math.min(startIndex + pageSize, worktrees.length);
+    if (startIndex >= endIndex) return;
+
     try {
-      const sessionName = tmuxService.sessionName(selected.project, selected.feature);
-      const activeSessions = await tmuxService.listSessions();
-      const attached = activeSessions.includes(sessionName);
-      
-      // Run git status and claude status in parallel
-      const [gitStatus, claudeStatus] = await Promise.all([
-        gitService.getGitStatus(selected.path),
-        attached ? tmuxService.getClaudeStatus(sessionName) : Promise.resolve('not_running' as const)
-      ]);
-      
-      // Detect push (ahead count went from >0 to 0) and invalidate PR cache
-      const previousAhead = selected.git?.ahead || 0;
-      const currentAhead = gitStatus.ahead || 0;
-      
-      if (previousAhead > 0 && currentAhead === 0) {
-        // A push occurred - invalidate PR cache and refresh
-        const pr = getPRStatus(selected.path);
-        if (pr && pr.state === 'OPEN' && refreshPRForWorktree) {
-          logDebug(`Detected push for ${selected.feature}, invalidating PR cache and refreshing`);
-          // The GitHubContext will handle cache invalidation in refreshPRForWorktree
-          await refreshPRForWorktree(selected.path);
+      if (refreshingVisibleRef.current) return;
+      refreshingVisibleRef.current = true;
+      // Reuse session list if fetched very recently to avoid excessive tmux calls
+      let activeSessions: string[];
+      const now = Date.now();
+      if (lastSessionsRef.current && now - lastSessionsAtRef.current < 1500) {
+        activeSessions = lastSessionsRef.current;
+      } else {
+        activeSessions = await tmuxService.listSessions();
+        lastSessionsRef.current = activeSessions;
+        lastSessionsAtRef.current = now;
+      }
+      const indices = Array.from({length: endIndex - startIndex}, (_, k) => startIndex + k);
+      if (indices.length > 0) {
+        const results = await mapLimit(indices, 3, async (i) => {
+          try {
+            const wt = worktrees[i];
+            const sessionName = tmuxService.sessionName(wt.project, wt.feature);
+            const attached = activeSessions.includes(sessionName);
+            const [gitStatus, aiResult] = await Promise.all([
+              gitService.getGitStatus(wt.path),
+              attached ? tmuxService.getAIStatus(sessionName) : Promise.resolve({tool: 'none' as const, status: 'not_running' as const})
+            ]);
+
+            // Detect push using same logic as pushed column (is_pushed transition)
+            const prevPushed = wt.git?.is_pushed === true;
+            const currPushed = gitStatus.is_pushed === true;
+            if (!prevPushed && currPushed) {
+              const pr = getPRStatus(wt.path);
+              if (pr && pr.state === 'OPEN' && refreshPRForWorktree) {
+                logDebug(`Detected push for ${wt.feature}, refreshing PR status`);
+                await refreshPRForWorktree(wt.path);
+              }
+            }
+
+            const updated = new WorktreeInfo({
+              ...wt,
+              git: gitStatus,
+              session: new SessionInfo({
+                session_name: sessionName,
+                attached,
+                ai_status: aiResult.status,
+                ai_tool: aiResult.tool
+              }),
+            });
+            return {index: i, updated};
+          } catch (err) {
+            // eslint-disable-next-line no-console
+            console.error('[refreshVisibleStatus] worker failed -', err instanceof Error ? err.message : String(err));
+            return undefined as any;
+          }
+        });
+        const merged = [...worktrees];
+        for (const r of results) {
+          if (!r) continue;
+          merged[(r as any).index] = (r as any).updated;
         }
+        setWorktrees(merged);
       }
-      
-      const updatedWorktrees = [...worktrees];
-      updatedWorktrees[selectedIndex] = new WorktreeInfo({
-        ...selected,
-        git: gitStatus,
-        session: new SessionInfo({
-          session_name: sessionName,
-          attached,
-          claude_status: claudeStatus
-        }),
-        pr: getPRStatus(selected.path) // Update with possibly refreshed PR status
-      });
-      
-      setWorktrees(updatedWorktrees);
-      
-      // Only log if status changed to working or waiting (interesting states)
-      if (claudeStatus === 'working' || claudeStatus === 'waiting') {
-        logDebug(`[Refresh.Selected] ${selected.feature}: ${claudeStatus}`);
-      }
-      
+      setLastRefreshed(Date.now());
     } catch (error) {
-      console.error('Failed to refresh selected worktree:', error);
+      console.error('Failed to refresh visible statuses:', error);
+    } finally {
+      refreshingVisibleRef.current = false;
     }
-  }, [worktrees, selectedIndex, gitService, tmuxService, getPRStatus, refreshPRForWorktree]);
-
-  const refreshPRSelective = useCallback(async () => {
-    if (!refreshPRStatus) return;
-    
-    try {
-      // Refresh PR status for visible worktrees only
-      await refreshPRStatus(worktrees, true);
-      
-      // Update worktrees with fresh PR data
-      const updatedWorktrees = worktrees.map(wt => new WorktreeInfo({
-        ...wt,
-        pr: getPRStatus(wt.path)
-      }));
-      
-      setWorktrees(updatedWorktrees);
-      
-    } catch (error) {
-      console.error('Failed to refresh PR status:', error);
-    }
-  }, [worktrees, refreshPRStatus, getPRStatus]);
+  }, [worktrees, gitService, tmuxService, getPRStatus, refreshPRForWorktree]);
 
   const refreshMemoryStatus = useCallback(async () => {
     try {
@@ -392,7 +339,7 @@ export function WorktreeProvider({
       console.error('Failed to refresh memory status:', error);
     }
   }, [memoryMonitorService]);
-
+  
   // Operations
   const createFeature = useCallback(async (projectName: string, featureName: string): Promise<WorktreeInfo | null> => {
     setLoading(true);
@@ -403,7 +350,6 @@ export function WorktreeProvider({
       const worktreePath = path.join(gitService.basePath, `${projectName}${DIR_BRANCHES_SUFFIX}`, featureName);
       
       setupWorktreeEnvironment(projectName, worktreePath);
-      createTmuxSession(projectName, featureName, worktreePath);
       
       await refresh();
       return new WorktreeInfo({
@@ -425,7 +371,6 @@ export function WorktreeProvider({
 
       const worktreePath = path.join(gitService.basePath, `${project}${DIR_BRANCHES_SUFFIX}`, localName);
       setupWorktreeEnvironment(project, worktreePath);
-      createTmuxSession(project, localName, worktreePath);
       
       await refresh();
       return true;
@@ -494,10 +439,7 @@ export function WorktreeProvider({
         const toolConfig = AI_TOOLS[selectedTool];
         let command: string = toolConfig.command;
         
-        // Special handling for Claude resume
-        if (selectedTool === 'claude' && worktree.wasKilledIdle) {
-          command = 'claude "/resume"';
-        }
+        // No auto-resume handling; auto-kill feature removed
         
         tmuxService.createSessionWithCommand(sessionName, worktree.path, command, true);
       } else {
@@ -810,7 +752,7 @@ export function WorktreeProvider({
   useEffect(() => {
     const shouldRefresh = Date.now() - lastRefreshed > CACHE_DURATION;
     if (shouldRefresh) {
-      refresh().catch(error => {
+      refresh('none').catch(error => {
         console.error('Auto-refresh failed:', error);
       });
     }
@@ -823,29 +765,16 @@ export function WorktreeProvider({
     });
   }, [refreshMemoryStatus]);
 
+  // Slow discovery: rebuild worktree list every 60s (or when actions change structure)
   useEffect(() => {
     const interval = setInterval(() => {
-      // Skip AI status refresh if any dialog is focused to avoid interrupting typing
       if (!isAnyDialogFocused) {
-        refreshSelected().catch(error => {
-          console.error('Selected refresh failed:', error);
-        });
+        // Background discovery of worktrees (structure)
+        refresh('none').catch(err => console.error('Background discovery failed:', err));
       }
-    }, AI_STATUS_REFRESH_DURATION);
+    }, 60_000);
     return () => clearInterval(interval);
-  }, [refreshSelected, isAnyDialogFocused]);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      // Skip diff status refresh if any dialog is focused to avoid interrupting typing
-      if (!isAnyDialogFocused) {
-        refresh().catch(error => {
-          console.error('Diff status refresh failed:', error);
-        });
-      }
-    }, DIFF_STATUS_REFRESH_DURATION);
-    return () => clearInterval(interval);
-  }, [refresh, isAnyDialogFocused]);
+  }, [refresh, isAnyDialogFocused, tmuxService]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -873,9 +802,8 @@ export function WorktreeProvider({
     
     // Data operations
     refresh,
+    refreshVisibleStatus,
     forceRefreshVisible,
-    refreshSelected,
-    refreshPRSelective,
     
     // Worktree operations
     createFeature,

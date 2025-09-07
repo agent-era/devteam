@@ -25,7 +25,7 @@ export default {
   testEnvironment: 'node',
   setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
   testMatch: [
-    '<rootDir>/tests/{unit,integration}/**/*.test.{ts,tsx}',
+    '<rootDir>/tests/unit/**/*.test.{ts,tsx}',
   ],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx'],
   collectCoverageFrom: [

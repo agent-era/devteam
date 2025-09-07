@@ -1,10 +1,15 @@
-import {TmuxService, ClaudeStatus} from '../../src/services/TmuxService.js';
+import {TmuxService} from '../../src/services/TmuxService.js';
 import {SessionInfo, AIStatus, AITool} from '../../src/models.js';
 import {memoryStore} from './stores.js';
 import {SESSION_PREFIX} from '../../src/constants.js';
+import {FakeAIToolService} from './FakeAIToolService.js';
 
 export class FakeTmuxService extends TmuxService {
   private sentKeys: Array<{session: string, keys: string[]}> = [];
+
+  constructor() {
+    super(new FakeAIToolService());
+  }
   
   sessionName(project: string, feature: string): string {
     return `${SESSION_PREFIX}${project}-${feature}`;
@@ -55,10 +60,6 @@ export class FakeTmuxService extends TmuxService {
     };
   }
 
-  async getClaudeStatus(session: string): Promise<ClaudeStatus> {
-    const result = await this.getAIStatus(session);
-    return result.status;
-  }
 
   killSession(session: string): string {
     const deleted = memoryStore.sessions.delete(session);
@@ -191,7 +192,7 @@ export class FakeTmuxService extends TmuxService {
   }
 
   // Test helpers
-  createTestSession(project: string, feature: string, claudeStatus: ClaudeStatus = 'not_running'): string | null {
+  createTestSession(project: string, feature: string, aiStatus: AIStatus = 'not_running'): string | null {
     // Check if session creation should fail (for error testing)
     if ((global as any).__mockTmuxShouldFail) {
       return null;
@@ -200,8 +201,9 @@ export class FakeTmuxService extends TmuxService {
     const sessionName = this.sessionName(project, feature);
     const sessionInfo = new SessionInfo({
       session_name: sessionName,
-      attached: claudeStatus !== 'not_running',
-      claude_status: claudeStatus,
+      attached: aiStatus !== 'not_running',
+      ai_status: aiStatus,
+      claude_status: aiStatus, // Keep for backward compatibility in models
     });
     
     memoryStore.sessions.set(sessionName, sessionInfo);
@@ -244,14 +246,6 @@ export class FakeTmuxService extends TmuxService {
     return sessionName;
   }
 
-  updateClaudeStatus(session: string, status: ClaudeStatus): void {
-    const sessionInfo = memoryStore.sessions.get(session);
-    if (sessionInfo) {
-      sessionInfo.claude_status = status;
-      sessionInfo.attached = status !== 'not_running';
-      memoryStore.sessions.set(session, sessionInfo);
-    }
-  }
 
   // Helper methods for testing AI tools
   setAITool(session: string, tool: AITool): void {

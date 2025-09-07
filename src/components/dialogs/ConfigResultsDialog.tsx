@@ -22,7 +22,7 @@ export default function ConfigResultsDialog({success, content, configPath, error
         <Text></Text>
         <Text>{error || 'Unknown error occurred'}</Text>
         <Text></Text>
-        <Text color="gray">Press any key to continue</Text>
+        <Text color="magenta" wrap="truncate">Press any key to continue</Text>
       </Box>
     );
   }
@@ -49,7 +49,7 @@ export default function ConfigResultsDialog({success, content, configPath, error
         {truncated ? <Text color="yellow">... (content truncated)</Text> : null}
       </Box>
       <Text></Text>
-      <Text color="gray">Press any key to continue</Text>
+      <Text color="magenta" wrap="truncate">Press any key to continue</Text>
     </Box>
   );
 }

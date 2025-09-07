@@ -56,7 +56,7 @@ export default function ArchiveConfirmScreen({
             <Text>Archive {featureInfo.project}/{featureInfo.feature}?</Text>
           </Box>
           <Box marginTop={1}>
-            <Text color="gray">Press y to confirm, n to cancel</Text>
+            <Text color="magenta" wrap="truncate">Press y to confirm, n to cancel</Text>
           </Box>
         </Box>
       </Box>

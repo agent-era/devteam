@@ -1,5 +1,6 @@
 import React from 'react';
 import {Box, Text, useInput, useStdin} from 'ink';
+import AnnotatedText from '../common/AnnotatedText.js';
 
 type Props = {
   sessionName: string;
@@ -38,7 +39,7 @@ export default function SessionWaitingDialog({sessionName, onGoToSession, onCanc
       <Text>• Go to session to respond to Claude's question</Text>
       <Text>• Cancel and try again later when Claude is idle</Text>
       <Box marginTop={1} marginBottom={1} />
-      <Text color="gray">Press G to Go to Session  •  Press C or Esc to Cancel</Text>
+      <AnnotatedText color="magenta" wrap="truncate" text={'[g]o to session  •  [c]ancel  •  [esc] cancel'} />
     </Box>
   );
 }

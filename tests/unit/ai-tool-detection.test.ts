@@ -2,15 +2,15 @@ import {TmuxService} from '../../src/services/TmuxService.js';
 import {AI_TOOLS} from '../../src/constants.js';
 
 // Mock the command execution functions
-jest.mock('../../src/utils.js', () => ({
-  ...jest.requireActual('../../src/utils.js'),
+jest.mock('../../src/shared/utils/commandExecutor.js', () => ({
+  ...jest.requireActual('../../src/shared/utils/commandExecutor.js'),
   runCommandQuickAsync: jest.fn(),
   runCommandQuick: jest.fn(),
   runCommand: jest.fn(),
   commandExitCode: jest.fn(),
 }));
 
-import {runCommandQuickAsync} from '../../src/utils.js';
+import {runCommandQuickAsync} from '../../src/shared/utils/commandExecutor.js';
 
 describe('AI Tool Detection', () => {
   let tmuxService: TmuxService;
@@ -334,8 +334,9 @@ dev-project3-feature3:33333`);
         return Promise.resolve('');
       });
 
-      const detectAll = jest.spyOn(tmuxService as any, 'detectAllSessionAITools');
-      const result = await (tmuxService as any).detectAllSessionAITools();
+      // Access the aiToolService from the tmuxService
+      const aiToolService = (tmuxService as any).aiToolService;
+      const result = await aiToolService.detectAllSessionAITools();
       
       expect(result.get('dev-project1-feature1')).toBe('claude');
       expect(result.get('dev-project2-feature2')).toBe('codex');

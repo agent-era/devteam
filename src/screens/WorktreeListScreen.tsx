@@ -2,9 +2,12 @@ import React, {useState, useEffect} from 'react';
 import {Box} from 'ink';
 import MainView from '../components/views/MainView.js';
 import {useWorktreeContext} from '../contexts/WorktreeContext.js';
+import {useGitHubContext} from '../contexts/GitHubContext.js';
+import {useInputFocus} from '../contexts/InputFocusContext.js';
 import {useUIContext} from '../contexts/UIContext.js';
 import {useKeyboardShortcuts} from '../hooks/useKeyboardShortcuts.js';
-import {usePageSize} from '../hooks/usePagination.js';
+// Page size is measured directly in MainView to avoid heuristics
+import {VISIBLE_STATUS_REFRESH_DURATION} from '../constants.js';
 
 
 interface WorktreeListScreenProps {
@@ -28,9 +31,11 @@ export default function WorktreeListScreen({
   onExecuteRun,
   onConfigureRun
 }: WorktreeListScreenProps) {
-  const {worktrees, selectedIndex, selectWorktree, refresh, forceRefreshVisible, attachSession, attachShellSession, needsToolSelection, lastRefreshed, memoryStatus} = useWorktreeContext();
+  const {worktrees, selectedIndex, selectWorktree, refresh, refreshVisibleStatus, forceRefreshVisible, attachSession, attachShellSession, needsToolSelection, lastRefreshed, memoryStatus} = useWorktreeContext();
+  const {setVisibleWorktrees} = useGitHubContext();
+  const {isAnyDialogFocused} = useInputFocus();
   const {showAIToolSelection} = useUIContext();
-  const pageSize = usePageSize();
+  const [pageSize, setPageSize] = useState(1);
   const [currentPage, setCurrentPage] = useState(0);
 
   // Refresh data when component mounts, but only if data is missing or very stale
@@ -42,6 +47,24 @@ export default function WorktreeListScreen({
       refresh('none').catch(() => {});
     }
   }, []); // Only on mount
+
+  // Keep GitHub context informed of which worktrees are visible (current page)
+  useEffect(() => {
+    const startIndex = currentPage * pageSize;
+    const endIndex = Math.min(startIndex + pageSize, worktrees.length);
+    const visiblePaths = worktrees.slice(startIndex, endIndex).map(w => w.path);
+    setVisibleWorktrees(visiblePaths);
+  }, [worktrees, currentPage, pageSize, setVisibleWorktrees]);
+
+  // Single loop to refresh git+AI status for visible rows only
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (!isAnyDialogFocused) {
+        refreshVisibleStatus(currentPage, pageSize).catch(() => {});
+      }
+    }, VISIBLE_STATUS_REFRESH_DURATION);
+    return () => clearInterval(interval);
+  }, [currentPage, pageSize, refreshVisibleStatus, isAnyDialogFocused]);
 
   const handleMove = (delta: number) => {
     const nextIndex = selectedIndex + delta;
@@ -196,7 +219,7 @@ export default function WorktreeListScreen({
       onSelect={handleSelect}
       onQuit={onQuit}
       page={currentPage}
-      pageSize={pageSize}
+      onMeasuredPageSize={setPageSize}
       memoryStatus={memoryStatus}
     />
   );
