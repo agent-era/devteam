@@ -31,7 +31,7 @@ export default function WorktreeListScreen({
   onExecuteRun,
   onConfigureRun
 }: WorktreeListScreenProps) {
-  const {worktrees, selectedIndex, selectWorktree, refresh, refreshVisibleStatus, forceRefreshVisible, attachSession, attachShellSession, needsToolSelection, lastRefreshed, memoryStatus} = useWorktreeContext();
+  const {worktrees, selectedIndex, selectWorktree, refresh, refreshVisibleStatus, forceRefreshVisible, attachSession, attachShellSession, needsToolSelection, lastRefreshed, memoryStatus, versionInfo} = useWorktreeContext();
   const {setVisibleWorktrees} = useGitHubContext();
   const {isAnyDialogFocused} = useInputFocus();
   const {showAIToolSelection} = useUIContext();
@@ -221,6 +221,7 @@ export default function WorktreeListScreen({
       page={currentPage}
       onMeasuredPageSize={setPageSize}
       memoryStatus={memoryStatus}
+      versionInfo={versionInfo}
     />
   );
 }
