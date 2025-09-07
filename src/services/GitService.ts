@@ -453,14 +453,7 @@ export class GitService {
     }
   }
 
-  copyClaudeDocumentation(project: string, worktreePath: string): void {
-    const projectPath = path.join(this.basePath, project);
-    const claudeDoc = path.join(projectPath, 'CLAUDE.md');
-    const claudeDestDoc = path.join(worktreePath, 'CLAUDE.md');
-    if (fs.existsSync(claudeDoc)) {
-      fs.copyFileSync(claudeDoc, claudeDestDoc);
-    }
-  }
+  
 
   archiveWorktree(project: string, sourcePath: string, archivedDest: string): void {
     try {

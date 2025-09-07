@@ -586,7 +586,6 @@ export function WorktreeProvider({
     
     copyEnvironmentFile(projectPath, worktreePath);
     copyClaudeSettings(projectPath, worktreePath);
-    copyClaudeDocumentation(projectPath, worktreePath);
   }, []);
 
   const createTmuxSession = useCallback((project: string, feature: string, cwd: string, command?: string, aiTool?: AITool): string => {
@@ -716,11 +715,6 @@ export function WorktreeProvider({
   const copyClaudeSettings = useCallback((projectPath: string, worktreePath: string) => {
     const projectName = path.basename(projectPath);
     gitService.linkClaudeSettings(projectName, worktreePath);
-  }, [gitService]);
-
-  const copyClaudeDocumentation = useCallback((projectPath: string, worktreePath: string) => {
-    const projectName = path.basename(projectPath);
-    gitService.copyClaudeDocumentation(projectName, worktreePath);
   }, [gitService]);
 
   const configureTmuxDisplayTime = useCallback(() => {
