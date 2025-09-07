@@ -180,7 +180,18 @@ function generateMainListOutput(): string {
   const page = 0; // Default to first page for mock
   const {totalPages, paginationText} = calculatePaginationInfo(worktrees.length, page, pageSize);
 
-  let output = `Enter attach, n new, a archive, x exec, d diff, s shell, q quit${paginationText}\n`;
+  // Optional memory warning banner (simulates MainView warning line)
+  let output = '';
+  const mem = memoryStore.memoryStatus;
+  if (mem && mem.severity && mem.severity !== 'ok') {
+    const symbol = mem.severity === 'critical' ? '⛔' : '⚠';
+    const message = mem.message || (mem.severity === 'critical'
+      ? `CRITICAL: ${mem.availableRAM}GB free`
+      : `Low Memory: ${mem.availableRAM}GB free`);
+    output += `${symbol} ${message}\n`;
+  }
+
+  output += `Enter attach, n new, a archive, x exec, d diff, s shell, q quit${paginationText}\n`;
   output += '#    PROJECT/FEATURE        AI  DIFF     CHANGES  PUSHED  PR\n';
   
   // Show only items for current page
