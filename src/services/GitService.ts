@@ -453,10 +453,7 @@ export class GitService {
     }
   }
 
-  copyClaudeDocumentation(project: string, worktreePath: string): void {
-    // Intentionally no-op: do not copy CLAUDE.md into new worktrees
-    return;
-  }
+  
 
   archiveWorktree(project: string, sourcePath: string, archivedDest: string): void {
     try {
