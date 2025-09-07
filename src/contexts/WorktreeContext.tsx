@@ -674,13 +674,16 @@ export function WorktreeProvider({
       
       // Run the main command
       const command = (cfg as any).mainCommand;
-      const isLongRunning = (typeof (cfg as any).isLongRunning === 'boolean')
-        ? (cfg as any).isLongRunning
-        : true;
+      // detachOnExit reverses the previous isLongRunning flag semantics
+      // detachOnExit=true => non-long-running (exec and exit tmux session)
+      // detachOnExit=false => long-running (keep session alive)
+      const detachOnExit = (typeof (cfg as any).detachOnExit === 'boolean')
+        ? (cfg as any).detachOnExit
+        : false; // default to keeping session alive
 
       if (command) {
-        if (!isLongRunning) {
-          // For non-long-running commands (builds, tests), replace shell and exit when finished
+        if (detachOnExit) {
+          // For one-shot commands (builds, tests), replace shell and exit when finished
           tmuxService.sendText(sessionName, `exec ${command}`, { executeCommand: true });
         } else {
           // For long-running commands (servers, dev), keep session alive

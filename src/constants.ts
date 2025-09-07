@@ -234,7 +234,7 @@ Example of what to output:
     "mainCommand": "npm start",
     "preRunCommands": ["npm install"],
     "environmentVariables": {},
-    "isLongRunning": true
+    "detachOnExit": false
   },
   "notes": "Optional: add any tips the developer should know."
 }
@@ -243,7 +243,7 @@ Fill in values based on the project files you see:
 - "executionInstructions.mainCommand": primary run command (e.g. "npm run dev", "python app.py")
 - "executionInstructions.preRunCommands": commands to run before the main command (e.g. ["npm install"]) 
 - "executionInstructions.environmentVariables": key/value env vars needed by the app (often {})
-- "executionInstructions.isLongRunning": true for servers/dev loops; false for one-shot tasks (build/test)
+- "executionInstructions.detachOnExit": true for one-shot tasks (build/test); false for servers/dev loops
 - "notes": optional free-form guidance for humans reading the file
 
 Your response must start with { and end with } - nothing else.`;
