@@ -7,6 +7,7 @@ import {UIProvider} from '../../src/contexts/UIContext.js';
 import {FakeGitService} from '../fakes/FakeGitService.js';
 import {FakeTmuxService} from '../fakes/FakeTmuxService.js';
 import {FakeGitHubService} from '../fakes/FakeGitHubService.js';
+import {FakeMemoryMonitorService} from '../fakes/FakeMemoryMonitorService.js';
 import {memoryStore} from '../fakes/stores.js';
 import {calculatePageSize, calculatePaginationInfo} from '../../src/utils/pagination.js';
 
@@ -16,25 +17,27 @@ export interface TestAppProps {
   gitService?: FakeGitService;
   tmuxService?: FakeTmuxService;
   gitHubService?: FakeGitHubService;
+  memoryMonitorService?: FakeMemoryMonitorService;
 }
 
 // Create a custom WorktreeProvider for testing that accepts fake services
-function TestWorktreeProvider({children, gitService, tmuxService}: any) {
-  return h(WorktreeProvider, {gitService, tmuxService, children});
+function TestWorktreeProvider({children, gitService, tmuxService, memoryMonitorService}: any) {
+  return h(WorktreeProvider, {gitService, tmuxService, memoryMonitorService, children});
 }
 
 function TestGitHubProvider({children, gitHubService}: any) {
   return h(GitHubProvider, {gitHubService, children});
 }
 
-export function TestApp({gitService, tmuxService, gitHubService}: TestAppProps = {}) {
+export function TestApp({gitService, tmuxService, gitHubService, memoryMonitorService}: TestAppProps = {}) {
   const git = gitService || new FakeGitService();
   const tmux = tmuxService || new FakeTmuxService();
   const github = gitHubService || new FakeGitHubService();
+  const memory = memoryMonitorService || new FakeMemoryMonitorService();
 
   return h(
     TestWorktreeProvider,
-    {gitService: git, tmuxService: tmux},
+    {gitService: git, tmuxService: tmux, memoryMonitorService: memory},
     h(TestGitHubProvider, {gitHubService: github},
       h(UIProvider, null,
         h(App)
@@ -48,11 +51,13 @@ export function renderTestApp(props?: TestAppProps, options?: any) {
   const gitService = props?.gitService || new FakeGitService();
   const tmuxService = props?.tmuxService || new FakeTmuxService();
   const gitHubService = props?.gitHubService || new FakeGitHubService();
+  const memoryMonitorService = props?.memoryMonitorService || new FakeMemoryMonitorService();
   
   const services = {
     gitService,
     tmuxService,
     gitHubService,
+    memoryMonitorService,
     worktreeService: new (require('../fakes/FakeWorktreeService.js').FakeWorktreeService)(gitService, tmuxService)
   };
 
@@ -175,7 +180,18 @@ function generateMainListOutput(): string {
   const page = 0; // Default to first page for mock
   const {totalPages, paginationText} = calculatePaginationInfo(worktrees.length, page, pageSize);
 
-  let output = `Enter attach, n new, a archive, x exec, d diff, s shell, q quit${paginationText}\n`;
+  // Optional memory warning banner (simulates MainView warning line)
+  let output = '';
+  const mem = memoryStore.memoryStatus;
+  if (mem && mem.severity && mem.severity !== 'ok') {
+    const symbol = mem.severity === 'critical' ? '⛔' : '⚠';
+    const message = mem.message || (mem.severity === 'critical'
+      ? `CRITICAL: ${mem.availableRAM}GB free`
+      : `Low Memory: ${mem.availableRAM}GB free`);
+    output += `${symbol} ${message}\n`;
+  }
+
+  output += `Enter attach, n new, a archive, x exec, d diff, s shell, q quit${paginationText}\n`;
   output += '#    PROJECT/FEATURE        AI  DIFF     CHANGES  PUSHED  PR\n';
   
   // Show only items for current page

@@ -1,5 +1,5 @@
-import os from 'node:os';
 import path from 'node:path';
+import os from 'node:os';
 
 export const SESSION_PREFIX = 'dev-';
 export const DIR_BRANCHES_SUFFIX = '-branches';
@@ -14,6 +14,7 @@ export const DIFF_STATUS_REFRESH_DURATION = 2_000; // 2s diff status refresh
 export const GIT_REFRESH_DURATION = 5_000; // 5s git refresh
 export const PR_REFRESH_DURATION = 5_000; // 5s PR status refresh (visible + stale only)
 export const VISIBLE_STATUS_REFRESH_DURATION = 2_000; // 2s visible rows git+AI refresh
+export const MEMORY_REFRESH_DURATION = 20_000; // 20s memory status refresh (RAM warning)
 
 // Time helpers
 export const SECOND_MS = 1_000;
@@ -24,7 +25,8 @@ export const DAY_MS = 24 * HOUR_MS;
 export const ENV_FILE = '.env.local';
 export const CLAUDE_SETTINGS_FILE = path.join('.claude', 'settings.local.json');
 export const CLAUDE_CONFIG_PATTERNS = ['CLAUDE.md', '.claude*', 'claude.config*'];
-export const RUN_CONFIG_FILE = 'run-session.config.json';
+// Run config now stored in project-local .devteam/config.json
+export const RUN_CONFIG_FILE = path.join('.devteam', 'config.json');
 
 // UI constants (kept for parity; Ink layout differs)
 export const UI_MIN_WIDTH = 50;
@@ -223,17 +225,26 @@ export const MIN_TERMINAL_WIDTH = 40;
 export const MIN_TERMINAL_HEIGHT = 10;
 
 // Claude prompt for generating run configurations
-export const RUN_CONFIG_CLAUDE_PROMPT = `Analyze this project directory and generate a run-session.config.json file.
+export const RUN_CONFIG_CLAUDE_PROMPT = `Analyze this project directory and generate a .devteam/config.json file.
 
 CRITICAL: Your response must be ONLY the JSON object. Do NOT use markdown code blocks or any formatting.
 
 Example of what to output:
-{"command": "npm start", "env": {}, "setup": [], "watch": true}
+{
+  "executionInstructions": {
+    "mainCommand": "npm start",
+    "preRunCommands": ["npm install"],
+    "environmentVariables": {},
+    "detachOnExit": false
+  },
+  "notes": "Optional: add any tips the developer should know."
+}
 
 Fill in values based on the project files you see:
-- "command": main run command (e.g. "npm run dev", "python app.py")
-- "env": object with environment variables (usually empty {})
-- "setup": array of setup commands (e.g. ["npm install"])
-- "watch": true for servers/long-running, false for build/test commands
+- "executionInstructions.mainCommand": primary run command (e.g. "npm run dev", "python app.py")
+- "executionInstructions.preRunCommands": commands to run before the main command (e.g. ["npm install"]) 
+- "executionInstructions.environmentVariables": key/value env vars needed by the app (often {})
+- "executionInstructions.detachOnExit": true for one-shot tasks (build/test); false for servers/dev loops
+- "notes": optional free-form guidance for humans reading the file
 
 Your response must start with { and end with } - nothing else.`;

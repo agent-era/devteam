@@ -428,6 +428,9 @@ export class GitService {
   writeRunConfig(project: string, content: string): void {
     const projectPath = path.join(this.basePath, project);
     const configPath = path.join(projectPath, RUN_CONFIG_FILE);
+    // Ensure parent directory exists for .devteam/config.json
+    const dir = path.dirname(configPath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, {recursive: true});
     fs.writeFileSync(configPath, content);
   }
 
@@ -453,14 +456,7 @@ export class GitService {
     }
   }
 
-  copyClaudeDocumentation(project: string, worktreePath: string): void {
-    const projectPath = path.join(this.basePath, project);
-    const claudeDoc = path.join(projectPath, 'CLAUDE.md');
-    const claudeDestDoc = path.join(worktreePath, 'CLAUDE.md');
-    if (fs.existsSync(claudeDoc)) {
-      fs.copyFileSync(claudeDoc, claudeDestDoc);
-    }
-  }
+  
 
   archiveWorktree(project: string, sourcePath: string, archivedDest: string): void {
     try {

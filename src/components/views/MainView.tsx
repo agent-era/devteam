@@ -2,6 +2,7 @@ import React, {useMemo, useCallback, useRef, useEffect, useState} from 'react';
 import {Box, measureElement} from 'ink';
 import AnnotatedText from '../common/AnnotatedText.js';
 import type {WorktreeInfo} from '../../models.js';
+import type {MemoryStatus} from '../../services/MemoryMonitorService.js';
 import {calculatePaginationInfo} from '../../utils/pagination.js';
 import {useTerminalDimensions} from '../../hooks/useTerminalDimensions.js';
 import {useColumnWidths} from './MainView/hooks/useColumnWidths.js';
@@ -26,6 +27,7 @@ interface Props {
   message?: string;
   page?: number;
   onMeasuredPageSize?: (pageSize: number) => void;
+  memoryStatus?: MemoryStatus | null;
 }
 
 export default function MainView({
@@ -35,7 +37,8 @@ export default function MainView({
   prompt,
   message,
   page = 0,
-  onMeasuredPageSize
+  onMeasuredPageSize,
+  memoryStatus
 }: Props) {
   const {rows: terminalRows, columns: terminalWidth} = useTerminalDimensions();
 
@@ -47,7 +50,6 @@ export default function MainView({
   
   // Use measured page size for pagination info to align with what's rendered
   const paginationInfo = useMemo(() => 
-    // Keep pagination info based on requested pageSize for stability
     calculatePaginationInfo(worktrees.length, page, measuredPageSize),
     [worktrees.length, page, measuredPageSize]
   );
@@ -67,6 +69,17 @@ export default function MainView({
   const getRowKey = useCallback((worktree: WorktreeInfo, index: number) => 
     getWorktreeKey(worktree, index), []
   );
+
+  const renderMemoryWarning = useMemo(() => {
+    if (!memoryStatus || memoryStatus.severity === 'ok') return null;
+    const color = memoryStatus.severity === 'critical' ? 'red' : 'yellow';
+    const symbol = memoryStatus.severity === 'critical' ? '⛔' : '⚠';
+    return (
+      <Box marginBottom={1}>
+        <AnnotatedText color={color} wrap="truncate" text={`${symbol} ${memoryStatus.message ?? ''}`} />
+      </Box>
+    );
+  }, [memoryStatus]);
 
   // After render and on resize, measure the list container height to determine how many rows fit
   useEffect(() => {
@@ -98,9 +111,8 @@ export default function MainView({
 
   return (
     <Box flexDirection="column" flexGrow={1}>
-      
+      {renderMemoryWarning}
       <TableHeader columnWidths={columnWidths} />
-
       <Box ref={listRef} flexDirection="column" flexGrow={1}>
         {pageItems.map((worktree, index) => {
           const globalIndex = page * measuredPageSize + index;
@@ -118,11 +130,9 @@ export default function MainView({
           );
         })}
       </Box>
-      
       <Box marginTop={1}>
         <AnnotatedText color="magenta" wrap="truncate" text={headerText} />
       </Box>
-      
       <PaginationFooter
         totalPages={paginationInfo.totalPages}
         paginationText={paginationInfo.paginationText}
@@ -130,3 +140,4 @@ export default function MainView({
     </Box>
   );
 }
+
