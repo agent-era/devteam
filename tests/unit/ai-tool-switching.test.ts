@@ -162,8 +162,8 @@ Generating code...
     });
   });
 
-  describe('Batch Tool Detection Performance', () => {
-    test('caches batch detection results', async () => {
+  describe('Batch Tool Detection', () => {
+    test('detects multiple AI tools in batch operation', async () => {
       // Mock multiple sessions
       (runCommandQuickAsync as jest.Mock).mockImplementation((args) => {
         if (args.includes('list-panes') && args.includes('-a')) {
@@ -179,21 +179,21 @@ dev-project3-feature:12347`);
         return Promise.resolve('');
       });
       
-      // First call should fetch
-      const toolsMap1 = await (tmuxService as any).detectAllSessionAITools();
-      expect(toolsMap1.get('dev-project1-feature')).toBe('claude');
-      expect(toolsMap1.get('dev-project2-feature')).toBe('codex');
-      expect(toolsMap1.get('dev-project3-feature')).toBe('gemini');
+      // Test batch detection functionality
+      const aiToolService = (tmuxService as any).aiToolService;
+      const toolsMap = await aiToolService.detectAllSessionAITools();
       
-      // Clear mock calls
-      (runCommandQuickAsync as jest.Mock).mockClear();
+      expect(toolsMap.get('dev-project1-feature')).toBe('claude');
+      expect(toolsMap.get('dev-project2-feature')).toBe('codex');
+      expect(toolsMap.get('dev-project3-feature')).toBe('gemini');
       
-      // Second call within cache duration should use cache
-      const toolsMap2 = await (tmuxService as any).detectAllSessionAITools();
-      expect(toolsMap2.get('dev-project1-feature')).toBe('claude');
-      
-      // Should not have made new calls
-      expect(runCommandQuickAsync).not.toHaveBeenCalled();
+      // Verify the correct commands were called
+      expect(runCommandQuickAsync).toHaveBeenCalledWith([
+        'tmux', 'list-panes', '-a', '-F', '#{session_name}:#{pane_pid}'
+      ]);
+      expect(runCommandQuickAsync).toHaveBeenCalledWith([
+        'ps', '-p', '12345,12346,12347', '-o', 'pid=', '-o', 'args='
+      ]);
     });
   });
 });

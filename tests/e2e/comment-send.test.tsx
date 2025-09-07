@@ -354,7 +354,7 @@ describe('Comment Send to Claude E2E', () => {
     
     // Mock session exists and Claude is idle
     jest.spyOn(fakeTmuxService, 'listSessions').mockResolvedValue(['dev-idle-project-idle-feature']);
-    jest.spyOn(fakeTmuxService, 'getClaudeStatus').mockResolvedValue('idle');
+    jest.spyOn(fakeTmuxService, 'getAIStatus').mockResolvedValue({tool: 'claude', status: 'idle'});
     
     const mockRunCommand = jest.spyOn(commandExecutor, 'runCommand').mockReturnValue('');
     const mockRunInteractive = jest.spyOn(commandExecutor, 'runInteractive').mockReturnValue(0);
@@ -428,7 +428,7 @@ describe('Comment Send to Claude E2E', () => {
     
     // Mock session exists but Claude is not running
     jest.spyOn(fakeTmuxService, 'listSessions').mockResolvedValue(['dev-not-running-project-not-running-feature']);
-    jest.spyOn(fakeTmuxService, 'getClaudeStatus').mockResolvedValue('not_running');
+    jest.spyOn(fakeTmuxService, 'getAIStatus').mockResolvedValue({tool: 'none', status: 'not_running'});
     
     const mockRunCommand = jest.spyOn(commandExecutor, 'runCommand').mockReturnValue('');
     const mockRunInteractive = jest.spyOn(commandExecutor, 'runInteractive').mockReturnValue(0);
@@ -454,7 +454,7 @@ describe('Comment Send to Claude E2E', () => {
     
     // Mock session exists and Claude is waiting
     jest.spyOn(fakeTmuxService, 'listSessions').mockResolvedValue(['dev-waiting-project-waiting-feature']);
-    jest.spyOn(fakeTmuxService, 'getClaudeStatus').mockResolvedValue('waiting');
+    jest.spyOn(fakeTmuxService, 'getAIStatus').mockResolvedValue({tool: 'claude', status: 'waiting'});
     
     const mockRunCommand = jest.spyOn(commandExecutor, 'runCommand').mockReturnValue('');
     const mockRunInteractive = jest.spyOn(commandExecutor, 'runInteractive').mockReturnValue(0);
@@ -487,7 +487,7 @@ describe('Comment Send to Claude E2E', () => {
     for (const status of statuses) {
       // Mock session exists and Claude is in the current status
       jest.spyOn(fakeTmuxService, 'listSessions').mockResolvedValue(['dev-working-project-working-feature']);
-      jest.spyOn(fakeTmuxService, 'getClaudeStatus').mockResolvedValue(status);
+      jest.spyOn(fakeTmuxService, 'getAIStatus').mockResolvedValue({tool: 'claude', status});
       
       const mockRunCommand = jest.spyOn(commandExecutor, 'runCommand').mockReturnValue('');
       const mockRunInteractive = jest.spyOn(commandExecutor, 'runInteractive').mockReturnValue(0);
@@ -528,7 +528,7 @@ describe('Comment Send to Claude E2E', () => {
     
     // Mock session exists and Claude starts as idle
     jest.spyOn(fakeTmuxService, 'listSessions').mockResolvedValue([sessionName]);
-    jest.spyOn(fakeTmuxService, 'getClaudeStatus').mockResolvedValue('idle');
+    jest.spyOn(fakeTmuxService, 'getAIStatus').mockResolvedValue({tool: 'claude', status: 'idle'});
     
     // Mock capturePane to simulate Claude transitioned to waiting (no comments visible)
     jest.spyOn(fakeTmuxService, 'capturePane').mockResolvedValue('1. What would you like me to help with?');
@@ -588,7 +588,7 @@ describe('Comment Send to Claude E2E', () => {
     
     // Mock session exists and Claude is idle
     jest.spyOn(fakeTmuxService, 'listSessions').mockResolvedValue([sessionName]);
-    jest.spyOn(fakeTmuxService, 'getClaudeStatus').mockResolvedValue('idle');
+    jest.spyOn(fakeTmuxService, 'getAIStatus').mockResolvedValue({tool: 'claude', status: 'idle'});
     
     // Mock capturePane to simulate comments are visible (successfully received)
     const mockPaneContent = `
@@ -659,7 +659,7 @@ I'll help you address these comments...
     
     // Mock session exists and Claude is idle
     jest.spyOn(fakeTmuxService, 'listSessions').mockResolvedValue([sessionName]);
-    jest.spyOn(fakeTmuxService, 'getClaudeStatus').mockResolvedValue('idle');
+    jest.spyOn(fakeTmuxService, 'getAIStatus').mockResolvedValue({tool: 'claude', status: 'idle'});
     
     // Mock capturePane to simulate only one comment is visible (partial delivery)
     const mockPaneContent = `

@@ -422,7 +422,8 @@ export class FakeWorktreeService {
       return 'not_running';
     }
     
-    return await this.tmuxService.getClaudeStatus(worktree.session.session_name);
+    const aiStatus = await this.tmuxService.getAIStatus(worktree.session.session_name);
+    return aiStatus.status;
   }
 
   /**

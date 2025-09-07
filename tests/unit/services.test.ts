@@ -73,11 +73,13 @@ describe('Fake Services Unit Tests', () => {
       
       const sessionName = tmuxService.createTestSession('project', 'feature', 'working')!;
       
-      expect(await tmuxService.getClaudeStatus(sessionName)).toBe('working');
+      const aiStatus1 = await tmuxService.getAIStatus(sessionName);
+      expect(aiStatus1.status).toBe('working');
       
       // Update status
-      tmuxService.updateClaudeStatus(sessionName, 'idle');
-      expect(await tmuxService.getClaudeStatus(sessionName)).toBe('idle');
+      tmuxService.setAIStatus(sessionName, 'idle');
+      const aiStatus2 = await tmuxService.getAIStatus(sessionName);
+      expect(aiStatus2.status).toBe('idle');
     });
 
     test('should kill sessions', () => {
