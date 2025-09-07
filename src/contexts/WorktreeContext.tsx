@@ -648,22 +648,23 @@ export function WorktreeProvider({
     try {
       const configContent = gitService.readRunConfig(project);
       const raw = JSON.parse(configContent);
-      const cfg = (raw && typeof raw === 'object' && (raw as any).executionInstructions)
-        ? (raw as any).executionInstructions
-        : raw;
+      const cfg = (raw && typeof raw === 'object') ? (raw as any).executionInstructions : undefined;
+      if (!cfg || typeof cfg !== 'object') {
+        throw new Error('Missing executionInstructions in run config');
+      }
       
-      // Run setup commands if they exist (new: preRunCommands; legacy: setup)
+      // Run setup commands if they exist
       const preRun = Array.isArray((cfg as any).preRunCommands)
         ? (cfg as any).preRunCommands
-        : (Array.isArray((cfg as any).setup) ? (cfg as any).setup : []);
+        : [];
       for (const setupCmd of preRun) {
         tmuxService.sendText(sessionName, setupCmd, { executeCommand: true });
       }
       
-      // Set environment variables if they exist (new: environmentVariables; legacy: env)
+      // Set environment variables if they exist
       const envVars = ((cfg as any).environmentVariables && typeof (cfg as any).environmentVariables === 'object')
         ? (cfg as any).environmentVariables
-        : (((cfg as any).env && typeof (cfg as any).env === 'object') ? (cfg as any).env : undefined);
+        : undefined;
       if (envVars) {
         for (const [key, value] of Object.entries(envVars)) {
           const safeVal = String(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
@@ -671,11 +672,11 @@ export function WorktreeProvider({
         }
       }
       
-      // Run the main command (new: mainCommand; legacy: command)
-      const command = (cfg as any).mainCommand || (cfg as any).command;
+      // Run the main command
+      const command = (cfg as any).mainCommand;
       const isLongRunning = (typeof (cfg as any).isLongRunning === 'boolean')
         ? (cfg as any).isLongRunning
-        : (((cfg as any).watch === false) ? false : true);
+        : true;
 
       if (command) {
         if (!isLongRunning) {
