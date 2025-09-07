@@ -86,7 +86,7 @@ export default function MainView({
 
   const renderUpdateBanner = useMemo(() => {
     if (!versionInfo || !versionInfo.hasUpdate) return null;
-    const whats = versionInfo.whatsNew ? `\n- ${versionInfo.whatsNew}` : '';
+    const whats = versionInfo.whatsNew ? ` — ${versionInfo.whatsNew}` : '';
     const cmd = 'npm install -g @agent-era/devteam';
     const text = `⬆ Update available: v${versionInfo.current} → v${versionInfo.latest}${whats} — press [u] to update (runs: ${cmd})`;
     return (
