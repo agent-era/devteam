@@ -31,8 +31,7 @@ devteam --dir /path/to/projects
 PROJECTS_DIR=/path/to/projects devteam
 ```
 
-Features
---------
+## Features
 
 - Multi-project Git worktrees: discover, create, attach, archive
 - Tmux automation: sessions `dev-{project}-{feature}`, plus `-shell` and `-run`
@@ -42,8 +41,7 @@ Features
 - Run sessions: generate `run-session.config.json` with Claude, then execute
 - AI tools: detect/switch Claude, Codex, or Gemini per session
 
-Quick guide
------------
+## Quick Guide
 
 - Navigation: arrows or `j/k`; `1–9` quick select; `<`/`>` or `,`/`.` to page; PgUp/PgDn; Home/End
 - Open/attach: `enter` on a feature to create/attach its session
