@@ -15,7 +15,7 @@ export default function ProgressDialog({title = 'Progress', message, project}: P
       <Text>{message}</Text>
       {project ? <Text color="gray">Project: {project}</Text> : null}
       <Text></Text>
-      <Text color="yellow">⏳ Please wait...</Text>
+      <Text color="yellow">Please wait...</Text>
     </Box>
   );
 }
