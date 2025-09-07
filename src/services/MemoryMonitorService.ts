@@ -14,10 +14,13 @@ export interface MemoryStatus {
 }
 
 export class MemoryMonitorService {
-  private static readonly WARNING_RAM_THRESHOLD_GB = 10.0; // < 10GB free (will trigger!)
-  private static readonly CRITICAL_RAM_THRESHOLD_GB = 8.0; // < 8GB free (will trigger!)
-  private static readonly WARNING_SWAP_THRESHOLD = 5; // > 5% swap used (will trigger!)
-  private static readonly CRITICAL_SWAP_THRESHOLD = 10; // > 10% swap used
+  // Reasonable defaults for modern dev machines
+  // - Warning when free RAM < 4 GB or swap usage > 50%
+  // - Critical when free RAM < 2 GB or swap usage > 90%
+  private static readonly WARNING_RAM_THRESHOLD_GB = 4.0;
+  private static readonly CRITICAL_RAM_THRESHOLD_GB = 2.0;
+  private static readonly WARNING_SWAP_THRESHOLD = 50; // percent used
+  private static readonly CRITICAL_SWAP_THRESHOLD = 90; // percent used
 
   async getMemoryStatus(): Promise<MemoryStatus> {
     try {
@@ -86,7 +89,7 @@ export class MemoryMonitorService {
     if (availableRAM < MemoryMonitorService.CRITICAL_RAM_THRESHOLD_GB || 
         swapUsedPercent > MemoryMonitorService.CRITICAL_SWAP_THRESHOLD) {
       status.severity = 'critical';
-      status.message = `CRITICAL: Critically low memory - ${status.availableRAM}GB free, ${status.swapUsedPercent}% swap used - Close some sessions!`;
+      status.message = `CRITICAL: ${status.availableRAM}GB free, ${status.swapUsedPercent}% swap used - Sessions may be unstable`;
       logDebug('Memory status: CRITICAL', status);
     } else if (availableRAM < MemoryMonitorService.WARNING_RAM_THRESHOLD_GB || 
                swapUsedPercent > MemoryMonitorService.WARNING_SWAP_THRESHOLD) {
