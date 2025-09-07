@@ -10,6 +10,7 @@ import RunConfigDialog from './components/dialogs/RunConfigDialog.js';
 import ProgressDialog from './components/dialogs/ProgressDialog.js';
 import ConfigResultsDialog from './components/dialogs/ConfigResultsDialog.js';
 import AIToolDialog from './components/dialogs/AIToolDialog.js';
+import TmuxDetachHintDialog from './components/dialogs/TmuxDetachHintDialog.js';
 
 import WorktreeListScreen from './screens/WorktreeListScreen.js';
 import CreateFeatureScreen from './screens/CreateFeatureScreen.js';
@@ -62,6 +63,13 @@ function AppContent() {
     runPath,
     runConfigResult,
     pendingWorktree,
+    
+    // tmux hint
+    tmuxHintShown,
+    tmuxHintWorktree,
+    tmuxHintTool,
+    showTmuxHintFor,
+    markTmuxHintShown,
     showList,
     showCreateFeature,
     showArchiveConfirmation,
@@ -171,8 +179,12 @@ function AppContent() {
             // Show AI tool selection dialog
             showAIToolSelection(newWorktree);
           } else {
-            // Auto-attach to the newly created session
-            await attachSession(newWorktree);
+            // Auto-attach to the newly created session, but show tmux hint once
+            if (!tmuxHintShown) {
+              showTmuxHintFor(newWorktree);
+            } else {
+              await attachSession(newWorktree);
+            }
           }
         }
       } else {
@@ -342,15 +354,44 @@ function AppContent() {
             availableTools={getAvailableAITools()}
             currentTool={pendingWorktree.session?.ai_tool}
             onSelect={async (tool) => {
+              const wt = pendingWorktree;
               showList();
-              // Attach session with selected tool
+              // Attach session with selected tool, but show tmux hint once
               try {
-                await attachSession(pendingWorktree, tool);
+                if (!tmuxHintShown) {
+                  showTmuxHintFor(wt, tool);
+                } else {
+                  await attachSession(wt, tool);
+                }
               } catch (error) {
                 console.error('Failed to attach session with selected tool:', error);
               }
             }}
             onCancel={showList}
+          />
+        </Box>
+      </FullScreen>
+    );
+  }
+
+  if (mode === 'tmuxHint') {
+    return (
+      <FullScreen>
+        <Box flexGrow={1} alignItems="center" justifyContent="center">
+          <TmuxDetachHintDialog
+            onContinue={async () => {
+              const wt = tmuxHintWorktree;
+              const tool = tmuxHintTool || undefined;
+              markTmuxHintShown();
+              showList();
+              if (wt) {
+                try {
+                  await attachSession(wt, tool);
+                } catch (error) {
+                  console.error('Failed to attach after tmux hint:', error);
+                }
+              }
+            }}
           />
         </Box>
       </FullScreen>

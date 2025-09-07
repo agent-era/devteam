@@ -1,23 +1,43 @@
 {
-  "name": "tmux-session-manager",
+  "name": "@agent-era/devteam",
   "version": "0.1.0",
-  "description": "Tmux Session Manager for feature development (Node + Ink)",
+  "description": "DevTeam: Git/Tmux development workflow TUI (Node + Ink)",
   "bin": {
-    "dev-sessions": "dist/bin/dev-sessions.js"
+    "devteam": "dist/bin/devteam.js"
   },
   "type": "module",
   "engines": {
     "node": ">=18"
   },
   "scripts": {
-    "build": "tsc -p .",
+    "build": "rm -rf dist && tsc -p .",
     "typecheck": "npm install && tsc -p tsconfig.test.json",
     "start": "node dist/index.js",
-    "cli": "node dist/bin/dev-sessions.js",
+    "cli": "node dist/bin/devteam.js",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:terminal": "npm run build && tsc -p tsconfig.node-tests.json && node --test tests/e2e/terminal/*.test.mjs"
+    "test:terminal": "npm run build && tsc -p tsconfig.node-tests.json && node --test tests/e2e/terminal/*.test.mjs",
+    "prepublishOnly": "npm run build"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/agent-era/devteam.git"
+  },
+  "bugs": {
+    "url": "https://github.com/agent-era/devteam/issues"
+  },
+  "homepage": "https://github.com/agent-era/devteam#readme",
+  "publishConfig": {
+    "access": "public"
+  },
+  "private": false,
+  "preferGlobal": true,
+  "main": "dist/index.js",
+  "files": [
+    "dist",
+    "README.md",
+    "CLAUDE.md"
+  ],
   "dependencies": {
     "@inkjs/ui": "^2.0.0",
     "ink": "^5.2.1",
