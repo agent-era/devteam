@@ -31,6 +31,7 @@ function AppContent() {
   const {
     worktrees,
     loading,
+    lastRefreshed,
     selectedIndex,
     getSelectedWorktree,
     createFeature,
@@ -167,6 +168,20 @@ function AppContent() {
       showRunConfig(selectedWorktree.project, selectedWorktree.feature, selectedWorktree.path);
     }
   };
+
+  // Initial startup loading screen while first refresh is in progress
+  if (mode === 'list' && loading && lastRefreshed === 0) {
+    return (
+      <FullScreen>
+        <Box flexGrow={1} alignItems="center" justifyContent="center">
+          <ProgressDialog
+            title="Starting DevTeam"
+            message="Scanning projects and sessions..."
+          />
+        </Box>
+      </FullScreen>
+    );
+  }
 
   const handleConfigureRun = () => {
     const selectedWorktree = getSelectedWorktree();
