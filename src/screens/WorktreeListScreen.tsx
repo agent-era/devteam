@@ -176,6 +176,27 @@ export default function WorktreeListScreen({
     await forceRefreshVisible(currentPage, pageSize);
   };
 
+  const handleUpdate = async () => {
+    try {
+      if (!versionInfo || !versionInfo.hasUpdate) return;
+      // Use npm to install latest globally, then restart the app in background
+      // Show progress in terminal
+      const pkg = '@agent-era/devteam';
+      // Synchronous interactive install
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const {runInteractive, runCommandQuick} = await import('../shared/utils/commandExecutor.js');
+      runInteractive('npm', ['install', '-g', pkg]);
+      // Try to relaunch the CLI in the background to avoid nested TUIs
+      const relaunch = 'command -v devteam >/dev/null 2>&1 && nohup devteam >/dev/null 2>&1 & disown || nohup node dist/bin/devteam.js >/dev/null 2>&1 & disown';
+      runCommandQuick(['bash', '-lc', relaunch]);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('Update failed:', err);
+    } finally {
+      onQuit();
+    }
+  };
+
   const handleJumpToFirst = () => {
     setCurrentPage(0);  // First item is always on page 0
     selectWorktree(0);
@@ -207,7 +228,8 @@ export default function WorktreeListScreen({
     onJumpToLast: handleJumpToLast,
     onQuit: onQuit,
     onExecuteRun: onExecuteRun,
-    onConfigureRun: onConfigureRun
+    onConfigureRun: onConfigureRun,
+    onUpdate: handleUpdate
   }, {
     page: currentPage,
     pageSize,
