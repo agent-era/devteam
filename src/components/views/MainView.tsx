@@ -87,7 +87,8 @@ export default function MainView({
   const renderUpdateBanner = useMemo(() => {
     if (!versionInfo || !versionInfo.hasUpdate) return null;
     const whats = versionInfo.whatsNew ? ` — ${versionInfo.whatsNew}` : '';
-    const text = `⬆ Update available: v${versionInfo.current} → v${versionInfo.latest}${whats} — press [u] to update`;
+    const cmd = 'npm install -g @agent-era/devteam';
+    const text = `⬆ Update available: v${versionInfo.current} → v${versionInfo.latest}${whats} — press [u] to update (runs: ${cmd})`;
     return (
       <Box marginBottom={1}>
         <AnnotatedText color="cyan" wrap="truncate" text={text} />
