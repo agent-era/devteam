@@ -22,8 +22,8 @@ Git worktrees allow multiple branches to be checked out simultaneously in differ
 - Archived features: `{projects-directory}/{project-name}-archived/archived-{timestamp}_{feature-name}/`
 
 The projects directory is configurable:
-- **CLI Argument**: `dev-sessions --dir /path/to/projects`
-- **Environment Variable**: `PROJECTS_DIR=/path/to/projects dev-sessions`
+- **CLI Argument**: `devteam --dir /path/to/projects`
+- **Environment Variable**: `PROJECTS_DIR=/path/to/projects devteam`
 - **Default**: Current working directory
 
 #### 2. **Tmux Sessions**
@@ -46,7 +46,7 @@ src/
 ├── bootstrap.tsx           # App bootstrap (Ink render)
 ├── App.tsx                 # Main React component
 ├── bin/                    # CLI binary
-│   └── dev-sessions.ts     # CLI executable
+│   └── devteam.ts          # CLI executable
 ├── components/             # React/Ink UI components
 │   ├── common/            # Shared components
 │   ├── dialogs/           # Modal dialogs
@@ -489,7 +489,7 @@ Example:
 ```bash
 npm run build         # Compile TypeScript
 npm run typecheck    # Check types only
-npm link            # Install globally as 'dev-sessions'
+npm link            # Install globally as 'devteam'
 ```
 
 ## Best Practices
