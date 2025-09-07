@@ -2,13 +2,13 @@ import {AIToolService} from '../../src/services/AIToolService.js';
 import {AI_TOOLS} from '../../src/constants.js';
 
 // Mock the command execution functions
-jest.mock('../../src/utils.js', () => ({
-  ...jest.requireActual('../../src/utils.js'),
+jest.mock('../../src/shared/utils/commandExecutor.js', () => ({
+  ...jest.requireActual('../../src/shared/utils/commandExecutor.js'),
   runCommandQuickAsync: jest.fn(),
   runCommand: jest.fn(),
 }));
 
-import {runCommandQuickAsync, runCommand} from '../../src/utils.js';
+import {runCommandQuickAsync, runCommand} from '../../src/shared/utils/commandExecutor.js';
 
 describe('AIToolService', () => {
   let aiToolService: AIToolService;
