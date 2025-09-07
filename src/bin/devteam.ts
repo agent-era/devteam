@@ -9,6 +9,6 @@ const root = path.resolve(__dirname, '..');
 
 // Launch the Ink app (compiled index.js lives at dist/index.js)
 import(path.join(root, 'index.js')).catch((err) => {
-  console.error('Failed to start Tmux Session Manager CLI:', err?.stack || err);
+  console.error('Failed to start DevTeam CLI:', err?.stack || err);
   process.exit(1);
 });
