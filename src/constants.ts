@@ -1,5 +1,5 @@
-import os from 'node:os';
 import path from 'node:path';
+import os from 'node:os';
 
 export const SESSION_PREFIX = 'dev-';
 export const DIR_BRANCHES_SUFFIX = '-branches';
@@ -24,7 +24,8 @@ export const DAY_MS = 24 * HOUR_MS;
 export const ENV_FILE = '.env.local';
 export const CLAUDE_SETTINGS_FILE = path.join('.claude', 'settings.local.json');
 export const CLAUDE_CONFIG_PATTERNS = ['CLAUDE.md', '.claude*', 'claude.config*'];
-export const RUN_CONFIG_FILE = 'run-session.config.json';
+// Run config now stored in project-local .devteam/config.json
+export const RUN_CONFIG_FILE = path.join('.devteam', 'config.json');
 
 // UI constants (kept for parity; Ink layout differs)
 export const UI_MIN_WIDTH = 50;
@@ -223,7 +224,7 @@ export const MIN_TERMINAL_WIDTH = 40;
 export const MIN_TERMINAL_HEIGHT = 10;
 
 // Claude prompt for generating run configurations
-export const RUN_CONFIG_CLAUDE_PROMPT = `Analyze this project directory and generate a run-session.config.json file.
+export const RUN_CONFIG_CLAUDE_PROMPT = `Analyze this project directory and generate a .devteam/config.json file.
 
 CRITICAL: Your response must be ONLY the JSON object. Do NOT use markdown code blocks or any formatting.
 
