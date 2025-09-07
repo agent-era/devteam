@@ -30,28 +30,21 @@ devteam --dir /path/to/projects
 # or
 PROJECTS_DIR=/path/to/projects devteam
 ```
+For best results:
+- run in a VM and give your agents broad permissions within that sandbox
+- give them a dedicated GitHub account that they can use to create PRs automatically
+- add some guidelines in CLAUDE.md / AGENTS.md to add tests and make a PR for each feature
 
 ## Features
 
-- Multi-project Git worktrees: discover, create, attach, archive
-- Tmux automation: sessions `dev-{project}-{feature}`, plus `-shell` and `-run`
-- Git awareness: diff counts and ahead/behind in the list
-- PR awareness (GitHub CLI): PR number and checks (✓ passing / ⏳ pending / ✗ failing / ⟫ merged)
-- Diff viewer: full vs uncommitted-only modes with per-file navigation
-- Run sessions: generate `run-session.config.json` with Claude, then execute
-- AI tools: detect/switch Claude, Codex, or Gemini per session
+Use DevTeam to manage a team of agents working in parallel on your projects:
 
-## Quick Guide
-
-- Navigation: arrows or `j/k`; `1–9` quick select; `<`/`>` or `,`/`.` to page; PgUp/PgDn; Home/End
-- Open/attach: `enter` on a feature to create/attach its session
-- Create: `n` new feature; `b` from remote branch
-- Manage: `a` archive selected; `s` open shell session
-- Diff: `d` full diff vs base; `D` uncommitted changes only
-- Run: `x` execute using run config; `X` create/update `run-session.config.json` with Claude
-- AI tool: `t` select active AI tool for the session
-- Misc: `r` refresh; `?` help overlay; `q` quit
-- Tmux: detach with `Ctrl-b` then `d`
+- Kick off multiple agents working on features in parallel (uses git worktrees)
+- See their code changes with a built-in diff viewer, and add comments that are sent to them to address
+- Agents asking for your input are highlighted in the UI so you can unblock them
+- See how far each agent is: diff line counts, whether the feature is pushed, GitHub PR checks and status
+- Run your program or server in each worktree so you can try out the changes easily.
+- Choose Claude Code, Codex or Gemini CLI to work on each feature
 
 ## Repository
 
@@ -61,8 +54,9 @@ PROJECTS_DIR=/path/to/projects devteam
 ## Development
 
 - Build: `npm run build`
+- Run: `npm run cli -- --dir <path_to_projects_root>`
 - Test: `npm test`
-- Terminal E2E: `npm run test:terminal`
+- Terminal E2E tests: `npm run test:terminal`
 
 ## Publishing (scoped public)
 
