@@ -89,7 +89,8 @@ export function runInteractive(cmd: string, args: string[], opts: {cwd?: string}
         try { out.write('\u001b[?1049h'); } catch {}
         try { out.write('\u001b[2J\u001b[H'); } catch {}
         try { out.write('\u001b[?25l'); } catch {}
-        out.emit?.('resize');
+        // Small delay to ensure terminal processed alt-screen restore
+        setTimeout(() => { try { out.emit?.('resize'); } catch {} }, 10);
       }
     } catch {}
     return 0;
@@ -107,8 +108,8 @@ export function runInteractive(cmd: string, args: string[], opts: {cwd?: string}
     try { out.write('\u001b[?1049h'); } catch {}
     try { out.write('\u001b[2J\u001b[H'); } catch {}
     try { out.write('\u001b[?25l'); } catch {}
-    // Nudge Ink/FullScreen to re-measure and re-render
-    try { out.emit?.('resize'); } catch {}
+    // Nudge Ink/FullScreen after a short delay to avoid race
+    setTimeout(() => { try { out.emit?.('resize'); } catch {} }, 10);
   }
 
   return result.status ?? 0;
