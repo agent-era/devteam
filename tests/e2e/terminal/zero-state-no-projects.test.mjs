@@ -14,22 +14,7 @@ test('App shows NoProjectsDialog when no projects discovered', async () => {
   memoryStore.reset();
 
   // Custom stdout/stdin to satisfy Ink raw-mode and capture frames
-  const {EventEmitter} = await import('node:events');
-  class CapturingStdout extends EventEmitter {
-    constructor(){ super(); this.frames=[]; this._last=''; this.isTTY=true; this.columns=100; this.rows=30; }
-    write(chunk){ const s = typeof chunk === 'string'? chunk: String(chunk); this.frames.push(s); this._last=s; return true; }
-    lastFrame(){ return this._last; }
-    on(){ return super.on(...arguments); }
-    off(){ return super.off(...arguments); }
-  }
-  class StdinStub extends EventEmitter {
-    constructor(){ super(); this.isTTY=true; }
-    setEncoding(){}
-    setRawMode(){}
-    ref(){}
-    unref(){}
-    read(){ return null; }
-  }
+  const {CapturingStdout, StdinStub} = await import('./_utils.js');
   const stdout = new CapturingStdout();
   const stdin = new StdinStub();
 
@@ -46,4 +31,3 @@ test('App shows NoProjectsDialog when no projects discovered', async () => {
   assert.ok(frame.includes('Press [enter] or [q] to exit'), 'Expected exit hint');
   try { inst.unmount?.(); } catch {}
 });
-
