@@ -7,8 +7,6 @@ import {
   SYMBOL_WORKING,
   SYMBOL_WAITING,
   SYMBOL_FAILED,
-  USE_EMOJI_SYMBOLS,
-  ASCII_SYMBOLS,
 } from '../../../constants.js';
 
 export function formatNumber(num: number): string {
@@ -34,40 +32,19 @@ export function formatPushStatus(worktree: WorktreeInfo): string {
   if (!worktree.git?.has_remote) return '-';
   
   if (worktree.git.ahead === 0 && !worktree.git.has_changes) {
-    return ASCII_SYMBOLS.IDLE; // '+'
+    return '✓';
   }
-  return ASCII_SYMBOLS.FAILED; // 'x'
+  return 'x';
 }
 
 export function getAISymbol(aiStatus: string, hasSession: boolean): string {
-  // Get the base symbol
-  let baseSymbol: string;
-  
-  if (!hasSession) {
-    baseSymbol = USE_EMOJI_SYMBOLS ? SYMBOL_NO_SESSION : ASCII_SYMBOLS.NO_SESSION;
-  } else {
-    const status = aiStatus.toLowerCase();
-    let symbol = SYMBOL_FAILED;
-    
-    if (status.includes('waiting')) symbol = SYMBOL_WAITING;
-    else if (status.includes('working')) symbol = SYMBOL_WORKING;
-    else if (status.includes('idle') || status.includes('active')) symbol = SYMBOL_IDLE;
+  if (!hasSession) return SYMBOL_NO_SESSION;
 
-    if (!USE_EMOJI_SYMBOLS) {
-      const symbolMap: Record<string, string> = {
-        [SYMBOL_NO_SESSION]: ASCII_SYMBOLS.NO_SESSION,
-        [SYMBOL_WAITING]: ASCII_SYMBOLS.WAITING,
-        [SYMBOL_WORKING]: ASCII_SYMBOLS.WORKING,
-        [SYMBOL_IDLE]: ASCII_SYMBOLS.IDLE,
-        [SYMBOL_FAILED]: ASCII_SYMBOLS.FAILED,
-      };
-      baseSymbol = symbolMap[symbol] || symbol;
-    } else {
-      baseSymbol = symbol;
-    }
-  }
-  
-  return baseSymbol;
+  const status = aiStatus.toLowerCase();
+  if (status.includes('waiting')) return SYMBOL_WAITING;
+  if (status.includes('working')) return SYMBOL_WORKING;
+  if (status.includes('idle') || status.includes('active')) return SYMBOL_IDLE;
+  return SYMBOL_FAILED;
 }
 
 // Backward compatibility function
@@ -77,7 +54,7 @@ export function getClaudeSymbol(claudeStatus: string, hasSession: boolean): stri
 
 export function formatPRStatus(pr: WorktreeInfo['pr']): string {
   if (!pr || pr.isNotChecked) return '';
-  if (pr.isLoading) return ASCII_SYMBOLS.PENDING; // '*'
+  if (pr.isLoading) return '*';
   if (pr.noPR) return '-';
   if (pr.hasError) return '!';
   

@@ -66,19 +66,9 @@ export const GIT_AHEAD = '↑';
 export const GIT_BEHIND = '↓';
 
 // Prefer ASCII-safe symbols to avoid wcwidth drift
-export const USE_EMOJI_SYMBOLS = false;
-// Some terminals render "ambiguous" symbols (e.g., ✓, ⚡) at width 1.
-// Set to false to treat ambiguous symbols as narrow to match most terminals.
+// Some terminals render certain symbols at different widths.
+// Keep this false so we treat ambiguous symbols as narrow (width 1) for alignment.
 export const AMBIGUOUS_EMOJI_ARE_WIDE = false;
-export const ASCII_SYMBOLS = {
-  NO_SESSION: '-',
-  IDLE: '✓',
-  WORKING: '*',
-  WAITING: '?',
-  FAILED: 'x',
-  MERGED: '⟫',
-  PENDING: '*',
-};
 
 // AI tool configurations with detection patterns
 export const AI_TOOLS = {
