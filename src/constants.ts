@@ -67,9 +67,9 @@ export const GIT_BEHIND = '↓';
 
 // Prefer ASCII-safe symbols to avoid wcwidth drift
 export const USE_EMOJI_SYMBOLS = false;
-// Some terminals render "ambiguous" symbols (e.g., ⚡) at width 2.
-// When true, wcwidth treats a small allowlist of such symbols as wide.
-export const AMBIGUOUS_EMOJI_ARE_WIDE = true;
+// Some terminals render "ambiguous" symbols (e.g., ✓, ⚡) at width 1.
+// Set to false to treat ambiguous symbols as narrow to match most terminals.
+export const AMBIGUOUS_EMOJI_ARE_WIDE = false;
 export const ASCII_SYMBOLS = {
   NO_SESSION: '-',
   IDLE: '✓',

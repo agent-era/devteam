@@ -37,7 +37,7 @@ export function formatPushStatus(worktree: WorktreeInfo): string {
   if (worktree.git.ahead === 0 && !worktree.git.has_changes) {
     return '✓';
   }
-  return '↗';
+  return 'x';
 }
 
 export function getAISymbol(aiStatus: string, hasSession: boolean): string {
@@ -85,7 +85,7 @@ export function formatPRStatus(pr: WorktreeInfo['pr']): string {
   if (pr.hasError) return '!';
   
   if (pr.exists && pr.number) {
-    const badge = pr.has_conflicts ? '⚠️' 
+    const badge = pr.has_conflicts ? '!' 
       : pr.is_merged ? '⟫' 
       : pr.checks === 'passing' ? '✓' 
       : pr.checks === 'failing' ? '✗' 
