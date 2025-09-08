@@ -53,14 +53,14 @@ export const COL_CHANGES_POS = 47;
 export const COL_PR_POS = 58;
 
 // Symbols
-export const SYMBOL_NO_SESSION = '○';
+// Display symbols (ASCII only to avoid wrapping/width drift)
+export const SYMBOL_NO_SESSION = '-';
 export const SYMBOL_IDLE = '✓';
-export const SYMBOL_WORKING = '⚡';
-export const SYMBOL_WAITING = '❓';
-export const SYMBOL_FAILED = '✗';
+export const SYMBOL_WORKING = '*';
+export const SYMBOL_WAITING = '?';
+export const SYMBOL_FAILED = 'x';
 export const SYMBOL_MERGED = '⟫';
-export const SYMBOL_PENDING = '⏳';
-export const SYMBOL_THINKING = '🤔';
+export const SYMBOL_PENDING = '*';
 
 export const GIT_AHEAD = '↑';
 export const GIT_BEHIND = '↓';
@@ -75,10 +75,9 @@ export const ASCII_SYMBOLS = {
   IDLE: '✓',
   WORKING: '*',
   WAITING: '?',
-  THINKING: '~',
   FAILED: 'x',
-  MERGED: '>>',
-  PENDING: '~',
+  MERGED: '⟫',
+  PENDING: '*',
 };
 
 // AI tool configurations with detection patterns
@@ -201,8 +200,8 @@ export function generateHelpSections(projectsDir: string): string[] {
     '  Sessions:   dev-{project}-{feature}',
     '',
     'SYMBOLS:',
-    '  ○  No session    ✓  Idle         ⚡  Working',
-    '  🤔  Thinking      ❓  Waiting      📦  Archived',
+    '  -  No session    ✓  Idle         *  Working',
+    '  ?  Waiting       archived',
     '',
     'GIT STATUS:',
     '  DIFF column:',
@@ -214,8 +213,8 @@ export function generateHelpSections(projectsDir: string): string[] {
     '    clean  No changes or commits',
     '',
     'PULL REQUESTS:',
-    '  #N✓  PR passing       #N✗  PR failing',
-    '  #N⏳  PR pending       #N⟫  PR merged',
+    '  #N✓  PR passing       #Nx  PR failing',
+    '  #N*  PR pending       #N⟫  PR merged',
     ''
   ];
 }

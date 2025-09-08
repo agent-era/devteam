@@ -114,7 +114,7 @@ export default function BranchPickerDialog({branches, onSubmit, onCancel, onRefr
       if (b.ahead > 0) chgRaw += `↑${b.ahead} `;
       if (b.behind > 0) chgRaw += `↓${b.behind}`;
       if (!chgRaw) chgRaw = 'synced';
-      const prBadge = b.pr_number ? `#${b.pr_number}${b.pr_checks === 'passing' ? '✓' : b.pr_checks === 'failing' ? '✗' : b.pr_checks === 'pending' ? '⏳' : ''}` : '';
+      const prBadge = b.pr_number ? `#${b.pr_number}${b.pr_checks === 'passing' ? '✓' : b.pr_checks === 'failing' ? 'x' : b.pr_checks === 'pending' ? '*' : ''}` : '';
       
       return [
         b.local_name || '',
@@ -203,7 +203,7 @@ export default function BranchPickerDialog({branches, onSubmit, onCancel, onRefr
         if (b.behind > 0) chgRaw += `↓${b.behind}`;
         if (!chgRaw) chgRaw = 'synced';
         
-        const prBadge = b.pr_number ? `#${b.pr_number}${b.pr_checks === 'passing' ? '✓' : b.pr_checks === 'failing' ? '✗' : b.pr_checks === 'pending' ? '⏳' : ''}` : '';
+        const prBadge = b.pr_number ? `#${b.pr_number}${b.pr_checks === 'passing' ? '✓' : b.pr_checks === 'failing' ? 'x' : b.pr_checks === 'pending' ? '*' : ''}` : '';
         
         // Truncate branch name and title if too long
         const branchName = stringDisplayWidth(b.local_name || '') > columnWidths[0] 

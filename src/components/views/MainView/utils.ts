@@ -6,7 +6,6 @@ import {
   SYMBOL_IDLE,
   SYMBOL_WORKING,
   SYMBOL_WAITING,
-  SYMBOL_THINKING,
   SYMBOL_FAILED,
   USE_EMOJI_SYMBOLS,
   ASCII_SYMBOLS,
@@ -35,9 +34,9 @@ export function formatPushStatus(worktree: WorktreeInfo): string {
   if (!worktree.git?.has_remote) return '-';
   
   if (worktree.git.ahead === 0 && !worktree.git.has_changes) {
-    return '✓';
+    return ASCII_SYMBOLS.IDLE; // '+'
   }
-  return 'x';
+  return ASCII_SYMBOLS.FAILED; // 'x'
 }
 
 export function getAISymbol(aiStatus: string, hasSession: boolean): string {
@@ -52,7 +51,6 @@ export function getAISymbol(aiStatus: string, hasSession: boolean): string {
     
     if (status.includes('waiting')) symbol = SYMBOL_WAITING;
     else if (status.includes('working')) symbol = SYMBOL_WORKING;
-    else if (status.includes('thinking')) symbol = SYMBOL_THINKING;
     else if (status.includes('idle') || status.includes('active')) symbol = SYMBOL_IDLE;
 
     if (!USE_EMOJI_SYMBOLS) {
@@ -60,7 +58,6 @@ export function getAISymbol(aiStatus: string, hasSession: boolean): string {
         [SYMBOL_NO_SESSION]: ASCII_SYMBOLS.NO_SESSION,
         [SYMBOL_WAITING]: ASCII_SYMBOLS.WAITING,
         [SYMBOL_WORKING]: ASCII_SYMBOLS.WORKING,
-        [SYMBOL_THINKING]: ASCII_SYMBOLS.THINKING,
         [SYMBOL_IDLE]: ASCII_SYMBOLS.IDLE,
         [SYMBOL_FAILED]: ASCII_SYMBOLS.FAILED,
       };
@@ -80,7 +77,7 @@ export function getClaudeSymbol(claudeStatus: string, hasSession: boolean): stri
 
 export function formatPRStatus(pr: WorktreeInfo['pr']): string {
   if (!pr || pr.isNotChecked) return '';
-  if (pr.isLoading) return '⏳';
+  if (pr.isLoading) return ASCII_SYMBOLS.PENDING; // '*'
   if (pr.noPR) return '-';
   if (pr.hasError) return '!';
   
@@ -88,8 +85,8 @@ export function formatPRStatus(pr: WorktreeInfo['pr']): string {
     const badge = pr.has_conflicts ? '!' 
       : pr.is_merged ? '⟫' 
       : pr.checks === 'passing' ? '✓' 
-      : pr.checks === 'failing' ? '✗' 
-      : pr.checks === 'pending' ? '⏳' 
+      : pr.checks === 'failing' ? 'x' 
+      : pr.checks === 'pending' ? '*' 
       : '';
     return `#${pr.number}${badge}`;
   }
