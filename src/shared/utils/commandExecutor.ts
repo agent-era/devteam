@@ -143,11 +143,14 @@ export function runInteractive(cmd: string, args: string[], opts: {cwd?: string}
       // Re-enable raw mode if it was previously enabled
       try { inp?.setRawMode?.(hadRaw); } catch {}
       try { inp?.resume?.(); } catch {}
-      // Nudge Ink/FullScreen after a short delay to avoid race
-      setTimeout(() => {
-        try { out.emit?.('resize'); } catch {}
-        try { requestRedraw(); } catch {}
-      }, 200);
+      // Nudge Ink/FullScreen after short and longer delays to avoid races
+      const nudge = () => { try { out.emit?.('resize'); } catch {}; try { requestRedraw(); } catch {} };
+      // microtask (in case event loop needs to settle)
+      try { Promise.resolve().then(nudge); } catch {}
+      // short delay
+      setTimeout(nudge, 200);
+      // longer delay as safety (some terminals settle slower)
+      setTimeout(nudge, 1000);
     }
   }
 }
