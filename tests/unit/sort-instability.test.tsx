@@ -67,7 +67,7 @@ describe('Sort instability - worktree list ordering flips with mtime-based sort'
 
     const gitService = new FakeGitService();
     const tmuxService = new FakeTmuxService();
-    const gitHubService = new FakeGitHubService();
+    const gitHubService: any = new FakeGitHubService();
 
     const probeRef = React.createRef<ProbeHandle>();
     const app = render(

@@ -57,7 +57,7 @@ export class GitService {
     last_commit_ts: number;
   }>> {
     const timer = new Timer();
-    const worktrees: Array<{project: string; feature: string; path: string; branch: string; mtime: number}> = [];
+    const worktrees: Array<{project: string; feature: string; path: string; branch: string; mtime: number; last_commit_ts: number}> = [];
     const branchesDirName = `${project.name}${DIR_BRANCHES_SUFFIX}`;
     const output = await runCommandAsync(['git', '-C', project.path, 'worktree', 'list', '--porcelain']);
     if (!output) {
