@@ -1,6 +1,6 @@
 import {execFileSync, spawnSync, execFile, spawn} from 'child_process';
 import {SUBPROCESS_SHORT_TIMEOUT, SUBPROCESS_TIMEOUT, AI_TOOLS} from '../../constants.js';
-import {requestRedraw} from './redraw.js';
+import {requestRedraw, requestRemount} from './redraw.js';
 
 // Consolidated command executors (sync + async) with options
 export function runCommand(
@@ -115,8 +115,13 @@ export function runInteractive(cmd: string, args: string[], opts: {cwd?: string}
         try { out.write('\u001b[?25l'); } catch {}
         // Re-enable raw mode in case child altered it
         try { (process.stdin as any)?.setRawMode?.(true); } catch {}
-        // Small delay to ensure terminal processed alt-screen restore
-        setTimeout(() => { try { out.emit?.('resize'); } catch {} }, 200);
+        // Multi-phase nudge and optional remount
+        const nudge = () => { try { out.emit?.('resize'); } catch {}; try { requestRedraw(); } catch {} };
+        const remount = () => { try { requestRemount(); } catch {} };
+        try { Promise.resolve().then(nudge); } catch {}
+        setTimeout(nudge, 200);
+        setTimeout(nudge, 1000);
+        setTimeout(remount, 1100);
       }
     } catch {}
     return 0;
@@ -145,12 +150,15 @@ export function runInteractive(cmd: string, args: string[], opts: {cwd?: string}
       try { inp?.resume?.(); } catch {}
       // Nudge Ink/FullScreen after short and longer delays to avoid races
       const nudge = () => { try { out.emit?.('resize'); } catch {}; try { requestRedraw(); } catch {} };
+      const remount = () => { try { requestRemount(); } catch {} };
       // microtask (in case event loop needs to settle)
       try { Promise.resolve().then(nudge); } catch {}
       // short delay
       setTimeout(nudge, 200);
       // longer delay as safety (some terminals settle slower)
       setTimeout(nudge, 1000);
+      // force a shallow remount a bit later if still stuck
+      setTimeout(remount, 1100);
     }
   }
 }

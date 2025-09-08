@@ -13,3 +13,13 @@ export function onRedraw(handler: () => void): () => void {
   };
 }
 
+export function requestRemount(): void {
+  try { emitter.emit('remount'); } catch {}
+}
+
+export function onRemount(handler: () => void): () => void {
+  emitter.on('remount', handler);
+  return () => {
+    try { emitter.off('remount', handler); } catch {}
+  };
+}

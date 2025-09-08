@@ -21,11 +21,12 @@ import {WorktreeProvider, useWorktreeContext} from './contexts/WorktreeContext.j
 import {GitHubProvider, useGitHubContext} from './contexts/GitHubContext.js';
 import {UIProvider, useUIContext} from './contexts/UIContext.js';
 import {InputFocusProvider} from './contexts/InputFocusContext.js';
-import {onRedraw} from './shared/utils/redraw.js';
+import {onRedraw, onRemount} from './shared/utils/redraw.js';
 
 
 function AppContent() {
   const [redrawTick, setRedrawTick] = useState(0);
+  const [remountTick, setRemountTick] = useState(0);
   const {exit} = useApp();
   const {isRawModeSupported} = useStdin();
   
@@ -101,6 +102,12 @@ function AppContent() {
   // Subscribe to global redraw requests to force a render pass
   useEffect(() => {
     const off = onRedraw(() => setRedrawTick(t => t + 1));
+    return () => off();
+  }, []);
+
+  // Occasionally force a shallow remount of the screen container after tmux returns
+  useEffect(() => {
+    const off = onRemount(() => setRemountTick(t => t + 1));
     return () => off();
   }, []);
 
@@ -453,7 +460,7 @@ function AppContent() {
 
   // Wrap all routed content in a single persistent FullScreen to avoid flicker/blanking
   return (
-    <FullScreen>
+    <FullScreen key={remountTick}>
       {content}
     </FullScreen>
   );
