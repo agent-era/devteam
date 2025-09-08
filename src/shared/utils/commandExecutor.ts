@@ -90,7 +90,7 @@ export function runInteractive(cmd: string, args: string[], opts: {cwd?: string}
         try { out.write('\u001b[2J\u001b[H'); } catch {}
         try { out.write('\u001b[?25l'); } catch {}
         // Small delay to ensure terminal processed alt-screen restore
-        setTimeout(() => { try { out.emit?.('resize'); } catch {} }, 30);
+        setTimeout(() => { try { out.emit?.('resize'); } catch {} }, 200);
       }
     } catch {}
     return 0;
@@ -109,7 +109,7 @@ export function runInteractive(cmd: string, args: string[], opts: {cwd?: string}
     try { out.write('\u001b[2J\u001b[H'); } catch {}
     try { out.write('\u001b[?25l'); } catch {}
     // Nudge Ink/FullScreen after a short delay to avoid race
-    setTimeout(() => { try { out.emit?.('resize'); } catch {} }, 30);
+    setTimeout(() => { try { out.emit?.('resize'); } catch {} }, 200);
   }
 
   return result.status ?? 0;
