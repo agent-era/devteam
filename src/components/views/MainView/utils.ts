@@ -6,10 +6,7 @@ import {
   SYMBOL_IDLE,
   SYMBOL_WORKING,
   SYMBOL_WAITING,
-  SYMBOL_THINKING,
   SYMBOL_FAILED,
-  USE_EMOJI_SYMBOLS,
-  ASCII_SYMBOLS,
 } from '../../../constants.js';
 
 export function formatNumber(num: number): string {
@@ -41,36 +38,13 @@ export function formatPushStatus(worktree: WorktreeInfo): string {
 }
 
 export function getAISymbol(aiStatus: string, hasSession: boolean): string {
-  // Get the base symbol
-  let baseSymbol: string;
-  
-  if (!hasSession) {
-    baseSymbol = USE_EMOJI_SYMBOLS ? SYMBOL_NO_SESSION : ASCII_SYMBOLS.NO_SESSION;
-  } else {
-    const status = aiStatus.toLowerCase();
-    let symbol = SYMBOL_FAILED;
-    
-    if (status.includes('waiting')) symbol = SYMBOL_WAITING;
-    else if (status.includes('working')) symbol = SYMBOL_WORKING;
-    else if (status.includes('thinking')) symbol = SYMBOL_THINKING;
-    else if (status.includes('idle') || status.includes('active')) symbol = SYMBOL_IDLE;
+  if (!hasSession) return SYMBOL_NO_SESSION;
 
-    if (!USE_EMOJI_SYMBOLS) {
-      const symbolMap: Record<string, string> = {
-        [SYMBOL_NO_SESSION]: ASCII_SYMBOLS.NO_SESSION,
-        [SYMBOL_WAITING]: ASCII_SYMBOLS.WAITING,
-        [SYMBOL_WORKING]: ASCII_SYMBOLS.WORKING,
-        [SYMBOL_THINKING]: ASCII_SYMBOLS.THINKING,
-        [SYMBOL_IDLE]: ASCII_SYMBOLS.IDLE,
-        [SYMBOL_FAILED]: ASCII_SYMBOLS.FAILED,
-      };
-      baseSymbol = symbolMap[symbol] || symbol;
-    } else {
-      baseSymbol = symbol;
-    }
-  }
-  
-  return baseSymbol;
+  const status = aiStatus.toLowerCase();
+  if (status.includes('waiting')) return SYMBOL_WAITING;
+  if (status.includes('working')) return SYMBOL_WORKING;
+  if (status.includes('idle') || status.includes('active')) return SYMBOL_IDLE;
+  return SYMBOL_FAILED;
 }
 
 // Backward compatibility function
@@ -80,7 +54,7 @@ export function getClaudeSymbol(claudeStatus: string, hasSession: boolean): stri
 
 export function formatPRStatus(pr: WorktreeInfo['pr']): string {
   if (!pr || pr.isNotChecked) return '';
-  if (pr.isLoading) return '⏳';
+  if (pr.isLoading) return '*';
   if (pr.noPR) return '-';
   if (pr.hasError) return '!';
   
@@ -88,8 +62,8 @@ export function formatPRStatus(pr: WorktreeInfo['pr']): string {
     const badge = pr.has_conflicts ? '!' 
       : pr.is_merged ? '⟫' 
       : pr.checks === 'passing' ? '✓' 
-      : pr.checks === 'failing' ? '✗' 
-      : pr.checks === 'pending' ? '⏳' 
+      : pr.checks === 'failing' ? 'x' 
+      : pr.checks === 'pending' ? '*' 
       : '';
     return `#${pr.number}${badge}`;
   }
