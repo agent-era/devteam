@@ -1,4 +1,4 @@
-import {execFileSync, spawnSync, execFile} from 'child_process';
+import {execFileSync, spawnSync, execFile, spawn} from 'child_process';
 import {SUBPROCESS_SHORT_TIMEOUT, SUBPROCESS_TIMEOUT, AI_TOOLS} from '../../constants.js';
 
 // Consolidated command executors (sync + async) with options
@@ -24,23 +24,42 @@ export function runCommandAsync(
   args: string[],
   opts: { timeout?: number; cwd?: string; env?: NodeJS.ProcessEnv } = {}
 ): Promise<string> {
+  // Use spawn to better control lifecycle and ensure cleanup on timeout
+  const timeoutMs = opts.timeout ?? SUBPROCESS_TIMEOUT;
+  const maxBuffer = 10 * 1024 * 1024; // 10MB cap
+
   return new Promise((resolve) => {
     try {
-      execFile(
-        args[0],
-        args.slice(1),
-        {
-          encoding: 'utf8' as any,
-          timeout: opts.timeout ?? SUBPROCESS_TIMEOUT,
-          cwd: opts.cwd,
-          env: opts.env ?? process.env,
-          maxBuffer: 10 * 1024 * 1024,
-        },
-        (err, stdout) => {
-          if (err) return resolve('');
-          resolve((stdout || '').toString().trim());
-        }
-      );
+      const child = spawn(args[0], args.slice(1), {
+        cwd: opts.cwd,
+        env: opts.env ?? process.env,
+        stdio: ['ignore', 'pipe', 'ignore'],
+      });
+
+      let resolved = false;
+      let output = '';
+
+      const finish = (value: string) => {
+        if (resolved) return;
+        resolved = true;
+        try { child.removeAllListeners(); } catch {}
+        try { child.stdout?.removeAllListeners(); } catch {}
+        clearTimeout(timer);
+        resolve(value);
+      };
+
+      const timer = setTimeout(() => {
+        try { child.kill('SIGKILL'); } catch {}
+        finish('');
+      }, timeoutMs);
+
+      child.on('error', () => finish(''));
+      child.on('close', () => finish(output.trim()));
+
+      child.stdout?.on('data', (chunk: Buffer) => {
+        if (output.length >= maxBuffer) return; // truncate beyond cap
+        try { output += chunk.toString('utf8'); } catch {}
+      });
     } catch {
       resolve('');
     }
