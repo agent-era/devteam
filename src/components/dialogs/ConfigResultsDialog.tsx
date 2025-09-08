@@ -35,7 +35,7 @@ export default function ConfigResultsDialog({success, content, configPath, error
 
   return (
     <Box flexDirection="column" borderStyle="round" borderColor="green" padding={1}>
-      <Text color="green">✓ Config Generated Successfully</Text>
+      <Text color="green">Config Generated Successfully</Text>
       <Text></Text>
       <Text color="cyan">File: {configPath}</Text>
       <Text></Text>
