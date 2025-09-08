@@ -284,10 +284,10 @@ r - Refresh
 q - Quit
 
 Column Explanations:
-AI - Claude AI status (*=working, ?=waiting, -=idle)
+AI - Claude AI status: idle, working, waiting
 DIFF - Added/removed lines (+10/-5)
 CHANGES - Commits ahead/behind (↑2 ↓1)  
-PUSHED - Whether changes are pushed (✓/-)
+PUSHED - Whether changes are pushed
 PR - Pull request number and status
 
 Press ESC to close this help.`;
