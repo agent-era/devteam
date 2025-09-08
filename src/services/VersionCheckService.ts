@@ -50,7 +50,7 @@ export class VersionCheckService {
       // Avoid static import.meta syntax so Jest CJS parsing doesn't choke
       const metaUrl = (Function('return import.meta.url') as () => string)();
       const thisFilePath = fileURLToPath(metaUrl);
-      // Walk up a few directories to find the nearest package.json
+      // Walk a fixed offset to find the nearest package.json
       let dir = path.dirname(thisFilePath);
       // Fast path: some install layouts place package.json three levels up
       try {
@@ -64,24 +64,7 @@ export class VersionCheckService {
           if (pkg?.version) return String(pkg.version);
         }
       } catch {}
-      for (let i = 0; i < 6; i++) {
-        const candidate = path.join(dir, 'package.json');
-        if (fs.existsSync(candidate)) {
-          try {
-            const content = await fs.promises.readFile(candidate, 'utf-8');
-            const pkg = JSON.parse(content);
-            if (pkg?.name && typeof pkg.name === 'string') {
-              this.packageName = pkg.name;
-            }
-            if (pkg?.version) return String(pkg.version);
-          } catch {
-            // try parent dir if read/parse fails
-          }
-        }
-        const parent = path.dirname(dir);
-        if (parent === dir) break;
-        dir = parent;
-      }
+      // No additional walk-up beyond the fixed 3-level check.
     } catch {
       // ignore and fall back
     }
