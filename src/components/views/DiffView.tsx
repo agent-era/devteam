@@ -1726,7 +1726,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
         <AnnotatedText
           color="magenta"
           wrap="truncate"
-          text={truncateDisplay(`[j]/[k] move  toggle [v]iew (${viewMode})  toggle [w]rap (${wrapMode})  [c]omment  [C] show all  [d]elete  [S]end to Claude  [q] close`, terminalWidth)}
+          text={truncateDisplay(`Shift+↑/↓ prev/next file  [v]iew (${viewMode})  [w]rap (${wrapMode})  [c]omment  [C] show all  [d]elete  [S]end to agent  [q] close`, terminalWidth)}
         />
       )}
       
