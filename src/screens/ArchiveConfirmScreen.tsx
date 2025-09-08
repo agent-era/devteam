@@ -1,6 +1,5 @@
 import React from 'react';
 import {Box, Text, useInput, useStdin} from 'ink';
-import FullScreen from '../components/common/FullScreen.js';
 import {useWorktreeContext} from '../contexts/WorktreeContext.js';
 
 
@@ -48,18 +47,16 @@ export default function ArchiveConfirmScreen({
   });
 
   return (
-    <FullScreen>
-      <Box flexGrow={1} alignItems="center" justifyContent="center">
-        <Box flexDirection="column" paddingX={2}>
-          <Text bold color="cyan">Archive Feature</Text>
-          <Box marginTop={1}>
-            <Text>Archive {featureInfo.project}/{featureInfo.feature}?</Text>
-          </Box>
-          <Box marginTop={1}>
-            <Text color="magenta" wrap="truncate">Press y to confirm, n to cancel</Text>
-          </Box>
+    <Box flexGrow={1} alignItems="center" justifyContent="center">
+      <Box flexDirection="column" paddingX={2}>
+        <Text bold color="cyan">Archive Feature</Text>
+        <Box marginTop={1}>
+          <Text>Archive {featureInfo.project}/{featureInfo.feature}?</Text>
+        </Box>
+        <Box marginTop={1}>
+          <Text color="magenta" wrap="truncate">Press y to confirm, n to cancel</Text>
         </Box>
       </Box>
-    </FullScreen>
+    </Box>
   );
 }

@@ -1,0 +1,53 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import React from 'react';
+
+test('pressing a then ESC with one worktree returns to list (not blank)', async () => {
+  const Ink = await import('../../../node_modules/ink/build/index.js');
+  const {TestableApp} = await import('../../../dist/App.js');
+  const {FakeGitService} = await import('../../../dist-tests/tests/fakes/FakeGitService.js');
+  const {FakeTmuxService} = await import('../../../dist-tests/tests/fakes/FakeTmuxService.js');
+  const {FakeGitHubService} = await import('../../../dist-tests/tests/fakes/FakeGitHubService.js');
+  const {memoryStore, setupTestProject, setupTestWorktree} = await import('../../../dist-tests/tests/fakes/stores.js');
+
+  // Seed exactly one worktree
+  memoryStore.reset();
+  setupTestProject('demo');
+  const wt = setupTestWorktree('demo', 'feature-1');
+
+  // Custom stdout/stdin to satisfy Ink raw-mode and capture frames
+  const {CapturingStdout, StdinStub} = await import('./_utils.js');
+  const stdout = new CapturingStdout();
+  const stdin = new StdinStub();
+
+  const tree = React.createElement(TestableApp, {
+    gitService: new FakeGitService('/fake/projects'),
+    gitHubService: new FakeGitHubService(),
+    tmuxService: new FakeTmuxService()
+  });
+
+  const inst = Ink.render(tree, {stdout, stdin, debug: true, exitOnCtrlC: false, patchConsole: false});
+
+  // Let initial frame render
+  await new Promise(r => setTimeout(r, 250));
+  let frame = stdout.lastFrame() || '';
+  assert.ok(frame.includes('demo/feature-1'), 'Expected initial list with the single worktree');
+
+  // Press 'a' to open archive confirmation
+  stdin.emit('data', Buffer.from('a'));
+  await new Promise(r => setTimeout(r, 150));
+  frame = stdout.lastFrame() || '';
+  assert.ok(frame.includes('Archive Feature') || frame.includes('Press y to confirm'), 'Expected archive confirm screen');
+
+  // Press ESC to cancel and return to list
+  stdin.emit('data', Buffer.from('\u001b'));
+  await new Promise(r => setTimeout(r, 200));
+  frame = stdout.lastFrame() || '';
+
+  // Must not be blank; should show the list again with the worktree row visible
+  assert.ok((frame.trim().length > 0), `Expected non-blank frame after ESC, got: ${JSON.stringify(frame)}`);
+  assert.ok(frame.includes('demo/feature-1'), 'Expected to return to main list after ESC');
+
+  try { inst.unmount?.(); } catch {}
+});
+
