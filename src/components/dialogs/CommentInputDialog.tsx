@@ -68,7 +68,6 @@ const CommentInputDialog = React.memo(function CommentInputDialog({fileName, lin
           onChange={handleChange}
         />
       </Box>
-<<<<<<< HEAD
       <Box marginTop={1} />
       <AnnotatedText color="magenta" wrap="truncate" text={'[enter] save  [esc] cancel'} />
     </Box>
