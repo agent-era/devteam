@@ -72,6 +72,8 @@ export function commandExitCode(args: string[], cwd?: string, env?: NodeJS.Proce
 export function runInteractive(cmd: string, args: string[], opts: {cwd?: string} = {}): number {
   const out: any = process.stdout as any;
   const isTTY = !!(out && out.isTTY);
+  const inp: any = process.stdin as any;
+  const hadRaw: boolean = !!(inp && inp.isRaw);
 
   // In terminal E2E, allow simulation without spawning tmux
   if (process.env.E2E_SIMULATE_TMUX_ATTACH === '1') {
@@ -101,26 +103,30 @@ export function runInteractive(cmd: string, args: string[], opts: {cwd?: string}
   }
 
   // Gracefully release alt-screen to the child, then restore and force redraw
-  if (isTTY) {
-    try { out.write('\u001b[?25h'); } catch {}
-    try { out.write('\u001b[?1049l'); } catch {}
+  try {
+    if (isTTY) {
+      try { out.write('\u001b[?25h'); } catch {}
+      try { out.write('\u001b[?1049l'); } catch {}
+    }
+    // Disable raw mode before handing control to child
+    try { inp?.setRawMode?.(false); } catch {}
+
+    const result = spawnSync(cmd, args, {cwd: opts.cwd, stdio: 'inherit'});
+    return result.status ?? 0;
+  } finally {
+    if (isTTY) {
+      // Perform a soft terminal reset to clear any lingering modes set by child
+      try { out.write('\u001bc'); } catch {}
+      try { out.write('\u001b[?1049h'); } catch {}
+      try { out.write('\u001b[2J\u001b[H'); } catch {}
+      try { out.write('\u001b[?25l'); } catch {}
+      // Re-enable raw mode if it was previously enabled
+      try { inp?.setRawMode?.(hadRaw); } catch {}
+      try { inp?.resume?.(); } catch {}
+      // Nudge Ink/FullScreen after a short delay to avoid race
+      setTimeout(() => { try { out.emit?.('resize'); } catch {} }, 200);
+    }
   }
-
-  const result = spawnSync(cmd, args, {cwd: opts.cwd, stdio: 'inherit'});
-
-  if (isTTY) {
-    // Perform a soft terminal reset to clear any lingering modes set by child
-    try { out.write('\u001bc'); } catch {}
-    try { out.write('\u001b[?1049h'); } catch {}
-    try { out.write('\u001b[2J\u001b[H'); } catch {}
-    try { out.write('\u001b[?25l'); } catch {}
-    // Re-enable raw mode in case child altered it
-    try { (process.stdin as any)?.setRawMode?.(true); } catch {}
-    // Nudge Ink/FullScreen after a short delay to avoid race
-    setTimeout(() => { try { out.emit?.('resize'); } catch {} }, 200);
-  }
-
-  return result.status ?? 0;
 }
 
 export function runClaudeSync(prompt: string, cwd?: string): {success: boolean; output: string; error?: string} {
