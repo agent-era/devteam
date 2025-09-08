@@ -52,6 +52,18 @@ export class VersionCheckService {
       const thisFilePath = fileURLToPath(metaUrl);
       // Walk up a few directories to find the nearest package.json
       let dir = path.dirname(thisFilePath);
+      // Fast path: some install layouts place package.json three levels up
+      try {
+        const candidate3 = path.join(dir, '..', '..', '..', 'package.json');
+        if (fs.existsSync(candidate3)) {
+          const content = await fs.promises.readFile(candidate3, 'utf-8');
+          const pkg = JSON.parse(content);
+          if (pkg?.name && typeof pkg.name === 'string') {
+            this.packageName = pkg.name;
+          }
+          if (pkg?.version) return String(pkg.version);
+        }
+      } catch {}
       for (let i = 0; i < 6; i++) {
         const candidate = path.join(dir, 'package.json');
         if (fs.existsSync(candidate)) {
