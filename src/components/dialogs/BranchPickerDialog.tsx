@@ -180,7 +180,6 @@ export default function BranchPickerDialog({branches, onSubmit, onCancel, onRefr
   return (
     <Box flexDirection="column">
       <Text color="cyan">Create from Remote Branch</Text>
-      <AnnotatedText color="magenta" wrap="truncate" text={`Type to filter, [j]/[k] move, [PgUp]/[PgDn], [1]–[9] jump, [r]efresh, [enter] select, [esc] cancel  [${Math.floor(selected / pageSize) + 1}/${Math.max(1, Math.ceil(filtered.length / pageSize))}]`} />
       <Box flexDirection="row">
         <Text color="gray">Filter: </Text>
         <Text>{filter || ' '}</Text>
@@ -242,6 +241,9 @@ export default function BranchPickerDialog({branches, onSubmit, onCancel, onRefr
           </Box>
         );
       })}
+      <Box marginTop={1}>
+        <AnnotatedText color="magenta" wrap="truncate" text={`Type to filter, [j]/[k] move, [PgUp]/[PgDn], [1]–[9] jump, [r]efresh, [enter] select, [esc] cancel  [${Math.floor(selected / pageSize) + 1}/${Math.max(1, Math.ceil(filtered.length / pageSize))}]`} />
+      </Box>
     </Box>
   );
 }

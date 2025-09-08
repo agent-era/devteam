@@ -65,7 +65,6 @@ export default function ProjectPickerDialog({projects, defaultProject, onSubmit,
   return (
     <Box flexDirection="column">
       <Text color="cyan">Select Project</Text>
-      <AnnotatedText color="magenta" wrap="truncate" text={"Type to filter, [j]/[k] move, [1]–[9] quick select, [enter] select, [esc] cancel"} />
       <Box flexDirection="row">
         <Text color="gray">Filter: </Text>
         <Text>{filter || ' '}</Text>
@@ -75,6 +74,9 @@ export default function ProjectPickerDialog({projects, defaultProject, onSubmit,
           {`${i === selected ? '› ' : '  '}${p.name}`}
         </Text>
       )}
+      <Box marginTop={1}>
+        <AnnotatedText color="magenta" wrap="truncate" text={"Type to filter, [j]/[k] move, [1]–[9] quick select, [enter] select, [esc] cancel"} />
+      </Box>
     </Box>
   );
 }
