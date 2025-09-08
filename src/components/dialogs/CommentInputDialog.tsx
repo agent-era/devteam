@@ -26,12 +26,6 @@ const CommentInputDialog = React.memo(function CommentInputDialog({fileName, lin
       onCancel();
       return;
     }
-
-    if (key.return && key.shift) {
-      // Handle newlines for multi-line comments
-      setComment(prev => prev + '\n');
-      return;
-    }
   });
 
   const handleSubmit = (value: string) => {
@@ -74,7 +68,7 @@ const CommentInputDialog = React.memo(function CommentInputDialog({fileName, lin
           onChange={handleChange}
         />
       </Box>
-      <AnnotatedText color="magenta" wrap="truncate" text={'[enter] save  [shift]+[enter] new line  [esc] cancel'} />
+      <AnnotatedText color="magenta" wrap="truncate" text={'[enter] save  [esc] cancel'} />
     </Box>
   );
 });
