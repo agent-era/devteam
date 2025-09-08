@@ -86,9 +86,13 @@ export function runInteractive(cmd: string, args: string[], opts: {cwd?: string}
     // Re-enter alt screen and trigger a resize to force Ink re-render
     try {
       if (isTTY) {
+        // Perform a soft terminal reset to clear any lingering modes set by tmux
+        try { out.write('\u001bc'); } catch {}
         try { out.write('\u001b[?1049h'); } catch {}
         try { out.write('\u001b[2J\u001b[H'); } catch {}
         try { out.write('\u001b[?25l'); } catch {}
+        // Re-enable raw mode in case child altered it
+        try { (process.stdin as any)?.setRawMode?.(true); } catch {}
         // Small delay to ensure terminal processed alt-screen restore
         setTimeout(() => { try { out.emit?.('resize'); } catch {} }, 200);
       }
@@ -105,9 +109,13 @@ export function runInteractive(cmd: string, args: string[], opts: {cwd?: string}
   const result = spawnSync(cmd, args, {cwd: opts.cwd, stdio: 'inherit'});
 
   if (isTTY) {
+    // Perform a soft terminal reset to clear any lingering modes set by child
+    try { out.write('\u001bc'); } catch {}
     try { out.write('\u001b[?1049h'); } catch {}
     try { out.write('\u001b[2J\u001b[H'); } catch {}
     try { out.write('\u001b[?25l'); } catch {}
+    // Re-enable raw mode in case child altered it
+    try { (process.stdin as any)?.setRawMode?.(true); } catch {}
     // Nudge Ink/FullScreen after a short delay to avoid race
     setTimeout(() => { try { out.emit?.('resize'); } catch {} }, 200);
   }
