@@ -1,6 +1,7 @@
 import {useEffect} from 'react';
-import {useStdin} from 'ink';
+import {useStdin, useStdout} from 'ink';
 import {useInputFocus} from '../contexts/InputFocusContext.js';
+import {requestRedraw} from '../shared/utils/redraw.js';
 
 export interface KeyboardActions {
   onMove?: (delta: number) => void;
@@ -38,6 +39,7 @@ export function useKeyboardShortcuts(
   options: KeyboardShortcutsOptions = {}
 ) {
   const {stdin, setRawMode} = useStdin();
+  const {stdout} = useStdout();
   const {hasFocus, requestFocus, isAnyDialogFocused} = useInputFocus();
   const {
     enabled = true,
@@ -57,6 +59,11 @@ export function useKeyboardShortcuts(
 
     setRawMode(true);
 
+    const nudgeRender = () => {
+      try { (stdout as any)?.emit?.('resize'); } catch {}
+      try { requestRedraw(); } catch {}
+    };
+
     const handler = (buf: Buffer) => {
       // Only process input if we have focus and no dialog is focused
       if (isAnyDialogFocused || !hasFocus('main')) {
@@ -68,8 +75,10 @@ export function useKeyboardShortcuts(
       // Navigation
       if (input === 'j' || input === '\u001b[B') { // j or down arrow
         actions.onMove?.(1);
+        nudgeRender();
       } else if (input === 'k' || input === '\u001b[A') { // k or up arrow
         actions.onMove?.(-1);
+        nudgeRender();
       } else if (input === '\r') { // Enter
         actions.onSelect?.();
       } else if (input === 'q' || input === '\u001b') { // q or Escape
