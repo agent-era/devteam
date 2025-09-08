@@ -1,5 +1,6 @@
 import {execFileSync, spawnSync, execFile, spawn} from 'child_process';
 import {SUBPROCESS_SHORT_TIMEOUT, SUBPROCESS_TIMEOUT, AI_TOOLS} from '../../constants.js';
+import {requestRedraw} from './redraw.js';
 
 // Consolidated command executors (sync + async) with options
 export function runCommand(
@@ -143,7 +144,10 @@ export function runInteractive(cmd: string, args: string[], opts: {cwd?: string}
       try { inp?.setRawMode?.(hadRaw); } catch {}
       try { inp?.resume?.(); } catch {}
       // Nudge Ink/FullScreen after a short delay to avoid race
-      setTimeout(() => { try { out.emit?.('resize'); } catch {} }, 200);
+      setTimeout(() => {
+        try { out.emit?.('resize'); } catch {}
+        try { requestRedraw(); } catch {}
+      }, 200);
     }
   }
 }
