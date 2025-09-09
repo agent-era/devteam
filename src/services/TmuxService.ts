@@ -165,6 +165,8 @@ export class TmuxService {
       this.setSessionOption(session, 'status-position', 'bottom');
       this.setSessionOption(session, 'status-style', 'fg=white,bg=black');
       this.setSessionOption(session, 'status-interval', '5');
+      // Ensure tmux messages are visible for debug to confirm mouse events
+      this.setSessionOption(session, 'display-time', '2000');
 
       // Restore default status building, then set minimal left/right so footer is always visible
       runCommand(['tmux', 'set-option', '-gu', 'status-format'], { env: this.tmuxEnv });
@@ -174,16 +176,35 @@ export class TmuxService {
       // Minimal right if empty; include session name and hint
       this.setSessionOption(session, 'status-right', ' #S | Click status for menu ');
 
-      // Provide a reliable menu on status clicks; separators require empty name only
-      const menu = [
-        'display-menu', '-T', 'DevTeam', '-x', 'M', '-y', 'S',
-        'Detach', 'd', 'detach-client',
-        '',
-        'Kill Session', 'k', 'confirm-before', '-p', 'Kill session #S?', 'kill-session', '-t', '#S'
+      // Build a run-shell action that both logs and shows a menu at the mouse position
+      const menuScript = [
+        'tmux display-message -d 2000 "DevTeam click: x=#{mouse_x} y=#{mouse_y} loc=#{mouse_status_line} rng=#{mouse_status_range}"; ',
+        'tmux display-menu -x M -y S ',
+        '"Detach" d detach-client ',
+        '"Kill Session" k confirm-before -p "Kill session #S?" "kill-session -t #S"'
+      ].join('');
+      const menuAction = ['run-shell', menuScript];
+      const debugAction = [
+        'display-message', '-d', '2000',
+        'DevTeam mouse: x=#{mouse_x} y=#{mouse_y} loc=#{mouse_status_line} rng=#{mouse_status_range}'
       ];
-      for (const k of ['MouseDown1Status', 'MouseUp1Status']) {
-        try { runCommand(['tmux', 'unbind-key', '-n', k], { env: this.tmuxEnv }); } catch {}
-        runCommand(['tmux', 'bind-key', '-n', k, ...menu], { env: this.tmuxEnv });
+
+      const bind = (key: string, args: string[]) => {
+        try { runCommand(['tmux', 'unbind-key', '-n', key], { env: this.tmuxEnv }); } catch {}
+        runCommand(['tmux', 'bind-key', '-n', key, ...args], { env: this.tmuxEnv });
+      };
+
+      // Left click menu across all status regions
+      for (const k of ['MouseDown1Status', 'MouseDown1StatusLeft', 'MouseDown1StatusRight', 'MouseDown1StatusDefault']) {
+        bind(k, menuAction);
+      }
+      // Right click menu as well
+      for (const k of ['MouseDown3Status', 'MouseDown3StatusLeft', 'MouseDown3StatusRight', 'MouseDown3StatusDefault']) {
+        bind(k, menuAction);
+      }
+      // Wheel and drag debug messages to verify detection
+      for (const k of ['WheelUpStatus', 'WheelDownStatus', 'MouseDrag1Status', 'MouseDragEnd1Status', 'MouseUp1Status']) {
+        bind(k, debugAction);
       }
     } catch (err) {
       // eslint-disable-next-line no-console
