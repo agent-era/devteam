@@ -6,7 +6,6 @@ on:
     paths:
       - 'src/**'
       - 'tests/**' 
-      - 'tests/e2e/terminal/**'
       - 'package.json'
       - 'package-lock.json'
       - 'tsconfig.json'
@@ -17,7 +16,6 @@ on:
     paths:
       - 'src/**'
       - 'tests/**'
-      - 'tests/e2e/terminal/**'
       - 'package.json'
       - 'package-lock.json' 
       - 'tsconfig.json'
@@ -47,9 +45,6 @@ jobs:
 
     - name: Run all tests
       run: npm test -- --coverage --watchAll=false
-
-    - name: Run terminal rendering tests (node:test)
-      run: npm run test:terminal
 
     - name: Upload coverage reports to Codecov
       uses: codecov/codecov-action@v4

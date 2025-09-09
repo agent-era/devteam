@@ -112,7 +112,6 @@ const CreateFeatureDialog = React.memo(function CreateFeatureDialog({projects, d
         <Text color="cyan">Create Feature — Select Project</Text>
         {showFilter && (
           <>
-            <AnnotatedText color="magenta" wrap="truncate" text={"Type to filter, [1]–[9] quick select, [enter] select, [esc] cancel"} />
             <Box flexDirection="row">
               <Text color="gray">Filter: </Text>
               <Text>{filter || ' '}</Text>
@@ -124,6 +123,9 @@ const CreateFeatureDialog = React.memo(function CreateFeatureDialog({projects, d
             {`${i === selected ? '› ' : '  '}${p.name}`}
           </Text>
         )}
+        <Box marginTop={1}>
+          <AnnotatedText color="magenta" wrap="truncate" text={`${showFilter ? 'Type to filter, ' : ''}[1]–[9] quick select, [enter] select, [esc] cancel`} />
+        </Box>
       </Box>
     );
   }

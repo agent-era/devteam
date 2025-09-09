@@ -70,6 +70,12 @@ export function commandExitCode(args: string[], cwd?: string, env?: NodeJS.Proce
 }
 
 export function runInteractive(cmd: string, args: string[], opts: {cwd?: string} = {}): number {
+  // In terminal E2E, allow simulation without actually spawning the command
+  if (process.env.E2E_SIMULATE_TMUX_ATTACH === '1') {
+    return 0;
+  }
+
+  // Simply run the interactive command inheriting stdio.
   const result = spawnSync(cmd, args, {cwd: opts.cwd, stdio: 'inherit'});
   return result.status ?? 0;
 }

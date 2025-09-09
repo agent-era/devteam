@@ -6,7 +6,7 @@ import type {AITool} from '../models.js';
 type UIMode = 'list' | 'create' | 'confirmArchive' | 'help' | 
              'pickProjectForBranch' | 'pickBranch' | 'diff' | 'runConfig' | 
              'runProgress' | 'runResults' | 'selectAITool' | 'tmuxHint' |
-             'noProjects';
+             'tmuxAttachLoading' | 'noProjects';
 
 interface UIContextType {
   // Current UI state values
@@ -43,6 +43,7 @@ interface UIContextType {
   showAIToolSelection: (worktree: WorktreeInfo) => void;
   showTmuxHintFor: (worktree: WorktreeInfo, tool?: AITool) => void;
   showNoProjectsDialog: () => void;
+  runWithLoading: (task: () => Promise<unknown> | unknown, options?: {returnToList?: boolean}) => void;
   
   // Branch management
   setBranchList: (branches: any[]) => void;
@@ -170,6 +171,19 @@ export function UIProvider({children}: UIProviderProps) {
     setTmuxHintTool(tool || null);
   };
 
+  // Central helper to wrap tmux interactions with a minimal loading screen
+  const runWithLoading = (task: () => Promise<unknown> | unknown, options?: {returnToList?: boolean}) => {
+    const {returnToList = true} = options || {};
+    setMode('tmuxAttachLoading');
+    setTimeout(async () => {
+      try {
+        await task();
+      } finally {
+        if (returnToList) showList();
+      }
+    }, 10);
+  };
+
   const showNoProjectsDialog = () => {
     setMode('noProjects');
   };
@@ -219,6 +233,7 @@ export function UIProvider({children}: UIProviderProps) {
     showRunResults,
     showAIToolSelection,
     showTmuxHintFor,
+    runWithLoading,
     showNoProjectsDialog,
     
     // Branch management

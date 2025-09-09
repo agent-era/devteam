@@ -114,7 +114,7 @@ export default function BranchPickerDialog({branches, onSubmit, onCancel, onRefr
       if (b.ahead > 0) chgRaw += `↑${b.ahead} `;
       if (b.behind > 0) chgRaw += `↓${b.behind}`;
       if (!chgRaw) chgRaw = 'synced';
-      const prBadge = b.pr_number ? `#${b.pr_number}${b.pr_checks === 'passing' ? '✓' : b.pr_checks === 'failing' ? '✗' : b.pr_checks === 'pending' ? '⏳' : ''}` : '';
+      const prBadge = b.pr_number ? `#${b.pr_number}${b.pr_checks === 'passing' ? '✓' : b.pr_checks === 'failing' ? 'x' : b.pr_checks === 'pending' ? '*' : ''}` : '';
       
       return [
         b.local_name || '',
@@ -180,7 +180,6 @@ export default function BranchPickerDialog({branches, onSubmit, onCancel, onRefr
   return (
     <Box flexDirection="column">
       <Text color="cyan">Create from Remote Branch</Text>
-      <AnnotatedText color="magenta" wrap="truncate" text={`Type to filter, [PgUp]/[PgDn], [1]–[9] jump, [r]efresh, [enter] select, [esc] cancel  [${Math.floor(selected / pageSize) + 1}/${Math.max(1, Math.ceil(filtered.length / pageSize))}]`} />
       <Box flexDirection="row">
         <Text color="gray">Filter: </Text>
         <Text>{filter || ' '}</Text>
@@ -204,7 +203,7 @@ export default function BranchPickerDialog({branches, onSubmit, onCancel, onRefr
         if (b.behind > 0) chgRaw += `↓${b.behind}`;
         if (!chgRaw) chgRaw = 'synced';
         
-        const prBadge = b.pr_number ? `#${b.pr_number}${b.pr_checks === 'passing' ? '✓' : b.pr_checks === 'failing' ? '✗' : b.pr_checks === 'pending' ? '⏳' : ''}` : '';
+        const prBadge = b.pr_number ? `#${b.pr_number}${b.pr_checks === 'passing' ? '✓' : b.pr_checks === 'failing' ? 'x' : b.pr_checks === 'pending' ? '*' : ''}` : '';
         
         // Truncate branch name and title if too long
         const branchName = stringDisplayWidth(b.local_name || '') > columnWidths[0] 
@@ -242,6 +241,9 @@ export default function BranchPickerDialog({branches, onSubmit, onCancel, onRefr
           </Box>
         );
       })}
+      <Box marginTop={1}>
+        <AnnotatedText color="magenta" wrap="truncate" text={`Type to filter, [PgUp]/[PgDn], [1]–[9] jump, [r]efresh, [enter] select, [esc] cancel  [${Math.floor(selected / pageSize) + 1}/${Math.max(1, Math.ceil(filtered.length / pageSize))}]`} />
+      </Box>
     </Box>
   );
 }

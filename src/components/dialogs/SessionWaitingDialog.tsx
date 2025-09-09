@@ -30,14 +30,14 @@ export default function SessionWaitingDialog({sessionName, onGoToSession, onCanc
       width={80}
       alignSelf="center"
     >
-      <Text bold color="yellow">⚠ Claude is Waiting for Response</Text>
+      <Text bold color="yellow">⚠ Agent is Waiting for Response</Text>
       <Box marginTop={1} marginBottom={1} />
-      <Text>Claude in session "{sessionName}" is waiting for a response to a question</Text>
+      <Text>Agent in session "{sessionName}" is waiting for a response to a question</Text>
       <Text>and cannot accept new input right now.</Text>
       <Box marginTop={1} marginBottom={1} />
       <Text bold>Options:</Text>
-      <Text>• Go to session to respond to Claude's question</Text>
-      <Text>• Cancel and try again later when Claude is idle</Text>
+      <Text>• Go to session to respond to the agent's question</Text>
+      <Text>• Cancel and try again later when the agent is idle</Text>
       <Box marginTop={1} marginBottom={1} />
       <AnnotatedText color="magenta" wrap="truncate" text={'[g]o to session  •  [c]ancel  •  [esc] cancel'} />
     </Box>

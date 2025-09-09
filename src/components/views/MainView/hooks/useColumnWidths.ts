@@ -45,7 +45,7 @@ export function useColumnWidths(
       
       let pushed = '-';
       if (w.git?.has_remote) {
-        pushed = (w.git.ahead === 0 && !w.git.has_changes) ? '✓' : '↗';
+        pushed = (w.git.ahead === 0 && !w.git.has_changes) ? '✓' : 'x';
       }
       
       const prStr = formatPRStatus(pullRequests[w.path]);
@@ -63,7 +63,8 @@ export function useColumnWidths(
     const allRows = [headerRow, ...dataRows];
     
     const fixedWidths = [0, 1, 2, 3, 4, 5, 6].map(colIndex => {
-      if (colIndex === 1) return 0;
+      if (colIndex === 1) return 0; // dynamic PROJECT/FEATURE
+      if (colIndex === 5) return 6; // enforce PUSHED column width to 6 chars
       const maxContentWidth = Math.max(...allRows.map(row => stringDisplayWidth(row[colIndex] || '')));
       return Math.max(4, maxContentWidth);
     });

@@ -148,13 +148,13 @@ export default function MainView({
           );
         })}
       </Box>
-      <Box marginTop={1}>
-        <AnnotatedText color="magenta" wrap="truncate" text={headerText} />
-      </Box>
       <PaginationFooter
         totalPages={paginationInfo.totalPages}
         paginationText={paginationInfo.paginationText}
       />
+      <Box marginTop={1}>
+        <AnnotatedText color="magenta" wrap="truncate" text={headerText} />
+      </Box>
     </Box>
   );
 }

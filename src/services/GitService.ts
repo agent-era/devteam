@@ -49,14 +49,15 @@ export class GitService {
   }
 
   async getWorktreesForProject(project: ProjectInfo): Promise<Array<{
-    project: string; 
-    feature: string; 
-    path: string; 
-    branch: string; 
-    mtime: number
+    project: string;
+    feature: string;
+    path: string;
+    branch: string;
+    mtime: number;
+    last_commit_ts: number;
   }>> {
     const timer = new Timer();
-    const worktrees: Array<{project: string; feature: string; path: string; branch: string; mtime: number}> = [];
+    const worktrees: Array<{project: string; feature: string; path: string; branch: string; mtime: number; last_commit_ts: number}> = [];
     const branchesDirName = `${project.name}${DIR_BRANCHES_SUFFIX}`;
     const output = await runCommandAsync(['git', '-C', project.path, 'worktree', 'list', '--porcelain']);
     if (!output) {
@@ -71,12 +72,19 @@ export class GitService {
           const wtPath = current.path;
           const feature = path.basename(wtPath);
           const mtime = fs.existsSync(wtPath) ? fs.statSync(wtPath).mtimeMs : 0;
+          // Last commit timestamp for the checked-out worktree
+          let lastCommitTs = 0;
+          try {
+            const ts = await runCommandQuickAsync(['git', '-C', wtPath, 'log', '-1', '--format=%at']);
+            if (ts) lastCommitTs = Number(ts.trim()) || 0;
+          } catch {}
           worktrees.push({
             project: project.name,
             feature,
             path: wtPath,
             branch: current.branch || 'unknown',
             mtime,
+            last_commit_ts: lastCommitTs,
           });
         }
         current = {path: line.slice(9)};
@@ -90,16 +98,27 @@ export class GitService {
       const wtPath = current.path;
       const feature = path.basename(wtPath);
       const mtime = fs.existsSync(wtPath) ? fs.statSync(wtPath).mtimeMs : 0;
+      let lastCommitTs = 0;
+      try {
+        const ts = await runCommandQuickAsync(['git', '-C', wtPath, 'log', '-1', '--format=%at']);
+        if (ts) lastCommitTs = Number(ts.trim()) || 0;
+      } catch {}
       worktrees.push({
         project: project.name,
         feature,
         path: wtPath,
         branch: current.branch || 'unknown',
         mtime,
+        last_commit_ts: lastCommitTs,
       });
     }
-    
-    worktrees.sort((a, b) => b.mtime - a.mtime);
+
+    // Stable sort: last commit desc, then feature asc
+    worktrees.sort((a, b) => {
+      const d = (b.last_commit_ts || 0) - (a.last_commit_ts || 0);
+      if (d !== 0) return d;
+      return a.feature.localeCompare(b.feature);
+    });
     
     const timing = timer.elapsed();
     logDebug(`[Worktree.Collection] ${project.name}: ${worktrees.length} worktrees in ${timing.formatted}`);

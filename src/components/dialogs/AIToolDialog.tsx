@@ -59,12 +59,13 @@ export default function AIToolDialog({availableTools, currentTool, onSelect, onC
   return (
     <Box flexDirection="column">
       <Text color="cyan">Select AI Tool</Text>
-      <AnnotatedText color="magenta" wrap="truncate" text={"[j]/[k] move, [1]–[9] quick select, [enter] launch, [esc] cancel"} />
-      <Text></Text>
       <Select
         options={options}
         onChange={handleSelect}
       />
+      <Box marginTop={1}>
+        <AnnotatedText color="magenta" wrap="truncate" text={"[j]/[k] move, [1]–[9] quick select, [enter] launch, [esc] cancel"} />
+      </Box>
     </Box>
   );
 }
