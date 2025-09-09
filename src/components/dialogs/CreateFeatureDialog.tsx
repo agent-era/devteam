@@ -31,6 +31,7 @@ const CreateFeatureDialog = React.memo(function CreateFeatureDialog({projects, d
     const f = filter.toLowerCase();
     return projects.filter(p => p.name.toLowerCase().includes(f));
   }, [projects, filter]);
+  const showFilter = (projects?.length || 0) > 3;
 
   useInput((input, key) => {
     if (mode === 'creating') return; // Disable input during creation
@@ -63,16 +64,18 @@ const CreateFeatureDialog = React.memo(function CreateFeatureDialog({projects, d
         return;
       }
       
-      // Text filtering - check both keys due to terminal key mapping inconsistencies
-      if (key.backspace || key.delete) {
-        setFilter((f) => f.slice(0, -1));
-        return;
-      }
-      
-      // Regular typing
-      if (input && !key.ctrl && !key.meta) {
-        setFilter((f) => f + input);
-        return;
+      // Text filtering — only when filter UI is shown
+      if (showFilter) {
+        if (key.backspace || key.delete) {
+          setFilter((f) => f.slice(0, -1));
+          return;
+        }
+        
+        // Regular typing
+        if (input && !key.ctrl && !key.meta) {
+          setFilter((f) => f + input);
+          return;
+        }
       }
     }
   });
@@ -107,11 +110,15 @@ const CreateFeatureDialog = React.memo(function CreateFeatureDialog({projects, d
     return (
       <Box flexDirection="column">
         <Text color="cyan">Create Feature — Select Project</Text>
-        <AnnotatedText color="magenta" wrap="truncate" text={"Type to filter, [j]/[k] move, [1]–[9] quick select, [enter] select, [esc] cancel"} />
-        <Box flexDirection="row">
-          <Text color="gray">Filter: </Text>
-          <Text>{filter || ' '}</Text>
-        </Box>
+        {showFilter && (
+          <>
+            <AnnotatedText color="magenta" wrap="truncate" text={"Type to filter, [1]–[9] quick select, [enter] select, [esc] cancel"} />
+            <Box flexDirection="row">
+              <Text color="gray">Filter: </Text>
+              <Text>{filter || ' '}</Text>
+            </Box>
+          </>
+        )}
         {filtered.slice(0, 20).map((p, i) => 
           <Text key={p.name} color={i === selected ? 'green' : undefined}>
             {`${i === selected ? '› ' : '  '}${p.name}`}
