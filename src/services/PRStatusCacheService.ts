@@ -31,7 +31,7 @@ interface CacheData {
 export class PRStatusCacheService {
   private cacheFilePath: string;
   private cache: CacheData;
-  private readonly DEFAULT_CACHE_DIR = process.env.DEVTEAM_CACHE_DIR || path.join(os.homedir(), '.cache', 'coding-agent-team');
+  private readonly DEFAULT_CACHE_DIR = path.join(os.homedir(), '.cache', 'coding-agent-team');
   private readonly FALLBACK_CACHE_DIR = path.join(process.cwd(), '.devteam', 'cache');
 
   constructor() {

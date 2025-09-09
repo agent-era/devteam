@@ -22,7 +22,6 @@ import {WorktreeProvider, useWorktreeContext} from './contexts/WorktreeContext.j
 import {GitHubProvider, useGitHubContext} from './contexts/GitHubContext.js';
 import {UIProvider, useUIContext} from './contexts/UIContext.js';
 import {InputFocusProvider} from './contexts/InputFocusContext.js';
-import {commandExists} from './shared/utils/commandExecutor.js';
 
 
 function AppContent() {

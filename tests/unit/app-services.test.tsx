@@ -415,11 +415,10 @@ describe('App Services E2E', () => {
     });
 
     test('should handle cache persistence of loadingStatus field', () => {
-      // Force cache directory to a project-local writable path for test isolation
+      // Use a project-local cache file for test isolation
       const fs = require('node:fs');
       const path = require('node:path');
       const testCacheDir = path.join(process.cwd(), '.devteam', 'cache-tests');
-      process.env.DEVTEAM_CACHE_DIR = testCacheDir;
       if (!fs.existsSync(testCacheDir)) {
         fs.mkdirSync(testCacheDir, {recursive: true});
       }
@@ -431,6 +430,8 @@ describe('App Services E2E', () => {
       
       // Create two cache service instances to simulate app restart
       const cacheService1 = new (require('../../src/services/PRStatusCacheService.js').PRStatusCacheService)();
+      // Point first instance to the test cache file before writing
+      (cacheService1 as any).cacheFilePath = testCacheFile;
       
       // Cache a PR with specific loadingStatus
       const originalPR = new PRStatus({
@@ -445,6 +446,10 @@ describe('App Services E2E', () => {
       
       // Create new cache service instance (simulates app restart)
       const cacheService2 = new (require('../../src/services/PRStatusCacheService.js').PRStatusCacheService)();
+      // Ensure second instance reads from the same test cache file
+      (cacheService2 as any).cacheFilePath = testCacheFile;
+      // Reload cache from disk after pointing to test file
+      (cacheService2 as any).loadFromDisk();
       
       // Retrieve from cache
       const restoredPR = cacheService2.get(worktreePath);
