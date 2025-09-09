@@ -98,7 +98,7 @@ function AppContent() {
     }
   }, [isRawModeSupported, exit]);
 
-  // On startup: if no projects discovered, show dialog and wait for exit
+  // On startup: discover projects
   useEffect(() => {
     try {
       const projects = discoverProjects();
@@ -434,6 +434,7 @@ function AppContent() {
       </Box>
     );
   }
+
 
   // Default: Main worktree list screen
   if (!content) {

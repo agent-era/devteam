@@ -192,9 +192,10 @@ dev-project3-feature:12347`);
       expect(runCommandQuickAsync).toHaveBeenCalledWith([
         'tmux', 'list-panes', '-a', '-F', '#{session_name}:#{pane_pid}'
       ]);
-      expect(runCommandQuickAsync).toHaveBeenCalledWith([
-        'ps', '-p', '12345,12346,12347', '-o', 'pid=', '-o', 'args='
-      ]);
+      const expectedPsArgs = process.platform === 'darwin'
+        ? ['ps', '-p', '12345,12346,12347', '-o', 'pid=,command=']
+        : ['ps', '-p', '12345,12346,12347', '-o', 'pid=', '-o', 'args='];
+      expect(runCommandQuickAsync).toHaveBeenCalledWith(expectedPsArgs);
     });
   });
 });

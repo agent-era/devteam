@@ -188,6 +188,7 @@ export function UIProvider({children}: UIProviderProps) {
     setMode('noProjects');
   };
 
+
   const requestExit = () => {
     setShouldExit(true);
   };
