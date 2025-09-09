@@ -16,10 +16,10 @@ test('MainView shows EmptyState when projects exist but no worktrees', async () 
   );
 
   await new Promise(r => setTimeout(r, 100));
-  const frame = lastFrame?.() || '';
+  const raw = lastFrame?.() || '';
+  const frame = raw.replace(/\u001b\[[0-9;]*m/g, ''); // strip ANSI
   assert.ok(frame.includes('Welcome to DevTeam'), 'Expected EmptyState welcome text');
   assert.ok(frame.includes('Press [n] to create a new branch'), 'Expected create-branch hint');
   assert.ok(frame.includes('Press [q] to quit'), 'Expected quit hint');
   try { unmount?.(); } catch {}
 });
-

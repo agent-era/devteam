@@ -8,6 +8,7 @@ import {FakeGitService} from '../fakes/FakeGitService.js';
 import {FakeTmuxService} from '../fakes/FakeTmuxService.js';
 import {FakeGitHubService} from '../fakes/FakeGitHubService.js';
 import {FakeMemoryMonitorService} from '../fakes/FakeMemoryMonitorService.js';
+import {FakeWorktreeService} from '../fakes/FakeWorktreeService.js';
 import {memoryStore} from '../fakes/stores.js';
 import {calculatePageSize, calculatePaginationInfo} from '../../src/utils/pagination.js';
 
@@ -58,7 +59,7 @@ export function renderTestApp(props?: TestAppProps, options?: any) {
     tmuxService,
     gitHubService,
     memoryMonitorService,
-    worktreeService: new (require('../fakes/FakeWorktreeService.js').FakeWorktreeService)(gitService, tmuxService)
+    worktreeService: new FakeWorktreeService(gitService, tmuxService)
   };
 
   const result = render(h(TestApp, props as any));

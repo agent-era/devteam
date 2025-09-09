@@ -19,7 +19,7 @@ import {
   RUN_CONFIG_CLAUDE_PROMPT,
   TMUX_DISPLAY_TIME,
 } from '../constants.js';
-import {getProjectsDirectory} from '../config.js';
+import {getProjectsDirectory, isAppIntervalsEnabled} from '../config.js';
 import {ensureDirectory, copyWithIgnore} from '../shared/utils/fileSystem.js';
 import {generateTimestamp} from '../shared/utils/formatting.js';
 import {runClaudeSync, detectAvailableAITools, runCommandQuick} from '../shared/utils/commandExecutor.js';
@@ -783,6 +783,8 @@ export function WorktreeProvider({
   // Auto-refresh intervals
   // Regular cache-based refresh cycle
   useEffect(() => {
+    const intervalsEnabled = isAppIntervalsEnabled();
+    if (!intervalsEnabled) return;
     const shouldRefresh = Date.now() - lastRefreshed > CACHE_DURATION;
     if (shouldRefresh) {
       refresh('none').catch(error => {
@@ -793,6 +795,8 @@ export function WorktreeProvider({
 
   // Initial memory check on mount
   useEffect(() => {
+    const intervalsEnabled = isAppIntervalsEnabled();
+    if (!intervalsEnabled) return;
     refreshMemoryStatus().catch(error => {
       console.error('Initial memory status check failed:', error);
     });
@@ -800,6 +804,8 @@ export function WorktreeProvider({
 
   // Initial version check on mount + daily
   useEffect(() => {
+    const intervalsEnabled = isAppIntervalsEnabled();
+    if (!intervalsEnabled) return;
     refreshVersionInfo().catch(error => {
       console.error('Initial version check failed:', error);
     });
@@ -811,6 +817,8 @@ export function WorktreeProvider({
 
   // Slow discovery: rebuild worktree list every 60s (or when actions change structure)
   useEffect(() => {
+    const intervalsEnabled = isAppIntervalsEnabled();
+    if (!intervalsEnabled) return;
     const interval = setInterval(() => {
       if (!isAnyDialogFocused) {
         // Background discovery of worktrees (structure)
@@ -821,6 +829,8 @@ export function WorktreeProvider({
   }, [refresh, isAnyDialogFocused, tmuxService]);
 
   useEffect(() => {
+    const intervalsEnabled = isAppIntervalsEnabled();
+    if (!intervalsEnabled) return;
     const interval = setInterval(() => {
       // Skip memory status refresh if any dialog is focused to avoid interrupting typing
       if (!isAnyDialogFocused) {

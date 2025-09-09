@@ -32,6 +32,7 @@ export class PRStatusCacheService {
   private cacheFilePath: string;
   private cache: CacheData;
   private readonly CACHE_DIR = path.join(os.homedir(), '.cache', 'coding-agent-team');
+  private static MEMORY_CACHE: CacheData = {};
 
   constructor() {
     this.cacheFilePath = path.join(this.CACHE_DIR, 'pr-cache.json');
@@ -332,10 +333,13 @@ export class PRStatusCacheService {
       if (fs.existsSync(this.cacheFilePath)) {
         const content = fs.readFileSync(this.cacheFilePath, 'utf8');
         this.cache = JSON.parse(content);
+      } else if (Object.keys(PRStatusCacheService.MEMORY_CACHE).length > 0) {
+        // Fallback to in-memory cache when file not present
+        this.cache = {...PRStatusCacheService.MEMORY_CACHE};
       }
     } catch (error) {
       // Silent failure - start with empty cache
-      this.cache = {};
+      this.cache = {...PRStatusCacheService.MEMORY_CACHE};
     }
   }
 
@@ -346,9 +350,12 @@ export class PRStatusCacheService {
         fs.mkdirSync(this.CACHE_DIR, {recursive: true});
       }
 
+      // Keep an in-memory copy to support test environments without filesystem persistence
+      PRStatusCacheService.MEMORY_CACHE = {...this.cache};
       fs.writeFileSync(this.cacheFilePath, JSON.stringify(this.cache, null, 2), 'utf8');
     } catch (error) {
       // Silent failure - cache continues to work in memory
+      PRStatusCacheService.MEMORY_CACHE = {...this.cache};
     }
   }
 }

@@ -8,6 +8,7 @@ import {useUIContext} from '../contexts/UIContext.js';
 import {useKeyboardShortcuts} from '../hooks/useKeyboardShortcuts.js';
 // Page size is measured directly in MainView to avoid heuristics
 import {VISIBLE_STATUS_REFRESH_DURATION} from '../constants.js';
+import {isAppIntervalsEnabled} from '../config.js';
 
 
 interface WorktreeListScreenProps {
@@ -69,6 +70,8 @@ export default function WorktreeListScreen({
 
   // Single loop to refresh git+AI status for visible rows only
   useEffect(() => {
+    const intervalsEnabled = isAppIntervalsEnabled();
+    if (!intervalsEnabled) return;
     const interval = setInterval(() => {
       if (!isAnyDialogFocused) {
         refreshVisibleStatus(currentPage, pageSize).catch(() => {});
