@@ -144,5 +144,4 @@ vite.config.ts.timestamp-*
 .claude
 
 # Devteam local cache
-.devteam/cache/
-.devteam/cache-tests/
+.devteam
