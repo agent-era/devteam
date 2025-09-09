@@ -68,17 +68,53 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
     {text: data.pr, width: columnWidths.pr, justify: 'flex-start' as const},
   ];
   
-  // Apply highlighting
-  const getCellColor = (cellIndex: number) => {
-    if (isDimmed) return 'gray';
-    if (highlightInfo && cellIndex === highlightInfo.columnIndex) return highlightInfo.color;
+  // Compute background/foreground colors for cells
+  const isPriorityCell = (cellIndex: number): boolean =>
+    !!(highlightInfo && cellIndex === highlightInfo.columnIndex);
+
+  const getCellBackground = (cellIndex: number): string | undefined => {
+    // Keep priority-highlighted cells with their colored background
+    if (isPriorityCell(cellIndex)) return highlightInfo!.color;
+    // On merged rows, selected non-priority cells get a gray highlight bar
+    if (selected && isDimmed && !isPriorityCell(cellIndex)) return 'gray';
+    // Selection (non-merged) uses inverse on non-priority cells (no explicit background)
     return undefined;
   };
-  
-  // Common text props
-  const textProps = {
-    backgroundColor: selected ? 'blue' : undefined,
-    bold: selected,
+
+  const getCellForeground = (cellIndex: number): string | undefined => {
+    // Selected merged rows: explicit gray background on non-priority cells -> use black text for contrast
+    if (selected && isDimmed && !isPriorityCell(cellIndex)) return 'black';
+    // For selected non-priority cells (non-merged), don't force a color so inverse remains clean
+    if (selected && !isPriorityCell(cellIndex)) return undefined;
+    // Dim merged rows when not selected or when priority cell is shown
+    if (isDimmed) return 'gray';
+    const bg = getCellBackground(cellIndex);
+    if (!bg) return undefined;
+    // Choose readable foregrounds for colored backgrounds
+    if (bg === 'yellow' || bg === 'green') return 'black';
+    return 'white'; // for blue/red and others
+  };
+
+  // Fit and align cell content to fill full cell width so background covers entire cell
+  const formatCellText = (text: string, width: number, justify: 'flex-start' | 'center' | 'flex-end'): string => {
+    const raw = (text ?? '').trim();
+    // Truncate if needed (simple substring, width-calculated earlier for project/feature)
+    let visible = raw;
+    if (stringDisplayWidth(visible) > width) {
+      // keep simple truncation at end
+      visible = visible.slice(0, Math.max(0, width));
+    }
+    const pad = Math.max(0, width - stringDisplayWidth(visible));
+    if (justify === 'flex-end') {
+      return ' '.repeat(pad) + visible;
+    }
+    if (justify === 'center') {
+      const left = Math.floor(pad / 2);
+      const right = pad - left;
+      return ' '.repeat(left) + visible + ' '.repeat(right);
+    }
+    // flex-start
+    return visible + ' '.repeat(pad);
   };
   
   return (
@@ -90,12 +126,13 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
           justifyContent={cell.justify}
           marginRight={cellIndex < cells.length - 1 ? 1 : 0}
         >
-          <Text 
-            {...textProps}
-            color={getCellColor(cellIndex)}
-            wrap="truncate"
+          <Text
+            backgroundColor={getCellBackground(cellIndex)}
+            color={getCellForeground(cellIndex)}
+            bold={selected && !isPriorityCell(cellIndex)}
+            inverse={selected && !isPriorityCell(cellIndex) && !isDimmed}
           >
-            {cell.text.trim()}
+            {formatCellText(cell.text, cell.width, cell.justify)}
           </Text>
         </Box>
       ))}

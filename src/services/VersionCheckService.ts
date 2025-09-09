@@ -45,23 +45,49 @@ export class VersionCheckService {
     // Prefer env-provided version (present in many npm-run contexts)
     const envVersion = process.env.npm_package_version || process.env.DEVTEAM_VERSION;
     if (envVersion) return envVersion;
-    // Try reading from this package's package.json (works for global/local install)
+    // Try reading from the installed package's package.json (global/local install)
     try {
       // Avoid static import.meta syntax so Jest CJS parsing doesn't choke
       const metaUrl = (Function('return import.meta.url') as () => string)();
-      const pkgPath = fileURLToPath(new URL('../../package.json', metaUrl));
-      const content = await fs.promises.readFile(pkgPath, 'utf-8');
-      const pkg = JSON.parse(content);
-      if (pkg?.version) return String(pkg.version);
-    } catch {}
-    // Fallback: read package.json from current working directory
+      const thisFilePath = fileURLToPath(metaUrl);
+      // Walk a fixed offset to find the nearest package.json
+      let dir = path.dirname(thisFilePath);
+      // Fast path: some install layouts place package.json three levels up
+      try {
+        const candidate3 = path.join(dir, '..', '..', '..', 'package.json');
+        if (fs.existsSync(candidate3)) {
+          const content = await fs.promises.readFile(candidate3, 'utf-8');
+          const pkg = JSON.parse(content);
+          if (pkg?.name && typeof pkg.name === 'string') {
+            this.packageName = pkg.name;
+          }
+          if (pkg?.version) return String(pkg.version);
+        }
+      } catch {}
+      // No additional walk-up beyond the fixed 3-level check.
+    } catch {
+      // ignore and fall back
+    }
+    // Fallback: read package.json from current working directory (if present)
     try {
       const pkgPath = path.resolve(process.cwd(), 'package.json');
+      if (!fs.existsSync(pkgPath)) {
+        // No package.json here — this is a normal case when executed outside a project
+        return '';
+      }
       const content = await fs.promises.readFile(pkgPath, 'utf-8');
       const pkg = JSON.parse(content);
+      if (pkg?.name && typeof pkg.name === 'string') {
+        this.packageName = pkg.name;
+      }
       return String(pkg.version || '');
-    } catch (err) {
-      logError('Failed to read current version from package.json', err);
+    } catch (err: any) {
+      // Only log unexpected errors; missing file is handled above
+      if (err && err.code !== 'ENOENT') {
+        logError('Failed to read current version from package.json', err);
+      } else {
+        logDebug('No package.json found in CWD; skipping version read');
+      }
       return '';
     }
   }

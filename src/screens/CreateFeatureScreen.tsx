@@ -1,7 +1,6 @@
 import React from 'react';
 import {Box} from 'ink';
 import CreateFeatureDialog from '../components/dialogs/CreateFeatureDialog.js';
-import FullScreen from '../components/common/FullScreen.js';
 import {useWorktreeContext} from '../contexts/WorktreeContext.js';
 import {useUIContext} from '../contexts/UIContext.js';
 
@@ -52,15 +51,13 @@ export default function CreateFeatureScreen({
   };
 
   return (
-    <FullScreen>
-      <Box flexGrow={1} alignItems="center" justifyContent="center">
-        <CreateFeatureDialog
-          projects={projects as any}
-          defaultProject={defaultProject}
-          onCancel={onCancel}
-          onSubmit={handleSubmit}
-        />
-      </Box>
-    </FullScreen>
+    <Box flexGrow={1} alignItems="center" justifyContent="center">
+      <CreateFeatureDialog
+        projects={projects as any}
+        defaultProject={defaultProject}
+        onCancel={onCancel}
+        onSubmit={handleSubmit}
+      />
+    </Box>
   );
 }

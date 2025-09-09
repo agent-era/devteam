@@ -68,11 +68,12 @@ export class FakeGitService extends GitService {
   }
 
   async getWorktreesForProject(project: ProjectInfo): Promise<Array<{
-    project: string; 
-    feature: string; 
-    path: string; 
-    branch: string; 
-    mtime: number
+    project: string;
+    feature: string;
+    path: string;
+    branch: string;
+    mtime: number;
+    last_commit_ts: number;
   }>> {
     const merged = new Map<string, WorktreeInfo>([...this.worktrees, ...memoryStore.worktrees]);
     const worktrees = Array.from(merged.values())
@@ -83,9 +84,14 @@ export class FakeGitService extends GitService {
         path: w.path,
         branch: w.branch,
         mtime: w.mtime || Date.now(),
+        last_commit_ts: (w.last_commit_ts as any) || 0,
       }))
-      .sort((a, b) => b.mtime - a.mtime);
-    
+      .sort((a, b) => {
+        const d = (b.last_commit_ts || 0) - (a.last_commit_ts || 0);
+        if (d !== 0) return d;
+        return a.feature.localeCompare(b.feature);
+      });
+
     return worktrees;
   }
 

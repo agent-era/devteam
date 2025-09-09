@@ -212,13 +212,13 @@ function generateMainListOutput(): string {
     const displayName = `${worktree.project}/${worktree.feature}`.padEnd(20);
     
     // AI status
-    let aiSymbol = '○'; // not running
+    let aiSymbol = '-'; // not running
     if (session) {
       switch (session.claude_status) {
-        case 'working': aiSymbol = '●'; break;
-        case 'waiting': aiSymbol = '◐'; break;
-        case 'idle': aiSymbol = '◯'; break;
-        default: aiSymbol = '○';
+        case 'working': aiSymbol = '*'; break;
+        case 'waiting': aiSymbol = '?'; break;
+        case 'idle': aiSymbol = '+'; break;
+        default: aiSymbol = '-';
       }
     }
     
@@ -236,15 +236,15 @@ function generateMainListOutput(): string {
     if (!changes) changes = '-';
     
     // Pushed status
-    const pushed = gitStatus?.is_pushed ? '✓' : '○';
+    const pushed = gitStatus?.is_pushed ? '✓' : '-';
     
     // PR status
     let prStr = '-';
     if (prStatus?.number) {
       prStr = `${prStatus.number}`; // Just the number, no # prefix for cleaner display
-      if (prStatus.checks === 'failing') prStr += '✗';
+      if (prStatus.checks === 'failing') prStr += 'x';
       else if (prStatus.checks === 'passing') prStr += '✓';
-      else if (prStatus.checks === 'pending') prStr += '⏳';
+      else if (prStatus.checks === 'pending') prStr += '*';
       if (prStatus.is_merged || prStatus.state === 'MERGED') prStr += '⟫';
     }
     
@@ -285,10 +285,10 @@ r - Refresh
 q - Quit
 
 Column Explanations:
-AI - Claude AI status (●=working, ◐=waiting, ○=idle)
+AI - Claude AI status: idle, working, waiting
 DIFF - Added/removed lines (+10/-5)
 CHANGES - Commits ahead/behind (↑2 ↓1)  
-PUSHED - Whether changes are pushed (✓/○)
+PUSHED - Whether changes are pushed
 PR - Pull request number and status
 
 Press ESC to close this help.`;
@@ -554,9 +554,9 @@ function generateBranchPickerOutput(viewData: any): string {
     const prNumber = branch.pr_number || branch.prNumber;
     const prChecks = branch.pr_checks || branch.prChecks;
     if (prNumber) {
-      const checksIcon = prChecks === 'passing' ? '✓' : 
-                        prChecks === 'failing' ? '✗' :
-                        prChecks === 'pending' ? '⏳' : '';
+      const checksIcon = prChecks === 'passing' ? '+' : 
+                        prChecks === 'failing' ? 'x' :
+                        prChecks === 'pending' ? '~' : '';
       line += ` #${prNumber}${checksIcon}`;
     }
     

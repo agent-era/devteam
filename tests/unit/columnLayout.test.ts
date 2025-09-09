@@ -7,8 +7,8 @@ describe('Column Layout and Spacing', () => {
       // Mock data representing typical worktree display
       const mockData = [
         ['#', 'PROJECT/FEATURE', 'AI', 'DIFF', 'CHANGES', 'PUSHED', 'PR'],
-        ['1', 'my-project/long-feature-name', '●', '+1.2k/-500', '↑3 ↓1', '✓', '#123✓'],
-        ['12', 'short/feat', '○', '-', '-', '↗', '-']
+        ['1', 'my-project/long-feature-name', '*', '+1.2k/-500', '↑3 ↓1', '+', '#123+'],
+        ['12', 'short/feat', '-', '-', '-', '-', '-']
       ];
 
       const testTerminalWidths = [60, 80, 100, 120];
@@ -41,8 +41,8 @@ describe('Column Layout and Spacing', () => {
 
     test('should stretch content-based columns to actual content width', () => {
       const mockData = [
-        ['1', 'project/feature', '●', '+1000/-200', '↑10 ↓5', '✓', '#1234✓'],
-        ['123', 'another/name', '○', '+5k/-1k', '↑2', '↗', '-']
+        ['1', 'project/feature', '*', '+1000/-200', '↑10 ↓5', '+', '#1234+'],
+        ['123', 'another/name', '-', '+5k/-1k', '↑2', '-', '-']
       ];
 
       // Test each non-PROJECT/FEATURE column
@@ -62,7 +62,7 @@ describe('Column Layout and Spacing', () => {
       
       const mockData = [
         ['#', 'PROJECT/FEATURE', 'AI', 'DIFF', 'CHANGES', 'PUSHED', 'PR'],
-        ['1', 'very-long-project-name/feature', '●', '+1k/-2k', '↑1 ↓2', '✓', '#1✓']
+        ['1', 'very-long-project-name/feature', '*', '+1k/-2k', '↑1 ↓2', '✓', '#1✓']
       ];
 
       const fixedWidths = [0, 1, 2, 3, 4, 5, 6].map(colIndex => {
@@ -158,9 +158,9 @@ describe('Column Layout and Spacing', () => {
     test('should maintain consistent spacing regardless of content length', () => {
       const scenarios = [
         // Short content
-        ['1', 'a/b', '○', '-', '-', '-', '-'],
+        ['1', 'a/b', '-', '-', '-', '-', '-'],
         // Long content  
-        ['999', 'very-long-project/very-long-feature', '●', '+999k/-999k', '↑99 ↓99', '✓', '#999✓']
+        ['999', 'very-long-project/very-long-feature', '*', '+999k/-999k', '↑99 ↓99', '+', '#999+']
       ];
 
       // Each scenario should use same margin structure

@@ -12,6 +12,7 @@ import ConfigResultsDialog from './components/dialogs/ConfigResultsDialog.js';
 import AIToolDialog from './components/dialogs/AIToolDialog.js';
 import TmuxDetachHintDialog from './components/dialogs/TmuxDetachHintDialog.js';
 import NoProjectsDialog from './components/dialogs/NoProjectsDialog.js';
+import LoadingScreen from './components/common/LoadingScreen.js';
 
 import WorktreeListScreen from './screens/WorktreeListScreen.js';
 import CreateFeatureScreen from './screens/CreateFeatureScreen.js';
@@ -85,6 +86,7 @@ function AppContent() {
     showRunResults,
     showAIToolSelection,
     showNoProjectsDialog,
+    runWithLoading,
     requestExit
   } = useUIContext();
 
@@ -120,8 +122,7 @@ function AppContent() {
   }, [shouldExit, exit]);
 
   const handleAttachToSession = (sessionName: string) => {
-    // Attach to the tmux session interactively
-    runInteractive('tmux', ['attach-session', '-t', sessionName]);
+    runWithLoading(() => runInteractive('tmux', ['attach-session', '-t', sessionName]));
   };
   // Operations simplified to use contexts
   const handleCreateFeature = () => {
@@ -162,24 +163,29 @@ function AppContent() {
     const selectedWorktree = getSelectedWorktree();
     if (!selectedWorktree) return;
     
-    const result = await attachRunSession(selectedWorktree);
-    
-    if (result === 'no_config') {
-      showRunConfig(selectedWorktree.project, selectedWorktree.feature, selectedWorktree.path);
-    }
+    // Use loading screen; handle no-config by navigating to config dialog
+    runWithLoading(async () => {
+      const result = await attachRunSession(selectedWorktree);
+      if (result === 'no_config') {
+        showRunConfig(selectedWorktree.project, selectedWorktree.feature, selectedWorktree.path);
+      } else {
+        showList();
+      }
+    }, {returnToList: false});
   };
+
+  // Router content node (wrapped by a single FullScreen below)
+  let content: React.ReactNode = null;
 
   // Initial startup loading screen while first refresh is in progress
   if (mode === 'list' && loading && lastRefreshed === 0) {
-    return (
-      <FullScreen>
-        <Box flexGrow={1} alignItems="center" justifyContent="center">
-          <ProgressDialog
-            title="Starting DevTeam"
-            message="Scanning projects and sessions..."
-          />
-        </Box>
-      </FullScreen>
+    content = (
+      <Box flexGrow={1} alignItems="center" justifyContent="center">
+        <ProgressDialog
+          title="Starting DevTeam"
+          message="Scanning projects and sessions..."
+        />
+      </Box>
     );
   }
 
@@ -235,9 +241,9 @@ function AppContent() {
   };
 
   // Screen routing - much simpler now!
-  if (mode === 'create') {
+  if (!content && mode === 'create') {
     const defaultProject = getSelectedWorktree()?.project || createProjects?.[0]?.name;
-    return (
+    content = (
       <CreateFeatureScreen
         projects={createProjects || []}
         defaultProject={defaultProject}
@@ -247,8 +253,8 @@ function AppContent() {
     );
   }
 
-  if (mode === 'confirmArchive' && pendingArchive) {
-    return (
+  if (!content && mode === 'confirmArchive' && pendingArchive) {
+    content = (
       <ArchiveConfirmScreen
         featureInfo={pendingArchive}
         onCancel={showList}
@@ -259,196 +265,179 @@ function AppContent() {
 
   // Archived view removed
 
-  if (mode === 'help') {
-    return (
-      <FullScreen>
-        <Box flexGrow={1} paddingX={1}>
-          <HelpOverlay onClose={showList} />
-        </Box>
-      </FullScreen>
+  if (!content && mode === 'help') {
+    content = (
+      <Box flexGrow={1} paddingX={1}>
+        <HelpOverlay onClose={showList} />
+      </Box>
     );
   }
 
-  if (mode === 'diff' && diffWorktree) {
-    return (
-      <FullScreen>
-        <Box flexGrow={1} paddingX={1}>
-          <DiffView
-            worktreePath={diffWorktree}
-            title={diffType === 'uncommitted' ? 'Diff Viewer (Uncommitted Changes)' : 'Diff Viewer'}
-            diffType={diffType}
-            onClose={showList}
-            onAttachToSession={handleAttachToSession}
-          />
-        </Box>
-      </FullScreen>
+  if (!content && mode === 'diff' && diffWorktree) {
+    content = (
+      <Box flexGrow={1} paddingX={1}>
+        <DiffView
+          worktreePath={diffWorktree}
+          title={diffType === 'uncommitted' ? 'Diff Viewer (Uncommitted Changes)' : 'Diff Viewer'}
+          diffType={diffType}
+          onClose={showList}
+          onAttachToSession={handleAttachToSession}
+        />
+      </Box>
     );
   }
 
-  if (mode === 'pickProjectForBranch') {
+  if (!content && mode === 'pickProjectForBranch') {
     const defaultProject = getSelectedWorktree()?.project || createProjects?.[0]?.name;
-    return (
-      <FullScreen>
-        <Box flexGrow={1} alignItems="center" justifyContent="center">
-          <ProjectPickerDialog
-            projects={createProjects as any}
-            defaultProject={defaultProject}
-            onCancel={showList}
-            onSubmit={async (project: string) => {
-              // Load remote branches for the selected project
-              const branches = await getRemoteBranches(project);
-              showBranchListForProject(project, branches);
-            }}
-          />
-        </Box>
-      </FullScreen>
+    content = (
+      <Box flexGrow={1} alignItems="center" justifyContent="center">
+        <ProjectPickerDialog
+          projects={createProjects as any}
+          defaultProject={defaultProject}
+          onCancel={showList}
+          onSubmit={async (project: string) => {
+            // Load remote branches for the selected project
+            const branches = await getRemoteBranches(project);
+            showBranchListForProject(project, branches);
+          }}
+        />
+      </Box>
     );
   }
 
-  if (mode === 'pickBranch') {
-    return (
-      <FullScreen>
-        <Box flexGrow={1} alignItems="center" justifyContent="center">
-          <BranchPickerDialog
-            branches={branchList as any}
-            onCancel={showList}
-            onSubmit={handleCreateFromBranch}
-            onRefresh={() => {
-              // TODO: Refresh branch list
-            }}
-          />
-        </Box>
-      </FullScreen>
+  if (!content && mode === 'pickBranch') {
+    content = (
+      <Box flexGrow={1} alignItems="center" justifyContent="center">
+        <BranchPickerDialog
+          branches={branchList as any}
+          onCancel={showList}
+          onSubmit={handleCreateFromBranch}
+          onRefresh={() => {
+            // TODO: Refresh branch list
+          }}
+        />
+      </Box>
     );
   }
 
-  if (mode === 'runConfig' && runProject) {
-    return (
-      <FullScreen>
-        <Box flexGrow={1} alignItems="center" justifyContent="center">
-          <RunConfigDialog
-            project={runProject}
-            configPath={getRunConfigPath(runProject)}
-            claudePrompt="Analyze this project and generate run config"
-            onCancel={showList}
-            onCreateConfig={() => {
-              showRunProgress();
-              // Generate config in background
-              setTimeout(async () => {
-                const result = await createOrFillRunConfig(runProject!);
-                showRunResults(result);
-              }, 100);
-            }}
-          />
-        </Box>
-      </FullScreen>
+  if (!content && mode === 'tmuxAttachLoading') {
+    content = (
+      <LoadingScreen />
     );
   }
 
-  if (mode === 'runProgress' && runProject) {
-    return (
-      <FullScreen>
-        <Box flexGrow={1} alignItems="center" justifyContent="center">
-          <ProgressDialog
-            title="Generating Run Configuration"
-            message="Claude is analyzing your project and generating a run configuration..."
-            project={runProject}
-          />
-        </Box>
-      </FullScreen>
+  if (!content && mode === 'runConfig' && runProject) {
+    content = (
+      <Box flexGrow={1} alignItems="center" justifyContent="center">
+        <RunConfigDialog
+          project={runProject}
+          configPath={getRunConfigPath(runProject)}
+          claudePrompt="Analyze this project and generate run config"
+          onCancel={showList}
+          onCreateConfig={() => {
+            showRunProgress();
+            // Generate config in background
+            setTimeout(async () => {
+              const result = await createOrFillRunConfig(runProject!);
+              showRunResults(result);
+            }, 100);
+          }}
+        />
+      </Box>
     );
   }
 
-  if (mode === 'runResults' && runConfigResult && runProject && runFeature && runPath) {
-    return (
-      <FullScreen>
-        <Box flexGrow={1} alignItems="center" justifyContent="center">
-          <ConfigResultsDialog
-            success={runConfigResult.success}
-            content={runConfigResult.content}
-            configPath={runConfigResult.path}
-            error={runConfigResult.error}
-            onClose={() => {
-              showList();
-              // If successful, try to execute the run session
-              if (runConfigResult.success) {
-                try {
-                  const worktreeInfo = {project: runProject!, feature: runFeature!, path: runPath!};
-                  attachRunSession(worktreeInfo as any).catch(() => {});
-                } catch {}
-              }
-            }}
-          />
-        </Box>
-      </FullScreen>
+  if (!content && mode === 'runProgress' && runProject) {
+    content = (
+      <Box flexGrow={1} alignItems="center" justifyContent="center">
+        <ProgressDialog
+          title="Generating Run Configuration"
+          message="Claude is analyzing your project and generating a run configuration..."
+          project={runProject}
+        />
+      </Box>
     );
   }
 
-  if (mode === 'selectAITool' && pendingWorktree) {
-    return (
-      <FullScreen>
-        <Box flexGrow={1} alignItems="center" justifyContent="center">
-          <AIToolDialog
-            availableTools={getAvailableAITools()}
-            currentTool={pendingWorktree.session?.ai_tool}
-            onSelect={async (tool) => {
-              const wt = pendingWorktree;
-              showList();
-              // Attach session with selected tool, but show tmux hint once
+  if (!content && mode === 'runResults' && runConfigResult && runProject && runFeature && runPath) {
+    content = (
+      <Box flexGrow={1} alignItems="center" justifyContent="center">
+        <ConfigResultsDialog
+          success={runConfigResult.success}
+          content={runConfigResult.content}
+          configPath={runConfigResult.path}
+          error={runConfigResult.error}
+          onClose={() => {
+            // If successful, execute the run session with loading screen
+            if (runConfigResult.success) {
               try {
-                if (!tmuxHintShown) {
-                  showTmuxHintFor(wt, tool);
-                } else {
-                  await attachSession(wt, tool);
-                }
-              } catch (error) {
-                console.error('Failed to attach session with selected tool:', error);
-              }
-            }}
-            onCancel={showList}
-          />
-        </Box>
-      </FullScreen>
-    );
-  }
-
-  if (mode === 'tmuxHint') {
-    return (
-      <FullScreen>
-        <Box flexGrow={1} alignItems="center" justifyContent="center">
-          <TmuxDetachHintDialog
-            onContinue={async () => {
-              const wt = tmuxHintWorktree;
-              const tool = tmuxHintTool || undefined;
-              markTmuxHintShown();
+                const worktreeInfo = {project: runProject!, feature: runFeature!, path: runPath!};
+                runWithLoading(() => attachRunSession(worktreeInfo as any));
+              } catch { showList(); }
+            } else {
               showList();
-              if (wt) {
-                try {
-                  await attachSession(wt, tool);
-                } catch (error) {
-                  console.error('Failed to attach after tmux hint:', error);
-                }
-              }
-            }}
-          />
-        </Box>
-      </FullScreen>
+            }
+          }}
+        />
+      </Box>
     );
   }
 
-  if (mode === 'noProjects') {
-    return (
-      <FullScreen>
-        <Box flexGrow={1} alignItems="center" justifyContent="center">
-          <NoProjectsDialog onExit={requestExit} />
-        </Box>
-      </FullScreen>
+  if (!content && mode === 'selectAITool' && pendingWorktree) {
+    content = (
+      <Box flexGrow={1} alignItems="center" justifyContent="center">
+        <AIToolDialog
+          availableTools={getAvailableAITools()}
+          currentTool={pendingWorktree.session?.ai_tool}
+          onSelect={async (tool) => {
+            const wt = pendingWorktree;
+            // Attach session with selected tool, but show tmux hint once
+            try {
+              if (!tmuxHintShown) {
+                showTmuxHintFor(wt, tool);
+              } else {
+                runWithLoading(() => attachSession(wt, tool));
+              }
+            } catch (error) {
+              console.error('Failed to attach session with selected tool:', error);
+            }
+          }}
+          onCancel={showList}
+        />
+      </Box>
+    );
+  }
+
+  if (!content && mode === 'tmuxHint') {
+    content = (
+      <Box flexGrow={1} alignItems="center" justifyContent="center">
+        <TmuxDetachHintDialog
+          onContinue={async () => {
+            const wt = tmuxHintWorktree;
+            const tool = tmuxHintTool || undefined;
+            markTmuxHintShown();
+            if (wt) {
+              runWithLoading(() => attachSession(wt, tool));
+            } else {
+              showList();
+            }
+          }}
+        />
+      </Box>
+    );
+  }
+
+  if (!content && mode === 'noProjects') {
+    content = (
+      <Box flexGrow={1} alignItems="center" justifyContent="center">
+        <NoProjectsDialog onExit={requestExit} />
+      </Box>
     );
   }
 
   // Default: Main worktree list screen
-  return (
-    <FullScreen>
+  if (!content) {
+    content = (
       <WorktreeListScreen
         onCreateFeature={handleCreateFeature}
         onArchiveFeature={handleArchiveFeature}
@@ -459,6 +448,13 @@ function AppContent() {
         onExecuteRun={handleExecuteRun}
         onConfigureRun={handleConfigureRun}
       />
+    );
+  }
+
+  // Wrap all routed content in a single persistent FullScreen to avoid flicker/blanking
+  return (
+    <FullScreen>
+      {content}
     </FullScreen>
   );
 }

@@ -20,6 +20,7 @@ export default function ConfirmDialog({title, message, confirmKey = 'y', cancelK
     <Box flexDirection="column">
       {title ? <Text color="cyan">{title}</Text> : null}
       <Text>{message}</Text>
+      <Box marginTop={1} />
       <AnnotatedText color="magenta" wrap="truncate" text={`[${confirmKey}] confirm, [${cancelKey}] cancel`} />
     </Box>
   );
