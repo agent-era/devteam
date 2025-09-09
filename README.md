@@ -1,7 +1,6 @@
 # DevTeam CLI (@agent-era/devteam)
 
-A mostly vibe-coded terminal utility to run a team of local coding agents. Launch multiple Claude Code, Codex or Gemini agents, switch between them, review their changes and add comments, and push PRs all from one streamlined terminal UI. An exercise to push how fast development can happen with multiple parallel agents.
-
+Run a team of local coding agents in your terminal. Launch multiple Claude Code, Codex or Gemini agents, switch between them, review their changes and add comments, and push PRs  all from one streamlined terminal UI. An exercise to push how fast development can happen with multiple parallel agents. Mostly vibe-coded
 
 ![Screenshot](docs/screenshot.png)
 
