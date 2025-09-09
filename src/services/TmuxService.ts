@@ -160,7 +160,8 @@ export class TmuxService {
       // Ensure mouse is enabled and status is visible
       this.setOption('mouse', 'on');
       this.setSessionOption(session, 'mouse', 'on');
-      this.setSessionOption(session, 'status', 'on');
+      // Make the footer taller for easier clicks and better menu visibility
+      this.setSessionOption(session, 'status', '3');
       this.setSessionOption(session, 'status-position', 'bottom');
       this.setSessionOption(session, 'status-style', 'fg=white,bg=black');
       this.setSessionOption(session, 'status-interval', '5');
