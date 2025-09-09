@@ -378,7 +378,7 @@ export function WorktreeProvider({
         project: projectName,
         feature: featureName,
         path: worktreePath,
-        branch: `feature/${featureName}`
+        branch: featureName
       });
     } finally {
       setLoading(false);
