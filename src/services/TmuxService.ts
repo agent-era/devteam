@@ -162,18 +162,23 @@ export class TmuxService {
       this.setSessionOption(session, 'mouse', 'on');
       this.setSessionOption(session, 'status', 'on');
       this.setSessionOption(session, 'status-position', 'bottom');
+      this.setSessionOption(session, 'status-style', 'fg=white,bg=black');
       this.setSessionOption(session, 'status-interval', '5');
 
-      // Revert any custom status-format from previous runs; use default status
+      // Restore default status building, then set minimal left/right so footer is always visible
       runCommand(['tmux', 'set-option', '-gu', 'status-format'], { env: this.tmuxEnv });
       runCommand(['tmux', 'set-option', '-u', '-t', session, 'status-format'], { env: this.tmuxEnv });
+      // Show simple action hints on the left; keep window list and user right settings intact
+      this.setSessionOption(session, 'status-left', '#[fg=black,bg=yellow] [ Detach ] #[default] #[fg=white,bg=red] [ Kill ] #[default] ');
+      // Minimal right if empty; include session name and hint
+      this.setSessionOption(session, 'status-right', ' #S | Click status for menu ');
 
-      // Provide a reliable menu on status clicks that works with any status config
+      // Provide a reliable menu on status clicks; separators require empty name only
       const menu = [
-        'display-menu', '-T', 'DevTeam', '-xM', '-yS',
+        'display-menu', '-T', 'DevTeam', '-x', 'M', '-y', 'S',
         'Detach', 'd', 'detach-client',
-        '-',
-        'Kill Session', 'k', 'confirm-before', '-p', 'Kill session #S?', 'kill-session -t #S'
+        '',
+        'Kill Session', 'k', 'confirm-before', '-p', 'Kill session #S?', 'kill-session', '-t', '#S'
       ];
       for (const k of ['MouseDown1Status', 'MouseUp1Status']) {
         try { runCommand(['tmux', 'unbind-key', '-n', k], { env: this.tmuxEnv }); } catch {}
