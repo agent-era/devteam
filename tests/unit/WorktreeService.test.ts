@@ -35,7 +35,7 @@ describe('FakeWorktreeService Operations', () => {
       expect(result).toBeTruthy();
       expect(result?.project).toBe('test-project');
       expect(result?.feature).toBe('new-feature');
-      expect(result?.branch).toBe('feature/new-feature');
+      expect(result?.branch).toBe('new-feature');
       
       // And: Should exist in memory store
       expectWorktreeInMemory('test-project', 'new-feature');

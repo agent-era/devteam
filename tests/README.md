@@ -115,7 +115,7 @@ test('should create worktree in memory', () => {
   );
   
   expect(created).toBeDefined();
-  expect(created?.branch).toBe('feature/new-feature');
+  expect(created?.branch).toBe('new-feature');
 });
 ```
 
@@ -153,7 +153,7 @@ test('should create worktree through UI', async () => {
   
   // Verify data was created in memory
   const worktree = expectWorktreeInMemory('my-project', 'new-feature');
-  expect(worktree.branch).toBe('feature/new-feature');
+  expect(worktree.branch).toBe('new-feature');
 });
 ```
 

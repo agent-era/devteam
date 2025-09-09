@@ -60,7 +60,7 @@ describe('GitService worktree creation', () => {
     expect(mockCommandExecutor.runCommand).toHaveBeenNthCalledWith(2,
       ['git', '-C', '/test/base/path/test-project', 'worktree', 'add', 
        '/test/base/path/test-project-branches/new-feature', 
-       '-b', 'feature/new-feature', 'origin/main'],
+       '-b', 'new-feature', 'origin/main'],
       {timeout: 30000}
     );
 
@@ -79,7 +79,7 @@ describe('GitService worktree creation', () => {
     expect(mockCommandExecutor.runCommand).toHaveBeenNthCalledWith(2,
       ['git', '-C', '/test/base/path/test-project', 'worktree', 'add', 
        '/test/base/path/test-project-branches/new-feature', 
-       '-b', 'feature/new-feature', 'origin/master'],
+       '-b', 'new-feature', 'origin/master'],
       {timeout: 30000}
     );
   });
@@ -96,7 +96,7 @@ describe('GitService worktree creation', () => {
     expect(mockCommandExecutor.runCommand).toHaveBeenNthCalledWith(2,
       ['git', '-C', '/test/base/path/test-project', 'worktree', 'add', 
        '/test/base/path/test-project-branches/new-feature', 
-       '-b', 'feature/new-feature', 'origin/main'],
+       '-b', 'new-feature', 'origin/main'],
       {timeout: 30000}
     );
   });

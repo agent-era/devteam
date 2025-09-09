@@ -44,7 +44,7 @@ describe('Worktree Management E2E', () => {
       const worktree = expectWorktreeInMemory('my-project', 'new-feature');
       expect(worktree.project).toBe('my-project');
       expect(worktree.feature).toBe('new-feature');
-      expect(worktree.branch).toBe('feature/new-feature');
+      expect(worktree.branch).toBe('new-feature');
       expect(worktree.path).toContain('my-project-branches/new-feature');
 
       // Verify UI would show the new worktree (based on memory store)
