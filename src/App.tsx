@@ -1,6 +1,7 @@
 import React, {useEffect} from 'react';
 import {useApp, useStdin, Box} from 'ink';
 import {runInteractive} from './shared/utils/commandExecutor.js';
+import {TmuxService} from './services/TmuxService.js';
 import FullScreen from './components/common/FullScreen.js';
 import HelpOverlay from './components/dialogs/HelpOverlay.js';
 import DiffView from './components/views/DiffView.js';
@@ -122,7 +123,8 @@ function AppContent() {
   }, [shouldExit, exit]);
 
   const handleAttachToSession = (sessionName: string) => {
-    runWithLoading(() => runInteractive('tmux', ['attach-session', '-t', sessionName]));
+    const tmux = new TmuxService();
+    runWithLoading(() => tmux.attachSessionWithControls(sessionName));
   };
   // Operations simplified to use contexts
   const handleCreateFeature = () => {

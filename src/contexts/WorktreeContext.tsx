@@ -473,7 +473,7 @@ export function WorktreeProvider({
     }
     
     configureTmuxDisplayTime();
-    tmuxService.attachSessionInteractive(sessionName);
+    tmuxService.attachSessionWithControls(sessionName);
   }, [tmuxService, availableAITools]);
 
   const attachShellSession = useCallback(async (worktree: WorktreeInfo) => {
@@ -485,7 +485,7 @@ export function WorktreeProvider({
     }
     
     configureTmuxDisplayTime();
-    tmuxService.attachSessionInteractive(sessionName);
+    tmuxService.attachSessionWithControls(sessionName);
   }, [tmuxService]);
 
   const attachRunSession = useCallback(async (worktree: WorktreeInfo): Promise<'success' | 'no_config'> => {
@@ -505,7 +505,7 @@ export function WorktreeProvider({
     }
     
     configureTmuxDisplayTime();
-    tmuxService.attachSessionInteractive(sessionName);
+    tmuxService.attachSessionWithControls(sessionName);
     return 'success';
   }, [tmuxService]);
 

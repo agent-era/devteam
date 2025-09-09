@@ -150,6 +150,57 @@ export class TmuxService {
     runInteractive('tmux', ['attach-session', '-t', sessionName]);
   }
 
+  /**
+   * Configure a tmux session with mouse support and a clickable status bar
+   * that exposes Detach and Kill actions.
+   * Uses tmux status-format ranges (tmux 3.2+) and MouseDown1Status binding.
+   */
+  configureSessionUI(session: string): void {
+    try {
+      // Enable mouse and status bar for this session and make messages instant
+      this.setSessionOption(session, 'mouse', 'on');
+      this.setSessionOption(session, 'status', 'on');
+      this.setSessionOption(session, 'status-position', 'bottom');
+      this.setSessionOption(session, 'status-interval', '5');
+
+      // Clickable ranges on the status line. DETACH and KILL are user ranges.
+      // The binding for MouseDown1Status will inspect mouse_status_range.
+      const status = [
+        // Left controls
+        '#[range=user|DETACH]#[fg=black,bg=yellow] [ Detach ] #[default]#[norange]',
+        ' ',
+        '#[range=user|KILL]#[fg=white,bg=red] [ Kill ] #[default]#[norange]',
+        // Center session name
+        ' #[align=centre]#[bold]#S#[nobold] ',
+        // Right side: attach indicator
+        ' #[align=right]#{?session_attached,attached,detached} '
+      ].join('');
+      runCommand(['tmux', 'set-option', '-t', session, 'status-format[0]', status], { env: this.tmuxEnv });
+
+      // Global mouse binding that reacts to our status ranges only.
+      // This is idempotent and generic; safe to set repeatedly.
+      // On click in DETACH area -> detach this client; in KILL area -> confirm then kill session.
+      runCommand([
+        'tmux', 'bind-key', '-n', 'MouseDown1Status',
+        'if-shell', '-F', "#{==:#{mouse_status_range},DETACH}",
+        'detach-client',
+        'if-shell', '-F', "#{==:#{mouse_status_range},KILL}",
+        'confirm-before', '-p', 'Kill session #{session_name}?', 'kill-session -t #{session_name}'
+      ], { env: this.tmuxEnv });
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to configure tmux session UI:', err);
+    }
+  }
+
+  /**
+   * Attach to a session with clickable status bar controls enabled.
+   */
+  attachSessionWithControls(sessionName: string): void {
+    this.configureSessionUI(sessionName);
+    this.attachSessionInteractive(sessionName);
+  }
+
   setOption(option: string, value: string): void {
     runCommand(['tmux', 'set-option', '-g', option, value], { env: this.tmuxEnv });
   }

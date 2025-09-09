@@ -1,6 +1,7 @@
 import React, {useMemo, useCallback, useRef, useEffect, useState} from 'react';
 import {Box, measureElement} from 'ink';
 import AnnotatedText from '../common/AnnotatedText.js';
+import MouseToolbar from '../common/MouseToolbar.js';
 import type {WorktreeInfo} from '../../models.js';
 import type {MemoryStatus} from '../../services/MemoryMonitorService.js';
 import type {VersionInfo} from '../../services/versionTypes.js';
@@ -154,6 +155,9 @@ export default function MainView({
       />
       <Box marginTop={1}>
         <AnnotatedText color="magenta" wrap="truncate" text={headerText} />
+      </Box>
+      <Box marginTop={1}>
+        <MouseToolbar />
       </Box>
     </Box>
   );
