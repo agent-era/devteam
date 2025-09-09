@@ -36,6 +36,7 @@ function AppContent() {
     loading,
     lastRefreshed,
     selectedIndex,
+    refresh,
     getSelectedWorktree,
     createFeature,
     createFromBranch,
