@@ -38,7 +38,7 @@ describe('Fake Services Unit Tests', () => {
       );
       
       expect(created).toBeDefined();
-      expect(created?.branch).toBe('feature/new-feature');
+      expect(created?.branch).toBe('new-feature');
     });
 
     test('should get worktrees for project', async () => {
