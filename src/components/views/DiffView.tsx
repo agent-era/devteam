@@ -1,5 +1,5 @@
-import React, {useEffect, useMemo, useState} from 'react';
-import {Box, Text, useInput, useStdin} from 'ink';
+import React, {useEffect, useMemo, useRef, useState} from 'react';
+import {Box, Text, useInput, useStdin, measureElement} from 'ink';
 import SyntaxHighlight from 'ink-syntax-highlight';
 import {runCommandAsync, runCommand} from '../../shared/utils/commandExecutor.js';
 import {findBaseBranch} from '../../shared/utils/gitHelpers.js';
@@ -254,18 +254,25 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     })();
   }, [worktreePath, diffType]);
 
-  // Calculate dynamic sticky header count (0, 1, or 2 headers displayed)
-  const stickyHeaderCount = useMemo(() => {
-    let count = 0;
-    if (currentFileHeader) count++;
-    if (currentHunkHeader) count++;
-    return count;
-  }, [currentFileHeader, currentHunkHeader]);
-
-  // Calculate page size dynamically - reserve space for title, help, sticky headers, and optional overlay area
-  const helpReservedRows = showFileTreeOverlay ? 0 : 1; // hide help when overlay shows
+  // Measure-based page size: measure the scroll container height to avoid off-by-one issues
+  const listRef = useRef<any>(null);
+  const [measuredPageSize, setMeasuredPageSize] = useState<number>(1);
   const overlayAreaHeight = showFileTreeOverlay ? Math.max(6, Math.floor(terminalHeight / 2)) : 0;
-  const pageSize = Math.max(1, terminalHeight - 2 - stickyHeaderCount - helpReservedRows - overlayAreaHeight); // -1 title, -N sticky headers, -help, -overlay
+
+  // After render and on resize, measure the diff list container height
+  useEffect(() => {
+    const measureAndUpdate = () => {
+      const h = listRef.current ? measureElement(listRef.current).height : 0;
+      if (h > 0 && h !== measuredPageSize) {
+        setMeasuredPageSize(h);
+      }
+    };
+    // Measure now and on next tick to ensure layout settles
+    measureAndUpdate();
+    const t = setTimeout(measureAndUpdate, 0);
+    return () => clearTimeout(t);
+    // Re-measure on terminal resize and UI elements that affect vertical space
+  }, [terminalHeight, terminalWidth, currentFileHeader, currentHunkHeader, showFileTreeOverlay]);
 
   // Smooth scrolling animation
   useEffect(() => {
@@ -370,10 +377,10 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       setSelectedLine(prev => Math.min(maxLineIndex, prev + 1));
     }
     if (key.pageUp || input === 'b') {
-      setSelectedLine(prev => Math.max(0, prev - Math.floor(pageSize / 2)));
+      setSelectedLine(prev => Math.max(0, prev - Math.floor(measuredPageSize / 2)));
     }
     if (key.pageDown || input === 'f' || input === ' ') {
-      setSelectedLine(prev => Math.min(maxLineIndex, prev + Math.floor(pageSize / 2)));
+      setSelectedLine(prev => Math.min(maxLineIndex, prev + Math.floor(measuredPageSize / 2)));
     }
     if (input === 'g') {
       setSelectedLine(0);
@@ -643,7 +650,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       textLines,
       selectedLine,
       targetScrollRow,
-      pageSize,
+      measuredPageSize,
       maxWidth,
       wrapMode
     );
@@ -651,10 +658,10 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     // Don't override scroll position during file navigation (Shift+Up/Down)
     // File navigation sets a specific scroll position to make headers sticky
     if (newScrollRow !== targetScrollRow && !isFileNavigation) {
-      const maxScrollRow = ViewportCalculator.getMaxScrollRow(textLines, pageSize, maxWidth, wrapMode);
+      const maxScrollRow = ViewportCalculator.getMaxScrollRow(textLines, measuredPageSize, maxWidth, wrapMode);
       setTargetScrollRow(Math.max(0, Math.min(maxScrollRow, newScrollRow)));
     }
-  }, [selectedLine, viewMode, wrapMode, terminalWidth, lines, sideBySideLines, pageSize, isFileNavigation]);
+  }, [selectedLine, viewMode, wrapMode, terminalWidth, lines, sideBySideLines, measuredPageSize, isFileNavigation]);
 
   const formatCommentsAsPrompt = (comments: any[]): string => {
     let prompt = "Please address the following code review comments:\\n\\n";
@@ -943,11 +950,11 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       textLines,
       selectedLine,
       scrollRow,
-      pageSize,
+      measuredPageSize,
       maxWidth,
       wrapMode
     );
-  }, [lines, sideBySideLines, selectedLine, scrollRow, pageSize, viewMode, wrapMode, terminalWidth]);
+  }, [lines, sideBySideLines, selectedLine, scrollRow, measuredPageSize, viewMode, wrapMode, terminalWidth]);
   
   useEffect(() => {
     const currentLines = viewMode === 'unified' ? lines : sideBySideLines;
@@ -1097,7 +1104,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
   // No early return: overlay is drawn on-screen while keeping diff visible
 
   return (
-    <Box flexDirection="column">
+    <Box flexDirection="column" flexGrow={1}>
       <Text bold>{title}</Text>
       {/* Sticky headers - only render when content exists */}
       {currentFileHeader && (
@@ -1118,6 +1125,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
           {currentHunkHeader}
         </Text>
       )}
+      <Box ref={listRef} flexDirection="column" flexGrow={1}>
       {(() => {
         const renderedElements: React.ReactNode[] = [];
         let visibleLineIndex = 0;
@@ -1708,6 +1716,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       
         return renderedElements;
       })()}
+      </Box>
       
       {showAllComments && commentStore.count > 0 && (
         <Box flexDirection="column" borderStyle="single" borderColor="blue" padding={1} marginTop={1}>
