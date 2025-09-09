@@ -70,47 +70,13 @@ export function commandExitCode(args: string[], cwd?: string, env?: NodeJS.Proce
 }
 
 export function runInteractive(cmd: string, args: string[], opts: {cwd?: string} = {}): number {
-  const out: any = process.stdout as any;
-  const isTTY = !!(out && out.isTTY);
-
-  // In terminal E2E, allow simulation without spawning tmux
+  // In terminal E2E, allow simulation without actually spawning the command
   if (process.env.E2E_SIMULATE_TMUX_ATTACH === '1') {
-    try {
-      // Simulate leaving Ink's alt-screen while tmux takes over
-      if (isTTY) {
-        try { out.write('\u001b[?25h'); } catch {}
-        try { out.write('\u001b[?1049l'); } catch {}
-      }
-    } catch {}
-    // Simulate quick detach and return control to app
-    // Re-enter alt screen and trigger a resize to force Ink re-render
-    try {
-      if (isTTY) {
-        try { out.write('\u001b[?1049h'); } catch {}
-        try { out.write('\u001b[2J\u001b[H'); } catch {}
-        try { out.write('\u001b[?25l'); } catch {}
-        out.emit?.('resize');
-      }
-    } catch {}
     return 0;
   }
 
-  // Gracefully release alt-screen to the child, then restore and force redraw
-  if (isTTY) {
-    try { out.write('\u001b[?25h'); } catch {}
-    try { out.write('\u001b[?1049l'); } catch {}
-  }
-
+  // Simply run the interactive command inheriting stdio.
   const result = spawnSync(cmd, args, {cwd: opts.cwd, stdio: 'inherit'});
-
-  if (isTTY) {
-    try { out.write('\u001b[?1049h'); } catch {}
-    try { out.write('\u001b[2J\u001b[H'); } catch {}
-    try { out.write('\u001b[?25l'); } catch {}
-    // Nudge Ink/FullScreen to re-measure and re-render
-    try { out.emit?.('resize'); } catch {}
-  }
-
   return result.status ?? 0;
 }
 

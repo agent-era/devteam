@@ -12,6 +12,7 @@ import ConfigResultsDialog from './components/dialogs/ConfigResultsDialog.js';
 import AIToolDialog from './components/dialogs/AIToolDialog.js';
 import TmuxDetachHintDialog from './components/dialogs/TmuxDetachHintDialog.js';
 import NoProjectsDialog from './components/dialogs/NoProjectsDialog.js';
+import LoadingScreen from './components/common/LoadingScreen.js';
 
 import WorktreeListScreen from './screens/WorktreeListScreen.js';
 import CreateFeatureScreen from './screens/CreateFeatureScreen.js';
@@ -85,6 +86,7 @@ function AppContent() {
     showRunResults,
     showAIToolSelection,
     showNoProjectsDialog,
+    runWithLoading,
     requestExit
   } = useUIContext();
 
@@ -120,8 +122,7 @@ function AppContent() {
   }, [shouldExit, exit]);
 
   const handleAttachToSession = (sessionName: string) => {
-    // Attach to the tmux session interactively
-    runInteractive('tmux', ['attach-session', '-t', sessionName]);
+    runWithLoading(() => runInteractive('tmux', ['attach-session', '-t', sessionName]));
   };
   // Operations simplified to use contexts
   const handleCreateFeature = () => {
@@ -162,11 +163,15 @@ function AppContent() {
     const selectedWorktree = getSelectedWorktree();
     if (!selectedWorktree) return;
     
-    const result = await attachRunSession(selectedWorktree);
-    
-    if (result === 'no_config') {
-      showRunConfig(selectedWorktree.project, selectedWorktree.feature, selectedWorktree.path);
-    }
+    // Use loading screen; handle no-config by navigating to config dialog
+    runWithLoading(async () => {
+      const result = await attachRunSession(selectedWorktree);
+      if (result === 'no_config') {
+        showRunConfig(selectedWorktree.project, selectedWorktree.feature, selectedWorktree.path);
+      } else {
+        showList();
+      }
+    }, {returnToList: false});
   };
 
   // Router content node (wrapped by a single FullScreen below)
@@ -315,6 +320,12 @@ function AppContent() {
     );
   }
 
+  if (!content && mode === 'tmuxAttachLoading') {
+    content = (
+      <LoadingScreen />
+    );
+  }
+
   if (!content && mode === 'runConfig' && runProject) {
     content = (
       <Box flexGrow={1} alignItems="center" justifyContent="center">
@@ -357,13 +368,14 @@ function AppContent() {
           configPath={runConfigResult.path}
           error={runConfigResult.error}
           onClose={() => {
-            showList();
-            // If successful, try to execute the run session
+            // If successful, execute the run session with loading screen
             if (runConfigResult.success) {
               try {
                 const worktreeInfo = {project: runProject!, feature: runFeature!, path: runPath!};
-                attachRunSession(worktreeInfo as any).catch(() => {});
-              } catch {}
+                runWithLoading(() => attachRunSession(worktreeInfo as any));
+              } catch { showList(); }
+            } else {
+              showList();
             }
           }}
         />
@@ -379,13 +391,12 @@ function AppContent() {
           currentTool={pendingWorktree.session?.ai_tool}
           onSelect={async (tool) => {
             const wt = pendingWorktree;
-            showList();
             // Attach session with selected tool, but show tmux hint once
             try {
               if (!tmuxHintShown) {
                 showTmuxHintFor(wt, tool);
               } else {
-                await attachSession(wt, tool);
+                runWithLoading(() => attachSession(wt, tool));
               }
             } catch (error) {
               console.error('Failed to attach session with selected tool:', error);
@@ -405,13 +416,10 @@ function AppContent() {
             const wt = tmuxHintWorktree;
             const tool = tmuxHintTool || undefined;
             markTmuxHintShown();
-            showList();
             if (wt) {
-              try {
-                await attachSession(wt, tool);
-              } catch (error) {
-                console.error('Failed to attach after tmux hint:', error);
-              }
+              runWithLoading(() => attachSession(wt, tool));
+            } else {
+              showList();
             }
           }}
         />
