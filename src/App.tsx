@@ -11,6 +11,7 @@ import ProgressDialog from './components/dialogs/ProgressDialog.js';
 import ConfigResultsDialog from './components/dialogs/ConfigResultsDialog.js';
 import AIToolDialog from './components/dialogs/AIToolDialog.js';
 import TmuxDetachHintDialog from './components/dialogs/TmuxDetachHintDialog.js';
+import TmuxMissingDialog from './components/dialogs/TmuxMissingDialog.js';
 import NoProjectsDialog from './components/dialogs/NoProjectsDialog.js';
 import LoadingScreen from './components/common/LoadingScreen.js';
 
@@ -22,6 +23,7 @@ import {WorktreeProvider, useWorktreeContext} from './contexts/WorktreeContext.j
 import {GitHubProvider, useGitHubContext} from './contexts/GitHubContext.js';
 import {UIProvider, useUIContext} from './contexts/UIContext.js';
 import {InputFocusProvider} from './contexts/InputFocusContext.js';
+import {commandExists} from './shared/utils/commandExecutor.js';
 
 
 function AppContent() {
@@ -86,6 +88,7 @@ function AppContent() {
     showRunResults,
     showAIToolSelection,
     showNoProjectsDialog,
+    showTmuxMissingDialog,
     runWithLoading,
     requestExit
   } = useUIContext();
@@ -98,8 +101,15 @@ function AppContent() {
     }
   }, [isRawModeSupported, exit]);
 
-  // On startup: if no projects discovered, show dialog and wait for exit
+  // On startup: require tmux, then discover projects
   useEffect(() => {
+    const bypassTmux = process.env.E2E_SIMULATE_TMUX_ATTACH === '1';
+    if (!bypassTmux && !commandExists('tmux')) {
+      // Block startup with dialog when tmux is missing
+      showTmuxMissingDialog();
+      return;
+    }
+
     try {
       const projects = discoverProjects();
       if (!projects || projects.length === 0) {
@@ -431,6 +441,14 @@ function AppContent() {
     content = (
       <Box flexGrow={1} alignItems="center" justifyContent="center">
         <NoProjectsDialog onExit={requestExit} />
+      </Box>
+    );
+  }
+
+  if (!content && mode === 'tmuxMissing') {
+    content = (
+      <Box flexGrow={1} alignItems="center" justifyContent="center">
+        <TmuxMissingDialog onExit={requestExit} />
       </Box>
     );
   }
