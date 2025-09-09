@@ -1,7 +1,6 @@
 import {useEffect} from 'react';
 import {useStdin, useStdout} from 'ink';
 import {useInputFocus} from '../contexts/InputFocusContext.js';
-import {requestRedraw} from '../shared/utils/redraw.js';
 
 export interface KeyboardActions {
   onMove?: (delta: number) => void;
@@ -61,7 +60,6 @@ export function useKeyboardShortcuts(
 
     const nudgeRender = () => {
       try { (stdout as any)?.emit?.('resize'); } catch {}
-      try { requestRedraw(); } catch {}
     };
 
     const handler = (buf: Buffer) => {
