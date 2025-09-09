@@ -180,7 +180,7 @@ export class GitService {
     // Ensure we use the origin version of the base branch
     const originBase = baseBranch.startsWith('origin/') ? baseBranch : `origin/${baseBranch}`;
     
-    const branch = branchName || `feature/${featureName}`;
+    const branch = branchName || featureName;
     runCommand(['git', '-C', mainRepo, 'worktree', 'add', worktreePath, '-b', branch, originBase], {timeout: 30000});
     return fs.existsSync(worktreePath);
   }
@@ -292,6 +292,8 @@ export class GitService {
   private parseBranchCandidates(output: string, existing: string[], base: string): Array<[string, string]> {
     const candidates: Array<[string, string]> = [];
     const seen = new Set<string>();
+    const normalize = (name: string) => name.replace(/^refs\/heads\//, '').replace(/^origin\//, '').replace(/^feature\//, '');
+    const existingNormalized = new Set(existing.map(normalize));
     
     for (const line of output.trim().split('\n')) {
       let name = line.trim();
@@ -302,7 +304,8 @@ export class GitService {
       const isRemote = name.startsWith('origin/');
       const clean = isRemote ? name.slice(7) : name;
       
-      if (existing.includes(clean) || existing.includes(`feature/${clean}`)) continue;
+      // Skip if equivalent branch already has a worktree (treat feature/foo and foo as same)
+      if (existing.includes(clean) || existingNormalized.has(normalize(clean))) continue;
       if (BASE_BRANCH_CANDIDATES.includes(clean)) continue;
       if (seen.has(clean)) continue;
       

@@ -64,7 +64,7 @@ export default function AIToolDialog({availableTools, currentTool, onSelect, onC
         onChange={handleSelect}
       />
       <Box marginTop={1}>
-        <AnnotatedText color="magenta" wrap="truncate" text={"[j]/[k] move, [1]–[9] quick select, [enter] launch, [esc] cancel"} />
+        <AnnotatedText color="magenta" wrap="truncate" text={"[enter] launch, [esc] cancel"} />
       </Box>
     </Box>
   );
