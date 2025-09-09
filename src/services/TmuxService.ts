@@ -157,73 +157,28 @@ export class TmuxService {
    */
   configureSessionUI(session: string): void {
     try {
-      // Enable mouse and status bar for this session and make messages instant
-      // Also ensure global mouse is on (safe and idempotent)
+      // Ensure mouse is enabled and status is visible
       this.setOption('mouse', 'on');
       this.setSessionOption(session, 'mouse', 'on');
-      // Use a multi-line status so we have room for clickable controls
-      this.setSessionOption(session, 'status', '3');
+      this.setSessionOption(session, 'status', 'on');
       this.setSessionOption(session, 'status-position', 'bottom');
-      this.setSessionOption(session, 'status-interval', '1');
-      this.setSessionOption(session, 'status-style', 'bg=black,fg=white');
-      // Clear conflicting left/right for this session to ensure status-format renders alone
-      this.setSessionOption(session, 'status-left', '');
-      this.setSessionOption(session, 'status-right', '');
+      this.setSessionOption(session, 'status-interval', '5');
 
-      // Clickable ranges on the status line. DETACH and KILL are user ranges.
-      // Line 1: primary buttons + centered session name (static styles; no inline conditional styles to avoid rendering issues)
-      const status0 = [
-        '#[align=left]',
-        '#[range=user|DETACH]#[fg=black,bg=yellow] [ Detach ] #[default]#[norange] ',
-        '#[range=user|KILL]#[fg=white,bg=red] [ Kill ] #[default]#[norange]',
-        ' #[align=centre]#[bold]#S#[nobold] ',
-        ' #[align=right]#{?session_attached,attached,detached} '
-      ].join('');
-      // Set status-format globally to avoid per-session incompatibilities across tmux versions
-      runCommand(['tmux', 'set-option', '-g', 'status-format[0]', status0], { env: this.tmuxEnv });
+      // Revert any custom status-format from previous runs; use default status
+      runCommand(['tmux', 'set-option', '-gu', 'status-format'], { env: this.tmuxEnv });
+      runCommand(['tmux', 'set-option', '-u', '-t', session, 'status-format'], { env: this.tmuxEnv });
 
-      // Line 2: keep simple; show session and time instead of complex window list to maximize compatibility
-      const line1 = ' #[align=left]#{session_name} #[align=right]%Y-%m-%d %H:%M ';
-      runCommand(['tmux', 'set-option', '-g', 'status-format[1]', line1], { env: this.tmuxEnv });
-
-      // Line 3: hover status from last mouse event (stored in @devteam_hover) and hint
-      const status2 = [
-        '#[align=left]',
-        '#{?#{==:#{@devteam_hover},DETACH},Hover: Detach — click to detach,',
-        '#{?#{==:#{@devteam_hover},KILL},Hover: Kill — click to terminate session,}}',
-        ' #[align=right] Ctrl+b then d to detach '
-      ].join('');
-      runCommand(['tmux', 'set-option', '-g', 'status-format[2]', status2], { env: this.tmuxEnv });
-
-      // Global mouse binding that reacts to our status ranges only.
-      // This is idempotent and generic; safe to set repeatedly.
-      // On click in DETACH area -> detach this client; in KILL area -> confirm then kill session.
-      runCommand(['tmux', 'unbind-key', '-n', 'MouseDown1Status'], { env: this.tmuxEnv });
-      runCommand(['tmux', 'unbind-key', '-n', 'MouseUp1Status'], { env: this.tmuxEnv });
-      // Update hover state on common mouse events on the status line
-      const setHover = 'run-shell "tmux set -g @devteam_hover \"#{mouse_status_range}\""';
-      for (const k of ['MouseDown1Status', 'MouseUp1Status', 'WheelUpStatus', 'WheelDownStatus', 'MouseDrag1Status', 'MouseDragEnd1Status']) {
-        try {
-          runCommand(['tmux', 'unbind-key', '-n', k], { env: this.tmuxEnv });
-        } catch {}
-        runCommand(['tmux', 'bind-key', '-n', k, setHover], { env: this.tmuxEnv });
+      // Provide a reliable menu on status clicks that works with any status config
+      const menu = [
+        'display-menu', '-T', 'DevTeam', '-xM', '-yS',
+        'Detach', 'd', 'detach-client',
+        '-',
+        'Kill Session', 'k', 'confirm-before', '-p', 'Kill session #S?', 'kill-session -t #S'
+      ];
+      for (const k of ['MouseDown1Status', 'MouseUp1Status']) {
+        try { runCommand(['tmux', 'unbind-key', '-n', k], { env: this.tmuxEnv }); } catch {}
+        runCommand(['tmux', 'bind-key', '-n', k, ...menu], { env: this.tmuxEnv });
       }
-      // Click handler: record hover and perform action
-      const handler = [
-        'run-shell',
-        '"',
-        'R=\"#{mouse_status_range}\"; ',
-        'tmux set -g @devteam_hover \"$R\"; ',
-        'if [ \"$R\" = DETACH ]; then tmux detach-client; ',
-        'elif [ \"$R\" = KILL ]; then tmux confirm-before -p \"Kill session #{session_name}?\" \"kill-session -t #{session_name}\"; ',
-        'else tmux display-menu -T \"DevTeam\" -xM -yS ',
-        '\"Detach\" d \"detach-client\" ',
-        '"" \"Kill\" k \"confirm-before -p \"\"Kill session #{session_name}?\"\" \"\"kill-session -t #{session_name}\"\"\" ',
-        '"" \"Cancel\" "" ""; fi',
-        '"'
-      ].join('');
-      runCommand(['tmux', 'bind-key', '-n', 'MouseDown1Status', handler], { env: this.tmuxEnv });
-      runCommand(['tmux', 'bind-key', '-n', 'MouseUp1Status', handler], { env: this.tmuxEnv });
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error('Failed to configure tmux session UI:', err);
