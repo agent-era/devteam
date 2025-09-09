@@ -6,7 +6,6 @@ import type {AITool} from '../models.js';
 type UIMode = 'list' | 'create' | 'confirmArchive' | 'help' | 
              'pickProjectForBranch' | 'pickBranch' | 'diff' | 'runConfig' | 
              'runProgress' | 'runResults' | 'selectAITool' | 'tmuxHint' |
-             'attachProgress' |
              'noProjects';
 
 interface UIContextType {
@@ -44,7 +43,10 @@ interface UIContextType {
   showAIToolSelection: (worktree: WorktreeInfo) => void;
   showTmuxHintFor: (worktree: WorktreeInfo, tool?: AITool) => void;
   showNoProjectsDialog: () => void;
-  showAttachProgress: () => void;
+  // Attach spinner controls
+  attaching: boolean;
+  startAttaching: () => void;
+  stopAttaching: () => void;
   
   // Branch management
   setBranchList: (branches: any[]) => void;
@@ -80,6 +82,7 @@ export function UIProvider({children}: UIProviderProps) {
   const [tmuxHintShown, setTmuxHintShown] = useState<boolean>(false);
   const [tmuxHintWorktree, setTmuxHintWorktree] = useState<WorktreeInfo | null>(null);
   const [tmuxHintTool, setTmuxHintTool] = useState<AITool | null>(null);
+  const [attaching, setAttaching] = useState<boolean>(false);
 
 
   const resetUIState = () => {
@@ -176,9 +179,8 @@ export function UIProvider({children}: UIProviderProps) {
     setMode('noProjects');
   };
 
-  const showAttachProgress = () => {
-    setMode('attachProgress');
-  };
+  const startAttaching = () => setAttaching(true);
+  const stopAttaching = () => setAttaching(false);
 
   const requestExit = () => {
     setShouldExit(true);
@@ -226,7 +228,9 @@ export function UIProvider({children}: UIProviderProps) {
     showAIToolSelection,
     showTmuxHintFor,
     showNoProjectsDialog,
-    showAttachProgress,
+    attaching,
+    startAttaching,
+    stopAttaching,
     
     // Branch management
     setBranchList,

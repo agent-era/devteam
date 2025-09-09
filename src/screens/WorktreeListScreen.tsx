@@ -34,7 +34,7 @@ export default function WorktreeListScreen({
   const {worktrees, selectedIndex, selectWorktree, refresh, refreshVisibleStatus, forceRefreshVisible, attachSession, attachShellSession, needsToolSelection, lastRefreshed, memoryStatus, versionInfo, discoverProjects} = useWorktreeContext();
   const {setVisibleWorktrees} = useGitHubContext();
   const {isAnyDialogFocused} = useInputFocus();
-  const {showAIToolSelection, tmuxHintShown, showTmuxHintFor, showAttachProgress, showList} = useUIContext();
+  const {showAIToolSelection, tmuxHintShown, showTmuxHintFor, showList, attaching, startAttaching, stopAttaching} = useUIContext();
   const [pageSize, setPageSize] = useState(1);
   const [currentPage, setCurrentPage] = useState(0);
   const [hasProjects, setHasProjects] = useState<boolean>(false);
@@ -128,13 +128,13 @@ export default function WorktreeListScreen({
           return;
         }
         try {
-          showAttachProgress();
+          startAttaching();
           await attachSession(selectedWorktree);
         } catch {}
         await refresh().catch(error => {
           console.error('Refresh after attach failed:', error);
         });
-        showList();
+        stopAttaching();
       }
     } catch (error) {
       console.error('Failed to handle selection:', error);
@@ -264,6 +264,7 @@ export default function WorktreeListScreen({
       memoryStatus={memoryStatus}
       versionInfo={versionInfo}
       hasProjects={hasProjects}
+      attaching={attaching}
     />
   );
 }

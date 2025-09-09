@@ -10,6 +10,7 @@ import {useColumnWidths} from './MainView/hooks/useColumnWidths.js';
 import {WorktreeRow} from './MainView/WorktreeRow.js';
 import {TableHeader} from './MainView/TableHeader.js';
 import {PaginationFooter} from './MainView/PaginationFooter.js';
+import Spinner from '../common/Spinner.js';
 import {EmptyState} from './MainView/EmptyState.js';
 import {MessageView} from './MainView/MessageView.js';
 import {PromptView} from './MainView/PromptView.js';
@@ -31,6 +32,7 @@ interface Props {
   memoryStatus?: MemoryStatus | null;
   versionInfo?: VersionInfo | null;
   hasProjects?: boolean;
+  attaching?: boolean;
 }
 
 export default function MainView({
@@ -44,6 +46,7 @@ export default function MainView({
   memoryStatus,
   versionInfo,
   hasProjects,
+  attaching,
 }: Props) {
   const {rows: terminalRows, columns: terminalWidth} = useTerminalDimensions();
 
@@ -152,6 +155,11 @@ export default function MainView({
         totalPages={paginationInfo.totalPages}
         paginationText={paginationInfo.paginationText}
       />
+      {attaching ? (
+        <Box marginTop={1}>
+          <Spinner label="Launching tmux session... (Ctrl+b, then d to return)" />
+        </Box>
+      ) : null}
       <Box marginTop={1}>
         <AnnotatedText color="magenta" wrap="truncate" text={headerText} />
       </Box>

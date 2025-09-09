@@ -75,7 +75,9 @@ function AppContent() {
     tmuxHintWorktree,
     tmuxHintTool,
     showTmuxHintFor,
-    showAttachProgress,
+    // attach spinner
+    startAttaching,
+    stopAttaching,
     markTmuxHintShown,
     showList,
     showCreateFeature,
@@ -285,16 +287,7 @@ function AppContent() {
     );
   }
 
-  if (!content && mode === 'attachProgress') {
-    content = (
-      <Box flexGrow={1} alignItems="center" justifyContent="center">
-        <ProgressDialog
-          title="Launching tmux session..."
-          message="Press Ctrl+b, then d to detach and return"
-        />
-      </Box>
-    );
-  }
+  // attachProgress screen removed; we use a bottom spinner instead
 
   if (!content && mode === 'diff' && diffWorktree) {
     content = (
@@ -435,11 +428,20 @@ function AppContent() {
             markTmuxHintShown();
             if (wt) {
               try {
-                showAttachProgress();
-                await attachSession(wt, tool);
-                // After returning, refresh and show list
-                await refresh('none');
+                // Return to list and show spinner at bottom while launching
                 showList();
+                // Defer to allow list to render before launching
+                setTimeout(async () => {
+                  try {
+                    startAttaching();
+                    await attachSession(wt, tool);
+                  } catch (e) {
+                    console.error('Attach failed:', e);
+                  } finally {
+                    try { stopAttaching(); } catch {}
+                    try { await refresh('none'); } catch {}
+                  }
+                }, 10);
               } catch (error) {
                 console.error('Failed to attach after tmux hint:', error);
                 showList();
