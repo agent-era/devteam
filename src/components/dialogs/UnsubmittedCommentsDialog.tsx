@@ -24,7 +24,7 @@ export default function UnsubmittedCommentsDialog({commentCount, onSubmit, onExi
       <Text>What would you like to do?</Text>
       <Text></Text>
       <Box marginTop={1} />
-      <AnnotatedText color="green" text={'[S]ubmit comments to Claude'} />
+      <AnnotatedText color="green" text={'[S]ubmit comments to agent'} />
       <AnnotatedText color="blue" text={'[q] exit without submitting (comments will be kept)'} />
       <AnnotatedText color="magenta" wrap="truncate" text={'[esc] cancel (return to diff view)'} />
     </Box>
