@@ -48,11 +48,11 @@ const CreateFeatureDialog = React.memo(function CreateFeatureDialog({projects, d
       }
       
       // Navigation keys
-      if (key.downArrow || input === 'j') {
+      if (key.downArrow) {
         setSelected(s => Math.min(filtered.length - 1, s + 1));
         return;
       }
-      if (key.upArrow || input === 'k') {
+      if (key.upArrow) {
         setSelected(s => Math.max(0, s - 1));
         return;
       }
