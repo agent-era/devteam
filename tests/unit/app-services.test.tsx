@@ -415,6 +415,16 @@ describe('App Services E2E', () => {
     });
 
     test('should handle cache persistence of loadingStatus field', () => {
+      // Force cache directory to a project-local writable path for test isolation
+      const fs = require('node:fs');
+      const path = require('node:path');
+      const testCacheDir = path.join(process.cwd(), '.devteam', 'cache-tests');
+      process.env.DEVTEAM_CACHE_DIR = testCacheDir;
+      if (!fs.existsSync(testCacheDir)) {
+        fs.mkdirSync(testCacheDir, {recursive: true});
+      }
+      const testCacheFile = path.join(testCacheDir, 'pr-cache.json');
+      try { if (fs.existsSync(testCacheFile)) fs.unlinkSync(testCacheFile); } catch {}
       resetTestData();
       
       const worktreePath = '/home/mserv/projects/persist-test-branches/persist-feature';
@@ -449,4 +459,3 @@ describe('App Services E2E', () => {
   });
 
 });
-

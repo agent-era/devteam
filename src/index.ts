@@ -11,14 +11,15 @@ try {
     if (process.platform === 'darwin') {
       // Write directly to stderr to avoid interfering with Ink stdout
       process.stderr.write(
-        '\nWarning: tmux is not installed.\n' +
+        '\nError: tmux is not installed.\n' +
         'Install it via Homebrew: brew install tmux\n\n'
       );
     } else {
       process.stderr.write(
-        '\nWarning: tmux is not installed. Please install tmux to enable sessions.\n\n'
+        '\nError: tmux is not installed. Please install tmux to enable sessions.\n\n'
       );
     }
+    process.exit(1);
   }
 } catch {
   // Best-effort check; ignore errors

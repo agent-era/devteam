@@ -11,7 +11,6 @@ import ProgressDialog from './components/dialogs/ProgressDialog.js';
 import ConfigResultsDialog from './components/dialogs/ConfigResultsDialog.js';
 import AIToolDialog from './components/dialogs/AIToolDialog.js';
 import TmuxDetachHintDialog from './components/dialogs/TmuxDetachHintDialog.js';
-import TmuxMissingDialog from './components/dialogs/TmuxMissingDialog.js';
 import NoProjectsDialog from './components/dialogs/NoProjectsDialog.js';
 import LoadingScreen from './components/common/LoadingScreen.js';
 
@@ -88,7 +87,6 @@ function AppContent() {
     showRunResults,
     showAIToolSelection,
     showNoProjectsDialog,
-    showTmuxMissingDialog,
     runWithLoading,
     requestExit
   } = useUIContext();
@@ -101,15 +99,8 @@ function AppContent() {
     }
   }, [isRawModeSupported, exit]);
 
-  // On startup: require tmux, then discover projects
+  // On startup: discover projects
   useEffect(() => {
-    const bypassTmux = process.env.E2E_SIMULATE_TMUX_ATTACH === '1';
-    if (!bypassTmux && !commandExists('tmux')) {
-      // Block startup with dialog when tmux is missing
-      showTmuxMissingDialog();
-      return;
-    }
-
     try {
       const projects = discoverProjects();
       if (!projects || projects.length === 0) {
@@ -445,13 +436,6 @@ function AppContent() {
     );
   }
 
-  if (!content && mode === 'tmuxMissing') {
-    content = (
-      <Box flexGrow={1} alignItems="center" justifyContent="center">
-        <TmuxMissingDialog onExit={requestExit} />
-      </Box>
-    );
-  }
 
   // Default: Main worktree list screen
   if (!content) {

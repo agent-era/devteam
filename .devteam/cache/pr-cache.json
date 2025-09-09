@@ -1,0 +1,17 @@
+{
+  "/test/project-branches/feature": {
+    "data": {
+      "loadingStatus": "exists",
+      "number": 456,
+      "state": "OPEN",
+      "checks": "passing",
+      "url": null,
+      "title": "Add remote commit tracking",
+      "mergeable": null
+    },
+    "timestamp": 1757388803136,
+    "commitHash": "abc123local",
+    "remoteCommitHash": "new789commit",
+    "ttl": 30000
+  }
+}
