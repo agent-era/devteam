@@ -158,35 +158,52 @@ export class TmuxService {
   configureSessionUI(session: string): void {
     try {
       // Enable mouse and status bar for this session and make messages instant
+      // Also ensure global mouse is on (safe and idempotent)
+      this.setOption('mouse', 'on');
       this.setSessionOption(session, 'mouse', 'on');
-      this.setSessionOption(session, 'status', 'on');
+      // Use a multi-line status so we have room for clickable controls
+      this.setSessionOption(session, 'status', '3');
       this.setSessionOption(session, 'status-position', 'bottom');
       this.setSessionOption(session, 'status-interval', '5');
+      this.setSessionOption(session, 'status-style', 'bg=black,fg=white');
 
       // Clickable ranges on the status line. DETACH and KILL are user ranges.
-      // The binding for MouseDown1Status will inspect mouse_status_range.
-      const status = [
-        // Left controls
-        '#[range=user|DETACH]#[fg=black,bg=yellow] [ Detach ] #[default]#[norange]',
-        ' ',
-        '#[range=user|KILL]#[fg=white,bg=red] [ Kill ] #[default]#[norange]',
-        // Center session name
+      // Line 1: primary buttons + centered session name
+      const status0 = [
+        '#[align=left]',
+        // Hover effect using mouse_status_range to add underscore when hovering same range
+        '#[range=user|DETACH]',
+        '#{?#{==:#{mouse_status_range},DETACH},#[fg=black,bg=yellow,underscore],#[fg=black,bg=yellow]} [ Detach ] #[default]#[norange] ',
+        '#[range=user|KILL]',
+        '#{?#{==:#{mouse_status_range},KILL},#[fg=white,bg=red,underscore],#[fg=white,bg=red]} [ Kill ] #[default]#[norange]',
         ' #[align=centre]#[bold]#S#[nobold] ',
-        // Right side: attach indicator
         ' #[align=right]#{?session_attached,attached,detached} '
       ].join('');
-      runCommand(['tmux', 'set-option', '-t', session, 'status-format[0]', status], { env: this.tmuxEnv });
+      runCommand(['tmux', 'set-option', '-t', session, 'status-format[0]', status0], { env: this.tmuxEnv });
+
+      // Line 2: window list to keep navigation
+      // This embeds the window list with current/other formats.
+      const windowList = '#{W:#{E:window-status-format} ,#{E:window-status-current-format} }';
+      runCommand(['tmux', 'set-option', '-t', session, 'status-format[1]', windowList], { env: this.tmuxEnv });
+
+      // Line 3: hints
+      const status2 = '#[align=left] Click status buttons with mouse  #[align=right] Ctrl+b then d to detach ';
+      runCommand(['tmux', 'set-option', '-t', session, 'status-format[2]', status2], { env: this.tmuxEnv });
 
       // Global mouse binding that reacts to our status ranges only.
       // This is idempotent and generic; safe to set repeatedly.
       // On click in DETACH area -> detach this client; in KILL area -> confirm then kill session.
-      runCommand([
-        'tmux', 'bind-key', '-n', 'MouseDown1Status',
-        'if-shell', '-F', "#{==:#{mouse_status_range},DETACH}",
-        'detach-client',
-        'if-shell', '-F', "#{==:#{mouse_status_range},KILL}",
-        'confirm-before', '-p', 'Kill session #{session_name}?', 'kill-session -t #{session_name}'
-      ], { env: this.tmuxEnv });
+      runCommand(['tmux', 'unbind-key', '-n', 'MouseDown1Status'], { env: this.tmuxEnv });
+      // Use run-shell with formatted variable to branch by range in sh
+      const handler = [
+        'run-shell',
+        '"',
+        'R=\"#{mouse_status_range}\"; ',
+        'if [ \"$R\" = DETACH ]; then tmux detach-client; ',
+        'elif [ \"$R\" = KILL ]; then tmux confirm-before -p \"Kill session #{session_name}?\" \"kill-session -t #{session_name}\"; fi',
+        '"'
+      ].join('');
+      runCommand(['tmux', 'bind-key', '-n', 'MouseDown1Status', handler], { env: this.tmuxEnv });
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error('Failed to configure tmux session UI:', err);

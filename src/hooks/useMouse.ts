@@ -37,9 +37,10 @@ export function useMouse({enabled = true, onEvent}: UseMouseOptions = {}) {
     try {
       setRawMode(true);
       // Enable SGR mouse reporting + button tracking + focus
-      // 1000: report button press/release; 1002: report button drag; 1006: SGR; 1004: focus
+      // 1000: button press/release; 1002: drag; 1003: any-motion; 1006: SGR; 1004: focus
       stdout.write('\u001b[?1000h');
       stdout.write('\u001b[?1002h');
+      stdout.write('\u001b[?1003h');
       stdout.write('\u001b[?1006h');
       stdout.write('\u001b[?1004h');
     } catch {}
@@ -69,7 +70,10 @@ export function useMouse({enabled = true, onEvent}: UseMouseOptions = {}) {
         } else {
           const base = b & 3; // 0 left, 1 middle, 2 right; 3 release or drag marker
           const dragging = !!(b & 32);
-          if (dragging) type = 'drag';
+          if (dragging) {
+            // Any-motion mode (1003) sends motion with base=3 and dragging bit on
+            type = base === 3 ? 'move' : 'drag';
+          }
 
           if (!up) {
             if (base === 0) button = 'left';
@@ -103,6 +107,7 @@ export function useMouse({enabled = true, onEvent}: UseMouseOptions = {}) {
         // Disable mouse tracking
         stdout.write('\u001b[?1004l');
         stdout.write('\u001b[?1006l');
+        stdout.write('\u001b[?1003l');
         stdout.write('\u001b[?1002l');
         stdout.write('\u001b[?1000l');
       } catch {}
@@ -110,4 +115,3 @@ export function useMouse({enabled = true, onEvent}: UseMouseOptions = {}) {
     };
   }, [enabled, stdin, setRawMode, stdout, onEvent]);
 }
-

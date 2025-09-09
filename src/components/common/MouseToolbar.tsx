@@ -15,6 +15,7 @@ export default function MouseToolbar() {
   const {getSelectedWorktree, attachSession, attachShellSession} = useWorktreeContext();
   const {showHelp, requestExit, showDiffView, showRunConfig, runWithLoading, showList} = useUIContext();
   const [lastClick, setLastClick] = useState<{x: number; y: number} | null>(null);
+  const [hoverId, setHoverId] = useState<string | null>(null);
 
   const buttons = useMemo<Button[]>(() => [
     { id: 'attach', label: 'Attach', action: () => {
@@ -48,15 +49,20 @@ export default function MouseToolbar() {
 
   useMouse({
     onEvent: ev => {
-      // Only handle clicks on the last visible row (or second to last as a buffer)
       const rows = stdout?.rows || 24;
-      if (ev.type !== 'down') return;
-      if (!(ev.y === rows - 1 || ev.y === rows - 2)) return;
+      const withinToolbarRow = (ev.y === rows - 1 || ev.y === rows - 2);
+      if (!withinToolbarRow) return;
       const hit = rangesRef.current.find(r => ev.x >= r.start && ev.x <= r.end);
-      if (hit) {
-        setLastClick({x: ev.x, y: ev.y});
-        const btn = buttons.find(b => b.id === hit.id);
-        btn?.action();
+      if (ev.type === 'move') {
+        setHoverId(hit?.id ?? null);
+      } else if (ev.type === 'down') {
+        if (hit) {
+          setLastClick({x: ev.x, y: ev.y});
+          const btn = buttons.find(b => b.id === hit.id);
+          btn?.action();
+        } else {
+          setHoverId(null);
+        }
       }
     }
   });
@@ -67,13 +73,16 @@ export default function MouseToolbar() {
 
   return (
     <Box borderStyle="single" borderColor="cyan" paddingX={1}>
-      {buttons.map((b, i) => (
-        <Box key={b.id} marginRight={1}>
-          <Text>
-            {'['} <Text bold>{b.label}</Text> {']'}{i < buttons.length - 1 ? ' ' : ''}
-          </Text>
-        </Box>
-      ))}
+      {buttons.map((b, i) => {
+        const hovered = hoverId === b.id;
+        return (
+          <Box key={b.id} marginRight={1}>
+            <Text color={hovered ? 'cyan' : undefined} inverse={hovered}>
+              {'['} <Text bold color={hovered ? 'black' : undefined}>{b.label}</Text> {']'}{i < buttons.length - 1 ? ' ' : ''}
+            </Text>
+          </Box>
+        );
+      })}
       <Box flexGrow={1} />
       {lastClick ? (
         <Text dimColor>
@@ -84,4 +93,3 @@ export default function MouseToolbar() {
     </Box>
   );
 }
-
