@@ -164,18 +164,15 @@ export class TmuxService {
       // Use a multi-line status so we have room for clickable controls
       this.setSessionOption(session, 'status', '3');
       this.setSessionOption(session, 'status-position', 'bottom');
-      this.setSessionOption(session, 'status-interval', '5');
+      this.setSessionOption(session, 'status-interval', '1');
       this.setSessionOption(session, 'status-style', 'bg=black,fg=white');
 
       // Clickable ranges on the status line. DETACH and KILL are user ranges.
-      // Line 1: primary buttons + centered session name
+      // Line 1: primary buttons + centered session name (static styles; no inline conditional styles to avoid rendering issues)
       const status0 = [
         '#[align=left]',
-        // Hover effect using mouse_status_range to add underscore when hovering same range
-        '#[range=user|DETACH]',
-        '#{?#{==:#{mouse_status_range},DETACH},#[fg=black,bg=yellow,underscore],#[fg=black,bg=yellow]} [ Detach ] #[default]#[norange] ',
-        '#[range=user|KILL]',
-        '#{?#{==:#{mouse_status_range},KILL},#[fg=white,bg=red,underscore],#[fg=white,bg=red]} [ Kill ] #[default]#[norange]',
+        '#[range=user|DETACH]#[fg=black,bg=yellow] [ Detach ] #[default]#[norange] ',
+        '#[range=user|KILL]#[fg=white,bg=red] [ Kill ] #[default]#[norange]',
         ' #[align=centre]#[bold]#S#[nobold] ',
         ' #[align=right]#{?session_attached,attached,detached} '
       ].join('');
@@ -186,19 +183,33 @@ export class TmuxService {
       const windowList = '#{W:#{E:window-status-format} ,#{E:window-status-current-format} }';
       runCommand(['tmux', 'set-option', '-t', session, 'status-format[1]', windowList], { env: this.tmuxEnv });
 
-      // Line 3: hints
-      const status2 = '#[align=left] Click status buttons with mouse  #[align=right] Ctrl+b then d to detach ';
+      // Line 3: hover status from last mouse event (stored in @devteam_hover) and hint
+      const status2 = [
+        '#[align=left]',
+        '#{?#{==:#{@devteam_hover},DETACH},Hover: Detach — click to detach,',
+        '#{?#{==:#{@devteam_hover},KILL},Hover: Kill — click to terminate session,}}',
+        ' #[align=right] Ctrl+b then d to detach '
+      ].join('');
       runCommand(['tmux', 'set-option', '-t', session, 'status-format[2]', status2], { env: this.tmuxEnv });
 
       // Global mouse binding that reacts to our status ranges only.
       // This is idempotent and generic; safe to set repeatedly.
       // On click in DETACH area -> detach this client; in KILL area -> confirm then kill session.
       runCommand(['tmux', 'unbind-key', '-n', 'MouseDown1Status'], { env: this.tmuxEnv });
-      // Use run-shell with formatted variable to branch by range in sh
+      // Update hover state on common mouse events on the status line
+      const setHover = 'run-shell "tmux set -g @devteam_hover \"#{mouse_status_range}\""';
+      for (const k of ['MouseUp1Status', 'WheelUpStatus', 'WheelDownStatus', 'MouseDrag1Status', 'MouseDragEnd1Status']) {
+        try {
+          runCommand(['tmux', 'unbind-key', '-n', k], { env: this.tmuxEnv });
+        } catch {}
+        runCommand(['tmux', 'bind-key', '-n', k, setHover], { env: this.tmuxEnv });
+      }
+      // Click handler: record hover and perform action
       const handler = [
         'run-shell',
         '"',
         'R=\"#{mouse_status_range}\"; ',
+        'tmux set -g @devteam_hover \"$R\"; ',
         'if [ \"$R\" = DETACH ]; then tmux detach-client; ',
         'elif [ \"$R\" = KILL ]; then tmux confirm-before -p \"Kill session #{session_name}?\" \"kill-session -t #{session_name}\"; fi',
         '"'
