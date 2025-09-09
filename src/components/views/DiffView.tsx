@@ -558,7 +558,9 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                 const sbsLine = line as SideBySideLine;
                 const leftText = sbsLine.left?.text || '';
                 const rightText = sbsLine.right?.text || '';
-                return leftText.length > rightText.length ? leftText : rightText;
+                const leftH = LineWrapper.calculateHeight(leftText, maxWidth);
+                const rightH = LineWrapper.calculateHeight(rightText, maxWidth);
+                return leftH >= rightH ? leftText : rightText;
               }
             });
             
@@ -607,7 +609,9 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                 const sbsLine = line as SideBySideLine;
                 const leftText = sbsLine.left?.text || '';
                 const rightText = sbsLine.right?.text || '';
-                return leftText.length > rightText.length ? leftText : rightText;
+                const leftH = LineWrapper.calculateHeight(leftText, maxWidth);
+                const rightH = LineWrapper.calculateHeight(rightText, maxWidth);
+                return leftH >= rightH ? leftText : rightText;
               }
             });
             
@@ -942,7 +946,9 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
         const sbsLine = line as SideBySideLine;
         const leftText = sbsLine.left?.text || '';
         const rightText = sbsLine.right?.text || '';
-        return leftText.length > rightText.length ? leftText : rightText;
+        const leftH = LineWrapper.calculateHeight(leftText, maxWidth);
+        const rightH = LineWrapper.calculateHeight(rightText, maxWidth);
+        return leftH >= rightH ? leftText : rightText;
       }
     });
     
@@ -1129,7 +1135,31 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       {(() => {
         const renderedElements: React.ReactNode[] = [];
         let visibleLineIndex = 0;
-        
+        // Enforce row budget when wrapping
+        let rowsRemaining = measuredPageSize;
+        const unifiedMaxWidth = terminalWidth - 4;
+        const sbsPaneWidth = Math.floor((terminalWidth - 2) / 2);
+        const sbsMaxPaneWidth = sbsPaneWidth - 2;
+        // Calculate the starting visual row of the first visible line
+        let firstVisibleLineStartRow = 0;
+        if (wrapMode === 'wrap') {
+          const currentLinesForHeight = viewMode === 'unified' ? lines : sideBySideLines;
+          const firstIdx = viewport.firstVisibleLine;
+          for (let i = 0; i < firstIdx; i++) {
+            if (viewMode === 'unified') {
+              const t = (currentLinesForHeight[i] as DiffLine).text || ' ';
+              firstVisibleLineStartRow += LineWrapper.calculateHeight(t, unifiedMaxWidth);
+            } else {
+              const sbs = currentLinesForHeight[i] as SideBySideLine;
+              const leftText = sbs.left?.text || '';
+              const rightText = sbs.right?.text || '';
+              const hL = LineWrapper.calculateHeight(leftText, sbsMaxPaneWidth);
+              const hR = LineWrapper.calculateHeight(rightText, sbsMaxPaneWidth);
+              firstVisibleLineStartRow += Math.max(hL, hR);
+            }
+          }
+        }
+
         for (const l of visibleLines) {
           const actualLineIndex = viewport.visibleLines[visibleLineIndex];
           const isCurrentLine = actualLineIndex === selectedLine;
@@ -1244,10 +1274,16 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
             }
           } else {
             // Wrap mode with gutter and diff colors
-            const maxWidth = terminalWidth - 4; // -4 for gutter
+            const maxWidth = unifiedMaxWidth; // -4 for gutter
             const segments = LineWrapper.wrapLine(fullText, maxWidth);
-            
-            segments.forEach((segment, segIdx) => {
+            let startSeg = 0;
+            if (visibleLineIndex === 0) {
+              const offsetRows = Math.max(0, viewport.viewportStartRow - firstVisibleLineStartRow);
+              startSeg = Math.min(offsetRows, segments.length);
+            }
+            for (let segIdx = startSeg; segIdx < segments.length; segIdx++) {
+              if (rowsRemaining <= 0) break;
+              const segment = segments[segIdx];
               if (unifiedLine.type === 'header') {
                 const headerColor = unifiedLine.headerType === 'file' ? 'white' : 'cyan';
                 renderedElements.push(
@@ -1260,7 +1296,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                       backgroundColor={isCurrentLine ? 'blue' : undefined}
                       bold={isCurrentLine}
                     >
-                      {segIdx === 0 ? gutterSymbol : '  '}
+                      {segIdx === startSeg ? gutterSymbol : '  '}
                     </Text>
                     <Text
                       color={headerColor}
@@ -1278,13 +1314,13 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                     backgroundColor={isCurrentLine ? 'blue' : undefined}
                     bold={isCurrentLine}
                   >
-                    {segIdx === 0 ? gutterSymbol : '  '}
+                    {segIdx === startSeg ? gutterSymbol : '  '}
                   </Text>
                 );
                 
                 // For wrapped segments, extract the actual code text (removing comment indicator from non-first segments)
                 let codeText = segment;
-                if (segIdx === 0 && hasComment) {
+                if (segIdx === startSeg && hasComment) {
                   codeText = segment.replace('[C] ', '');
                   const commentElement = (
                     <Text
@@ -1339,13 +1375,14 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                     </Box>
                   );
                 }
+              rowsRemaining--;
               }
-            });
+            }
           }
         } else {
           // Side-by-side diff rendering with syntax highlighting
           const sideBySideLine = l as SideBySideLine;
-          const paneWidth = Math.floor((terminalWidth - 2) / 2); // Leave 2 cols slack to avoid terminal wrap
+          const paneWidth = sbsPaneWidth; // Leave 2 cols slack to avoid terminal wrap
           
           // Get comment info based on the original line index
           const sbsFileForComment = sideBySideLine.right?.fileName || sideBySideLine.left?.fileName || '';
@@ -1535,12 +1572,17 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
             );
           } else {
             // Wrap mode: handle wrapped side-by-side content with syntax highlighting
-            const maxPaneWidth = paneWidth - 2;
+            const maxPaneWidth = sbsMaxPaneWidth;
             const leftSegments = leftFullText ? LineWrapper.wrapLine(leftFullText, maxPaneWidth) : [''];
             const rightSegments = rightFullText ? LineWrapper.wrapLine(rightFullText, maxPaneWidth) : [''];
-            const maxSegments = Math.max(leftSegments.length, rightSegments.length);
-            
-            for (let segIdx = 0; segIdx < maxSegments; segIdx++) {
+            const totalSegments = Math.max(leftSegments.length, rightSegments.length);
+            let startSeg = 0;
+            if (visibleLineIndex === 0) {
+              const offsetRows = Math.max(0, viewport.viewportStartRow - firstVisibleLineStartRow);
+              startSeg = Math.min(offsetRows, totalSegments);
+            }
+            for (let segIdx = startSeg; segIdx < totalSegments; segIdx++) {
+              if (rowsRemaining <= 0) break;
               const leftSegment = leftSegments[segIdx] || '';
               const rightSegment = rightSegments[segIdx] || '';
               
@@ -1580,7 +1622,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                   );
                   
                   // Handle comment indicator for first segment
-                  if (leftSegment.includes('[C] ') && segIdx === 0) {
+                  if (leftSegment.includes('[C] ') && segIdx === startSeg) {
                     leftElement = (
                       <Box
                         flexDirection="row"
@@ -1707,11 +1749,15 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                   {rightElement}
                 </Box>
               );
+              rowsRemaining--;
             }
           }
         }
         
         visibleLineIndex++;
+        if (wrapMode === 'wrap' && rowsRemaining <= 0) {
+          break;
+        }
       }
       
         return renderedElements;
