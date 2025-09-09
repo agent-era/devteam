@@ -1,5 +1,6 @@
 import {execFileSync, spawnSync, execFile, spawn} from 'child_process';
 import {SUBPROCESS_SHORT_TIMEOUT, SUBPROCESS_TIMEOUT, AI_TOOLS} from '../../constants.js';
+import {requestRedraw, requestRemount} from './redraw.js';
 
 // Consolidated command executors (sync + async) with options
 export function runCommand(
@@ -91,6 +92,20 @@ export function commandExitCode(args: string[], cwd?: string, env?: NodeJS.Proce
 export function runInteractive(cmd: string, args: string[], opts: {cwd?: string} = {}): number {
   // Do not manipulate terminal modes; hand over TTY and return
   const result = spawnSync(cmd, args, {cwd: opts.cwd, stdio: 'inherit'});
+
+  // After returning from an interactive program (e.g., tmux attach),
+  // nudge Ink to re-measure and repaint without touching terminal modes.
+  try {
+    const out: any = process.stdout as any;
+    const nudge = () => { try { out?.emit?.('resize'); } catch {}; try { requestRedraw(); } catch {} };
+    // Microtask, short, and longer delays to handle terminals that settle slowly
+    try { Promise.resolve().then(nudge); } catch {}
+    setTimeout(nudge, 100);
+    setTimeout(nudge, 500);
+    // Fallback: shallow remount if still stuck
+    setTimeout(() => { try { requestRemount(); } catch {} }, 700);
+  } catch {}
+
   return result.status ?? 0;
 }
 
