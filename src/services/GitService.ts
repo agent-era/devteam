@@ -477,10 +477,17 @@ export class GitService {
       fs.symlinkSync(claudeDirSrc, claudeDirDst, 'dir');
     }
   }
-
+  
   
 
   archiveWorktree(project: string, sourcePath: string, archivedDest: string): void {
+    // Clean ignored files in the worktree before archiving
+    try {
+      runCommandQuick(['git', '-C', sourcePath, 'clean', '-fdX']);
+    } catch {
+      // Silent failure; cleaning is best-effort and should not block archiving
+    }
+
     try {
       fs.renameSync(sourcePath, archivedDest);
     } catch {
