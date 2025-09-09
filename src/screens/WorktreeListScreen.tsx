@@ -31,12 +31,13 @@ export default function WorktreeListScreen({
   onExecuteRun,
   onConfigureRun
 }: WorktreeListScreenProps) {
-  const {worktrees, selectedIndex, selectWorktree, refresh, refreshVisibleStatus, forceRefreshVisible, attachSession, attachShellSession, needsToolSelection, lastRefreshed, memoryStatus, versionInfo} = useWorktreeContext();
+  const {worktrees, selectedIndex, selectWorktree, refresh, refreshVisibleStatus, forceRefreshVisible, attachSession, attachShellSession, needsToolSelection, lastRefreshed, memoryStatus, versionInfo, discoverProjects} = useWorktreeContext();
   const {setVisibleWorktrees} = useGitHubContext();
   const {isAnyDialogFocused} = useInputFocus();
-  const {showAIToolSelection, tmuxHintShown, showTmuxHintFor} = useUIContext();
+  const {showAIToolSelection, tmuxHintShown, showTmuxHintFor, showList, runWithLoading} = useUIContext();
   const [pageSize, setPageSize] = useState(1);
   const [currentPage, setCurrentPage] = useState(0);
+  const [hasProjects, setHasProjects] = useState<boolean>(false);
 
   // Refresh data when component mounts, but only if data is missing or very stale
   useEffect(() => {
@@ -48,6 +49,16 @@ export default function WorktreeListScreen({
     }
   }, []); // Only on mount
 
+  // Detect whether any projects are available (used for zero-state message)
+  useEffect(() => {
+    try {
+      const projects = discoverProjects();
+      setHasProjects(Array.isArray(projects) && projects.length > 0);
+    } catch {
+      setHasProjects(false);
+    }
+  }, []);
+
   // Keep GitHub context informed of which worktrees are visible (current page)
   useEffect(() => {
     const startIndex = currentPage * pageSize;
@@ -55,6 +66,19 @@ export default function WorktreeListScreen({
     const visiblePaths = worktrees.slice(startIndex, endIndex).map(w => w.path);
     setVisibleWorktrees(visiblePaths);
   }, [worktrees, currentPage, pageSize, setVisibleWorktrees]);
+
+  // Ensure the page shows the currently selected item (e.g., after reattaching)
+  useEffect(() => {
+    if (pageSize <= 0 || worktrees.length === 0) return;
+    const start = currentPage * pageSize;
+    const end = Math.min(start + pageSize - 1, Math.max(0, worktrees.length - 1));
+    if (selectedIndex < start || selectedIndex > end) {
+      const newPage = Math.floor(selectedIndex / pageSize);
+      if (Number.isFinite(newPage) && newPage !== currentPage) {
+        setCurrentPage(newPage);
+      }
+    }
+  }, [selectedIndex, pageSize, worktrees.length, currentPage]);
 
   // Single loop to refresh git+AI status for visible rows only
   useEffect(() => {
@@ -116,10 +140,7 @@ export default function WorktreeListScreen({
           showTmuxHintFor(selectedWorktree);
           return;
         }
-        attachSession(selectedWorktree);
-        refresh().catch(error => {
-          console.error('Refresh after attach failed:', error);
-        });
+        runWithLoading(() => attachSession(selectedWorktree));
       }
     } catch (error) {
       console.error('Failed to handle selection:', error);
@@ -131,12 +152,8 @@ export default function WorktreeListScreen({
     if (!selectedWorktree) return;
     
     try {
-      attachShellSession(selectedWorktree);
+      runWithLoading(() => attachShellSession(selectedWorktree));
     } catch {}
-    
-    refresh().catch(error => {
-      console.error('Refresh after attach failed:', error);
-    });
   };
 
   const handleDiffFull = () => {
@@ -248,6 +265,7 @@ export default function WorktreeListScreen({
       onMeasuredPageSize={setPageSize}
       memoryStatus={memoryStatus}
       versionInfo={versionInfo}
+      hasProjects={hasProjects}
     />
   );
 }

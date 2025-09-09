@@ -30,6 +30,7 @@ interface Props {
   onMeasuredPageSize?: (pageSize: number) => void;
   memoryStatus?: MemoryStatus | null;
   versionInfo?: VersionInfo | null;
+  hasProjects?: boolean;
 }
 
 export default function MainView({
@@ -41,7 +42,8 @@ export default function MainView({
   page = 0,
   onMeasuredPageSize,
   memoryStatus,
-  versionInfo
+  versionInfo,
+  hasProjects,
 }: Props) {
   const {rows: terminalRows, columns: terminalWidth} = useTerminalDimensions();
 
@@ -121,7 +123,7 @@ export default function MainView({
   }
   
   if (!worktrees.length) {
-    return <EmptyState />;
+    return <EmptyState hasProjects={hasProjects} />;
   }
 
   return (
@@ -146,13 +148,13 @@ export default function MainView({
           );
         })}
       </Box>
-      <Box marginTop={1}>
-        <AnnotatedText color="magenta" wrap="truncate" text={headerText} />
-      </Box>
       <PaginationFooter
         totalPages={paginationInfo.totalPages}
         paginationText={paginationInfo.paginationText}
       />
+      <Box marginTop={1}>
+        <AnnotatedText color="magenta" wrap="truncate" text={headerText} />
+      </Box>
     </Box>
   );
 }

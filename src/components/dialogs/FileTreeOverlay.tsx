@@ -70,10 +70,10 @@ export default function FileTreeOverlay({files, highlightedFile, maxWidth, maxHe
   // Determine overlay dimensions
   // Leave some padding for border and title
   const innerPadding = 4; // borders (2) + paddingX:1 on both sides (2)
-  const titleRowCount = 2; // title + help row
+  const titleRowCount = 3; // title + spacer + help row
   const availableHeight = Math.max(5, maxHeight - 4);
   const boxHeight = overlayHeight ?? Math.min(availableHeight, Math.max(10, Math.floor(maxHeight * 0.6)));
-  const contentHeight = Math.max(1, boxHeight - titleRowCount - 2); // minus border and title/help
+  const contentHeight = Math.max(1, boxHeight - titleRowCount - 2); // minus border and title/spacer/help
 
   // Compute preferred width based on content (indent + label)
   const maxLabelWidth = rows.reduce((w, r) => Math.max(w, stringDisplayWidth('  '.repeat(r.depth) + r.label)), 0);
@@ -120,7 +120,7 @@ export default function FileTreeOverlay({files, highlightedFile, maxWidth, maxHe
             );
           })}
         </Box>
-        <Box paddingX={1}>
+        <Box paddingX={1} marginTop={1}>
           <AnnotatedText color="magenta" wrap="truncate" text={'[shift]+[↑]/[↓] navigate files'} />
         </Box>
       </Box>
