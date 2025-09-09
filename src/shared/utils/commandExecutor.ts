@@ -1,6 +1,5 @@
 import {execFileSync, spawnSync, execFile, spawn} from 'child_process';
 import {SUBPROCESS_SHORT_TIMEOUT, SUBPROCESS_TIMEOUT, AI_TOOLS} from '../../constants.js';
-import {requestRedraw, requestRemount} from './redraw.js';
 
 // Consolidated command executors (sync + async) with options
 export function runCommand(
@@ -90,77 +89,9 @@ export function commandExitCode(args: string[], cwd?: string, env?: NodeJS.Proce
 }
 
 export function runInteractive(cmd: string, args: string[], opts: {cwd?: string} = {}): number {
-  const out: any = process.stdout as any;
-  const isTTY = !!(out && out.isTTY);
-  const inp: any = process.stdin as any;
-  const hadRaw: boolean = !!(inp && inp.isRaw);
-
-  // In terminal E2E, allow simulation without spawning tmux
-  if (process.env.E2E_SIMULATE_TMUX_ATTACH === '1') {
-    try {
-      // Simulate leaving Ink's alt-screen while tmux takes over
-      if (isTTY) {
-        try { out.write('\u001b[?25h'); } catch {}
-        try { out.write('\u001b[?1049l'); } catch {}
-      }
-    } catch {}
-    // Simulate quick detach and return control to app
-    // Re-enter alt screen and trigger a resize to force Ink re-render
-    try {
-      if (isTTY) {
-        // Perform a soft terminal reset to clear any lingering modes set by tmux
-        try { out.write('\u001bc'); } catch {}
-        try { out.write('\u001b[?1049h'); } catch {}
-        try { out.write('\u001b[2J\u001b[H'); } catch {}
-        try { out.write('\u001b[?25l'); } catch {}
-        // Re-enable raw mode in case child altered it
-        try { (process.stdin as any)?.setRawMode?.(true); } catch {}
-        // Multi-phase nudge and optional remount
-        const nudge = () => { try { out.emit?.('resize'); } catch {}; try { requestRedraw(); } catch {} };
-        const remount = () => { try { requestRemount(); } catch {} };
-        try { Promise.resolve().then(nudge); } catch {}
-        setTimeout(nudge, 200);
-        setTimeout(nudge, 1000);
-        setTimeout(remount, 1100);
-      }
-    } catch {}
-    return 0;
-  }
-
-  // Gracefully release alt-screen to the child, then restore and force redraw
-  try {
-    if (isTTY) {
-      try { out.write('\u001b[?25h'); } catch {}
-      try { out.write('\u001b[?1049l'); } catch {}
-    }
-    // Disable raw mode before handing control to child
-    try { inp?.setRawMode?.(false); } catch {}
-
-    const result = spawnSync(cmd, args, {cwd: opts.cwd, stdio: 'inherit'});
-    return result.status ?? 0;
-  } finally {
-    if (isTTY) {
-      // Perform a soft terminal reset to clear any lingering modes set by child
-      try { out.write('\u001bc'); } catch {}
-      try { out.write('\u001b[?1049h'); } catch {}
-      try { out.write('\u001b[2J\u001b[H'); } catch {}
-      try { out.write('\u001b[?25l'); } catch {}
-      // Re-enable raw mode if it was previously enabled
-      try { inp?.setRawMode?.(hadRaw); } catch {}
-      try { inp?.resume?.(); } catch {}
-      // Nudge Ink/FullScreen after short and longer delays to avoid races
-      const nudge = () => { try { out.emit?.('resize'); } catch {}; try { requestRedraw(); } catch {} };
-      const remount = () => { try { requestRemount(); } catch {} };
-      // microtask (in case event loop needs to settle)
-      try { Promise.resolve().then(nudge); } catch {}
-      // short delay
-      setTimeout(nudge, 200);
-      // longer delay as safety (some terminals settle slower)
-      setTimeout(nudge, 1000);
-      // force a shallow remount a bit later if still stuck
-      setTimeout(remount, 1100);
-    }
-  }
+  // Do not manipulate terminal modes; hand over TTY and return
+  const result = spawnSync(cmd, args, {cwd: opts.cwd, stdio: 'inherit'});
+  return result.status ?? 0;
 }
 
 export function runClaudeSync(prompt: string, cwd?: string): {success: boolean; output: string; error?: string} {

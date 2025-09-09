@@ -6,6 +6,7 @@ import type {AITool} from '../models.js';
 type UIMode = 'list' | 'create' | 'confirmArchive' | 'help' | 
              'pickProjectForBranch' | 'pickBranch' | 'diff' | 'runConfig' | 
              'runProgress' | 'runResults' | 'selectAITool' | 'tmuxHint' |
+             'attachProgress' |
              'noProjects';
 
 interface UIContextType {
@@ -43,6 +44,7 @@ interface UIContextType {
   showAIToolSelection: (worktree: WorktreeInfo) => void;
   showTmuxHintFor: (worktree: WorktreeInfo, tool?: AITool) => void;
   showNoProjectsDialog: () => void;
+  showAttachProgress: () => void;
   
   // Branch management
   setBranchList: (branches: any[]) => void;
@@ -174,6 +176,10 @@ export function UIProvider({children}: UIProviderProps) {
     setMode('noProjects');
   };
 
+  const showAttachProgress = () => {
+    setMode('attachProgress');
+  };
+
   const requestExit = () => {
     setShouldExit(true);
   };
@@ -220,6 +226,7 @@ export function UIProvider({children}: UIProviderProps) {
     showAIToolSelection,
     showTmuxHintFor,
     showNoProjectsDialog,
+    showAttachProgress,
     
     // Branch management
     setBranchList,

@@ -21,7 +21,7 @@ function useAltScreen(enabled: boolean) {
 }
 
 export default function FullScreen(props: {children: any; enableAltScreen?: boolean}) {
-  const {enableAltScreen = true} = props;
+  const {enableAltScreen = false} = props;
   const {stdout} = useStdout();
   const [dims, setDims] = useState<{columns: number; rows: number}>(() => ({columns: stdout?.columns || 80, rows: stdout?.rows || 24}));
   useAltScreen(enableAltScreen);

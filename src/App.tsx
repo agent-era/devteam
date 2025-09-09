@@ -74,6 +74,7 @@ function AppContent() {
     tmuxHintWorktree,
     tmuxHintTool,
     showTmuxHintFor,
+    showAttachProgress,
     markTmuxHintShown,
     showList,
     showCreateFeature,
@@ -283,6 +284,17 @@ function AppContent() {
     );
   }
 
+  if (!content && mode === 'attachProgress') {
+    content = (
+      <Box flexGrow={1} alignItems="center" justifyContent="center">
+        <ProgressDialog
+          title="Launching tmux session..."
+          message="Press Ctrl+b, then d to detach and return"
+        />
+      </Box>
+    );
+  }
+
   if (!content && mode === 'diff' && diffWorktree) {
     content = (
       <Box flexGrow={1} paddingX={1}>
@@ -420,12 +432,16 @@ function AppContent() {
             const wt = tmuxHintWorktree;
             const tool = tmuxHintTool || undefined;
             markTmuxHintShown();
-            showList();
             if (wt) {
               try {
+                showAttachProgress();
                 await attachSession(wt, tool);
+                // After returning, refresh and show list
+                await refresh('none');
+                showList();
               } catch (error) {
                 console.error('Failed to attach after tmux hint:', error);
+                showList();
               }
             }
           }}
