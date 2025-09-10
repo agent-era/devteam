@@ -55,9 +55,11 @@ interface WorktreeContextType {
   createFeature: (projectName: string, featureName: string) => Promise<WorktreeInfo | null>;
   createFromBranch: (project: string, remoteBranch: string, localName: string) => Promise<boolean>;
   archiveFeature: (worktreeOrProject: WorktreeInfo | string, path?: string, feature?: string) => Promise<{archivedPath: string}>;
+  archiveWorkspace: (featureName: string) => Promise<void>;
   // Workspace operations
   createWorkspace: (featureName: string, projects: string[]) => Promise<string | null>;
   attachWorkspaceSession: (featureName: string, aiTool?: AITool) => Promise<void>;
+  workspaceExists: (featureName: string) => boolean;
   
   
   // Session operations  
@@ -592,10 +594,8 @@ export function WorktreeProvider({
       } else {
         tmuxService.createSession(sessionName, workspaceDir, true);
       }
-      configureTmuxDisplayTime();
     }
-    configureTmuxDisplayTime();
-    tmuxService.attachSessionInteractive(sessionName);
+    tmuxService.attachSessionWithControls(sessionName);
   }, [tmuxService, availableAITools, gitService.basePath]);
 
   const attachShellSession = useCallback(async (worktree: WorktreeInfo) => {
@@ -626,6 +626,45 @@ export function WorktreeProvider({
     tmuxService.attachSessionWithControls(sessionName);
     return 'success';
   }, [tmuxService]);
+
+  // Archive entire workspace: kill workspace sessions, archive all child worktrees, remove workspace dir
+  const archiveWorkspace = useCallback(async (featureName: string) => {
+    setLoading(true);
+    try {
+      const base = gitService.basePath;
+      // Kill workspace-level sessions
+      const wsSession = tmuxService.sessionName('workspace', featureName);
+      const wsShell = tmuxService.shellSessionName('workspace', featureName);
+      const wsRun = tmuxService.runSessionName('workspace', featureName);
+      const active = await tmuxService.listSessions();
+      for (const s of [wsSession, wsShell, wsRun]) {
+        if (active.includes(s)) tmuxService.killSession(s);
+      }
+
+      // Collect all child worktrees for this feature
+      const children = worktrees.filter(w => (w as any).is_workspace_child && w.feature === featureName);
+      const timestamp = generateTimestamp();
+
+      for (const wt of children) {
+        try {
+          await terminateFeatureSessions(wt.project, featureName);
+        } catch {}
+        const archivedRoot = path.join(base, `${wt.project}${DIR_ARCHIVED_SUFFIX}`);
+        ensureDirectory(archivedRoot);
+        const archivedDest = path.join(archivedRoot, `${ARCHIVE_PREFIX}${timestamp}_${featureName}`);
+        moveWorktreeToArchive(wt.path, archivedDest, wt.project);
+        pruneWorktreeReferences(wt.project);
+      }
+
+      // Remove workspace directory
+      const workspaceDir = path.join(base, 'workspaces', featureName);
+      try { fs.rmSync(workspaceDir, {recursive: true, force: true}); } catch {}
+
+      await refresh('none');
+    } finally {
+      setLoading(false);
+    }
+  }, [gitService.basePath, worktrees, refresh]);
 
   const needsToolSelection = useCallback(async (worktree: WorktreeInfo): Promise<boolean> => {
     const sessionName = tmuxService.sessionName(worktree.project, worktree.feature);
@@ -896,6 +935,14 @@ export function WorktreeProvider({
     }
   }, [gitService.basePath, refresh]);
 
+  const workspaceExists = useCallback((featureName: string): boolean => {
+    try {
+      return workspaceService.hasWorkspaceForFeature(gitService.basePath, featureName);
+    } catch {
+      return false;
+    }
+  }, [gitService.basePath]);
+
   const pruneWorktreeReferences = useCallback((projectName: string) => {
     gitService.pruneWorktreeReferences(projectName);
   }, [gitService]);
@@ -984,9 +1031,11 @@ export function WorktreeProvider({
     createFeature,
     createFromBranch,
     archiveFeature,
+    archiveWorkspace,
     // Workspace operations
     createWorkspace,
     attachWorkspaceSession,
+    workspaceExists,
     
     // Session operations
     attachSession,

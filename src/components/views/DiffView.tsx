@@ -188,12 +188,20 @@ function convertToSideBySide(unifiedLines: DiffLine[]): SideBySideLine[] {
 }
 
 
-type Props = {worktreePath: string; title?: string; onClose: () => void; diffType?: 'full' | 'uncommitted'; onAttachToSession?: (sessionName: string) => void};
+type Props = {
+  worktreePath: string;
+  title?: string;
+  onClose: () => void;
+  diffType?: 'full' | 'uncommitted';
+  onAttachToSession?: (sessionName: string) => void;
+  // When viewing a workspace child repo, route comments to the top-level workspace session
+  workspaceFeature?: string;
+};
 
 type ViewMode = 'unified' | 'sidebyside';
 type WrapMode = 'truncate' | 'wrap';
 
-export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, diffType = 'full', onAttachToSession}: Props) {
+export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, diffType = 'full', onAttachToSession, workspaceFeature}: Props) {
   const {rows: terminalHeight, columns: terminalWidth} = useTerminalDimensions();
   const [lines, setLines] = useState<DiffLine[]>([]);
   const [sideBySideLines, setSideBySideLines] = useState<SideBySideLine[]>([]);
@@ -788,8 +796,11 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       const projectWithBranches = pathParts[pathParts.length - 2];
       const project = projectWithBranches.replace(/-branches$/, '');
       
-      // Construct proper session name: dev-project-feature
-      const sessionName = tmuxService.sessionName(project, feature);
+      // Determine target session name
+      // If this diff is for a workspace child, route comments to the top-level workspace session
+      const sessionName = workspaceFeature
+        ? tmuxService.sessionName('workspace', workspaceFeature)
+        : tmuxService.sessionName(project, feature);
       
       // Check if session exists
       const sessions = await tmuxService.listSessions();

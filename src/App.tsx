@@ -8,6 +8,7 @@ import DiffView from './components/views/DiffView.js';
 import ProjectPickerDialog from './components/dialogs/ProjectPickerDialog.js';
 import BranchPickerDialog from './components/dialogs/BranchPickerDialog.js';
 import RunConfigDialog from './components/dialogs/RunConfigDialog.js';
+import InfoDialog from './components/dialogs/InfoDialog.js';
 import ProgressDialog from './components/dialogs/ProgressDialog.js';
 import ConfigResultsDialog from './components/dialogs/ConfigResultsDialog.js';
 import AIToolDialog from './components/dialogs/AIToolDialog.js';
@@ -66,6 +67,7 @@ function AppContent() {
     runPath,
     runConfigResult,
     pendingWorktree,
+    info,
     
     // tmux hint removed
     showList,
@@ -81,6 +83,7 @@ function AppContent() {
     showRunResults,
     showAIToolSelection,
     showNoProjectsDialog,
+    showInfo,
     runWithLoading,
     requestExit
   } = useUIContext();
@@ -266,6 +269,8 @@ function AppContent() {
   }
 
   if (!content && mode === 'diff' && diffWorktree) {
+    const sel = getSelectedWorktree?.() as any;
+    const workspaceFeature = sel?.is_workspace_child ? (sel.parent_feature || sel.feature) : undefined;
     content = (
       <Box flexGrow={1} paddingX={1}>
         <DiffView
@@ -274,6 +279,21 @@ function AppContent() {
           diffType={diffType}
           onClose={showList}
           onAttachToSession={handleAttachToSession}
+          workspaceFeature={workspaceFeature}
+        />
+      </Box>
+    );
+  }
+
+  if (!content && mode === 'info' && info) {
+    content = (
+      <Box flexGrow={1} alignItems="center" justifyContent="center">
+        <InfoDialog
+          title={info.title}
+          message={info.message}
+          onClose={() => {
+            try { info.onClose && info.onClose(); } finally { showList(); }
+          }}
         />
       </Box>
     );

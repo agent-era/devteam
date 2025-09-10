@@ -18,12 +18,20 @@ export default function CreateFeatureScreen({
   onCancel,
   onSuccess
 }: CreateFeatureScreenProps) {
-  const {createFeature, needsToolSelection, createWorkspace, attachWorkspaceSession, attachSession} = useWorktreeContext();
-  const {showAIToolSelection} = useUIContext();
+  const {createFeature, needsToolSelection, createWorkspace, attachWorkspaceSession, attachSession, workspaceExists} = useWorktreeContext();
+  const {showAIToolSelection, showInfo} = useUIContext();
 
   // Updated: support multiple projects; if only one selected, do NOT create a workspace
   const handleSubmit = async (selectedProjects: string[], feature: string) => {
     try {
+      // Block if a workspace already exists for this feature name
+      if (workspaceExists(feature)) {
+        showInfo(`A workspace named '${feature}' already exists. Please choose a different feature name.`, {
+          title: 'Workspace Exists',
+          onClose: onCancel
+        });
+        return;
+      }
       // Create a worktree for each selected project
       const createdResults = [] as any[];
       for (const p of selectedProjects) {
