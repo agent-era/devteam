@@ -29,6 +29,7 @@ import {useInputFocus} from './InputFocusContext.js';
 import {useGitHubContext} from './GitHubContext.js';
 import {logDebug} from '../shared/utils/logger.js';
 import {Timer} from '../shared/utils/timing.js';
+import {DevTeamEngine} from '../sync/DevTeamEngine.js';
 
 
 interface WorktreeContextType {
@@ -130,32 +131,49 @@ export function WorktreeProvider({
   const refreshingVisibleRef = React.useRef(false);
   const lastSessionsRef = React.useRef<string[] | null>(null);
   const lastSessionsAtRef = React.useRef<number>(0);
+  const engineRef = React.useRef<DevTeamEngine | null>(null);
   // Filesystem operations are routed through GitService methods (see CLAUDE.md)
 
   // Cache available AI tools on startup
   const availableAITools = useMemo(() => detectAvailableAITools(), []);
 
-  const collectWorktrees = useCallback(async (): Promise<Array<{
-    project: string; 
-    feature: string; 
-    path: string; 
-    branch: string; 
-    mtime?: number
-  }>> => {
-    const projects = gitService.discoverProjects();
-    // Limit concurrent project scans to reduce fs/process load
-    const allWorktrees = await mapLimit(projects, 4, async (project) => 
-      gitService.getWorktreesForProject(project)
-    );
-    
-    // Flatten the results
-    const rows = [];
-    for (const worktrees of allWorktrees) {
-      for (const wt of worktrees) rows.push(wt);
-    }
-    
-    return rows;
-  }, [gitService]);
+  // Initialize DevTeamEngine once and subscribe to snapshots to keep structure + AI in sync
+  useEffect(() => {
+    const engine = new DevTeamEngine({projectsDir: getProjectsDirectory()}, {git: gitService, tmux: tmuxService});
+    engineRef.current = engine;
+    const handler = (snap: {version: number; items: Array<{project:string;feature:string;path:string;branch:string; session?: string; attached?: boolean; ai_tool?: any; ai_status?: any}>}) => {
+      const prevMap = new Map(worktrees.map(w => [`${w.project}/${w.feature}`, w]));
+      const list: WorktreeInfo[] = snap.items.map((it) => {
+        const key = `${it.project}/${it.feature}`;
+        const prev = prevMap.get(key);
+        const sessionInfo = new SessionInfo({
+          session_name: it.session || tmuxService.sessionName(it.project, it.feature),
+          attached: !!it.attached,
+          ai_status: (it.ai_status as any) || 'not_running',
+          ai_tool: (it.ai_tool as any) || 'none',
+        });
+        return new WorktreeInfo({
+          project: it.project,
+          feature: it.feature,
+          path: it.path,
+          branch: it.branch,
+          // preserve last known git status; visible-refresh will refine
+          git: prev?.git ? new GitStatus(prev.git) : new GitStatus(),
+          session: sessionInfo,
+        });
+      });
+      setWorktrees(list);
+      setLastRefreshed(Date.now());
+    };
+    engine.on('snapshot', handler);
+    // prime with initial refresh
+    engine.refreshNow().catch(() => {});
+    return () => {
+      try { engine.off('snapshot', handler as any); } catch {}
+      engineRef.current = null;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const attachRuntimeData = useCallback(async (list: Array<{
     project: string; 
@@ -221,8 +239,10 @@ export function WorktreeProvider({
     
     try {
       logDebug(`[Refresh.Full] Starting complete refresh`);
-      
-      const rawList = await collectWorktrees();
+      const engine = engineRef.current;
+      if (engine) await engine.refreshNow();
+      const snap = engine?.getSnapshot();
+      const rawList = snap?.items?.map(it => ({project: it.project, feature: it.feature, path: it.path, branch: it.branch})) || [];
       const enrichedList = await attachRuntimeData(rawList);
       setWorktrees(enrichedList);
       setLastRefreshed(Date.now());
@@ -238,7 +258,7 @@ export function WorktreeProvider({
     } finally {
       setLoading(false);
     }
-  }, [loading, collectWorktrees, attachRuntimeData, getPRStatus, setVisibleWorktrees, refreshPRStatus]);
+  }, [loading, attachRuntimeData, getPRStatus, setVisibleWorktrees, refreshPRStatus]);
 
   const forceRefreshVisible = useCallback(async (currentPage: number, pageSize: number) => {
     if (loading || worktrees.length === 0) return;
