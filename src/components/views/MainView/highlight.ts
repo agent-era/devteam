@@ -145,8 +145,8 @@ export function statusColorsFromReason(reason: StatusReason | string | null | un
     case StatusReason.PR_READY_TO_MERGE:
       return {bg: 'green', fg};
     case StatusReason.PR_CHECKING:
-      // No background; use amber-like yellow text
-      return {bg: 'none', fg: 'yellow'};
+      // No background; use magenta text
+      return {bg: 'none', fg: 'magenta'};
     case StatusReason.NO_PR:
       // Plain cyan text 'no-pr' with no background
       return {bg: 'none', fg: 'cyan'};

@@ -103,7 +103,7 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
         case StatusReason.PR_READY_TO_MERGE:
           return 'green';
         case StatusReason.PR_CHECKING:
-          return 'yellow'; // amber-like
+          return 'magenta';
         case StatusReason.NO_PR:
           return 'cyan';
         case StatusReason.PR_MERGED:
