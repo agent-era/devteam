@@ -43,9 +43,12 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
   
   // Format all data for display
   const data = {
+    // Number column: always show index, including for workspace children
     number: String(globalIndex + 1),
-    // Display as: feature [project]
-    projectFeature: `${worktree.feature} [${worktree.project}]`,
+    // Branch name column: show tree glyph + [project] for children; otherwise feature [project]
+    projectFeature: worktree.is_workspace_child
+      ? `${worktree.is_last_workspace_child ? '└─' : '├─'} [${worktree.project}]`
+      : `${worktree.feature} [${worktree.project}]`,
     ai: getAISymbol(worktree.session?.ai_status || '', worktree.session?.attached || false),
     diff: formatDiffStats(worktree.git?.base_added_lines || 0, worktree.git?.base_deleted_lines || 0),
     changes: formatGitChanges(worktree.git?.ahead || 0, worktree.git?.behind || 0),
@@ -135,6 +138,9 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
     const contentWidth = stringDisplayWidth(visible);
     const pad = Math.max(0, width - contentWidth);
 
+    // Dim the bracketed portion (project/workspace) like other rows
+    const renderBracket = (content: string) => <Text dimColor>{content}</Text>;
+
     if (justify === 'flex-end') {
       return (
         <>
@@ -142,7 +148,7 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
           {/* Feature keeps the cell's computed color */}
           <Text color={getCellForeground(1)}>{left}</Text>
           {/* Project (with brackets) dimmed */}
-          {bracketed ? <Text dimColor>{bracketed}</Text> : null}
+          {bracketed ? renderBracket(bracketed) : null}
         </>
       );
     }
@@ -153,7 +159,7 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
         <>
           {' '.repeat(leftPad)}
           <Text color={getCellForeground(1)}>{left}</Text>
-          {bracketed ? <Text dimColor>{bracketed}</Text> : null}
+          {bracketed ? renderBracket(bracketed) : null}
           {' '.repeat(rightPad)}
         </>
       );
@@ -162,7 +168,7 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
     return (
       <>
         <Text color={getCellForeground(1)}>{left}</Text>
-        {bracketed ? <Text dimColor>{bracketed}</Text> : null}
+        {bracketed ? renderBracket(bracketed) : null}
         {' '.repeat(pad)}
       </>
     );

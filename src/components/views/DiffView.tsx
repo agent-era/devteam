@@ -188,14 +188,28 @@ function convertToSideBySide(unifiedLines: DiffLine[]): SideBySideLine[] {
 }
 
 
-type Props = {worktreePath: string; title?: string; onClose: () => void; diffType?: 'full' | 'uncommitted'; onAttachToSession?: (sessionName: string) => void};
+type Props = {
+  worktreePath: string;
+  title?: string;
+  onClose: () => void;
+  diffType?: 'full' | 'uncommitted';
+  onAttachToSession?: (sessionName: string) => void;
+  // When viewing a workspace child repo, route comments to the top-level workspace session
+  workspaceFeature?: string;
+};
 
 type ViewMode = 'unified' | 'sidebyside';
 type WrapMode = 'truncate' | 'wrap';
 
 // Exported utility for formatting comments into a Claude-friendly prompt
-export function formatCommentsAsPrompt(comments: any[]): string {
+export function formatCommentsAsPrompt(
+  comments: any[],
+  opts?: {workspaceFeature?: string; project?: string}
+): string {
   let prompt = "Please address the following code review comments:\n\n";
+  if (opts?.workspaceFeature && opts?.project) {
+    prompt += `Context: In workspace '${opts.workspaceFeature}', target child directory: ./${opts.project}\n\n`;
+  }
 
   const commentsByFile: {[key: string]: typeof comments} = {};
   comments.forEach(comment => {
@@ -228,7 +242,7 @@ export function formatCommentsAsPrompt(comments: any[]): string {
   return prompt;
 }
 
-export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, diffType = 'full', onAttachToSession}: Props) {
+export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, diffType = 'full', onAttachToSession, workspaceFeature}: Props) {
   const {rows: terminalHeight, columns: terminalWidth} = useTerminalDimensions();
   const [lines, setLines] = useState<DiffLine[]>([]);
   const [sideBySideLines, setSideBySideLines] = useState<SideBySideLine[]>([]);
@@ -754,11 +768,15 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     return foundLines > 0;
   };
 
-  const sendCommentsViaAltEnter = (sessionName: string, comments: any[]) => {
+  const sendCommentsViaAltEnter = (sessionName: string, comments: any[], opts?: {workspaceFeature?: string; project?: string}) => {
     // Format as lines and send with Alt+Enter (existing logic)
     const messageLines: string[] = [];
     messageLines.push("Please address the following code review comments:");
     messageLines.push("");
+    if (opts?.workspaceFeature && opts?.project) {
+      messageLines.push(`Context: In workspace '${opts.workspaceFeature}', target child directory: ./${opts.project}`);
+      messageLines.push("");
+    }
     
     const commentsByFile: {[key: string]: typeof comments} = {};
     comments.forEach(comment => {
@@ -803,8 +821,11 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       const projectWithBranches = pathParts[pathParts.length - 2];
       const project = projectWithBranches.replace(/-branches$/, '');
       
-      // Construct proper session name: dev-project-feature
-      const sessionName = tmuxService.sessionName(project, feature);
+      // Determine target session name
+      // If this diff is for a workspace child, route comments to the top-level workspace session
+      const sessionName = workspaceFeature
+        ? tmuxService.sessionName('workspace', workspaceFeature)
+        : tmuxService.sessionName(project, feature);
       
       // Check if session exists
       const sessions = await tmuxService.listSessions();
@@ -825,11 +846,11 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
         // For idle/working/thinking/not_running - we can proceed
         if (claudeStatus === 'not_running') {
           // Start Claude with the prompt pre-filled!
-          const commentPrompt = formatCommentsAsPrompt(comments);
+          const commentPrompt = formatCommentsAsPrompt(comments, {workspaceFeature, project});
           tmuxService.sendText(sessionName, `claude ${JSON.stringify(commentPrompt)}`, { executeCommand: true });
         } else {
           // Claude is idle/working/active - can accept input via Alt+Enter
-          sendCommentsViaAltEnter(sessionName, comments);
+          sendCommentsViaAltEnter(sessionName, comments, {workspaceFeature, project});
           
           // Wait a brief moment for tmux to process the input
           runCommand(['sleep', '0.5']);
@@ -851,7 +872,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
         const hasClaude = runCommand(['bash', '-lc', 'command -v claude || true']).trim();
         if (hasClaude) {
           // Launch Claude with the comments as the initial prompt!
-          const commentPrompt = formatCommentsAsPrompt(comments);
+          const commentPrompt = formatCommentsAsPrompt(comments, {workspaceFeature, project});
           tmuxService.sendText(sessionName, `claude ${JSON.stringify(commentPrompt)}`, { executeCommand: true });
           
           // For new sessions, we can assume the prompt was received

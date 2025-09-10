@@ -31,10 +31,10 @@ export default function WorktreeListScreen({
   onExecuteRun,
   onConfigureRun
 }: WorktreeListScreenProps) {
-  const {worktrees, selectedIndex, selectWorktree, refresh, refreshVisibleStatus, forceRefreshVisible, attachSession, attachShellSession, needsToolSelection, lastRefreshed, memoryStatus, versionInfo, discoverProjects} = useWorktreeContext();
+  const {worktrees, selectedIndex, selectWorktree, refresh, refreshVisibleStatus, forceRefreshVisible, attachSession, attachShellSession, attachWorkspaceSession, needsToolSelection, lastRefreshed, memoryStatus, versionInfo, discoverProjects} = useWorktreeContext();
   const {setVisibleWorktrees} = useGitHubContext();
   const {isAnyDialogFocused} = useInputFocus();
-  const {showAIToolSelection, showList, runWithLoading} = useUIContext();
+  const {showAIToolSelection, showList, runWithLoading, showInfo} = useUIContext();
   const [pageSize, setPageSize] = useState(1);
   const [currentPage, setCurrentPage] = useState(0);
   const [hasProjects, setHasProjects] = useState<boolean>(false);
@@ -144,6 +144,15 @@ export default function WorktreeListScreen({
     if (!selectedWorktree) return;
     
     try {
+      // If a workspace child is selected, inform and attach/create the parent workspace session
+      if ((selectedWorktree as any).is_workspace_child) {
+        const feature = (selectedWorktree as any).parent_feature || selectedWorktree.feature;
+        showInfo(`Opening workspace session for '${feature}'.\nChild sessions are handled in the workspace.`, {
+          title: 'Workspace Session',
+          onClose: () => runWithLoading(() => attachWorkspaceSession(feature))
+        });
+        return;
+      }
       // Check if tool selection is needed
       const needsSelection = await needsToolSelection(selectedWorktree);
       
@@ -171,6 +180,10 @@ export default function WorktreeListScreen({
   const handleDiffFull = () => {
     const selectedWorktree = worktrees[selectedIndex];
     if (selectedWorktree) {
+      if ((selectedWorktree as any).is_workspace_header) {
+        showInfo('Diff is per project. Select a project row.', {title: 'Workspace Diff'});
+        return;
+      }
       onDiff('full');
     }
   };
@@ -178,6 +191,10 @@ export default function WorktreeListScreen({
   const handleDiffUncommitted = () => {
     const selectedWorktree = worktrees[selectedIndex];
     if (selectedWorktree) {
+      if ((selectedWorktree as any).is_workspace_header) {
+        showInfo('Diff is per project. Select a project row.', {title: 'Workspace Diff'});
+        return;
+      }
       onDiff('uncommitted');
     }
   };
@@ -198,6 +215,24 @@ export default function WorktreeListScreen({
     const newPage = Math.floor(newIndex / pageSize);
     setCurrentPage(newPage);
     selectWorktree(newIndex);
+  };
+
+  const handleExecuteRunWrapped = () => {
+    const selectedWorktree = worktrees[selectedIndex];
+    if (selectedWorktree && (selectedWorktree as any).is_workspace_header) {
+      showInfo('Run is per project. Select a project row.', {title: 'Workspace Run'});
+      return;
+    }
+    onExecuteRun();
+  };
+
+  const handleConfigureRunWrapped = () => {
+    const selectedWorktree = worktrees[selectedIndex];
+    if (selectedWorktree && (selectedWorktree as any).is_workspace_header) {
+      showInfo('Run is per project. Select a project row.', {title: 'Workspace Run'});
+      return;
+    }
+    onConfigureRun();
   };
 
   const handleRefresh = async () => {
@@ -256,8 +291,8 @@ export default function WorktreeListScreen({
     onJumpToFirst: handleJumpToFirst,
     onJumpToLast: handleJumpToLast,
     onQuit: onQuit,
-    onExecuteRun: onExecuteRun,
-    onConfigureRun: onConfigureRun,
+    onExecuteRun: handleExecuteRunWrapped,
+    onConfigureRun: handleConfigureRunWrapped,
     onUpdate: handleUpdate
   }, {
     page: currentPage,

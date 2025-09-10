@@ -21,19 +21,23 @@ export default function ArchiveConfirmScreen({
   onCancel,
   onSuccess
 }: ArchiveConfirmScreenProps) {
-  const {archiveFeature} = useWorktreeContext();
+  const {archiveFeature, archiveWorkspace} = useWorktreeContext();
   const {isRawModeSupported} = useStdin();
   const [isArchiving, setIsArchiving] = useState(false);
 
   const handleConfirm = async () => {
     try {
       setIsArchiving(true);
-      // Archive the feature
-      await archiveFeature(
-        featureInfo.project,
-        featureInfo.path,
-        featureInfo.feature
-      );
+      if (featureInfo.project === 'workspace') {
+        await archiveWorkspace(featureInfo.feature);
+      } else {
+        // Archive single feature
+        await archiveFeature(
+          featureInfo.project,
+          featureInfo.path,
+          featureInfo.feature
+        );
+      }
       onSuccess();
     } catch (error) {
       console.error('Failed to archive feature:', error);
@@ -55,14 +59,20 @@ export default function ArchiveConfirmScreen({
       {isArchiving ? (
         <ProgressDialog
           title="Archiving"
-          message={`Archiving ${featureInfo.project}/${featureInfo.feature}...`}
+          message={featureInfo.project === 'workspace'
+            ? `Archiving workspace ${featureInfo.feature} and all children...`
+            : `Archiving ${featureInfo.project}/${featureInfo.feature}...`}
           project={featureInfo.project}
         />
       ) : (
         <Box flexDirection="column" paddingX={2}>
-          <Text bold color="cyan">Archive Feature</Text>
+          <Text bold color="cyan">Archive {featureInfo.project === 'workspace' ? 'Workspace' : 'Feature'}</Text>
           <Box marginTop={1}>
-            <Text>Archive {featureInfo.project}/{featureInfo.feature}?</Text>
+            {featureInfo.project === 'workspace' ? (
+              <Text>Archive workspace {featureInfo.feature} and all project worktrees?</Text>
+            ) : (
+              <Text>Archive {featureInfo.project}/{featureInfo.feature}?</Text>
+            )}
           </Box>
           <Box marginTop={1}>
             <Text color="magenta" wrap="truncate">Press y to confirm, n to cancel</Text>
