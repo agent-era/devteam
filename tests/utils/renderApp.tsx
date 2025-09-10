@@ -192,7 +192,7 @@ function generateMainListOutput(): string {
   }
 
   output += `Enter attach, n new, a archive, x exec, d diff, s shell, q quit${paginationText}\n`;
-  output += '#    PROJECT/FEATURE        AI  DIFF     CHANGES  PUSHED  PR\n';
+  output += '#    STATUS        PROJECT/FEATURE        AI  DIFF     CHANGES  PUSHED  PR\n';
   
   // Show only items for current page
   const start = page * pageSize;
@@ -202,7 +202,18 @@ function generateMainListOutput(): string {
     const session = sessions.find(s => s.session_name.includes(worktree.feature));
     const gitStatus = memoryStore.gitStatus.get(worktree.path);
     const prStatus = memoryStore.prStatus.get(worktree.path);
-    
+    // STATUS label based on simple priority
+    let statusLabel = '';
+    const cs = session?.claude_status || 'not_running';
+    if (cs === 'working') statusLabel = 'working';
+    else if (cs === 'waiting') statusLabel = 'waiting';
+    else if (gitStatus?.has_changes) statusLabel = 'modified';
+    else if ((gitStatus?.ahead || 0) > 0) statusLabel = 'un-pushed';
+    else if (prStatus?.mergeable === 'CONFLICTING') statusLabel = 'conflict';
+    else if (prStatus?.checks === 'failing') statusLabel = 'pr-failed';
+    else if (prStatus?.checks === 'passing') statusLabel = 'pr-passed';
+    else if (prStatus?.is_merged && prStatus?.number) statusLabel = 'merged';
+
     // Row number (1-based for display, continuous across pages)
     const absoluteIndex = start + index;
     const rowNum = `${absoluteIndex + 1}`.padStart(4);
@@ -247,7 +258,8 @@ function generateMainListOutput(): string {
       if (prStatus.is_merged || prStatus.state === 'MERGED') prStr += '⟫';
     }
     
-    output += `${rowNum} ${displayName} ${aiSymbol}   ${diffStr.padEnd(8)} ${changes.padEnd(8)} ${pushed}       ${prStr}\n`;
+    const statusCol = (statusLabel || '').padEnd(13);
+    output += `${rowNum} ${statusCol} ${displayName} ${aiSymbol}   ${diffStr.padEnd(8)} ${changes.padEnd(8)} ${pushed}       ${prStr}\n`;
   });
   
   // Add pagination footer if multiple pages

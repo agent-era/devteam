@@ -14,6 +14,8 @@ import {
   shouldDimRow,
 } from './utils.js';
 import type {ColumnWidths} from './hooks/useColumnWidths.js';
+import StatusChip from '../../common/StatusChip.js';
+import {getStatusMeta} from './highlight.js';
 
 interface WorktreeRowProps {
   worktree: WorktreeInfo;
@@ -68,14 +70,15 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
     {text: data.pushed, width: columnWidths.pushed, justify: 'center' as const},
     {text: data.pr, width: columnWidths.pr, justify: 'flex-start' as const},
   ];
+  const statusMeta = getStatusMeta(worktree, pr);
   
   // Compute background/foreground colors for cells
   const isPriorityCell = (cellIndex: number): boolean =>
     !!(highlightInfo && cellIndex === highlightInfo.columnIndex);
 
   const getCellBackground = (cellIndex: number): string | undefined => {
-    // Keep priority-highlighted cells with their colored background
-    if (isPriorityCell(cellIndex)) return highlightInfo!.color;
+    // Priority cells now use a neutral gray highlight (colors reserved for STATUS chip)
+    if (isPriorityCell(cellIndex)) return 'gray';
     // On merged rows, selected non-priority cells get a gray highlight bar
     if (selected && isDimmed && !isPriorityCell(cellIndex)) return 'gray';
     // Selection (non-merged) uses inverse on non-priority cells (no explicit background)
@@ -170,25 +173,51 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
 
   return (
     <Box key={`worktree-${globalIndex}`}>
-      {cells.map((cell, cellIndex) => (
-        <Box
-          key={cellIndex}
-          width={cell.width}
-          justifyContent={cell.justify}
-          marginRight={cellIndex < cells.length - 1 ? 1 : 0}
+      {/* First column: # */}
+      <Box
+        width={cells[0].width}
+        justifyContent={cells[0].justify}
+        marginRight={1}
+      >
+        <Text
+          backgroundColor={getCellBackground(0)}
+          color={getCellForeground(0)}
+          bold={selected && !isPriorityCell(0)}
+          inverse={selected && !isPriorityCell(0) && !isDimmed}
         >
-          <Text
-            backgroundColor={getCellBackground(cellIndex)}
-            color={cellIndex === 1 ? undefined : getCellForeground(cellIndex)}
-            bold={selected && !isPriorityCell(cellIndex)}
-            inverse={selected && !isPriorityCell(cellIndex) && !isDimmed}
+          {formatCellText(cells[0].text, cells[0].width, cells[0].justify)}
+        </Text>
+      </Box>
+
+      {/* Second column: STATUS */}
+      <Box width={columnWidths.status} justifyContent="flex-start" marginRight={1}>
+        <StatusChip label={statusMeta.label || ''} color={statusMeta.bg} fg={statusMeta.fg} width={columnWidths.status} />
+      </Box>
+
+      {/* Remaining columns from cells[1..] */}
+      {cells.slice(1).map((cell, offsetIndex, arr) => {
+        const cellIndex = offsetIndex + 1; // original index in cells array
+        const isLast = offsetIndex === arr.length - 1;
+        return (
+          <Box
+            key={cellIndex}
+            width={cell.width}
+            justifyContent={cell.justify}
+            marginRight={isLast ? 0 : 1}
           >
-            {cellIndex === 1
-              ? renderProjectFeatureCell(cell.text, cell.width, cell.justify)
-              : formatCellText(cell.text, cell.width, cell.justify)}
-          </Text>
-        </Box>
-      ))}
+            <Text
+              backgroundColor={getCellBackground(cellIndex)}
+              color={cellIndex === 1 ? undefined : getCellForeground(cellIndex)}
+              bold={selected && !isPriorityCell(cellIndex)}
+              inverse={selected && !isPriorityCell(cellIndex) && !isDimmed}
+            >
+              {cellIndex === 1
+                ? renderProjectFeatureCell(cell.text, cell.width, cell.justify)
+                : formatCellText(cell.text, cell.width, cell.justify)}
+            </Text>
+          </Box>
+        );
+      })}
     </Box>
   );
 });
