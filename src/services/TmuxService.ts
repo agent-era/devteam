@@ -158,36 +158,37 @@ export class TmuxService {
   configureSessionUI(session: string): void {
     try {
       // Ensure mouse is enabled and status is visible
-      this.setOption('mouse', 'on');
+      // this.setOption('mouse', 'on');
       this.setSessionOption(session, 'mouse', 'on');
       // Make the footer taller for easier clicks and better menu visibility
       this.setSessionOption(session, 'status', '3');
       this.setSessionOption(session, 'status-position', 'bottom');
       this.setSessionOption(session, 'status-style', 'fg=white,bg=black');
       this.setSessionOption(session, 'status-interval', '5');
-      // Ensure tmux messages are visible for debug to confirm mouse events
-      this.setSessionOption(session, 'display-time', '2000');
+      // No debug messages; leave display-time as user default
 
-      // Restore default status building, then set minimal left/right so footer is always visible
-      runCommand(['tmux', 'set-option', '-gu', 'status-format'], { env: this.tmuxEnv });
+      // Restore default status building for this session only
       runCommand(['tmux', 'set-option', '-u', '-t', session, 'status-format'], { env: this.tmuxEnv });
-      // Show simple action hints on the left; keep window list and user right settings intact
-      this.setSessionOption(session, 'status-left', '#[fg=black,bg=yellow] [ Detach ] #[default] #[fg=white,bg=red] [ Kill ] #[default] ');
-      // Minimal right if empty; include session name and hint
-      this.setSessionOption(session, 'status-right', ' #S | Click status for menu ');
+      // Show session and command information on left
+      this.setSessionOption(
+        session,
+        'status-left',
+        '#[bold]#S#[nobold] | #\{@devteam_project}/#\{@devteam_feature} | Type: #\{@devteam_type}#\{?#\{==:#\{@devteam_type},AI\}, ( #\{@devteam_tool} ),} | cmd: #{pane_current_command} '
+      );
+      // Instruction on right
+      this.setSessionOption(
+        session,
+        'status-right',
+        ' Ctrl+b, release, then press d to detach '
+      );
 
-      // Build a run-shell action that both logs and shows a menu at the mouse position
+      // Build a run-shell action that shows a persistent menu at the mouse position
       const menuScript = [
-        'tmux display-message -d 2000 "DevTeam click: x=#{mouse_x} y=#{mouse_y} loc=#{mouse_status_line} rng=#{mouse_status_range}"; ',
         'tmux display-menu -x M -y S ',
         '"Detach" d detach-client ',
         '"Kill Session" k confirm-before -p "Kill session #S?" "kill-session -t #S"'
       ].join('');
       const menuAction = ['run-shell', menuScript];
-      const debugAction = [
-        'display-message', '-d', '2000',
-        'DevTeam mouse: x=#{mouse_x} y=#{mouse_y} loc=#{mouse_status_line} rng=#{mouse_status_range}'
-      ];
 
       const bind = (key: string, args: string[]) => {
         try { runCommand(['tmux', 'unbind-key', '-n', key], { env: this.tmuxEnv }); } catch {}
@@ -202,10 +203,7 @@ export class TmuxService {
       for (const k of ['MouseDown3Status', 'MouseDown3StatusLeft', 'MouseDown3StatusRight', 'MouseDown3StatusDefault']) {
         bind(k, menuAction);
       }
-      // Wheel and drag debug messages to verify detection
-      for (const k of ['WheelUpStatus', 'WheelDownStatus', 'MouseDrag1Status', 'MouseDragEnd1Status', 'MouseUp1Status']) {
-        bind(k, debugAction);
-      }
+      // No debug messages bound
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error('Failed to configure tmux session UI:', err);

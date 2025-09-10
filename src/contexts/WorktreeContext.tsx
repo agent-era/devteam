@@ -469,10 +469,15 @@ export function WorktreeProvider({
         tmuxService.createSession(sessionName, worktree.path, true);
       }
       
-      configureTmuxDisplayTime();
     }
-    
-    configureTmuxDisplayTime();
+    // Set session-specific labels for status
+    try {
+      tmuxService.setSessionOption(sessionName, '@devteam_project', worktree.project);
+      tmuxService.setSessionOption(sessionName, '@devteam_feature', worktree.feature);
+      tmuxService.setSessionOption(sessionName, '@devteam_type', 'AI');
+      if (aiTool) tmuxService.setSessionOption(sessionName, '@devteam_tool', aiTool);
+    } catch {}
+
     tmuxService.attachSessionWithControls(sessionName);
   }, [tmuxService, availableAITools]);
 
@@ -483,8 +488,12 @@ export function WorktreeProvider({
     if (!activeSessions.includes(sessionName)) {
       createShellSession(worktree.project, worktree.feature, worktree.path);
     }
-    
-    configureTmuxDisplayTime();
+    try {
+      tmuxService.setSessionOption(sessionName, '@devteam_project', worktree.project);
+      tmuxService.setSessionOption(sessionName, '@devteam_feature', worktree.feature);
+      tmuxService.setSessionOption(sessionName, '@devteam_type', 'Shell');
+      tmuxService.setSessionOption(sessionName, '@devteam_tool', 'shell');
+    } catch {}
     tmuxService.attachSessionWithControls(sessionName);
   }, [tmuxService]);
 
@@ -503,8 +512,12 @@ export function WorktreeProvider({
     if (!activeSessions.includes(sessionName)) {
       createRunSession(worktree.project, worktree.feature, worktree.path);
     }
-    
-    configureTmuxDisplayTime();
+    try {
+      tmuxService.setSessionOption(sessionName, '@devteam_project', worktree.project);
+      tmuxService.setSessionOption(sessionName, '@devteam_feature', worktree.feature);
+      tmuxService.setSessionOption(sessionName, '@devteam_type', 'Run');
+      tmuxService.setSessionOption(sessionName, '@devteam_tool', 'run');
+    } catch {}
     tmuxService.attachSessionWithControls(sessionName);
     return 'success';
   }, [tmuxService]);
@@ -660,7 +673,6 @@ export function WorktreeProvider({
       }
     }
     
-    configureTmuxDisplayTime();
     
     return sessionName;
   }, [tmuxService, availableAITools]);
@@ -670,7 +682,6 @@ export function WorktreeProvider({
     const shell = process.env.SHELL || '/bin/bash';
     
     tmuxService.createSessionWithCommand(sessionName, cwd, shell, true);
-    configureTmuxDisplayTime();
     
     return sessionName;
   }, [tmuxService]);
@@ -684,7 +695,6 @@ export function WorktreeProvider({
     tmuxService.createSession(sessionName, cwd);
     // Auto-destroy session when program exits
     tmuxService.setSessionOption(sessionName, 'remain-on-exit', 'off');
-    configureTmuxDisplayTime();
     
     try {
       const configContent = gitService.readRunConfig(project);
@@ -715,6 +725,12 @@ export function WorktreeProvider({
       
       // Run the main command
       const command = (cfg as any).mainCommand;
+      try {
+        tmuxService.setSessionOption(sessionName, '@devteam_project', project);
+        tmuxService.setSessionOption(sessionName, '@devteam_feature', feature);
+        tmuxService.setSessionOption(sessionName, '@devteam_type', 'Run');
+        tmuxService.setSessionOption(sessionName, '@devteam_tool', 'run');
+      } catch {}
       // detachOnExit controls whether the tmux session should exit when the command finishes
       // true  => exec the command and exit the session on completion
       // false => run the command normally and keep the session alive
@@ -776,9 +792,7 @@ export function WorktreeProvider({
     gitService.linkClaudeSettings(projectName, worktreePath);
   }, [gitService]);
 
-  const configureTmuxDisplayTime = useCallback(() => {
-    tmuxService.setOption('display-time', String(TMUX_DISPLAY_TIME));
-  }, [tmuxService]);
+  // Removed global tmux display-time; session UI config sets per-session options
 
   // Auto-refresh intervals
   // Regular cache-based refresh cycle
