@@ -27,7 +27,7 @@ import {AI_TOOLS} from '../constants.js';
 import type {AITool} from '../models.js';
 import {useInputFocus} from './InputFocusContext.js';
 import {useGitHubContext} from './GitHubContext.js';
-import {logDebug} from '../shared/utils/logger.js';
+import {logDebug, logError} from '../shared/utils/logger.js';
 import {Timer} from '../shared/utils/timing.js';
 
 
@@ -86,8 +86,9 @@ type WorktreeSummary = {
 
 // Exported sorter to enable unit testing of cross-project ordering
 export function sortWorktreeSummaries<T extends {last_commit_ts?: number; project: string; feature: string}>(rows: T[]): T[] {
-  return rows.sort((a, b) => {
-    const d = (b.last_commit_ts || 0) - (a.last_commit_ts || 0);
+  // Return a new array to avoid mutating inputs
+  return [...rows].sort((a, b) => {
+    const d = (b.last_commit_ts ?? 0) - (a.last_commit_ts ?? 0);
     if (d !== 0) return d;
     if (a.project !== b.project) return a.project.localeCompare(b.project);
     return a.feature.localeCompare(b.feature);
@@ -167,9 +168,8 @@ export function WorktreeProvider({
     }
 
     // Global sort across all projects: latest commit first
-    sortWorktreeSummaries(rows);
-
-    return rows;
+    const sorted = sortWorktreeSummaries(rows);
+    return sorted;
   }, [gitService]);
 
   const attachRuntimeData = useCallback(async (list: WorktreeSummary[]): Promise<WorktreeInfo[]> => {
@@ -180,7 +180,7 @@ export function WorktreeProvider({
     const activeSessions = await tmuxService.listSessions();
     
     // Concurrency-limit git + AI probes across all worktrees
-    const results = await mapLimit(list, 6, async (w: WorktreeSummary) => {
+    const results = await mapLimit<WorktreeSummary, WorktreeInfo | undefined>(list, 6, async (w: WorktreeSummary) => {
       try {
         const key = `${w.project}/${w.feature}`;
         const existing = existingWorktrees.get(key);
@@ -212,13 +212,12 @@ export function WorktreeProvider({
           last_commit_ts: w.last_commit_ts ?? 0,
         });
       } catch (err) {
-        // eslint-disable-next-line no-console
-        console.error('[attachRuntimeData] worker failed -', err instanceof Error ? err.message : String(err));
-        return undefined as any;
+        logError('[attachRuntimeData] worker failed', { error: err instanceof Error ? err.message : String(err) });
+        return undefined;
       }
     });
     
-    return results.filter(Boolean) as WorktreeInfo[];
+    return results.filter((r): r is WorktreeInfo => Boolean(r));
   }, [gitService, tmuxService, worktrees]);
 
   const refresh = useCallback(async (refreshPRs: 'all' | 'visible' | 'none' = 'none') => {
@@ -245,7 +244,7 @@ export function WorktreeProvider({
     } catch (error) {
       const timing = timer.elapsed();
       logDebug(`[Refresh.Full] Failed in ${timing.formatted}: ${error instanceof Error ? error.message : String(error)}`);
-      console.error('Failed to refresh worktrees:', error);
+      logError('Failed to refresh worktrees', { error: error instanceof Error ? error.message : String(error) });
     } finally {
       setLoading(false);
     }
@@ -269,7 +268,7 @@ export function WorktreeProvider({
       // No need to update worktrees array here; rows read PRs from context
       setLastRefreshed(Date.now());
     } catch (error) {
-      console.error('Failed to force refresh visible PRs:', error);
+      logError('Failed to force refresh visible PRs', { error: error instanceof Error ? error.message : String(error) });
     }
   }, [loading, worktrees, forceRefreshVisiblePRs]);
 
@@ -296,7 +295,8 @@ export function WorktreeProvider({
       }
       const indices = Array.from({length: endIndex - startIndex}, (_, k) => startIndex + k);
       if (indices.length > 0) {
-        const results = await mapLimit(indices, 3, async (i) => {
+        type UpdateResult = { index: number; updated: WorktreeInfo } | undefined;
+        const results = await mapLimit<number, UpdateResult>(indices, 3, async (i) => {
           try {
             const wt = worktrees[i];
             const sessionName = tmuxService.sessionName(wt.project, wt.feature);
@@ -329,21 +329,20 @@ export function WorktreeProvider({
             });
             return {index: i, updated};
           } catch (err) {
-            // eslint-disable-next-line no-console
-            console.error('[refreshVisibleStatus] worker failed -', err instanceof Error ? err.message : String(err));
-            return undefined as any;
+            logError('[refreshVisibleStatus] worker failed', { error: err instanceof Error ? err.message : String(err) });
+            return undefined;
           }
         });
         const merged = [...worktrees];
         for (const r of results) {
           if (!r) continue;
-          merged[(r as any).index] = (r as any).updated;
+          merged[r.index] = r.updated;
         }
         setWorktrees(merged);
       }
       setLastRefreshed(Date.now());
     } catch (error) {
-      console.error('Failed to refresh visible statuses:', error);
+      logError('Failed to refresh visible statuses', { error: error instanceof Error ? error.message : String(error) });
     } finally {
       refreshingVisibleRef.current = false;
     }
@@ -354,7 +353,7 @@ export function WorktreeProvider({
       const status = await memoryMonitorService.getMemoryStatus();
       setMemoryStatus(status);
     } catch (error) {
-      console.error('Failed to refresh memory status:', error);
+      logError('Failed to refresh memory status', { error: error instanceof Error ? error.message : String(error) });
     }
   }, [memoryMonitorService]);
 
@@ -369,7 +368,7 @@ export function WorktreeProvider({
       const info = await versionServiceRef.current.check();
       if (info && info.hasUpdate) setVersionInfo(info); else setVersionInfo(null);
     } catch (error) {
-      console.error('Failed to check latest version:', error);
+      logError('Failed to check latest version', { error: error instanceof Error ? error.message : String(error) });
     }
   }, []);
   
@@ -782,7 +781,7 @@ export function WorktreeProvider({
     const shouldRefresh = Date.now() - lastRefreshed > CACHE_DURATION;
     if (shouldRefresh) {
       refresh('none').catch(error => {
-        console.error('Auto-refresh failed:', error);
+        logError('Auto-refresh failed', { error: error instanceof Error ? error.message : String(error) });
       });
     }
   }, [lastRefreshed, refresh]);
@@ -790,14 +789,14 @@ export function WorktreeProvider({
   // Initial memory check on mount
   useEffect(() => {
     refreshMemoryStatus().catch(error => {
-      console.error('Initial memory status check failed:', error);
+      logError('Initial memory status check failed', { error: error instanceof Error ? error.message : String(error) });
     });
   }, [refreshMemoryStatus]);
 
   // Initial version check on mount + daily
   useEffect(() => {
     refreshVersionInfo().catch(error => {
-      console.error('Initial version check failed:', error);
+      logError('Initial version check failed', { error: error instanceof Error ? error.message : String(error) });
     });
     const interval = setInterval(() => {
       refreshVersionInfo().catch(() => {});
@@ -810,7 +809,7 @@ export function WorktreeProvider({
     const interval = setInterval(() => {
       if (!isAnyDialogFocused) {
         // Background discovery of worktrees (structure)
-        refresh('none').catch(err => console.error('Background discovery failed:', err));
+        refresh('none').catch(err => logError('Background discovery failed', { error: err instanceof Error ? err.message : String(err) }));
       }
     }, 60_000);
     return () => clearInterval(interval);
@@ -821,7 +820,7 @@ export function WorktreeProvider({
       // Skip memory status refresh if any dialog is focused to avoid interrupting typing
       if (!isAnyDialogFocused) {
         refreshMemoryStatus().catch(error => {
-          console.error('Memory status refresh failed:', error);
+          logError('Memory status refresh failed', { error: error instanceof Error ? error.message : String(error) });
         });
       }
     }, MEMORY_REFRESH_DURATION);
