@@ -122,6 +122,12 @@ export class WorktreeInfo {
   is_archived?: boolean;
   mtime?: number;
   last_commit_ts?: number;
+  // Workspace grouping (optional)
+  is_workspace?: boolean;
+  is_workspace_header?: boolean;
+  is_workspace_child?: boolean;
+  parent_feature?: string;
+  children?: WorktreeInfo[];
   constructor(init: Partial<WorktreeInfo> = {}) {
     this.project = '';
     this.feature = '';

@@ -18,31 +18,54 @@ export default function CreateFeatureScreen({
   onCancel,
   onSuccess
 }: CreateFeatureScreenProps) {
-  const {createFeature, attachSession, needsToolSelection} = useWorktreeContext();
+  const {createFeature, needsToolSelection, createWorkspace, attachWorkspaceSession, attachSession} = useWorktreeContext();
   const {showAIToolSelection} = useUIContext();
 
-  const handleSubmit = async (project: string, feature: string) => {
+  // Updated: support multiple projects; if only one selected, do NOT create a workspace
+  const handleSubmit = async (selectedProjects: string[], feature: string) => {
     try {
-      const result = await createFeature(project, feature);
-      if (result) {
-        // Auto-attach functionality from main
-        onSuccess();
-        
-        // Small delay to ensure UI state updates and worktree is visible
-        await new Promise(resolve => setTimeout(resolve, 100));
-        
-        // Check if tool selection is needed
-        const needsSelection = await needsToolSelection(result);
-        
-        if (needsSelection) {
-          // Show AI tool selection dialog
-          showAIToolSelection(result);
+      // Create a worktree for each selected project
+      const createdResults = [] as any[];
+      for (const p of selectedProjects) {
+        const r = await createFeature(p, feature);
+        if (r) createdResults.push(r);
+      }
+
+      if (createdResults.length === 0) { onCancel(); return; }
+
+      // If only a single project was selected, do not create a workspace.
+      if (selectedProjects.length === 1) {
+        const created = createdResults[0];
+        if (created) {
+          onSuccess();
+          // Small delay to ensure UI state updates and worktree appears
+          await new Promise(resolve => setTimeout(resolve, 100));
+          const needsSelection = await needsToolSelection(created);
+          if (needsSelection) {
+            showAIToolSelection(created);
+          } else {
+            await attachSession(created);
+          }
         } else {
-          // Auto-attach to the newly created session
-          attachSession(result);
+          onCancel();
+        }
+        return;
+      }
+
+      // Multiple projects selected -> create a workspace and attach in workspace dir
+      const wsPath = await createWorkspace(feature, selectedProjects);
+      const workspaceWorktree = wsPath ? { project: 'workspace', feature, path: wsPath } as any : null;
+      if (workspaceWorktree) {
+        const needsSelection = await needsToolSelection(workspaceWorktree);
+        onSuccess();
+        await new Promise(resolve => setTimeout(resolve, 100));
+        if (needsSelection) {
+          showAIToolSelection(workspaceWorktree);
+        } else {
+          await attachWorkspaceSession(feature);
         }
       } else {
-        onCancel();
+        onSuccess();
       }
     } catch (error) {
       console.error('Failed to create feature:', error);

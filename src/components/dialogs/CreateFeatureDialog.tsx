@@ -10,14 +10,21 @@ import {useInputFocus} from '../../contexts/InputFocusContext.js';
 type Props = {
   projects: ProjectInfo[];
   defaultProject?: string;
-  onSubmit: (project: string, feature: string) => Promise<void> | void;
+  // Updated: support selecting multiple projects
+  onSubmit: (projects: string[], feature: string) => Promise<void> | void;
   onCancel: () => void;
 };
 
 const CreateFeatureDialog = React.memo(function CreateFeatureDialog({projects, defaultProject, onSubmit, onCancel}: Props) {
   const [mode, setMode] = useState<'select'|'input'|'creating'>('select');
   const [filter, setFilter] = useState('');
-  const [selected, setSelected] = useState(() => Math.max(0, projects.findIndex(p => p.name === defaultProject)));
+  const [cursor, setCursor] = useState(() => Math.max(0, projects.findIndex(p => p.name === defaultProject)));
+  const [selectedIndices, setSelectedIndices] = useState<Set<number>>(() => {
+    const s = new Set<number>();
+    const idx = Math.max(0, projects.findIndex(p => p.name === defaultProject));
+    if (projects.length > 0) s.add(idx);
+    return s;
+  });
   const [featureName, setFeatureName] = useState('');
   const featureInputRef = useRef(null);
   const {requestFocus, releaseFocus} = useInputFocus();
@@ -43,24 +50,43 @@ const CreateFeatureDialog = React.memo(function CreateFeatureDialog({projects, d
     if (mode === 'select') {
       // Handle control keys first
       if (key.return) {
+        // Move to feature name input when at least one selected
+        if (selectedIndices.size === 0 && filtered.length > 0) {
+          const idx = Math.min(cursor, filtered.length - 1);
+          const globalIdx = Math.max(0, projects.findIndex(p => p.name === filtered[idx].name));
+          const s = new Set<number>([globalIdx]);
+          setSelectedIndices(s);
+        }
         setMode('input');
+        return;
+      }
+      if (input === ' ') {
+        // Toggle current item selection
+        const idxInFiltered = Math.min(cursor, filtered.length - 1);
+        if (idxInFiltered >= 0) {
+          const projectName = filtered[idxInFiltered].name;
+          const globalIdx = Math.max(0, projects.findIndex(p => p.name === projectName));
+          const next = new Set(selectedIndices);
+          if (next.has(globalIdx)) next.delete(globalIdx); else next.add(globalIdx);
+          setSelectedIndices(next);
+        }
         return;
       }
       
       // Navigation keys
       if (key.downArrow) {
-        setSelected(s => Math.min(filtered.length - 1, s + 1));
+        setCursor(s => Math.min(filtered.length - 1, s + 1));
         return;
       }
       if (key.upArrow) {
-        setSelected(s => Math.max(0, s - 1));
+        setCursor(s => Math.max(0, s - 1));
         return;
       }
       
       // Number keys for quick selection
       if (/^[0-9]$/.test(input)) {
         const idx = Number(input) - 1;
-        if (idx >= 0 && idx < filtered.length) setSelected(idx);
+        if (idx >= 0 && idx < filtered.length) setCursor(idx);
         return;
       }
       
@@ -81,15 +107,25 @@ const CreateFeatureDialog = React.memo(function CreateFeatureDialog({projects, d
   });
 
   const handleFeatureNameSubmit = (value: string) => {
-    const proj = filtered[selected]?.name || projects[0]?.name;
     const feat = kebabCase(value);
-    if (proj && validateFeatureName(feat)) {
-      setMode('creating');
-      Promise.resolve(onSubmit(proj, feat)).catch(() => {
-        // If creation fails, go back to input mode
-        setMode('input');
+    if (!validateFeatureName(feat)) return;
+    // Build selected project list from indices
+    const names: string[] = [];
+    if (selectedIndices.size === 0) {
+      const p = filtered[Math.min(cursor, filtered.length - 1)]?.name || projects[0]?.name;
+      if (p) names.push(p);
+    } else {
+      [...selectedIndices].sort((a, b) => a - b).forEach(i => {
+        const proj = projects[i]?.name;
+        if (proj) names.push(proj);
       });
     }
+    if (names.length === 0) return;
+    setMode('creating');
+    Promise.resolve(onSubmit(names, feat)).catch(() => {
+      // If creation fails, go back to input mode
+      setMode('input');
+    });
   };
 
   const handleFeatureNameChange = (value: string) => {
@@ -100,7 +136,7 @@ const CreateFeatureDialog = React.memo(function CreateFeatureDialog({projects, d
     return (
       <Box flexDirection="column" alignItems="center">
         <Text color="cyan">Creating feature branch...</Text>
-        <Text color="yellow">{`${filtered[selected]?.name || ''}/${featureName}`}</Text>
+        <Text color="yellow">{`${featureName}`}</Text>
         <Text color="gray">Setting up worktree and tmux session...</Text>
       </Box>
     );
@@ -109,7 +145,8 @@ const CreateFeatureDialog = React.memo(function CreateFeatureDialog({projects, d
   if (mode === 'select') {
     return (
       <Box flexDirection="column">
-        <Text color="cyan">Create Feature — Select Project</Text>
+        <Text color="cyan">Create Feature — Select Projects</Text>
+        <Text color="gray">[space] select multiple, [enter] continue</Text>
         {showFilter && (
           <>
             <Box flexDirection="row">
@@ -118,20 +155,26 @@ const CreateFeatureDialog = React.memo(function CreateFeatureDialog({projects, d
             </Box>
           </>
         )}
-        {filtered.slice(0, 20).map((p, i) => 
-          <Text key={p.name} color={i === selected ? 'green' : undefined}>
-            {`${i === selected ? '› ' : '  '}${p.name}`}
-          </Text>
-        )}
+        {filtered.slice(0, 20).map((p, i) => {
+          const projectIsSelected = selectedIndices.has(Math.max(0, projects.findIndex(pp => pp.name === p.name)));
+          const isCursor = i === cursor;
+          const prefix = isCursor ? '› ' : '  ';
+          const marker = projectIsSelected ? '[x] ' : '[ ] ';
+          return (
+            <Text key={p.name} color={isCursor ? 'green' : undefined}>
+              {`${prefix}${marker}${p.name}`}
+            </Text>
+          );
+        })}
         <Box marginTop={1}>
-          <AnnotatedText color="magenta" wrap="truncate" text={`${showFilter ? 'Type to filter, ' : ''}[1]–[9] quick select, [enter] select, [esc] cancel`} />
+          <AnnotatedText color="magenta" wrap="truncate" text={`${showFilter ? 'Type to filter, ' : ''}[space] multi-select, [1]–[9] quick move, [enter] continue, [esc] cancel`} />
         </Box>
       </Box>
     );
   }
   return (
     <Box flexDirection="column">
-      <Text color="cyan">Create Feature — {filtered[selected]?.name || ''}</Text>
+      <Text color="cyan">Create Feature — Feature Name</Text>
       <Text>Enter feature name (kebab-case suggested), ESC back</Text>
       <TextInput
         placeholder=" "

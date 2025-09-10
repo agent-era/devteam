@@ -43,8 +43,8 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
   
   // Format all data for display
   const data = {
-    number: String(globalIndex + 1),
-    projectFeature: `${worktree.project}/${worktree.feature}`,
+    number: worktree.is_workspace_child ? '' : String(globalIndex + 1),
+    projectFeature: `${worktree.is_workspace_child ? '  ' : ''}${worktree.project}/${worktree.feature}`,
     ai: getAISymbol(worktree.session?.ai_status || '', worktree.session?.attached || false),
     diff: formatDiffStats(worktree.git?.base_added_lines || 0, worktree.git?.base_deleted_lines || 0),
     changes: formatGitChanges(worktree.git?.ahead || 0, worktree.git?.behind || 0),
