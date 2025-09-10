@@ -386,18 +386,13 @@ export function WorktreeProvider({
   const createFeature = useCallback(async (projectName: string, featureName: string): Promise<WorktreeInfo | null> => {
     setLoading(true);
     try {
-      const created = gitService.createWorktree(projectName, featureName);
-      if (!created) return null;
-
-      const worktreePath = path.join(gitService.basePath, `${projectName}${DIR_BRANCHES_SUFFIX}`, featureName);
-      
-      setupWorktreeEnvironment(projectName, worktreePath);
-      
+      const ok = await engineRef.current?.createFeature(projectName, featureName);
+      if (!ok) return null;
       await refresh();
       return new WorktreeInfo({
         project: projectName,
         feature: featureName,
-        path: worktreePath,
+        path: path.join(gitService.basePath, `${projectName}${DIR_BRANCHES_SUFFIX}`, featureName),
         branch: featureName
       });
     } finally {
@@ -408,12 +403,8 @@ export function WorktreeProvider({
   const createFromBranch = useCallback(async (project: string, remoteBranch: string, localName: string): Promise<boolean> => {
     setLoading(true);
     try {
-      const created = gitService.createWorktreeFromRemote(project, remoteBranch, localName);
-      if (!created) return false;
-
-      const worktreePath = path.join(gitService.basePath, `${project}${DIR_BRANCHES_SUFFIX}`, localName);
-      setupWorktreeEnvironment(project, worktreePath);
-      
+      const ok = await engineRef.current?.createFromBranch(project, remoteBranch, localName);
+      if (!ok) return false;
       await refresh();
       return true;
     } finally {
@@ -437,20 +428,9 @@ export function WorktreeProvider({
         workPath = worktreeOrProject.path;
         featureName = worktreeOrProject.feature;
       }
-      
-      await terminateFeatureSessions(project, featureName);
-      
-      const archivedRoot = path.join(gitService.basePath, `${project}${DIR_ARCHIVED_SUFFIX}`);
-      ensureDirectory(archivedRoot);
-      
-      const timestamp = generateTimestamp();
-      const archivedDest = path.join(archivedRoot, `${ARCHIVE_PREFIX}${timestamp}_${featureName}`);
-
-      moveWorktreeToArchive(workPath, archivedDest);
-      pruneWorktreeReferences(project);
-
+      const result = await engineRef.current?.archiveFeature(project, workPath, featureName);
       await refresh();
-      return {archivedPath: archivedDest};
+      return {archivedPath: result?.archivedPath || ''};
     } finally {
       setLoading(false);
     }
@@ -558,8 +538,9 @@ export function WorktreeProvider({
   
 
   const getRemoteBranches = useCallback((project: string): Promise<Array<Record<string, any>>> => {
-    return gitService.getRemoteBranches(project);
-  }, [gitService]);
+    const engine = engineRef.current;
+    return engine?.getRemoteBranches(project) || Promise.resolve([]);
+  }, []);
 
   const getRunConfigPath = useCallback((project: string): string => {
     const projectPath = path.join(gitService.basePath, project);
