@@ -4,12 +4,36 @@ import {stringDisplayWidth} from '../../shared/utils/formatting.js';
 
 interface StatusChipProps {
   label: string;
-  color: string; // background color
+  color: string | undefined; // background color; 'none' or undefined => no background
   fg?: string;   // foreground color
   width?: number; // optional fixed width for alignment
 }
 
 export default function StatusChip({label, color, fg = 'white', width}: StatusChipProps) {
+  const isPlain = !color || color === 'none' || color === 'transparent';
+
+  // Plain text mode (no background, left-aligned, magenta etc.)
+  if (isPlain) {
+    const makePlain = (): string => {
+      const base = label;
+      if (!width || width <= 0) return base;
+      let visible = base;
+      if (stringDisplayWidth(visible) > width) {
+        visible = visible.slice(0, Math.max(0, width));
+      }
+      const pad = Math.max(0, width - stringDisplayWidth(visible));
+      const left = Math.floor(pad / 2);
+      const right = pad - left;
+      return ' '.repeat(left) + visible + ' '.repeat(right);
+    };
+
+    return (
+      <Box width={width} justifyContent="flex-start">
+        <Text color={fg}>{makePlain()}</Text>
+      </Box>
+    );
+  }
+
   // Create a string that exactly fills the width with background, centered label
   const makeChip = (): string => {
     const base = ` ${label} `; // padding around the label

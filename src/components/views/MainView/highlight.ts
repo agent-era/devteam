@@ -3,7 +3,7 @@ import type {WorktreeInfo, PRStatus} from '../../../models.js';
 export interface HighlightInfo {
   columnIndex: number;
   color: string;
-  reason: string;
+  reason: StatusReason | string;
 }
 
 export const COLUMNS = {
@@ -21,6 +21,45 @@ export const COLORS = {
   GREEN: 'green',
 } as const;
 
+// Enum for semantic status reasons (presentation-agnostic)
+export enum StatusReason {
+  CLAUDE_WAITING = 'claude-waiting',
+  UNSTAGED_CHANGES = 'unstaged-changes',
+  UNPUSHED_COMMITS = 'unpushed-commits',
+  PR_CONFLICTS = 'pr-conflicts',
+  PR_NEEDS_ATTENTION = 'pr-needs-attention',
+  PR_READY_TO_MERGE = 'pr-ready-to-merge',
+  PR_CHECKING = 'pr-checking',
+  NO_PR = 'no-pr',
+  PR_INFORMATIONAL = 'pr-informational',
+  PR_MERGED = 'pr-merged',
+  CLAUDE_READY = 'claude-ready',
+}
+
+// Determine the semantic status reason without presentation concerns
+export function determineStatusReason(worktree: WorktreeInfo, pr: PRStatus | undefined | null): StatusReason | null {
+  const cs = (worktree.session?.claude_status || '').toLowerCase();
+  if (cs.includes('waiting')) return StatusReason.CLAUDE_WAITING;
+  if (worktree.git?.has_changes) return StatusReason.UNSTAGED_CHANGES;
+  if ((worktree.git?.ahead || 0) > 0) return StatusReason.UNPUSHED_COMMITS;
+
+  if (pr) {
+    if (pr.has_conflicts) return StatusReason.PR_CONFLICTS;
+    if (pr.checks === 'failing') return StatusReason.PR_NEEDS_ATTENTION;
+    if (pr.is_ready_to_merge) return StatusReason.PR_READY_TO_MERGE;
+    if (pr.is_open && pr.number && pr.checks === 'pending') return StatusReason.PR_CHECKING;
+    if (pr.noPR) {
+      const hasCommittedBaseDiff = ((worktree.git?.base_added_lines ?? 0) + (worktree.git?.base_deleted_lines ?? 0)) > 0;
+      if (worktree.git?.has_remote && hasCommittedBaseDiff) return StatusReason.NO_PR;
+      return StatusReason.CLAUDE_READY;
+    }
+    if (pr.is_open && pr.number) return StatusReason.PR_INFORMATIONAL;
+    if (pr.is_merged && pr.number) return StatusReason.PR_MERGED;
+    if (worktree.session?.attached && (cs.includes('idle') || cs.includes('active'))) return StatusReason.CLAUDE_READY;
+  }
+  return null;
+}
+
 export function computeHighlightInfo(worktree: WorktreeInfo, pr: PRStatus | undefined | null): HighlightInfo | null {
   const cs = (worktree.session?.claude_status || '').toLowerCase();
   const isDimmed = pr?.is_merged === true || pr?.state === 'MERGED';
@@ -28,86 +67,91 @@ export function computeHighlightInfo(worktree: WorktreeInfo, pr: PRStatus | unde
     return null;
   }
 
-  if (cs.includes('waiting')) {
-    return {columnIndex: COLUMNS.AI, color: COLORS.YELLOW, reason: 'claude-waiting'};
-  }
-  if (worktree.git?.has_changes) {
-    return {columnIndex: COLUMNS.DIFF, color: COLORS.YELLOW, reason: 'unstaged-changes'};
-  }
-  if ((worktree.git?.ahead || 0) > 0) {
-    // Without PUSHED column, highlight CHANGES for unpushed commits
-    return {columnIndex: COLUMNS.CHANGES, color: COLORS.YELLOW, reason: 'unpushed-commits'};
+  const reason = determineStatusReason(worktree, pr);
+  if (!reason) return null;
+
+  // Map reason to table column for highlighting
+  const columnIndex =
+    reason === StatusReason.CLAUDE_WAITING || reason === StatusReason.CLAUDE_READY ? COLUMNS.AI :
+    reason === StatusReason.UNSTAGED_CHANGES ? COLUMNS.DIFF :
+    reason === StatusReason.UNPUSHED_COMMITS ? COLUMNS.CHANGES :
+    COLUMNS.PR;
+
+  // Map reason to a simple severity color for highlight emphasis
+  let color: string = COLORS.YELLOW;
+  switch (reason) {
+    case StatusReason.PR_CONFLICTS:
+    case StatusReason.PR_NEEDS_ATTENTION:
+      color = COLORS.RED; break;
+    case StatusReason.PR_READY_TO_MERGE:
+    case StatusReason.PR_MERGED:
+    case StatusReason.CLAUDE_READY:
+      color = COLORS.GREEN; break;
+    default:
+      color = COLORS.YELLOW; break;
   }
 
-  if (pr) {
-    if (pr.has_conflicts) {
-      return {columnIndex: COLUMNS.PR, color: COLORS.RED, reason: 'pr-conflicts'};
-    }
-    if (pr.checks === 'failing') {
-      return {columnIndex: COLUMNS.PR, color: COLORS.RED, reason: 'pr-needs-attention'};
-    }
-    if (pr.is_ready_to_merge) {
-      return {columnIndex: COLUMNS.PR, color: COLORS.GREEN, reason: 'pr-ready-to-merge'};
-    }
-    if (pr.is_open && pr.number) {
-      return {columnIndex: COLUMNS.PR, color: COLORS.YELLOW, reason: 'pr-informational'};
-    }
-    if (pr.is_merged && pr.number) {
-      return {columnIndex: COLUMNS.PR, color: COLORS.GREEN, reason: 'pr-merged'};
-    }
-    if (worktree.session?.attached && (cs.includes('idle') || cs.includes('active'))) {
-      return {columnIndex: COLUMNS.AI, color: COLORS.GREEN, reason: 'claude-ready'};
-    }
-  }
-  return null;
+  return {columnIndex, color, reason};
 }
 
-export function statusLabelFromReason(reason: string | null | undefined): string {
+export function statusLabelFromReason(reason: StatusReason | string | null | undefined): string {
   switch (reason) {
-    case 'claude-waiting':
+    case StatusReason.CLAUDE_WAITING:
       return 'waiting';
-    case 'unstaged-changes':
+    case StatusReason.UNSTAGED_CHANGES:
       return 'modified';
-    case 'unpushed-commits':
+    case StatusReason.UNPUSHED_COMMITS:
       return 'un-pushed';
-    case 'pr-conflicts':
+    case StatusReason.PR_CONFLICTS:
       return 'conflict';
-    case 'pr-needs-attention':
+    case StatusReason.PR_NEEDS_ATTENTION:
       return 'pr-failed';
-    case 'pr-ready-to-merge':
+    case StatusReason.PR_READY_TO_MERGE:
       return 'pr-passed';
-    case 'pr-informational':
+    case StatusReason.PR_CHECKING:
+      return 'pr-checking';
+    case StatusReason.NO_PR:
+      return 'no-pr';
+    case StatusReason.PR_INFORMATIONAL:
       return '';
-    case 'pr-merged':
+    case StatusReason.PR_MERGED:
       return 'merged';
-    case 'claude-ready':
+    case StatusReason.CLAUDE_READY:
       return 'ready';
     default:
       return '';
   }
 }
 
-export function statusColorsFromReason(reason: string | null | undefined): {bg: string; fg: string} {
+export function statusColorsFromReason(reason: StatusReason | string | null | undefined): {bg: string; fg: string} {
   // All statuses default to white text for readability
   const fg = 'white';
   switch (reason) {
-    case 'claude-waiting':
+    case StatusReason.CLAUDE_WAITING:
       return {bg: 'yellow', fg};
-    case 'unstaged-changes':
-      return {bg: 'blue', fg};
-    case 'unpushed-commits':
+    case StatusReason.UNSTAGED_CHANGES:
+      // Plain colored text for modified
+      return {bg: 'none', fg: 'blue'};
+    case StatusReason.UNPUSHED_COMMITS:
       return {bg: 'cyan', fg};
-    case 'pr-conflicts':
+    case StatusReason.PR_CONFLICTS:
       return {bg: 'red', fg};
-    case 'pr-needs-attention':
+    case StatusReason.PR_NEEDS_ATTENTION:
       return {bg: 'red', fg};
-    case 'pr-ready-to-merge':
+    case StatusReason.PR_READY_TO_MERGE:
       return {bg: 'green', fg};
-    case 'pr-informational':
+    case StatusReason.PR_CHECKING:
+      // No background; show text in magenta
+      return {bg: 'none', fg: 'magenta'};
+    case StatusReason.NO_PR:
+      // Plain cyan text 'no-pr' with no background
+      return {bg: 'none', fg: 'cyan'};
+    case StatusReason.PR_INFORMATIONAL:
       return {bg: 'magenta', fg};
-    case 'pr-merged':
-      return {bg: 'green', fg};
-    case 'claude-ready':
+    case StatusReason.PR_MERGED:
+      // Plain grey text 'merged' with no background
+      return {bg: 'none', fg: 'gray'};
+    case StatusReason.CLAUDE_READY:
       // Show text 'ready' but with default (black) background
       return {bg: 'black', fg};
     default:
@@ -124,6 +168,15 @@ export function getStatusMeta(
     const label = statusLabelFromReason(hi.reason);
     const {bg, fg} = statusColorsFromReason(hi.reason);
     return {label, bg, fg};
+  }
+  // If AI is working, show plain text label with no highlight
+  const ai = (worktree.session?.ai_status || worktree.session?.claude_status || '').toLowerCase();
+  if (ai.includes('working')) {
+    return {label: 'working', bg: 'none', fg: 'white'};
+  }
+  // If PR is merged, show plain grey 'merged' with no background
+  if (pr && (pr.is_merged || pr.state === 'MERGED')) {
+    return {label: 'merged', bg: 'none', fg: 'gray'};
   }
   return {label: '', bg: 'black', fg: 'white'};
 }
