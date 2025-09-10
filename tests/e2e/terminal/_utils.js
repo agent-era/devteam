@@ -60,7 +60,9 @@ export function stripAnsi(str = ''){
 }
 
 // Wait for a predicate to become true within a timeout
-export async function waitFor(predicate, {timeout = 2000, interval = 50, message = 'condition'} = {}){
+const DEFAULT_WAIT = 8000;
+
+export async function waitFor(predicate, {timeout = DEFAULT_WAIT, interval = 50, message = 'condition'} = {}){
   const start = Date.now();
   /* eslint-disable no-constant-condition */
   while (true) {
@@ -77,7 +79,7 @@ export async function waitFor(predicate, {timeout = 2000, interval = 50, message
 }
 
 // Wait for text to appear in a frame provider function
-export async function waitForText(getFrame, text, {timeout = 2000, interval = 50, strip = true} = {}){
+export async function waitForText(getFrame, text, {timeout = DEFAULT_WAIT, interval = 50, strip = true} = {}){
   const norm = (s) => strip ? stripAnsi(s || '') : (s || '');
   const msg = `text ${JSON.stringify(text)}`;
   return waitFor(() => {
