@@ -10,6 +10,8 @@ import {useKeyboardShortcuts} from '../hooks/useKeyboardShortcuts.js';
 import {VISIBLE_STATUS_REFRESH_DURATION} from '../constants.js';
 import {isAppIntervalsEnabled} from '../config.js';
 import {startIntervalIfEnabled} from '../shared/utils/intervals.js';
+import {useTerminalDimensions} from '../hooks/useTerminalDimensions.js';
+import {calculatePageSize} from '../utils/pagination.js';
 
 
 interface WorktreeListScreenProps {
@@ -37,7 +39,11 @@ export default function WorktreeListScreen({
   const {setVisibleWorktrees} = useGitHubContext();
   const {isAnyDialogFocused} = useInputFocus();
   const {showAIToolSelection, showList, runWithLoading, showInfo} = useUIContext();
-  const [pageSize, setPageSize] = useState(1);
+  // Seed page size with a realistic fallback based on terminal dimensions
+  // to avoid early navigation using a placeholder value (which can cause
+  // page jumps once the measured size arrives from MainView).
+  const {rows: termRows, columns: termCols} = useTerminalDimensions();
+  const [pageSize, setPageSize] = useState<number>(() => calculatePageSize(termRows, termCols));
   const [currentPage, setCurrentPage] = useState(0);
   const [hasProjects, setHasProjects] = useState<boolean>(false);
 

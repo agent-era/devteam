@@ -34,16 +34,28 @@ test('preserves page after attach/detach (selectedIndex visible)', async () => {
 
   const inst = Ink.render(tree, {stdout, stdin, debug: true, exitOnCtrlC: false, patchConsole: false});
 
-  // Allow initial frame to render
+  // Allow initial frame to render and wait for pagination to settle
   await new Promise(r => setTimeout(r, 250));
   const {waitFor, waitForText, worktreeRegex, stripAnsi} = await import('./_utils.js');
   let frame = stdout.lastFrame() || '';
   let clean = stripAnsi(frame);
   assert.ok(clean.includes('Page 1/'), 'Expected to start on Page 1');
+  // Settle: wait until pagination text includes a full range like "[Page 1/…: 1-XX/40]"
+  await waitFor(() => {
+    const s = stripAnsi(stdout.lastFrame() || '');
+    return /\[Page 1\/\d+: 1-\d+\/40\]/.test(s);
+  }, {timeout: 3000, interval: 50, message: 'pagination settled on Page 1'});
 
   // Go to Page 2 (full-page pagination)
+  // Give the keyboard listener a brief moment to attach in CI
+  await new Promise(r => setTimeout(r, 100));
   stdin.emit('data', Buffer.from('>'));
-  await waitForText(() => stdout.lastFrame() || '', 'Page 2/', {timeout: 3000});
+  await waitForText(() => stdout.lastFrame() || '', 'Page 2/', {timeout: 5000});
+  // Settle: ensure pagination range for Page 2 is visible
+  await waitFor(() => {
+    const s = stripAnsi(stdout.lastFrame() || '');
+    return /\[Page 2\/\d+: \d+-\d+\/40\]/.test(s);
+  }, {timeout: 3000, interval: 50, message: 'pagination settled on Page 2'});
   // wait until a worktree label is visible on Page 2 as well
   await waitFor(() => {
     const f = stdout.lastFrame() || '';
@@ -61,8 +73,14 @@ test('preserves page after attach/detach (selectedIndex visible)', async () => {
   await new Promise(r => setTimeout(r, 100));
 
   // Press Enter to attach directly (no tmux hint)
+  await new Promise(r => setTimeout(r, 50));
   stdin.emit('data', Buffer.from('\r'));
-  await waitForText(() => stdout.lastFrame() || '', 'Page 2/', {timeout: 3000});
+  await waitForText(() => stdout.lastFrame() || '', 'Page 2/', {timeout: 5000});
+  // Settle again after detach returns control
+  await waitFor(() => {
+    const s = stripAnsi(stdout.lastFrame() || '');
+    return /\[Page 2\/\d+: \d+-\d+\/40\]/.test(s);
+  }, {timeout: 3000, interval: 50, message: 'pagination re-settled on Page 2'});
   frame = stdout.lastFrame() || '';
   clean = stripAnsi(frame);
   
