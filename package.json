@@ -3,7 +3,9 @@
   "version": "1.0.6",
   "description": "DevTeam: Git/Tmux development workflow TUI (Node + Ink)",
   "bin": {
-    "devteam": "dist/bin/devteam.js"
+    "devteam": "dist/bin/devteam.js",
+    "devteam-relay": "dist/bin/devteam-relay.js",
+    "devteam-server": "dist/bin/devteam-server.js"
   },
   "type": "module",
   "engines": {
@@ -41,11 +43,22 @@
     "README.md",
     "CLAUDE.md"
   ],
+  "exports": {
+    ".": "./dist/index.js",
+    "./relay": "./dist/relay/index.js",
+    "./relay/server": "./dist/relay/server.js",
+    "./relay/client": "./dist/relay/client.js",
+    "./sync": "./dist/sync/index.js",
+    "./sync/server": "./dist/sync/server.js",
+    "./sync/client": "./dist/sync/client.js"
+  },
   "dependencies": {
     "@inkjs/ui": "^2.0.0",
     "ink": "^5.2.1",
     "ink-syntax-highlight": "^2.0.2",
-    "react": "^18.3.1"
+    "isomorphic-ws": "^5.0.0",
+    "react": "^18.3.1",
+    "ws": "^8.17.0"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
@@ -54,6 +67,7 @@
     "@types/jest": "^29.5.14",
     "@types/node": "^22.5.4",
     "@types/react": "^18.3.3",
+    "@types/ws": "^8.18.1",
     "babel-jest": "^29.7.0",
     "ink-testing-library": "^3.0.0",
     "jest": "^29.7.0",
