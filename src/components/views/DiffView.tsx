@@ -436,7 +436,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
         }
       } else {
         const currentLine = sideBySideLines[selectedLine];
-        const fileName = currentLine.left?.fileName || currentLine.right?.fileName;
+        const fileName = currentLine?.left?.fileName || currentLine?.right?.fileName;
         if (currentLine && fileName) {
           const perFileIndex = sideBySidePerFileIndex[selectedLine];
           if (perFileIndex !== undefined) {
@@ -875,8 +875,8 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       }
     } else {
       const currentLine = sideBySideLines[selectedLine];
-      const fileName = currentLine.right?.fileName || currentLine.left?.fileName;
-      const lineText = currentLine.right?.text || currentLine.left?.text;
+      const fileName = currentLine?.right?.fileName || currentLine?.left?.fileName;
+      const lineText = currentLine?.right?.text || currentLine?.left?.text;
       
       if (currentLine && fileName && lineText) {
         const perFileIndex = sideBySidePerFileIndex[selectedLine];
@@ -886,12 +886,12 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
         } else {
           // New logic for removed lines and file headers
           let textForComment = '';
-          if (currentLine.left?.type === 'header' && currentLine.left.headerType === 'file') {
+          if (currentLine?.left?.type === 'header' && currentLine.left.headerType === 'file') {
             // File header - use filename as line text
             textForComment = fileName || '';
           } else {
             // Removed lines - use the line text
-            textForComment = currentLine.left?.text || lineText;
+            textForComment = currentLine?.left?.text || lineText;
           }
           commentStore.addComment(undefined, fileName, textForComment, commentText);
         }
