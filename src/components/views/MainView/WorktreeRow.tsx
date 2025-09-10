@@ -87,11 +87,31 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
     if (selected && !isPriorityCell(cellIndex)) return undefined;
     // Color the applicable column's text
     if (isPriorityCell(cellIndex)) {
-      // Special-case colors for specific reasons
-      if (highlightInfo?.reason === StatusReason.UNPUSHED_COMMITS) return 'cyan';
-      if (highlightInfo?.reason === StatusReason.PR_CONFLICTS) return 'red';
-      // Default: match the STATUS chip's text color
-      return statusMeta.fg;
+      // Apply explicit text colors per status reason for the applicable column
+      switch (highlightInfo?.reason) {
+        case StatusReason.CLAUDE_WAITING:
+          return 'yellow';
+        case StatusReason.AGENT_READY:
+          return 'green';
+        case StatusReason.UNCOMMITTED_CHANGES:
+          return 'blue';
+        case StatusReason.UNPUSHED_COMMITS:
+          return 'cyan';
+        case StatusReason.PR_CONFLICTS:
+        case StatusReason.PR_FAILING:
+          return 'red';
+        case StatusReason.PR_READY_TO_MERGE:
+          return 'green';
+        case StatusReason.PR_CHECKING:
+          return 'yellow'; // amber-like
+        case StatusReason.NO_PR:
+          return 'cyan';
+        case StatusReason.PR_MERGED:
+          return 'gray';
+        default:
+          // Fallback to STATUS chip text color
+          return statusMeta.fg;
+      }
     }
     return undefined;
   };
