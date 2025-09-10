@@ -36,15 +36,20 @@ test('preserves page after attach/detach (selectedIndex visible)', async () => {
 
   // Allow initial frame to render
   await new Promise(r => setTimeout(r, 250));
-  const {waitForText} = await import('./_utils.js');
+  const {waitFor, waitForText, worktreeRegex} = await import('./_utils.js');
   let frame = stdout.lastFrame() || '';
   assert.ok(frame.includes('Page 1/'), 'Expected to start on Page 1');
 
   // Go to Page 2 (full-page pagination)
   stdin.emit('data', Buffer.from('>'));
   await waitForText(() => stdout.lastFrame() || '', 'Page 2/', {timeout: 3000});
+  // wait until a worktree label is visible on Page 2 as well
+  await waitFor(() => {
+    const f = stdout.lastFrame() || '';
+    return worktreeRegex('demo').test(f);
+  }, {timeout: 3000, interval: 50, message: 'first worktree visible on Page 2'});
   frame = stdout.lastFrame() || '';
-  const firstVisibleMatch = frame.match(/demo\/feature-\d+/);
+  const firstVisibleMatch = frame.match(worktreeRegex('demo'));
   const firstVisible = firstVisibleMatch ? firstVisibleMatch[0] : '';
   assert.ok(firstVisible.length > 0, 'Expected first item on Page 2 to be detectable');
 

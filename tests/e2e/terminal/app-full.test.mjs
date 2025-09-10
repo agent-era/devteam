@@ -29,9 +29,9 @@ test('full App renders list rows with fakes', async () => {
   const tree = React.createElement(TestableApp, {gitService, gitHubService, tmuxService});
   const inst = Ink.render(tree, {stdout, stdin, debug: true, exitOnCtrlC: false, patchConsole: false});
   try {
-    const {waitForText} = await import('./_utils.js');
-    await waitForText(() => stdout.lastFrame() || '', 'demo/feature-1', {timeout: 3000});
-    await waitForText(() => stdout.lastFrame() || '', 'demo/feature-2', {timeout: 3000});
+    const {waitFor, includesWorktree} = await import('./_utils.js');
+    await waitFor(() => includesWorktree(stdout.lastFrame() || '', 'demo', 'feature-1'), {timeout: 3000, interval: 50, message: 'feature-1 [demo] visible'});
+    await waitFor(() => includesWorktree(stdout.lastFrame() || '', 'demo', 'feature-2'), {timeout: 3000, interval: 50, message: 'feature-2 [demo] visible'});
   } finally {
     try { inst.unmount?.(); } catch {}
     try { restoreTimers?.(); } catch {}

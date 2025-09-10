@@ -33,14 +33,14 @@ test('attach then detach re-renders the main list (no blank screen)', async () =
   const inst = Ink.render(tree, {stdout, stdin, debug: true, exitOnCtrlC: false, patchConsole: false});
 
   // Allow initial frame to render
-  const {waitForText} = await import('./_utils.js');
-  await waitForText(() => stdout.lastFrame() || '', 'demo/feature-1', {timeout: 3000});
+  const {waitFor, includesWorktree} = await import('./_utils.js');
+  await waitFor(() => includesWorktree(stdout.lastFrame() || '', 'demo', 'feature-1'), {timeout: 3000, interval: 50, message: 'feature-1 [demo] visible before attach'});
   let frame = stdout.lastFrame() || '';
 
   // Press Enter to select -> directly attach (simulated)
   stdin.emit('data', Buffer.from('\r'));
   // Wait for simulated attach/detach cycle and redraw
-  await waitForText(() => stdout.lastFrame() || '', 'demo/feature-1', {timeout: 3000});
+  await waitFor(() => includesWorktree(stdout.lastFrame() || '', 'demo', 'feature-1'), {timeout: 3000, interval: 50, message: 'feature-1 [demo] visible after detach'});
 
   try { inst.unmount?.(); } catch {}
 });

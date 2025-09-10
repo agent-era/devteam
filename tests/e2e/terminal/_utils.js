@@ -100,3 +100,31 @@ export async function waitForText(getFrame, text, {timeout = DEFAULT_WAIT, inter
     }
   });
 }
+
+// Worktree label helpers to tolerate alternate render formats
+// Accept both "project/feature" and "feature [project]" styles across environments
+export function worktreeLabel(project, feature){
+  return `${feature} [${project}]`;
+}
+
+export function includesWorktree(frame = '', project, feature){
+  const label = worktreeLabel(project, feature);
+  return frame.includes(label);
+}
+
+function escapeRegExp(str){
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+export function worktreeRegex(project){
+  const p = escapeRegExp(project);
+  // Matches "feature-XX [project]"
+  return new RegExp(`feature-\\d+ \\[${p}\\]`);
+}
+
+export function countWorktrees(frame = '', project){
+  if (!frame) return 0;
+  const p = escapeRegExp(project);
+  const bracketMatches = frame.match(new RegExp(`feature-\\d+ \\[${p}\\]`, 'g')) || [];
+  return bracketMatches.length;
+}

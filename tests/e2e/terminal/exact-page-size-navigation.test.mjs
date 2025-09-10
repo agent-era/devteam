@@ -39,8 +39,8 @@ test('does not go blank when items equal page size and pressing down', async () 
   const inst = Ink.render(tree, {stdout, stdin, debug: true, exitOnCtrlC: false, patchConsole: false});
 
   // Allow initial frame to render and detect first item
-  const {waitForText} = await import('./_utils.js');
-  await waitForText(() => stdout.lastFrame() || '', 'demo/feature-01', {timeout: 3000});
+  const {waitFor, includesWorktree, countWorktrees, worktreeLabel} = await import('./_utils.js');
+  await waitFor(() => includesWorktree(stdout.lastFrame() || '', 'demo', 'feature-01'), {timeout: 3000, interval: 50, message: 'first item visible'});
   let frame = stdout.lastFrame() || '';
   // Derive the end of the visible range from the pagination footer (e.g., "Page 1/X: 1-25/25")
   const footerMatch = frame.match(/Page\s+1\/\d+:\s+1-(\d+)\/(\d+)/);
@@ -49,7 +49,7 @@ test('does not go blank when items equal page size and pressing down', async () 
     const total = Number(footerMatch[2]);
     // If total fits on one page, the last visible item should be the end of the range
     if (total <= PAGE_SIZE) {
-      const lastLabel = `demo/feature-${String(end).padStart(2, '0')}`;
+      const lastLabel = worktreeLabel('demo', `feature-${String(end).padStart(2, '0')}`);
       assert.ok(frame.includes(lastLabel), `Expected last visible item ${lastLabel}`);
     }
   }
@@ -60,7 +60,7 @@ test('does not go blank when items equal page size and pressing down', async () 
   await new Promise(r => setTimeout(r, 200));
 
   frame = stdout.lastFrame() || '';
-  const visibleRows = (frame.match(/demo\/feature-/g) || []).length;
+  const visibleRows = countWorktrees(frame, 'demo');
 
   // The correct behavior: list should not go blank; still show items on the only page.
   assert.ok(visibleRows > 0, 'List should not be blank after pressing down');

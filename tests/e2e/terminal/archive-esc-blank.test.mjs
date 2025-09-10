@@ -29,8 +29,8 @@ test('pressing a then ESC with one worktree returns to list (not blank)', async 
   const inst = Ink.render(tree, {stdout, stdin, debug: true, exitOnCtrlC: false, patchConsole: false});
 
   // Let initial frame render
-  const {waitForText, stripAnsi} = await import('./_utils.js');
-  await waitForText(() => stdout.lastFrame() || '', 'demo/feature-1', {timeout: 3000});
+  const {waitFor, waitForText, stripAnsi, includesWorktree} = await import('./_utils.js');
+  await waitFor(() => includesWorktree(stdout.lastFrame() || '', 'demo', 'feature-1'), {timeout: 3000, interval: 50, message: 'initial feature-1 [demo] visible'});
   let frame = stdout.lastFrame() || '';
 
   // Press 'a' to open archive confirmation
@@ -42,12 +42,12 @@ test('pressing a then ESC with one worktree returns to list (not blank)', async 
 
   // Press ESC to cancel and return to list
   stdin.emit('data', Buffer.from('\u001b'));
-  await waitForText(() => stdout.lastFrame() || '', 'demo/feature-1', {timeout: 3000});
+  await waitFor(() => includesWorktree(stdout.lastFrame() || '', 'demo', 'feature-1'), {timeout: 3000, interval: 50, message: 'worktree visible after ESC'});
   frame = stdout.lastFrame() || '';
 
   // Must not be blank; should show the list again with the worktree row visible
   assert.ok((frame.trim().length > 0), `Expected non-blank frame after ESC, got: ${JSON.stringify(frame)}`);
-  assert.ok(frame.includes('demo/feature-1'), 'Expected to return to main list after ESC');
+  assert.ok(includesWorktree(frame, 'demo', 'feature-1'), 'Expected to return to main list after ESC');
 
   try { inst.unmount?.(); } catch {}
 });
