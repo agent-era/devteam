@@ -12,7 +12,7 @@
     "node": ">=18"
   },
   "scripts": {
-    "build": "rm -rf dist && tsc -p .",
+    "build": "rm -rf dist && tsc -p . && chmod +x dist/bin/*.js",
     "typecheck": "npm install && tsc -p tsconfig.test.json",
     "start": "node dist/index.js",
     "cli": "node dist/bin/devteam.js",
