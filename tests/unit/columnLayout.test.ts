@@ -6,9 +6,9 @@ describe('Column Layout and Spacing', () => {
     test('should calculate column widths that fit terminal exactly', () => {
       // Mock data representing typical worktree display
       const mockData = [
-        ['#', 'PROJECT/FEATURE', 'AI', 'DIFF', 'CHANGES', 'PUSHED', 'PR'],
-        ['1', 'my-project/long-feature-name', '*', '+1.2k/-500', '↑3 ↓1', '+', '#123+'],
-        ['12', 'short/feat', '-', '-', '-', '-', '-']
+        ['#', 'STATUS', 'PROJECT/FEATURE', 'AI', 'DIFF', 'CHANGES', 'PR'],
+        ['1', 'un-pushed', 'my-project/long-feature-name', '*', '+1.2k/-500', '↑3 ↓1', '#123+'],
+        ['12', '', 'short/feat', '-', '-', '-', '-']
       ];
 
       const testTerminalWidths = [60, 80, 100, 120];
@@ -16,17 +16,17 @@ describe('Column Layout and Spacing', () => {
       for (const terminalWidth of testTerminalWidths) {
         // Calculate fixed column widths (all except PROJECT/FEATURE)
         const fixedWidths = [0, 1, 2, 3, 4, 5, 6].map(colIndex => {
-          if (colIndex === 1) return 0; // PROJECT/FEATURE calculated separately
+          if (colIndex === 2) return 0; // PROJECT/FEATURE calculated separately
           const maxWidth = Math.max(...mockData.map(row => stringDisplayWidth(row[colIndex] || '')));
           return Math.max(4, maxWidth);
         });
 
         // Calculate space allocation
-        const fixedColumnsWidth = fixedWidths.reduce((sum, width, index) => index === 1 ? sum : sum + width, 0);
+        const fixedColumnsWidth = fixedWidths.reduce((sum, width, index) => index === 2 ? sum : sum + width, 0);
         const marginsWidth = 6; // 6 spaces between 7 columns
         const usedWidth = fixedColumnsWidth + marginsWidth;
         const availableWidth = Math.max(15, terminalWidth - usedWidth);
-        fixedWidths[1] = Math.min(availableWidth, terminalWidth - usedWidth);
+        fixedWidths[2] = Math.min(availableWidth, terminalWidth - usedWidth);
         
         const totalWidth = fixedWidths.reduce((a, b) => a + b, 0) + marginsWidth;
         
@@ -35,18 +35,18 @@ describe('Column Layout and Spacing', () => {
         expect(totalWidth).toBeGreaterThan(terminalWidth - 5); // Should use most of the space
         
         // Verify PROJECT/FEATURE gets reasonable space
-        expect(fixedWidths[1]).toBeGreaterThanOrEqual(15); // Minimum readable width
+        expect(fixedWidths[2]).toBeGreaterThanOrEqual(15); // Minimum readable width
       }
     });
 
     test('should stretch content-based columns to actual content width', () => {
       const mockData = [
-        ['1', 'project/feature', '*', '+1000/-200', '↑10 ↓5', '+', '#1234+'],
-        ['123', 'another/name', '-', '+5k/-1k', '↑2', '-', '-']
+        ['1', 'un-pushed', 'project/feature', '*', '+1000/-200', '↑10 ↓5', '#1234+'],
+        ['123', '', 'another/name', '-', '+5k/-1k', '↑2', '-']
       ];
 
       // Test each non-PROJECT/FEATURE column
-      [0, 2, 3, 4, 5, 6].forEach(colIndex => {
+      [0, 1, 3, 4, 5, 6].forEach(colIndex => {
         const maxContentWidth = Math.max(...mockData.map(row => stringDisplayWidth(row[colIndex] || '')));
         const calculatedWidth = Math.max(4, maxContentWidth);
         
@@ -61,26 +61,26 @@ describe('Column Layout and Spacing', () => {
       const terminalWidth = 50;
       
       const mockData = [
-        ['#', 'PROJECT/FEATURE', 'AI', 'DIFF', 'CHANGES', 'PUSHED', 'PR'],
-        ['1', 'very-long-project-name/feature', '*', '+1k/-2k', '↑1 ↓2', '✓', '#1✓']
+        ['#', 'STATUS', 'PROJECT/FEATURE', 'AI', 'DIFF', 'CHANGES', 'PR'],
+        ['1', 'modified', 'very-long-project-name/feature', '*', '+1k/-2k', '↑1 ↓2', '#1✓']
       ];
 
       const fixedWidths = [0, 1, 2, 3, 4, 5, 6].map(colIndex => {
-        if (colIndex === 1) return 0;
+        if (colIndex === 2) return 0;
         const maxWidth = Math.max(...mockData.map(row => stringDisplayWidth(row[colIndex] || '')));
         return Math.max(4, maxWidth);
       });
 
-      const fixedColumnsWidth = fixedWidths.reduce((sum, width, index) => index === 1 ? sum : sum + width, 0);
+      const fixedColumnsWidth = fixedWidths.reduce((sum, width, index) => index === 2 ? sum : sum + width, 0);
       const marginsWidth = 6;
       const usedWidth = fixedColumnsWidth + marginsWidth;
       const availableWidth = Math.max(15, terminalWidth - usedWidth);
-      fixedWidths[1] = Math.min(availableWidth, terminalWidth - usedWidth);
+      fixedWidths[2] = Math.min(availableWidth, terminalWidth - usedWidth);
       
       const totalWidth = fixedWidths.reduce((a, b) => a + b, 0) + marginsWidth;
 
       expect(totalWidth).toBeLessThanOrEqual(terminalWidth);
-      expect(fixedWidths[1]).toBeGreaterThanOrEqual(12); // Minimum readable width for narrow terminals
+      expect(fixedWidths[2]).toBeGreaterThanOrEqual(10); // Minimum readable width for narrow terminals with STATUS column
     });
   });
 
