@@ -53,6 +53,9 @@ jobs:
         npm -v
 
     - name: Run terminal tests (Node test runner)
+      env:
+        TERM: xterm-256color
+        COLORTERM: truecolor
       run: npm run test:terminal
 
     - name: Upload coverage reports to Codecov

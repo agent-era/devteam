@@ -62,7 +62,7 @@ export function stripAnsi(str = ''){
 // Wait for a predicate to become true within a timeout
 const DEFAULT_WAIT = 12000;
 
-export async function waitFor(predicate, {timeout = DEFAULT_WAIT, interval = 50, message = 'condition'} = {}){
+export async function waitFor(predicate, {timeout = DEFAULT_WAIT, interval = 50, message = 'condition', onTimeout} = {}){
   const start = Date.now();
   /* eslint-disable no-constant-condition */
   while (true) {
@@ -72,6 +72,7 @@ export async function waitFor(predicate, {timeout = DEFAULT_WAIT, interval = 50,
       // ignore predicate errors during polling
     }
     if (Date.now() - start > timeout) {
+      try { onTimeout?.(); } catch {}
       throw new Error(`waitFor timeout waiting for ${message}`);
     }
     await new Promise(r => setTimeout(r, interval));
@@ -85,5 +86,17 @@ export async function waitForText(getFrame, text, {timeout = DEFAULT_WAIT, inter
   return waitFor(() => {
     const frame = norm(getFrame());
     return frame.includes(text);
-  }, {timeout, interval, message: msg});
+  }, {
+    timeout,
+    interval,
+    message: msg,
+    onTimeout: () => {
+      try {
+        const frame = norm(getFrame());
+        const tail = frame.slice(-800); // dump last 800 chars for context
+        // eslint-disable-next-line no-console
+        console.error(`waitForText timeout for ${msg}. Last frame: ${JSON.stringify(tail)}`);
+      } catch {}
+    }
+  });
 }
