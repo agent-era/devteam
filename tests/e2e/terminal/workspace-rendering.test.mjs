@@ -40,19 +40,21 @@ test('MainView renders workspace header with child rows (terminal)', async () =>
   // Allow time for providers to refresh and render
   await new Promise(r => setTimeout(r, 300));
   const frame = stdout.lastFrame() || '';
+  const {stripAnsi} = await import('./_utils.js');
+  const clean = stripAnsi(frame);
 
   // Assertions: header and both children are rendered
-  assert.ok(frame.includes('feature-x [workspace]'), 'Expected workspace header row');
+  assert.ok(clean.includes('feature-x [workspace]'), 'Expected workspace header row');
   // Children should render tree glyph in branch column and show project only
-  const childAFound = frame.includes('├─ [projA]') || frame.includes('└─ [projA]');
-  const childBFound = frame.includes('├─ [projB]') || frame.includes('└─ [projB]');
+  const childAFound = clean.includes('├─ [projA]') || clean.includes('└─ [projA]');
+  const childBFound = clean.includes('├─ [projB]') || clean.includes('└─ [projB]');
   assert.ok(childAFound, 'Expected child row for projA with tree glyph');
   assert.ok(childBFound, 'Expected child row for projB with tree glyph');
 
   // Header should appear before children in the rendered output
-  const hIdx = frame.indexOf('feature-x [workspace]');
-  const aIdx = Math.max(frame.indexOf('├─ [projA]'), frame.indexOf('└─ [projA]'));
-  const bIdx = Math.max(frame.indexOf('├─ [projB]'), frame.indexOf('└─ [projB]'));
+  const hIdx = clean.indexOf('feature-x [workspace]');
+  const aIdx = Math.max(clean.indexOf('├─ [projA]'), clean.indexOf('└─ [projA]'));
+  const bIdx = Math.max(clean.indexOf('├─ [projB]'), clean.indexOf('└─ [projB]'));
   assert.ok(hIdx >= 0 && aIdx > hIdx && bIdx > hIdx, 'Header should precede both children');
 
   try { inst.unmount?.(); } catch {}

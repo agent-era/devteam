@@ -133,7 +133,8 @@ export function worktreeLabel(project, feature){
 
 export function includesWorktree(frame = '', project, feature){
   const label = worktreeLabel(project, feature);
-  return frame.includes(label);
+  const clean = stripAnsi(frame || '');
+  return clean.includes(label);
 }
 
 function escapeRegExp(str){
@@ -142,13 +143,14 @@ function escapeRegExp(str){
 
 export function worktreeRegex(project){
   const p = escapeRegExp(project);
-  // Matches "feature-XX [project]"
+  // Matches "feature-XX [project]" after stripping ANSI
   return new RegExp(`feature-\\d+ \\[${p}\\]`);
 }
 
 export function countWorktrees(frame = '', project){
   if (!frame) return 0;
+  const clean = stripAnsi(frame || '');
   const p = escapeRegExp(project);
-  const bracketMatches = frame.match(new RegExp(`feature-\\d+ \\[${p}\\]`, 'g')) || [];
+  const bracketMatches = clean.match(new RegExp(`feature-\\d+ \\[${p}\\]`, 'g')) || [];
   return bracketMatches.length;
 }
