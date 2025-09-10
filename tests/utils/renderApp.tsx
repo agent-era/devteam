@@ -193,7 +193,7 @@ function generateMainListOutput(): string {
   }
 
   output += `Enter attach, n new, a archive, x exec, d diff, s shell, q quit${paginationText}\n`;
-  output += '#    STATUS        PROJECT/FEATURE        AI  DIFF     CHANGES  PUSHED  PR\n';
+  output += '#    STATUS        PROJECT/FEATURE        AI  DIFF     CHANGES  PR\n';
   
   // Show only items for current page
   const start = page * pageSize;
@@ -246,9 +246,6 @@ function generateMainListOutput(): string {
     if (behind > 0) changes += `↓${behind}`;
     if (!changes) changes = '-';
     
-    // Pushed status
-    const pushed = gitStatus?.is_pushed ? '✓' : '-';
-    
     // PR status
     let prStr = '-';
     if (prStatus?.number) {
@@ -260,7 +257,7 @@ function generateMainListOutput(): string {
     }
     
     const statusCol = (statusLabel || '').padEnd(13);
-    output += `${rowNum} ${statusCol} ${displayName} ${aiSymbol}   ${diffStr.padEnd(8)} ${changes.padEnd(8)} ${pushed}       ${prStr}\n`;
+    output += `${rowNum} ${statusCol} ${displayName} ${aiSymbol}   ${diffStr.padEnd(8)} ${changes.padEnd(8)} ${prStr}\n`;
   });
   
   // Add pagination footer if multiple pages
@@ -300,7 +297,6 @@ Column Explanations:
 AI - Claude AI status: idle, working, waiting
 DIFF - Added/removed lines (+10/-5)
 CHANGES - Commits ahead/behind (↑2 ↓1)  
-PUSHED - Whether changes are pushed
 PR - Pull request number and status
 
 Press ESC to close this help.`;

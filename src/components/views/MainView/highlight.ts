@@ -12,8 +12,7 @@ export const COLUMNS = {
   AI: 2,
   DIFF: 3,
   CHANGES: 4,
-  PUSHED: 5,
-  PR: 6,
+  PR: 5,
 } as const;
 
 export const COLORS = {
@@ -36,7 +35,8 @@ export function computeHighlightInfo(worktree: WorktreeInfo, pr: PRStatus | unde
     return {columnIndex: COLUMNS.DIFF, color: COLORS.YELLOW, reason: 'unstaged-changes'};
   }
   if ((worktree.git?.ahead || 0) > 0) {
-    return {columnIndex: COLUMNS.PUSHED, color: COLORS.YELLOW, reason: 'unpushed-commits'};
+    // Without PUSHED column, highlight CHANGES for unpushed commits
+    return {columnIndex: COLUMNS.CHANGES, color: COLORS.YELLOW, reason: 'unpushed-commits'};
   }
 
   if (pr) {

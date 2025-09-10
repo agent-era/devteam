@@ -5,14 +5,7 @@ import {stringDisplayWidth} from '../../../shared/utils/formatting.js';
 import {useHighlightPriority} from './hooks/useHighlightPriority.js';
 import {useGitHubContext} from '../../../contexts/GitHubContext.js';
 import type {PRStatus} from '../../../models.js';
-import {
-  formatDiffStats,
-  formatGitChanges,
-  formatPushStatus,
-  getAISymbol,
-  formatPRStatus,
-  shouldDimRow,
-} from './utils.js';
+import { formatDiffStats, formatGitChanges, getAISymbol, formatPRStatus, shouldDimRow } from './utils.js';
 import type {ColumnWidths} from './hooks/useColumnWidths.js';
 import StatusChip from '../../common/StatusChip.js';
 import {getStatusMeta} from './highlight.js';
@@ -54,7 +47,6 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
     ai: getAISymbol(worktree.session?.ai_status || '', worktree.session?.attached || false),
     diff: formatDiffStats(worktree.git?.base_added_lines || 0, worktree.git?.base_deleted_lines || 0),
     changes: formatGitChanges(worktree.git?.ahead || 0, worktree.git?.behind || 0),
-    pushed: formatPushStatus(worktree),
     pr: formatPRStatus(pr),
   };
   
@@ -70,7 +62,6 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
     {text: data.ai, width: columnWidths.ai, justify: 'center' as const},
     {text: data.diff, width: columnWidths.diff, justify: 'flex-end' as const},
     {text: data.changes, width: columnWidths.changes, justify: 'flex-end' as const},
-    {text: data.pushed, width: columnWidths.pushed, justify: 'center' as const},
     {text: data.pr, width: columnWidths.pr, justify: 'flex-start' as const},
   ];
   const statusMeta = getStatusMeta(worktree, pr);

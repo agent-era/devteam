@@ -12,7 +12,6 @@ export interface ColumnWidths {
   ai: number;
   diff: number;
   changes: number;
-  pushed: number;
   pr: number;
 }
 
@@ -35,7 +34,7 @@ export function useColumnWidths(
     const start = page * pageSize;
     const pageItems = worktrees.slice(start, start + pageSize);
     
-    const headerRow = ['#', 'STATUS', 'PROJECT/FEATURE', 'AI', 'DIFF', 'CHANGES', 'PUSHED', 'PR'];
+    const headerRow = ['#', 'STATUS', 'PROJECT/FEATURE', 'AI', 'DIFF', 'CHANGES', 'PR'];
     const dataRows = pageItems.map((w, i0) => {
       const added = w.git?.base_added_lines || 0;
       const deleted = w.git?.base_deleted_lines || 0;
@@ -44,11 +43,6 @@ export function useColumnWidths(
       const ahead = w.git?.ahead || 0;
       const behind = w.git?.behind || 0;
       const changes = formatGitChanges(ahead, behind);
-      
-      let pushed = '-';
-      if (w.git?.has_remote) {
-        pushed = (w.git.ahead === 0 && !w.git.has_changes) ? '✓' : 'x';
-      }
       
       const prObj = pullRequests[w.path];
       const prStr = formatPRStatus(prObj);
@@ -61,16 +55,14 @@ export function useColumnWidths(
         'AI',
         diffStr,
         changes,
-        pushed,
         prStr
       ];
     });
     
     const allRows = [headerRow, ...dataRows];
     
-    const fixedWidths = [0, 1, 2, 3, 4, 5, 6, 7].map(colIndex => {
+    const fixedWidths = [0, 1, 2, 3, 4, 5, 6].map(colIndex => {
       if (colIndex === 2) return 0; // dynamic PROJECT/FEATURE
-      if (colIndex === 6) return 6; // enforce PUSHED column width to 6 chars
       if (colIndex === 1) return 13; // fixed STATUS column width
       const maxContentWidth = Math.max(...allRows.map(row => stringDisplayWidth(row[colIndex] || '')));
       return Math.max(4, maxContentWidth);
@@ -91,8 +83,7 @@ export function useColumnWidths(
       ai: fixedWidths[3],
       diff: fixedWidths[4],
       changes: fixedWidths[5],
-      pushed: fixedWidths[6],
-      pr: fixedWidths[7],
+      pr: fixedWidths[6],
     };
   }, [worktrees, terminalWidth, page, pageSize, pullRequests]);
 }

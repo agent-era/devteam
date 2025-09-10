@@ -28,7 +28,6 @@ export const WorkspaceGroupRow = memo<WorkspaceGroupRowProps>(({workspace, globa
     {text: ai, width: columnWidths.ai, justify: 'center' as const},
     {text: '', width: columnWidths.diff, justify: 'flex-end' as const},
     {text: '', width: columnWidths.changes, justify: 'flex-end' as const},
-    {text: '', width: columnWidths.pushed, justify: 'center' as const},
     {text: '', width: columnWidths.pr, justify: 'flex-start' as const},
   ];
 
@@ -111,7 +110,6 @@ export const WorkspaceGroupRow = memo<WorkspaceGroupRowProps>(({workspace, globa
     prev.columnWidths.ai === next.columnWidths.ai &&
     prev.columnWidths.diff === next.columnWidths.diff &&
     prev.columnWidths.changes === next.columnWidths.changes &&
-    prev.columnWidths.pushed === next.columnWidths.pushed &&
     prev.columnWidths.pr === next.columnWidths.pr;
 
   return (
