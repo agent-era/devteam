@@ -36,14 +36,14 @@ test('preserves page after attach/detach (selectedIndex visible)', async () => {
 
   // Allow initial frame to render
   await new Promise(r => setTimeout(r, 250));
+  const {waitForText} = await import('./_utils.js');
   let frame = stdout.lastFrame() || '';
   assert.ok(frame.includes('Page 1/'), 'Expected to start on Page 1');
 
   // Go to Page 2 (full-page pagination)
   stdin.emit('data', Buffer.from('>'));
-  await new Promise(r => setTimeout(r, 200));
+  await waitForText(() => stdout.lastFrame() || '', 'Page 2/', {timeout: 3000});
   frame = stdout.lastFrame() || '';
-  assert.ok(frame.includes('Page 2/'), 'Expected to be on Page 2');
   const firstVisibleMatch = frame.match(/demo\/feature-\d+/);
   const firstVisible = firstVisibleMatch ? firstVisibleMatch[0] : '';
   assert.ok(firstVisible.length > 0, 'Expected first item on Page 2 to be detectable');
@@ -54,7 +54,6 @@ test('preserves page after attach/detach (selectedIndex visible)', async () => {
 
   // Press Enter to attach directly (no tmux hint)
   stdin.emit('data', Buffer.from('\r'));
-  const {waitForText} = await import('./_utils.js');
   await waitForText(() => stdout.lastFrame() || '', 'Page 2/', {timeout: 3000});
   frame = stdout.lastFrame() || '';
   

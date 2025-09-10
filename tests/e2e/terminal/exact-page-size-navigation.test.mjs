@@ -38,12 +38,10 @@ test('does not go blank when items equal page size and pressing down', async () 
 
   const inst = Ink.render(tree, {stdout, stdin, debug: true, exitOnCtrlC: false, patchConsole: false});
 
-  // Allow initial frame to render
-  await new Promise(r => setTimeout(r, 250));
+  // Allow initial frame to render and detect first item
+  const {waitForText} = await import('./_utils.js');
+  await waitForText(() => stdout.lastFrame() || '', 'demo/feature-01', {timeout: 3000});
   let frame = stdout.lastFrame() || '';
-
-  // Sanity: we should see first item on the page
-  assert.ok(frame.includes('demo/feature-01'), 'Expected first item visible');
   // Derive the end of the visible range from the pagination footer (e.g., "Page 1/X: 1-25/25")
   const footerMatch = frame.match(/Page\s+1\/\d+:\s+1-(\d+)\/(\d+)/);
   if (footerMatch) {

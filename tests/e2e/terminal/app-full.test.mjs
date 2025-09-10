@@ -29,10 +29,9 @@ test('full App renders list rows with fakes', async () => {
   const tree = React.createElement(TestableApp, {gitService, gitHubService, tmuxService});
   const inst = Ink.render(tree, {stdout, stdin, debug: true, exitOnCtrlC: false, patchConsole: false});
   try {
-    await new Promise(r => setTimeout(r, 300));
-    const frame = stdout.lastFrame() || '';
-    assert.ok(frame.includes('demo/feature-1'), 'Expected row demo/feature-1');
-    assert.ok(frame.includes('demo/feature-2'), 'Expected row demo/feature-2');
+    const {waitForText} = await import('./_utils.js');
+    await waitForText(() => stdout.lastFrame() || '', 'demo/feature-1', {timeout: 3000});
+    await waitForText(() => stdout.lastFrame() || '', 'demo/feature-2', {timeout: 3000});
   } finally {
     try { inst.unmount?.(); } catch {}
     try { restoreTimers?.(); } catch {}
