@@ -269,8 +269,8 @@ function AppContent() {
   }
 
   if (!content && mode === 'diff' && diffWorktree) {
-    const sel = getSelectedWorktree?.() as any;
-    const workspaceFeature = sel?.is_workspace_child ? (sel.parent_feature || sel.feature) : undefined;
+    const sel = getSelectedWorktree?.();
+    const workspaceFeature = sel && sel.is_workspace_child ? (sel.parent_feature || sel.feature) : undefined;
     content = (
       <Box flexGrow={1} paddingX={1}>
         <DiffView

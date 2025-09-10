@@ -122,8 +122,12 @@ const CreateFeatureDialog = React.memo(function CreateFeatureDialog({projects, d
     }
     if (names.length === 0) return;
     setMode('creating');
-    Promise.resolve(onSubmit(names, feat)).catch(() => {
-      // If creation fails, go back to input mode
+    Promise.resolve(onSubmit(names, feat)).catch((err) => {
+      // If creation fails, go back to input mode and log the error for debugging
+      try {
+        const {logError} = require('../../shared/utils/logger.js');
+        logError('CreateFeatureDialog: failed to create feature', { error: err instanceof Error ? err.message : String(err) });
+      } catch {}
       setMode('input');
     });
   };

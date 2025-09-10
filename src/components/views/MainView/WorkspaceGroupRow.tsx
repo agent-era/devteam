@@ -102,6 +102,27 @@ export const WorkspaceGroupRow = memo<WorkspaceGroupRowProps>(({workspace, globa
       ))}
     </Box>
   );
+}, (prev, next) => {
+  // Custom comparison to minimize re-renders
+  const prevW = prev.workspace;
+  const nextW = next.workspace;
+  const widthsEqual = prev.columnWidths.number === next.columnWidths.number &&
+    prev.columnWidths.projectFeature === next.columnWidths.projectFeature &&
+    prev.columnWidths.ai === next.columnWidths.ai &&
+    prev.columnWidths.diff === next.columnWidths.diff &&
+    prev.columnWidths.changes === next.columnWidths.changes &&
+    prev.columnWidths.pushed === next.columnWidths.pushed &&
+    prev.columnWidths.pr === next.columnWidths.pr;
+
+  return (
+    prev.selected === next.selected &&
+    prev.globalIndex === next.globalIndex &&
+    widthsEqual &&
+    prevW.feature === nextW.feature &&
+    !!prevW.session?.attached === !!nextW.session?.attached &&
+    (prevW.session?.ai_status || 'not_running') === (nextW.session?.ai_status || 'not_running') &&
+    (prevW.session?.ai_tool || 'none') === (nextW.session?.ai_tool || 'none')
+  );
 });
 
 WorkspaceGroupRow.displayName = 'WorkspaceGroupRow';

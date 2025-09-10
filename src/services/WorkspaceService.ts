@@ -40,6 +40,16 @@ export class WorkspaceService {
         const linkPath = path.join(workspaceDir, project);
         // Ensure absolute paths
         const target = path.resolve(worktreePath);
+        const baseResolved = path.resolve(basePath) + path.sep;
+        // Basic validation: target must live under basePath and inside the project's branches dir
+        const branchesDir = path.resolve(path.join(basePath, `${project}-branches`)) + path.sep;
+        const targetIsUnderBase = target.startsWith(baseResolved);
+        const targetIsUnderBranches = target.startsWith(branchesDir);
+        const targetEndsWithFeature = path.basename(target) === featureName;
+        if (!targetIsUnderBase || !targetIsUnderBranches || !targetEndsWithFeature) {
+          // Skip unsafe or unexpected targets
+          continue;
+        }
         // Replace existing file/dir/symlink if necessary
         try {
           if (fs.existsSync(linkPath)) fs.rmSync(linkPath, {recursive: true, force: true});
