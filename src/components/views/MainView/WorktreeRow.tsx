@@ -133,14 +133,15 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
     const pad = Math.max(0, width - contentWidth);
 
     // Dim the bracketed portion (project/workspace) like other rows
-    const renderBracket = (content: string) => <Text dimColor>{content}</Text>;
+    // When the whole row is dimmed, avoid double-dimming the bracket
+    const renderBracket = (content: string) => <Text dimColor={!isDimmed || selected}>{content}</Text>;
 
     if (justify === 'flex-end') {
       return (
         <>
           {' '.repeat(pad)}
           {/* Feature keeps the cell's computed color */}
-          <Text color={getCellForeground(1)}>{left}</Text>
+          <Text color={getCellForeground(1)} dimColor={isDimmed && !selected}>{left}</Text>
           {/* Project (with brackets) dimmed */}
           {bracketed ? renderBracket(bracketed) : null}
         </>
@@ -152,7 +153,7 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
       return (
         <>
           {' '.repeat(leftPad)}
-          <Text color={getCellForeground(1)}>{left}</Text>
+          <Text color={getCellForeground(1)} dimColor={isDimmed && !selected}>{left}</Text>
           {bracketed ? (selected && isDimmed
             ? <Text color={getCellForeground(1)}>{bracketed}</Text>
             : renderBracket(bracketed))
@@ -164,7 +165,7 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
     // flex-start
     return (
       <>
-        <Text color={getCellForeground(1)}>{left}</Text>
+        <Text color={getCellForeground(1)} dimColor={isDimmed && !selected}>{left}</Text>
         {bracketed ? (selected && isDimmed
           ? <Text color={getCellForeground(1)}>{bracketed}</Text>
           : renderBracket(bracketed))
@@ -185,6 +186,7 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
         <Text
           backgroundColor={getCellBackground(0)}
           color={getCellForeground(0)}
+          dimColor={isDimmed && !selected}
           bold={selected && !isPriorityCell(0)}
           inverse={selected && !isPriorityCell(0) && !isDimmed}
         >
@@ -211,6 +213,7 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
             <Text
               backgroundColor={getCellBackground(cellIndex)}
               color={cellIndex === 1 ? undefined : getCellForeground(cellIndex)}
+              dimColor={isDimmed && !selected}
               bold={selected && !isPriorityCell(cellIndex)}
               inverse={selected && !isPriorityCell(cellIndex) && !isDimmed}
             >
