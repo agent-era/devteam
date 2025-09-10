@@ -102,9 +102,17 @@ export default function MainView({
   useEffect(() => {
     const measureAndUpdate = () => {
       const h = listRef.current ? measureElement(listRef.current).height : 0;
-      if (h > 0 && h !== measuredPageSize) {
-        setMeasuredPageSize(h);
-        onMeasuredPageSize?.(h);
+      // Always ensure parent knows the measured size at least once.
+      // If h equals our initial optimistic value, we still want to propagate it
+      // so parent pagination logic (WorktreeListScreen) doesn't use a stale pageSize.
+      if (h > 0) {
+        if (h !== measuredPageSize) {
+          setMeasuredPageSize(h);
+          onMeasuredPageSize?.(h);
+        } else {
+          // Propagate unchanged measurement on first tick to sync parent
+          onMeasuredPageSize?.(h);
+        }
       }
     };
     // Measure now and on next tick to ensure Yoga layout has settled
@@ -113,6 +121,13 @@ export default function MainView({
     return () => clearTimeout(t);
     // Re-measure when terminal size changes or item count might affect footer visibility
   }, [terminalRows, terminalWidth, worktrees.length, onMeasuredPageSize]);
+
+  // Also propagate when our internal measuredPageSize changes due to any reason
+  useEffect(() => {
+    if (measuredPageSize > 0) {
+      onMeasuredPageSize?.(measuredPageSize);
+    }
+  }, [measuredPageSize, onMeasuredPageSize]);
 
   if (mode === 'message') {
     return <MessageView message={message} />;
