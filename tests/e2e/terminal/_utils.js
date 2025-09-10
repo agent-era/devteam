@@ -52,3 +52,36 @@ export function installTimerGuards(){
 
   return restore;
 }
+
+// Strip ANSI escape codes from a frame string
+export function stripAnsi(str = ''){
+  if (!str) return '';
+  return str.replace(/\u001b\[[0-9;]*m/g, '');
+}
+
+// Wait for a predicate to become true within a timeout
+export async function waitFor(predicate, {timeout = 2000, interval = 50, message = 'condition'} = {}){
+  const start = Date.now();
+  /* eslint-disable no-constant-condition */
+  while (true) {
+    try {
+      if (await predicate()) return true;
+    } catch {
+      // ignore predicate errors during polling
+    }
+    if (Date.now() - start > timeout) {
+      throw new Error(`waitFor timeout waiting for ${message}`);
+    }
+    await new Promise(r => setTimeout(r, interval));
+  }
+}
+
+// Wait for text to appear in a frame provider function
+export async function waitForText(getFrame, text, {timeout = 2000, interval = 50, strip = true} = {}){
+  const norm = (s) => strip ? stripAnsi(s || '') : (s || '');
+  const msg = `text ${JSON.stringify(text)}`;
+  return waitFor(() => {
+    const frame = norm(getFrame());
+    return frame.includes(text);
+  }, {timeout, interval, message: msg});
+}

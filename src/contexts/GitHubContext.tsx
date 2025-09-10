@@ -4,7 +4,8 @@ import {GitHubService} from '../services/GitHubService.js';
 import {GitService} from '../services/GitService.js';
 import {PRStatusCacheService} from '../services/PRStatusCacheService.js';
 import {PR_REFRESH_DURATION} from '../constants.js';
-import {getProjectsDirectory, isAppIntervalsEnabled} from '../config.js';
+import {getProjectsDirectory} from '../config.js';
+import {startIntervalIfEnabled, startTimeoutIfEnabled} from '../shared/utils/intervals.js';
 import {logError, logDebug} from '../shared/utils/logger.js';
 import {createThrottledBatch} from '../shared/utils/throttle.js';
 
@@ -194,10 +195,8 @@ export function GitHubProvider({children, gitHubService: ghOverride, gitService:
 
   // Auto-refresh PRs for visible worktrees (restart on visibility/strategy change)
   useEffect(() => {
-    const intervalsEnabled = isAppIntervalsEnabled();
-    if (!intervalsEnabled) return;
     if (refreshIntervalRef.current) clearInterval(refreshIntervalRef.current);
-    refreshIntervalRef.current = setInterval(() => {
+    const clear = startIntervalIfEnabled(() => {
       const paths = visibleWorktrees.filter(path => !cacheService.isValid(path));
       if (paths.length > 0) {
         const worktreesToRefresh = paths.map(path => ({
@@ -208,18 +207,18 @@ export function GitHubProvider({children, gitHubService: ghOverride, gitService:
         throttledRefreshPR({worktrees: worktreesToRefresh, visibleOnly: false});
       }
     }, REFRESH_MS);
+    // Store the clear function in ref so we can clear it on next run
+    refreshIntervalRef.current = undefined as any;
     return () => {
-      if (refreshIntervalRef.current) clearInterval(refreshIntervalRef.current);
+      clear?.();
     };
   }, [visibleWorktrees, cacheService, throttledRefreshPR, REFRESH_MS]);
 
   // Immediately refresh stale PRs for the current visible set (no need to wait for the interval)
   useEffect(() => {
-    const intervalsEnabled = isAppIntervalsEnabled();
-    if (!intervalsEnabled) return;
     if (!visibleWorktrees || visibleWorktrees.length === 0) return;
     // Debounce rapid page changes to avoid bursts
-    const handle = setTimeout(() => {
+    const clear = startTimeoutIfEnabled(() => {
       const paths = visibleWorktrees.filter(path => !cacheService.isValid(path));
       if (paths.length === 0) return;
       const worktreesToRefresh = paths.map(path => ({
@@ -229,7 +228,7 @@ export function GitHubProvider({children, gitHubService: ghOverride, gitService:
       }));
       throttledRefreshPR({worktrees: worktreesToRefresh, visibleOnly: false});
     }, 200);
-    return () => clearTimeout(handle);
+    return () => clear?.();
   }, [visibleWorktrees, cacheService, throttledRefreshPR]);
 
   const refreshPRStatus = useCallback(async (
