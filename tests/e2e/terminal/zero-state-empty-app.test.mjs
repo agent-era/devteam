@@ -27,8 +27,9 @@ test('App renders EmptyState when projects exist but no worktrees', async () => 
   const inst = Ink.render(tree, {stdout, stdin, debug: true, exitOnCtrlC: false, patchConsole: false});
   try {
     await new Promise(r => setTimeout(r, 400));
+  const {stripAnsi} = await import('./_utils.js');
   const raw = stdout.lastFrame() || '';
-  const frame = raw.replace(/\u001b\[[0-9;]*m/g, ''); // strip ANSI
+  const frame = stripAnsi(raw);
   assert.ok(frame.includes('Welcome to DevTeam'), 'Expected EmptyState welcome text');
   assert.ok(frame.includes('Press [n] to create a new branch'), 'Expected create-branch hint');
   assert.ok(frame.includes('Press [q] to quit'), 'Expected quit hint');

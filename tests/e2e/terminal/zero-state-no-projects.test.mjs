@@ -26,8 +26,9 @@ test('App shows NoProjectsDialog when no projects discovered', async () => {
   const inst = Ink.render(tree, {stdout, stdin, debug: true, exitOnCtrlC: false, patchConsole: false});
   try {
     await new Promise(r => setTimeout(r, 250));
+  const {stripAnsi} = await import('./_utils.js');
   const raw = stdout.lastFrame() || '';
-  const frame = raw.replace(/\u001b\[[0-9;]*m/g, ''); // strip ANSI
+  const frame = stripAnsi(raw);
   assert.ok(frame.includes('No projects found'), 'Expected NoProjectsDialog title');
   assert.ok(frame.includes('has no project folders with a .git'), 'Expected NoProjectsDialog guidance');
   assert.ok(frame.includes('Press [enter] or [q] to exit'), 'Expected exit hint');

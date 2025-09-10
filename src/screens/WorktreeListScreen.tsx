@@ -9,6 +9,7 @@ import {useKeyboardShortcuts} from '../hooks/useKeyboardShortcuts.js';
 // Page size is measured directly in MainView to avoid heuristics
 import {VISIBLE_STATUS_REFRESH_DURATION} from '../constants.js';
 import {isAppIntervalsEnabled} from '../config.js';
+import {startIntervalIfEnabled} from '../shared/utils/intervals.js';
 
 
 interface WorktreeListScreenProps {
@@ -83,14 +84,13 @@ export default function WorktreeListScreen({
 
   // Single loop to refresh git+AI status for visible rows only
   useEffect(() => {
-    const intervalsEnabled = isAppIntervalsEnabled();
-    if (!intervalsEnabled) return;
-    const interval = setInterval(() => {
+    if (!isAppIntervalsEnabled()) return;
+    const clear = startIntervalIfEnabled(() => {
       if (!isAnyDialogFocused) {
         refreshVisibleStatus(currentPage, pageSize).catch(() => {});
       }
     }, VISIBLE_STATUS_REFRESH_DURATION);
-    return () => clearInterval(interval);
+    return clear;
   }, [currentPage, pageSize, refreshVisibleStatus, isAnyDialogFocused]);
 
   const handleMove = (delta: number) => {
@@ -186,21 +186,21 @@ export default function WorktreeListScreen({
   };
 
   const handlePreviousPage = () => {
-    // Always move by half a page, regardless of total pages
-    const halfPageSize = Math.floor(pageSize / 2);
-    const newIndex = Math.max(0, selectedIndex - halfPageSize);
-    const newPage = Math.floor(newIndex / pageSize);
+    // Move by a full page (wrap-around)
+    const totalPages = Math.max(1, Math.ceil(worktrees.length / Math.max(1, pageSize)));
+    const newPage = currentPage > 0 ? currentPage - 1 : totalPages - 1;
     setCurrentPage(newPage);
-    selectWorktree(newIndex);
+    const lastItemOnPage = Math.min((newPage + 1) * Math.max(1, pageSize) - 1, worktrees.length - 1);
+    selectWorktree(lastItemOnPage);
   };
 
   const handleNextPage = () => {
-    // Always move by half a page, regardless of total pages
-    const halfPageSize = Math.floor(pageSize / 2);
-    const newIndex = Math.min(worktrees.length - 1, selectedIndex + halfPageSize);
-    const newPage = Math.floor(newIndex / pageSize);
+    // Move by a full page (wrap-around)
+    const totalPages = Math.max(1, Math.ceil(worktrees.length / Math.max(1, pageSize)));
+    const newPage = (currentPage + 1) % totalPages;
     setCurrentPage(newPage);
-    selectWorktree(newIndex);
+    const firstIndexOnPage = Math.min(newPage * Math.max(1, pageSize), worktrees.length - 1);
+    selectWorktree(firstIndexOnPage);
   };
 
   const handleRefresh = async () => {

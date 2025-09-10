@@ -46,6 +46,9 @@ jobs:
     - name: Run all tests
       run: npm test -- --coverage --watchAll=false
 
+    - name: Run terminal tests (Node test runner)
+      run: npm run test:terminal
+
     - name: Upload coverage reports to Codecov
       uses: codecov/codecov-action@v4
       with:

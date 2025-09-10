@@ -35,7 +35,7 @@ export class FakeWorktreeService {
         project: projectName,
         feature: featureName,
         path,
-        branch: `feature/${featureName}`,
+        branch: featureName,
         session: new SessionInfo({session_name: this.tmuxService.sessionName(projectName, featureName)})
       });
 

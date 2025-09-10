@@ -39,13 +39,9 @@ test('attach then detach re-renders the main list (no blank screen)', async () =
 
   // Press Enter to select -> directly attach (simulated)
   stdin.emit('data', Buffer.from('\r'));
-  await new Promise(r => setTimeout(r, 300));
-  // Give a moment for simulated attach/detach and redraw
-  frame = stdout.lastFrame() || '';
-
-  // After detach, screen should re-render main list (not stay blank)
-  assert.ok(frame.trim().length > 0, 'Expected non-blank frame after detach');
-  assert.ok(frame.includes('demo/feature-1'), 'Expected to return to list after detach');
+  // Wait for simulated attach/detach cycle and redraw
+  const {waitForText} = await import('./_utils.js');
+  await waitForText(() => stdout.lastFrame() || '', 'demo/feature-1', {timeout: 3000});
 
   try { inst.unmount?.(); } catch {}
 });

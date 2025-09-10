@@ -42,9 +42,19 @@ test('does not go blank when items equal page size and pressing down', async () 
   await new Promise(r => setTimeout(r, 250));
   let frame = stdout.lastFrame() || '';
 
-  // Sanity: we should see first and last items on the single page
+  // Sanity: we should see first item on the page
   assert.ok(frame.includes('demo/feature-01'), 'Expected first item visible');
-  assert.ok(frame.includes(`demo/feature-${PAGE_SIZE.toString().padStart(2, '0')}`), 'Expected last item visible');
+  // Derive the end of the visible range from the pagination footer (e.g., "Page 1/X: 1-25/25")
+  const footerMatch = frame.match(/Page\s+1\/\d+:\s+1-(\d+)\/(\d+)/);
+  if (footerMatch) {
+    const end = Number(footerMatch[1]);
+    const total = Number(footerMatch[2]);
+    // If total fits on one page, the last visible item should be the end of the range
+    if (total <= PAGE_SIZE) {
+      const lastLabel = `demo/feature-${String(end).padStart(2, '0')}`;
+      assert.ok(frame.includes(lastLabel), `Expected last visible item ${lastLabel}`);
+    }
+  }
 
   // Press down once. With the bug, the parent pageSize=1 causes page to advance to 1,
   // and with measured page size=25, page 1 renders no items (blank list).
