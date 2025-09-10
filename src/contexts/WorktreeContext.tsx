@@ -29,7 +29,7 @@ import {useInputFocus} from './InputFocusContext.js';
 import {useGitHubContext} from './GitHubContext.js';
 import {logDebug} from '../shared/utils/logger.js';
 import {Timer} from '../shared/utils/timing.js';
-import {DevTeamEngine} from '../sync/DevTeamEngine.js';
+import {DevTeamEngine} from '../engines/DevTeamEngine.js';
 
 
 interface WorktreeContextType {

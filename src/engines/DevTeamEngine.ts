@@ -4,7 +4,7 @@ import path from 'node:path';
 import {getProjectsDirectory} from '../config.js';
 import {GitService} from '../services/GitService.js';
 import {TmuxService} from '../services/TmuxService.js';
-import type {WorktreeSummary} from './types.js';
+import type {WorktreeSummary} from '../sync/types.js';
 import type {AITool, AIStatus} from '../models.js';
 import {DIR_BRANCHES_SUFFIX, DIR_ARCHIVED_SUFFIX, ARCHIVE_PREFIX} from '../constants.js';
 import {ensureDirectory} from '../shared/utils/fileSystem.js';
