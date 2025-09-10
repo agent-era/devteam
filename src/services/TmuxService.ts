@@ -158,50 +158,25 @@ export class TmuxService {
   configureSessionUI(session: string): void {
     try {
       // Ensure mouse is enabled and status is visible
-      // this.setOption('mouse', 'on');
       this.setSessionOption(session, 'mouse', 'on');
-      // Make the footer taller for easier clicks and better menu visibility
-      this.setSessionOption(session, 'status', '3');
+      // Ensure status bar is visible
+      this.setSessionOption(session, 'status', 'on');
       this.setSessionOption(session, 'status-position', 'bottom');
-      this.setSessionOption(session, 'status-style', 'fg=white,bg=black');
+      this.setSessionOption(session, 'status-style', 'fg=white,bold,bg=black');
       this.setSessionOption(session, 'status-interval', '5');
-      // No debug messages; leave display-time as user default
-
-      // Restore default status building for this session only
-      runCommand(['tmux', 'set-option', '-u', '-t', session, 'status-format'], { env: this.tmuxEnv });
-      // Show session and command information on left
-      this.setSessionOption(
-        session,
-        'status-left',
-        '#[bold]#S#[nobold] | #\{@devteam_project}/#\{@devteam_feature} | Type: #\{@devteam_type}#\{?#\{==:#\{@devteam_type},AI\}, ( #\{@devteam_tool} ),} | cmd: #{pane_current_command} '
-      );
-      // Instruction on right
-      this.setSessionOption(
-        session,
-        'status-right',
-        ' Ctrl+b, release, then press d to detach '
-      );
-
-      // Build a run-shell action that shows a persistent menu at the mouse position
-      const menuScript = [
-        'tmux display-menu -x M -y S ',
-        '"Detach" d detach-client ',
-        '"Kill Session" k confirm-before -p "Kill session #S?" "kill-session -t #S"'
-      ].join('');
-      const menuAction = ['run-shell', menuScript];
+      runCommand([
+        'tmux', 'set-option', '-t', session, 'status-format[0]',
+        ' #[align=right]Click here to return to devteam (or press Ctrl+b, then d) '
+      ], { env: this.tmuxEnv });
 
       const bind = (key: string, args: string[]) => {
         try { runCommand(['tmux', 'unbind-key', '-n', key], { env: this.tmuxEnv }); } catch {}
         runCommand(['tmux', 'bind-key', '-n', key, ...args], { env: this.tmuxEnv });
       };
 
-      // Left click menu across all status regions
-      for (const k of ['MouseDown1Status', 'MouseDown1StatusLeft', 'MouseDown1StatusRight', 'MouseDown1StatusDefault']) {
-        bind(k, menuAction);
-      }
-      // Right click menu as well
-      for (const k of ['MouseDown3Status', 'MouseDown3StatusLeft', 'MouseDown3StatusRight', 'MouseDown3StatusDefault']) {
-        bind(k, menuAction);
+      // Bind MouseUp (release) on all status regions to detach immediately (no menu)
+      for (const k of ['MouseUp1Status', 'MouseUp1StatusLeft', 'MouseUp1StatusRight', 'MouseUp1StatusDefault']) {
+        bind(k, ['detach-client']);
       }
       // No debug messages bound
     } catch (err) {
