@@ -1,6 +1,6 @@
 import {describe, test, expect} from '@jest/globals';
 import {getStatusMeta} from '../../src/components/views/MainView/highlight.js';
-import {PRStatus, WorktreeInfo} from '../../src/models.js';
+import {PRStatus, WorktreeInfo, SessionInfo} from '../../src/models.js';
 
 function wt(init?: Partial<WorktreeInfo>): WorktreeInfo {
   return new WorktreeInfo({
@@ -8,7 +8,7 @@ function wt(init?: Partial<WorktreeInfo>): WorktreeInfo {
     feature: 'feat',
     path: '/proj/feat',
     git: {has_remote: true, ahead: 0, behind: 0, is_pushed: true, has_changes: false, base_added_lines: 0, base_deleted_lines: 0, added_lines: 0, deleted_lines: 0, modified_files: 0, untracked_lines: 0},
-    session: {attached: true, session_name: 's', ai_status: 'idle', ai_tool: 'none'},
+    session: new SessionInfo({attached: true, session_name: 's', ai_status: 'idle', ai_tool: 'none'}),
     ...init,
   });
 }
@@ -24,7 +24,7 @@ describe('STATUS chip mapping', () => {
   });
 
   test('AI working => plain working, no bg', () => {
-    const worktree = wt({session: {attached: true, session_name: 's', ai_status: 'working', ai_tool: 'none'}});
+    const worktree = wt({session: new SessionInfo({attached: true, session_name: 's', ai_status: 'working', ai_tool: 'none'})});
     const pr = undefined;
     const meta = getStatusMeta(worktree, pr as any);
     expect(meta.label).toBe('working');
