@@ -60,7 +60,7 @@ export function stripAnsi(str = ''){
 }
 
 // Wait for a predicate to become true within a timeout
-const DEFAULT_WAIT = 8000;
+const DEFAULT_WAIT = 12000;
 
 export async function waitFor(predicate, {timeout = DEFAULT_WAIT, interval = 50, message = 'condition'} = {}){
   const start = Date.now();

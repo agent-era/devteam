@@ -31,10 +31,10 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Use Node.js 20.x
+    - name: Use Node.js 22.x
       uses: actions/setup-node@v4
       with:
-        node-version: 20.x
+        node-version: 22.x
         cache: 'npm'
 
     - name: Install dependencies
@@ -45,6 +45,11 @@ jobs:
 
     - name: Run all tests
       run: npm test -- --coverage --watchAll=false
+
+    - name: Print Node and npm versions
+      run: |
+        node -v
+        npm -v
 
     - name: Run terminal tests (Node test runner)
       run: npm run test:terminal
