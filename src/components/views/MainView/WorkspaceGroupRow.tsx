@@ -16,7 +16,8 @@ interface WorkspaceGroupRowProps {
 export const WorkspaceGroupRow = memo<WorkspaceGroupRowProps>(({workspace, globalIndex, selected, columnWidths}) => {
   const numberText = String(globalIndex + 1);
   const ai = getAISymbol(workspace.session?.ai_status || '', workspace.session?.attached || false);
-  const headerText = `workspace/${workspace.feature}`;
+  // Render like simple rows: feature [workspace]
+  const headerText = `${workspace.feature} [workspace]`;
   const truncatedHeader = stringDisplayWidth(headerText) > columnWidths.projectFeature
     ? headerText.slice(0, Math.max(0, columnWidths.projectFeature - 3)) + '...'
     : headerText;
@@ -46,12 +47,56 @@ export const WorkspaceGroupRow = memo<WorkspaceGroupRowProps>(({workspace, globa
     return visible + ' '.repeat(pad);
   };
 
+  // Custom render for the project/feature cell to dim bracketed [workspace]
+  const renderProjectFeatureCell = (text: string, width: number, justify: 'flex-start' | 'center' | 'flex-end') => {
+    const raw = (text ?? '').trim();
+    let visible = raw;
+    if (stringDisplayWidth(visible) > width) {
+      visible = visible.slice(0, Math.max(0, width));
+    }
+    const bracketIndex = visible.indexOf('[');
+    const left = bracketIndex >= 0 ? visible.slice(0, bracketIndex) : visible;
+    const bracketed = bracketIndex >= 0 ? visible.slice(bracketIndex) : '';
+    const contentWidth = stringDisplayWidth(visible);
+    const pad = Math.max(0, width - contentWidth);
+    if (justify === 'flex-end') {
+      return (
+        <>
+          {' '.repeat(pad)}
+          <Text>{left}</Text>
+          {bracketed ? <Text dimColor>{bracketed}</Text> : null}
+        </>
+      );
+    }
+    if (justify === 'center') {
+      const leftPad = Math.floor(pad / 2);
+      const rightPad = pad - leftPad;
+      return (
+        <>
+          {' '.repeat(leftPad)}
+          <Text>{left}</Text>
+          {bracketed ? <Text dimColor>{bracketed}</Text> : null}
+          {' '.repeat(rightPad)}
+        </>
+      );
+    }
+    return (
+      <>
+        <Text>{left}</Text>
+        {bracketed ? <Text dimColor>{bracketed}</Text> : null}
+        {' '.repeat(pad)}
+      </>
+    );
+  };
+
   return (
     <Box>
       {cells.map((cell, idx) => (
         <Box key={idx} width={cell.width} justifyContent={cell.justify} marginRight={idx < cells.length - 1 ? 1 : 0}>
           <Text bold={selected} inverse={selected}>
-            {formatCellText(cell.text, cell.width, cell.justify)}
+            {idx === 1
+              ? renderProjectFeatureCell(cell.text, cell.width, cell.justify)
+              : formatCellText(cell.text, cell.width, cell.justify)}
           </Text>
         </Box>
       ))}
@@ -60,4 +105,3 @@ export const WorkspaceGroupRow = memo<WorkspaceGroupRowProps>(({workspace, globa
 });
 
 WorkspaceGroupRow.displayName = 'WorkspaceGroupRow';
-

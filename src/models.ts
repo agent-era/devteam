@@ -128,6 +128,8 @@ export class WorktreeInfo {
   is_workspace_child?: boolean;
   parent_feature?: string;
   children?: WorktreeInfo[];
+  // Rendering helpers for workspace grouping
+  is_last_workspace_child?: boolean;
   constructor(init: Partial<WorktreeInfo> = {}) {
     this.project = '';
     this.feature = '';

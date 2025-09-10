@@ -281,9 +281,11 @@ export function WorktreeProvider({
         header.is_workspace = true;
         header.is_workspace_header = true;
         header.children = children;
-        for (const c of children) {
+        for (let i = 0; i < children.length; i++) {
+          const c = children[i];
           c.is_workspace_child = true;
           c.parent_feature = feature;
+          c.is_last_workspace_child = i === children.length - 1;
         }
         result.push(header, ...children);
       }
@@ -540,6 +542,13 @@ export function WorktreeProvider({
         featureName = worktreeOrProject.feature;
       }
       
+      // If this feature is part of a workspace and this is the last remaining child,
+      // we will remove the workspace directory after archiving this worktree.
+      const base = gitService.basePath;
+      const workspaceExistsForFeature = workspaceService.hasWorkspaceForFeature(base, featureName);
+      const childrenCountForFeature = worktrees.filter(w => (w as any).is_workspace_child && w.feature === featureName).length;
+      const isLastWorkspaceChild = workspaceExistsForFeature && childrenCountForFeature === 1;
+      
       await terminateFeatureSessions(project, featureName);
       
       const archivedRoot = path.join(gitService.basePath, `${project}${DIR_ARCHIVED_SUFFIX}`);
@@ -551,12 +560,29 @@ export function WorktreeProvider({
       moveWorktreeToArchive(workPath, archivedDest);
       pruneWorktreeReferences(project);
 
+      // If this was the last child in a workspace, clean up the workspace dir and sessions
+      if (isLastWorkspaceChild) {
+        try {
+          const wsSession = tmuxService.sessionName('workspace', featureName);
+          const wsShell = tmuxService.shellSessionName('workspace', featureName);
+          const wsRun = tmuxService.runSessionName('workspace', featureName);
+          const active = await tmuxService.listSessions();
+          for (const s of [wsSession, wsShell, wsRun]) {
+            if (active.includes(s)) tmuxService.killSession(s);
+          }
+          const wsDir = path.join(base, 'workspaces', featureName);
+          try { fs.rmSync(wsDir, {recursive: true, force: true}); } catch {}
+        } catch (e) {
+          logError('Failed to cleanup empty workspace', { error: e instanceof Error ? e.message : String(e) });
+        }
+      }
+
       await refresh();
       return {archivedPath: archivedDest};
     } finally {
       setLoading(false);
     }
-  }, [tmuxService, refresh]);
+  }, [tmuxService, refresh, gitService.basePath, workspaceService, worktrees]);
 
   // Unarchive and delete archived functionality removed
 
