@@ -29,7 +29,7 @@ import {AI_TOOLS} from '../constants.js';
 import type {AITool} from '../models.js';
 import {useInputFocus} from './InputFocusContext.js';
 import {useGitHubContext} from './GitHubContext.js';
-import {logDebug} from '../shared/utils/logger.js';
+import {logDebug, logError} from '../shared/utils/logger.js';
 import {Timer} from '../shared/utils/timing.js';
 
 
@@ -82,6 +82,25 @@ interface WorktreeContextType {
 }
 
 const WorktreeContext = createContext<WorktreeContextType | null>(null);
+
+type WorktreeSummary = {
+  project: string;
+  feature: string;
+  path: string;
+  branch: string;
+  last_commit_ts?: number;
+};
+
+// Exported sorter to enable unit testing of cross-project ordering
+export function sortWorktreeSummaries<T extends {last_commit_ts?: number; project: string; feature: string}>(rows: T[]): T[] {
+  // Return a new array to avoid mutating inputs
+  return [...rows].sort((a, b) => {
+    const d = (b.last_commit_ts ?? 0) - (a.last_commit_ts ?? 0);
+    if (d !== 0) return d;
+    if (a.project !== b.project) return a.project.localeCompare(b.project);
+    return a.feature.localeCompare(b.feature);
+  });
+}
 
 // Extracted decision helper for testability and clarity
 export function shouldPromptForAITool(
@@ -148,14 +167,26 @@ export function WorktreeProvider({
   // Cache available AI tools on startup
   const availableAITools = useMemo(() => detectAvailableAITools(), []);
 
-  // collectWorktrees is defined after attachRuntimeData
+  // Collect flat summaries across all projects (origin/main)
+  const collectWorktrees = useCallback(async (): Promise<WorktreeSummary[]> => {
+    const projects = gitService.discoverProjects();
+    // Limit concurrent project scans to reduce fs/process load
+    const allWorktrees = await mapLimit(projects, 4, async (project) => 
+      gitService.getWorktreesForProject(project)
+    );
+    
+    // Flatten the results
+    const rows: WorktreeSummary[] = [];
+    for (const worktrees of allWorktrees) {
+      for (const wt of worktrees) rows.push(wt);
+    }
 
-  const attachRuntimeData = useCallback(async (list: Array<{
-    project: string; 
-    feature: string; 
-    path: string; 
-    branch: string
-  }>): Promise<WorktreeInfo[]> => {
+    // Global sort across all projects: latest commit first
+    const sorted = sortWorktreeSummaries(rows);
+    return sorted;
+  }, [gitService]);
+
+  const attachRuntimeData = useCallback(async (list: WorktreeSummary[]): Promise<WorktreeInfo[]> => {
     // Get existing worktrees to preserve idle timers and kill flags
     const existingWorktrees = new Map(worktrees.map(w => [`${w.project}/${w.feature}`, w]));
     
@@ -163,7 +194,7 @@ export function WorktreeProvider({
     const activeSessions = await tmuxService.listSessions();
     
     // Concurrency-limit git + AI probes across all worktrees
-    const results = await mapLimit(list, 6, async (w: any) => {
+    const results = await mapLimit<WorktreeSummary, WorktreeInfo | undefined>(list, 6, async (w: WorktreeSummary) => {
       try {
         const key = `${w.project}/${w.feature}`;
         const existing = existingWorktrees.get(key);
@@ -191,32 +222,23 @@ export function WorktreeProvider({
           branch: w.branch,
           git: gitStatus,
           session: sessionInfo,
-          mtime: w.mtime || 0,
+          // Use 0 as a safe fallback (older than any real commit)
+          last_commit_ts: w.last_commit_ts ?? 0,
         });
       } catch (err) {
-        // eslint-disable-next-line no-console
-        console.error('[attachRuntimeData] worker failed -', err instanceof Error ? err.message : String(err));
-        return undefined as any;
+        logError('[attachRuntimeData] worker failed', { error: err instanceof Error ? err.message : String(err) });
+        return undefined;
       }
     });
     
-    return results.filter(Boolean) as WorktreeInfo[];
+    return results.filter((r): r is WorktreeInfo => Boolean(r));
   }, [gitService, tmuxService, worktrees]);
 
-  const collectWorktrees = useCallback(async (): Promise<WorktreeInfo[]> => {
-    const projects = gitService.discoverProjects();
-    // Limit concurrent project scans to reduce fs/process load
-    const perProject = await mapLimit(projects, 4, async (project) => 
-      gitService.getWorktreesForProject(project)
-    );
-
-    // Flatten the results
-    const flat: Array<{project: string; feature: string; path: string; branch: string; mtime?: number}> = [];
-    for (const arr of perProject) for (const wt of arr) flat.push(wt);
-
+  // Build final list with workspace headers/children from sorted summaries
+  const buildWorkspaceView = useCallback(async (summaries: WorktreeSummary[]): Promise<WorktreeInfo[]> => {
     // Group by feature
-    const byFeature = new Map<string, Array<{project: string; feature: string; path: string; branch: string; mtime?: number}>>();
-    for (const row of flat) {
+    const byFeature = new Map<string, WorktreeSummary[]>();
+    for (const row of summaries) {
       const list = byFeature.get(row.feature) || [];
       list.push(row);
       byFeature.set(row.feature, list);
@@ -224,22 +246,23 @@ export function WorktreeProvider({
 
     const base = gitService.basePath;
     const result: WorktreeInfo[] = [];
-
-    // Pre-fetch active sessions once
     const activeSessions = await tmuxService.listSessions();
 
-    for (const [feature, items] of byFeature.entries()) {
+    // Order feature groups by the max last_commit_ts among their children (desc)
+    const orderedFeatures = [...byFeature.entries()].sort((a, b) => {
+      const maxA = Math.max(...a[1].map(x => x.last_commit_ts ?? 0), 0);
+      const maxB = Math.max(...b[1].map(x => x.last_commit_ts ?? 0), 0);
+      return maxB - maxA;
+    });
+
+    for (const [feature, items] of orderedFeatures) {
       const hasWS = workspaceService.hasWorkspaceForFeature(base, feature);
       if (!hasWS) {
-        // No workspace: include each item as a normal row
-        const enriched = await attachRuntimeData(items);
-        result.push(...enriched);
-      } else {
-        // Has workspace: create header + child rows
-        const workspaceDir = path.join(base, 'workspaces', feature);
-        // Enrich children
         const children = await attachRuntimeData(items);
-        // Determine workspace session AI status
+        result.push(...children);
+      } else {
+        const workspaceDir = path.join(base, 'workspaces', feature);
+        const children = await attachRuntimeData(items);
         const wsSessionName = tmuxService.sessionName('workspace', feature);
         const wsAttached = activeSessions.includes(wsSessionName);
         const aiResult = wsAttached ? await tmuxService.getAIStatus(wsSessionName) : {tool: 'none' as const, status: 'not_running' as const};
@@ -258,18 +281,15 @@ export function WorktreeProvider({
         header.is_workspace = true;
         header.is_workspace_header = true;
         header.children = children;
-        // Tag children for rendering
         for (const c of children) {
           c.is_workspace_child = true;
           c.parent_feature = feature;
         }
-        // Flatten: header then children
         result.push(header, ...children);
       }
     }
-
     return result;
-  }, [gitService, tmuxService, workspaceService, attachRuntimeData]);
+  }, [gitService.basePath, workspaceService, tmuxService, attachRuntimeData]);
 
   const refresh = useCallback(async (refreshPRs: 'all' | 'visible' | 'none' = 'none') => {
     if (loading) {
@@ -283,9 +303,9 @@ export function WorktreeProvider({
     try {
       logDebug(`[Refresh.Full] Starting complete refresh`);
       
-      const rawList = await collectWorktrees();
-      const enrichedList = await attachRuntimeData(rawList);
-      setWorktrees(enrichedList);
+      const summaries = await collectWorktrees();
+      const finalList = await buildWorkspaceView(summaries);
+      setWorktrees(finalList);
       setLastRefreshed(Date.now());
 
       
@@ -295,7 +315,7 @@ export function WorktreeProvider({
     } catch (error) {
       const timing = timer.elapsed();
       logDebug(`[Refresh.Full] Failed in ${timing.formatted}: ${error instanceof Error ? error.message : String(error)}`);
-      console.error('Failed to refresh worktrees:', error);
+      logError('Failed to refresh worktrees', { error: error instanceof Error ? error.message : String(error) });
     } finally {
       setLoading(false);
     }
@@ -319,7 +339,7 @@ export function WorktreeProvider({
       // No need to update worktrees array here; rows read PRs from context
       setLastRefreshed(Date.now());
     } catch (error) {
-      console.error('Failed to force refresh visible PRs:', error);
+      logError('Failed to force refresh visible PRs', { error: error instanceof Error ? error.message : String(error) });
     }
   }, [loading, worktrees, forceRefreshVisiblePRs]);
 
@@ -346,7 +366,8 @@ export function WorktreeProvider({
       }
       const indices = Array.from({length: endIndex - startIndex}, (_, k) => startIndex + k);
       if (indices.length > 0) {
-        const results = await mapLimit(indices, 3, async (i) => {
+        type UpdateResult = { index: number; updated: WorktreeInfo } | undefined;
+        const results = await mapLimit<number, UpdateResult>(indices, 3, async (i) => {
           try {
             const wt = worktrees[i];
             if (wt.is_workspace_header) {
@@ -420,21 +441,20 @@ export function WorktreeProvider({
               return {index: i, updated};
             }
           } catch (err) {
-            // eslint-disable-next-line no-console
-            console.error('[refreshVisibleStatus] worker failed -', err instanceof Error ? err.message : String(err));
-            return undefined as any;
+            logError('[refreshVisibleStatus] worker failed', { error: err instanceof Error ? err.message : String(err) });
+            return undefined;
           }
         });
         const merged = [...worktrees];
         for (const r of results) {
           if (!r) continue;
-          merged[(r as any).index] = (r as any).updated;
+          merged[r.index] = r.updated;
         }
         setWorktrees(merged);
       }
       setLastRefreshed(Date.now());
     } catch (error) {
-      console.error('Failed to refresh visible statuses:', error);
+      logError('Failed to refresh visible statuses', { error: error instanceof Error ? error.message : String(error) });
     } finally {
       refreshingVisibleRef.current = false;
     }
@@ -445,7 +465,7 @@ export function WorktreeProvider({
       const status = await memoryMonitorService.getMemoryStatus();
       setMemoryStatus(status);
     } catch (error) {
-      console.error('Failed to refresh memory status:', error);
+      logError('Failed to refresh memory status', { error: error instanceof Error ? error.message : String(error) });
     }
   }, [memoryMonitorService]);
 
@@ -460,7 +480,7 @@ export function WorktreeProvider({
       const info = await versionServiceRef.current.check();
       if (info && info.hasUpdate) setVersionInfo(info); else setVersionInfo(null);
     } catch (error) {
-      console.error('Failed to check latest version:', error);
+      logError('Failed to check latest version', { error: error instanceof Error ? error.message : String(error) });
     }
   }, []);
   
@@ -963,7 +983,7 @@ export function WorktreeProvider({
     const shouldRefresh = Date.now() - lastRefreshed > CACHE_DURATION;
     if (shouldRefresh) {
       refresh('none').catch(error => {
-        console.error('Auto-refresh failed:', error);
+        logError('Auto-refresh failed', { error: error instanceof Error ? error.message : String(error) });
       });
     }
   }, [lastRefreshed, refresh]);
@@ -971,14 +991,14 @@ export function WorktreeProvider({
   // Initial memory check on mount
   useEffect(() => {
     refreshMemoryStatus().catch(error => {
-      console.error('Initial memory status check failed:', error);
+      logError('Initial memory status check failed', { error: error instanceof Error ? error.message : String(error) });
     });
   }, [refreshMemoryStatus]);
 
   // Initial version check on mount + daily
   useEffect(() => {
     refreshVersionInfo().catch(error => {
-      console.error('Initial version check failed:', error);
+      logError('Initial version check failed', { error: error instanceof Error ? error.message : String(error) });
     });
     const interval = setInterval(() => {
       refreshVersionInfo().catch(() => {});
@@ -991,7 +1011,7 @@ export function WorktreeProvider({
     const interval = setInterval(() => {
       if (!isAnyDialogFocused) {
         // Background discovery of worktrees (structure)
-        refresh('none').catch(err => console.error('Background discovery failed:', err));
+        refresh('none').catch(err => logError('Background discovery failed', { error: err instanceof Error ? err.message : String(err) }));
       }
     }, 60_000);
     return () => clearInterval(interval);
@@ -1002,7 +1022,7 @@ export function WorktreeProvider({
       // Skip memory status refresh if any dialog is focused to avoid interrupting typing
       if (!isAnyDialogFocused) {
         refreshMemoryStatus().catch(error => {
-          console.error('Memory status refresh failed:', error);
+          logError('Memory status refresh failed', { error: error instanceof Error ? error.message : String(error) });
         });
       }
     }, MEMORY_REFRESH_DURATION);

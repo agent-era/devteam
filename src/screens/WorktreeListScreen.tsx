@@ -95,6 +95,12 @@ export default function WorktreeListScreen({
     
     // Handle page boundaries
     if (nextIndex < 0) {
+      // If page size isn't established yet (<=1), treat as single page navigation
+      if (pageSize <= 1) {
+        setCurrentPage(0);
+        selectWorktree(Math.max(0, worktrees.length - 1));
+        return;
+      }
       // Move to previous page, select last item of that page
       const totalPages = Math.max(1, Math.ceil(worktrees.length / pageSize));
       const newPage = currentPage > 0 ? currentPage - 1 : totalPages - 1;
@@ -106,12 +112,22 @@ export default function WorktreeListScreen({
       setCurrentPage(0);
       selectWorktree(0);
     } else if (nextIndex >= (currentPage + 1) * pageSize) {
+      // If page size isn't established yet (<=1), avoid advancing to a blank page
+      if (pageSize <= 1) {
+        selectWorktree(nextIndex);
+        return;
+      }
       // Move to next page, select first item of that page
       const totalPages = Math.max(1, Math.ceil(worktrees.length / pageSize));
       const newPage = (currentPage + 1) % totalPages;
       setCurrentPage(newPage);
-      selectWorktree(newPage * pageSize);
+      selectWorktree(Math.min(newPage * pageSize, worktrees.length - 1));
     } else if (nextIndex < currentPage * pageSize) {
+      // If page size isn't established yet (<=1), avoid moving pages
+      if (pageSize <= 1) {
+        selectWorktree(Math.max(0, nextIndex));
+        return;
+      }
       // Move to previous page, select last item of that page
       const newPage = currentPage > 0 ? currentPage - 1 : Math.max(0, Math.ceil(worktrees.length / pageSize) - 1);
       const lastItemOnPage = Math.min((newPage + 1) * pageSize - 1, worktrees.length - 1);
