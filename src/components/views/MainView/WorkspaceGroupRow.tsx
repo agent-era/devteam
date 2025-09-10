@@ -28,7 +28,7 @@ export const WorkspaceGroupRow = memo<WorkspaceGroupRowProps>(({workspace, globa
     {text: ai, width: columnWidths.ai, justify: 'center' as const},
     {text: '', width: columnWidths.diff, justify: 'flex-end' as const},
     {text: '', width: columnWidths.changes, justify: 'flex-end' as const},
-    {text: '', width: columnWidths.pr, justify: 'flex-start' as const},
+    {text: '', width: columnWidths.pr, justify: 'flex-end' as const},
   ];
 
   const formatCellText = (text: string, width: number, justify: 'flex-start' | 'center' | 'flex-end'): string => {

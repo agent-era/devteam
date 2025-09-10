@@ -62,7 +62,7 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
     {text: data.ai, width: columnWidths.ai, justify: 'center' as const},
     {text: data.diff, width: columnWidths.diff, justify: 'flex-end' as const},
     {text: data.changes, width: columnWidths.changes, justify: 'flex-end' as const},
-    {text: data.pr, width: columnWidths.pr, justify: 'flex-start' as const},
+    {text: data.pr, width: columnWidths.pr, justify: 'flex-end' as const},
   ];
   const statusMeta = getStatusMeta(worktree, pr);
   
