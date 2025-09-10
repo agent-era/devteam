@@ -54,11 +54,8 @@ export function determineStatusReason(worktree: WorktreeInfo, pr: PRStatus | und
       return StatusReason.AGENT_READY;
     }
     if (pr.is_open && pr.number) {
-      // If checks are absent, treat as ready to merge when mergeable; otherwise still checking
-      if (pr.checks == null) {
-        return pr.mergeable === 'MERGEABLE' ? StatusReason.PR_READY_TO_MERGE : StatusReason.PR_CHECKING;
-      }
-      return StatusReason.PR_INFORMATIONAL;
+      // Default open PRs to pending until explicit status arrives
+      return StatusReason.PR_CHECKING;
     }
     if (pr.is_merged && pr.number) return StatusReason.PR_MERGED;
     if (worktree.session?.attached && (cs.includes('idle') || cs.includes('active'))) return StatusReason.AGENT_READY;
