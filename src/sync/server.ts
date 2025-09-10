@@ -6,6 +6,7 @@ import {getProjectsDirectory} from '../config.js';
 import {GitService} from '../services/GitService.js';
 import {TmuxService} from '../services/TmuxService.js';
 import type {ClientToServer, ServerToClient, SyncServerOptions, WorktreeSummary} from './types.js';
+import type {AITool, AIStatus} from '../models.js';
 import {createHash} from 'node:crypto';
 
 type Client = { ws: WebSocket; subs: Set<string> };
@@ -100,8 +101,8 @@ export class SyncServer {
         for (const wt of wts) {
           const session = tmux.sessionName(wt.project, wt.feature);
           const attached = activeSessions.includes(session);
-          let ai_tool: string | undefined = undefined;
-          let ai_status: string | undefined = undefined;
+          let ai_tool: AITool | undefined = undefined;
+          let ai_status: AIStatus | undefined = undefined;
           if (attached) {
             try {
               const res = await tmux.getAIStatus(session);

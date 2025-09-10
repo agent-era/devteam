@@ -1,14 +1,14 @@
-export interface WorktreeSummary {
-  project: string;
-  feature: string;
-  path: string;
-  branch: string;
-  // Optional runtime info (present when tmux is available)
-  session?: string;
-  attached?: boolean;
-  ai_tool?: string;   // e.g., 'claude', 'none'
-  ai_status?: string; // e.g., 'working', 'waiting', 'not_running'
-}
+import type {AIStatus, AITool, WorktreeInfo} from '../models.js';
+
+export type WorktreeSummary =
+  // Reuse core fields from the existing model
+  Pick<WorktreeInfo, 'project' | 'feature' | 'path' | 'branch'> & {
+    // Optional runtime info (present when tmux is available)
+    session?: string;
+    attached?: boolean;
+    ai_tool?: AITool;    // e.g., 'claude', 'none'
+    ai_status?: AIStatus; // e.g., 'working', 'waiting', 'not_running'
+  };
 
 export type ServerToClient =
   | {type: 'ready'; version: number; ts: number}
