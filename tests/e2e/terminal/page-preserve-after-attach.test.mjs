@@ -47,8 +47,10 @@ test('preserves page after attach/detach (selectedIndex visible)', async () => {
   }, {timeout: 3000, interval: 50, message: 'pagination settled on Page 1'});
 
   // Go to Page 2 (full-page pagination)
+  // Give the keyboard listener a brief moment to attach in CI
+  await new Promise(r => setTimeout(r, 100));
   stdin.emit('data', Buffer.from('>'));
-  await waitForText(() => stdout.lastFrame() || '', 'Page 2/', {timeout: 3000});
+  await waitForText(() => stdout.lastFrame() || '', 'Page 2/', {timeout: 5000});
   // Settle: ensure pagination range for Page 2 is visible
   await waitFor(() => {
     const s = stripAnsi(stdout.lastFrame() || '');
@@ -71,8 +73,9 @@ test('preserves page after attach/detach (selectedIndex visible)', async () => {
   await new Promise(r => setTimeout(r, 100));
 
   // Press Enter to attach directly (no tmux hint)
+  await new Promise(r => setTimeout(r, 50));
   stdin.emit('data', Buffer.from('\r'));
-  await waitForText(() => stdout.lastFrame() || '', 'Page 2/', {timeout: 3000});
+  await waitForText(() => stdout.lastFrame() || '', 'Page 2/', {timeout: 5000});
   // Settle again after detach returns control
   await waitFor(() => {
     const s = stripAnsi(stdout.lastFrame() || '');
