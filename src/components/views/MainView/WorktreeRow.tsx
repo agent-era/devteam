@@ -74,21 +74,21 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
     !!(highlightInfo && cellIndex === highlightInfo.columnIndex);
 
   const getCellBackground = (cellIndex: number): string | undefined => {
-    // Keep priority-highlighted cells with their colored background
+    // For merged/archived rows when selected, show a full-row gray highlight for visibility
+    if (selected && isDimmed) return 'gray';
+    // Keep priority-highlighted cells with their colored background when not dimmed/selected
     if (isPriorityCell(cellIndex)) return highlightInfo!.color;
-    // On merged rows, selected non-priority cells get a gray highlight bar
-    if (selected && isDimmed && !isPriorityCell(cellIndex)) return 'gray';
-    // Selection (non-merged) uses inverse on non-priority cells (no explicit background)
+    // Otherwise no explicit background; selection (non-dimmed) uses inverse
     return undefined;
   };
 
   const getCellForeground = (cellIndex: number): string | undefined => {
-    // Selected merged rows: explicit gray background on non-priority cells -> use black text for contrast
-    if (selected && isDimmed && !isPriorityCell(cellIndex)) return 'black';
-    // For selected non-priority cells (non-merged), don't force a color so inverse remains clean
+    // Selected merged/archived rows: gray background + white text for contrast
+    if (selected && isDimmed) return 'white';
+    // Non-selected merged/archived rows: dimmed text (handled via dimColor), don't force color
+    if (isDimmed) return undefined;
+    // For selected non-priority cells (non-dimmed), let inverse handle the color
     if (selected && !isPriorityCell(cellIndex)) return undefined;
-    // Dim merged rows when not selected or when priority cell is shown
-    if (isDimmed) return 'gray';
     const bg = getCellBackground(cellIndex);
     if (!bg) return undefined;
     // Choose readable foregrounds for colored backgrounds
@@ -153,7 +153,9 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
         <>
           {' '.repeat(leftPad)}
           <Text color={getCellForeground(1)}>{left}</Text>
-          {bracketed ? <Text dimColor>{bracketed}</Text> : null}
+          {bracketed ? (
+            selected && isDimmed ? <Text color={getCellForeground(1)}>{bracketed}</Text> : <Text dimColor>{bracketed}</Text>
+          ) : null}
           {' '.repeat(rightPad)}
         </>
       );
@@ -162,7 +164,9 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
     return (
       <>
         <Text color={getCellForeground(1)}>{left}</Text>
-        {bracketed ? <Text dimColor>{bracketed}</Text> : null}
+        {bracketed ? (
+          selected && isDimmed ? <Text color={getCellForeground(1)}>{bracketed}</Text> : <Text dimColor>{bracketed}</Text>
+        ) : null}
         {' '.repeat(pad)}
       </>
     );
@@ -180,8 +184,9 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
           <Text
             backgroundColor={getCellBackground(cellIndex)}
             color={cellIndex === 1 ? undefined : getCellForeground(cellIndex)}
+            dimColor={isDimmed && !selected}
             bold={selected && !isPriorityCell(cellIndex)}
-            inverse={selected && !isPriorityCell(cellIndex) && !isDimmed}
+            inverse={selected && !isDimmed && !isPriorityCell(cellIndex)}
           >
             {cellIndex === 1
               ? renderProjectFeatureCell(cell.text, cell.width, cell.justify)
