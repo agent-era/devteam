@@ -3,6 +3,11 @@ export interface WorktreeSummary {
   feature: string;
   path: string;
   branch: string;
+  // Optional runtime info (present when tmux is available)
+  session?: string;
+  attached?: boolean;
+  ai_tool?: string;   // e.g., 'claude', 'none'
+  ai_status?: string; // e.g., 'working', 'waiting', 'not_running'
 }
 
 export type ServerToClient =
@@ -24,4 +29,3 @@ export interface SyncClientOptions {
   url: string; // ws://127.0.0.1:8787/sync
   autoSubscribe?: boolean; // worktrees
 }
-

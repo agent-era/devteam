@@ -3,6 +3,7 @@ import {WebSocketServer, WebSocket} from 'ws';
 import {parse as parseUrl} from 'node:url';
 import {getProjectsDirectory} from '../config.js';
 import {GitService} from '../services/GitService.js';
+import {TmuxService} from '../services/TmuxService.js';
 import type {ClientToServer, ServerToClient, SyncServerOptions, WorktreeSummary} from './types.js';
 
 type Client = { ws: WebSocket; subs: Set<string> };
@@ -80,13 +81,36 @@ export class SyncServer {
   private async collectWorktrees(): Promise<WorktreeSummary[]> {
     const base = getProjectsDirectory();
     const git = new GitService(base);
+    const tmux = new TmuxService();
     const projects = git.discoverProjects();
     const items: WorktreeSummary[] = [];
+    let activeSessions: string[] = [];
+    try { activeSessions = await tmux.listSessions(); } catch { activeSessions = []; }
     for (const project of projects) {
       try {
         const wts = await git.getWorktreesForProject(project);
         for (const wt of wts) {
-          items.push({project: wt.project, feature: wt.feature, path: wt.path, branch: wt.branch});
+          const session = tmux.sessionName(wt.project, wt.feature);
+          const attached = activeSessions.includes(session);
+          let ai_tool: string | undefined = undefined;
+          let ai_status: string | undefined = undefined;
+          if (attached) {
+            try {
+              const res = await tmux.getAIStatus(session);
+              ai_tool = res.tool;
+              ai_status = res.status;
+            } catch {}
+          }
+          items.push({
+            project: wt.project,
+            feature: wt.feature,
+            path: wt.path,
+            branch: wt.branch,
+            session,
+            attached,
+            ai_tool,
+            ai_status,
+          });
         }
       } catch {}
     }
@@ -116,4 +140,3 @@ export class SyncServer {
 export function createSyncServer(options: SyncServerOptions = {}) {
   return new SyncServer(options);
 }
-
