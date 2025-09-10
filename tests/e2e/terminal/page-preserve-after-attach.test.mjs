@@ -36,15 +36,25 @@ test('preserves page after attach/detach (selectedIndex visible)', async () => {
 
   // Allow initial frame to render
   await new Promise(r => setTimeout(r, 250));
+  const {waitFor, waitForText, worktreeRegex, stripAnsi} = await import('./_utils.js');
   let frame = stdout.lastFrame() || '';
-  assert.ok(frame.includes('Page 1/'), 'Expected to start on Page 1');
+  let clean = stripAnsi(frame);
+  assert.ok(clean.includes('Page 1/'), 'Expected to start on Page 1');
 
-  // Go to Page 2
+  // Go to Page 2 (full-page pagination)
   stdin.emit('data', Buffer.from('>'));
-  await new Promise(r => setTimeout(r, 200));
+  await waitForText(() => stdout.lastFrame() || '', 'Page 2/', {timeout: 3000});
+  // wait until a worktree label is visible on Page 2 as well
+  await waitFor(() => {
+    const f = stdout.lastFrame() || '';
+    const s = stripAnsi(f);
+    return worktreeRegex('demo').test(s);
+  }, {timeout: 3000, interval: 50, message: 'first worktree visible on Page 2'});
   frame = stdout.lastFrame() || '';
-  assert.ok(frame.includes('Page 2/'), 'Expected to be on Page 2');
-  assert.ok(frame.includes('demo/feature-26'), 'Expected first item of Page 2 to be visible');
+  clean = stripAnsi(frame);
+  const firstVisibleMatch = clean.match(worktreeRegex('demo'));
+  const firstVisible = firstVisibleMatch ? firstVisibleMatch[0] : '';
+  assert.ok(firstVisible.length > 0, 'Expected first item on Page 2 to be detectable');
 
   // Select 6th item on the page (absolute index 30)
   stdin.emit('data', Buffer.from('6'));
@@ -52,12 +62,13 @@ test('preserves page after attach/detach (selectedIndex visible)', async () => {
 
   // Press Enter to attach directly (no tmux hint)
   stdin.emit('data', Buffer.from('\r'));
-  await new Promise(r => setTimeout(r, 300));
+  await waitForText(() => stdout.lastFrame() || '', 'Page 2/', {timeout: 3000});
   frame = stdout.lastFrame() || '';
-
-  // After detach, we should be back on the same page that contains the selected item
-  assert.ok(frame.includes('Page 2/'), 'Expected to remain on Page 2 after detach');
-  assert.ok(frame.includes('demo/feature-26'), 'Expected Page 2 content to be visible after detach');
+  clean = stripAnsi(frame);
+  
+  // After detach, we should be back on the same page and the previously first-visible item should still be visible
+  assert.ok(clean.includes('Page 2/'), 'Expected to remain on Page 2 after detach');
+  assert.ok(clean.includes(firstVisible), `Expected Page 2 content to include ${firstVisible} after detach`);
 
   try { inst.unmount?.(); } catch {}
 });

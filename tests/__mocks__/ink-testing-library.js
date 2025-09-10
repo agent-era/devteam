@@ -59,9 +59,9 @@ class MockRenderResult {
 
   _generateMockOutput() {
     // Generate mock output that would be useful for test assertions
-return `PROJECT/FEATURE    AI  DIFF     CHANGES  PUSHED  PR
-my-project/feature-1  -   +0/-0    -        ✓       -
-my-project/feature-2  *   +25/-5   ↑2       +       #123
+return `STATUS        PROJECT/FEATURE    AI  DIFF     CHANGES  PR
+un-pushed    my-project/feature-1  -   +0/-0    -        -
+modified     my-project/feature-2  *   +25/-5   ↑2       #123
 
 Press 'n' to create new feature, 'a' to archive, '?' for help`;
   }

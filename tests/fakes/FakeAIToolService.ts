@@ -1,11 +1,11 @@
 import {AIToolService} from '../../src/services/AIToolService.js';
 import {AIStatus, AITool} from '../../src/models.js';
 import {AI_TOOLS} from '../../src/constants.js';
-import {memoryStore} from './stores.js';
 
 export class FakeAIToolService extends AIToolService {
   private launchedSessions: Array<{tool: AITool, session: string, cwd: string}> = [];
   private switchedSessions: Array<{tool: AITool, session: string}> = [];
+  private toolBySession = new Map<string, {tool: AITool, status: AIStatus}>();
 
   /**
    * Fake implementation with simple, predictable logic for pane detection
@@ -17,22 +17,10 @@ export class FakeAIToolService extends AIToolService {
     return false;
   }
 
-  /**
-   * Fake implementation that uses the memory store to determine tools
-   */
   async detectAllSessionAITools(): Promise<Map<string, AITool>> {
-    const toolsMap = new Map<string, AITool>();
-    
-    // Use actual session data from memory store
-    for (const [sessionName, sessionInfo] of memoryStore.sessions.entries()) {
-      if (sessionName.startsWith('dev-')) {
-        // Use only the AI tool stored in session info
-        const tool: AITool = sessionInfo.ai_tool || 'none';
-        toolsMap.set(sessionName, tool);
-      }
-    }
-    
-    return toolsMap;
+    const result = new Map<string, AITool>();
+    for (const [name, v] of this.toolBySession.entries()) result.set(name, v.tool);
+    return result;
   }
 
   /**
@@ -132,20 +120,7 @@ export class FakeAIToolService extends AIToolService {
    * Create a test session with specific AI tool for consistent testing
    */
   createTestSessionWithTool(sessionName: string, tool: AITool, status: AIStatus = 'idle'): void {
-    const sessionInfo = memoryStore.sessions.get(sessionName);
-    if (sessionInfo) {
-      sessionInfo.ai_tool = tool;
-      sessionInfo.ai_status = status;
-    } else {
-      // Create new session info if it doesn't exist
-      memoryStore.sessions.set(sessionName, {
-        session_name: sessionName,
-        attached: true,
-        ai_tool: tool,
-        ai_status: status,
-        claude_status: tool === 'claude' ? status : 'not_running'
-      } as any);
-    }
+    this.toolBySession.set(sessionName, {tool, status});
   }
 
   /**

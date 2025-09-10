@@ -70,7 +70,7 @@ export function useKeyboardShortcuts(
         actions.onMove?.(1);
       } else if (input === 'k' || input === '\u001b[A') { // k or up arrow
         actions.onMove?.(-1);
-      } else if (input === '\r') { // Enter
+      } else if (input === '\r' || input === '\n') { // Enter
         actions.onSelect?.();
       } else if (input === 'q' || input === '\u001b') { // q or Escape
         actions.onQuit?.();

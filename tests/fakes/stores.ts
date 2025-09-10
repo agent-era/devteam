@@ -50,7 +50,7 @@ class InMemoryStore implements MemoryStore {
   }
 }
 
-// Global singleton store for tests
+// Global store for Jest tests; tests are isolated per worker/process
 export const memoryStore = new InMemoryStore();
 
 // Helper functions to set up test data
@@ -133,3 +133,4 @@ export function setupTestGitStatus(
   memoryStore.gitStatus.set(path, gitStatus);
   return gitStatus;
 }
+
