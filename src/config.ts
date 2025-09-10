@@ -32,3 +32,11 @@ export const PROJECTS_DIRECTORY = parseProjectsDirectory();
 export function getProjectsDirectory(): string {
   return PROJECTS_DIRECTORY;
 }
+
+/**
+ * Whether periodic app intervals (auto-refresh timers) should run.
+ * Centralized here to avoid scattering environment checks.
+ */
+export function isAppIntervalsEnabled(): boolean {
+  return process.env.NO_APP_INTERVALS !== '1';
+}

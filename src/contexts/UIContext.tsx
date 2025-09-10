@@ -6,7 +6,7 @@ import type {AITool} from '../models.js';
 type UIMode = 'list' | 'create' | 'confirmArchive' | 'help' |
              'pickProjectForBranch' | 'pickBranch' | 'diff' | 'runConfig' |
              'runProgress' | 'runResults' | 'selectAITool' |
-             'tmuxAttachLoading' | 'noProjects';
+             'tmuxAttachLoading' | 'noProjects' | 'info';
 
 interface UIContextType {
   // Current UI state values
@@ -23,6 +23,7 @@ interface UIContextType {
   runPath: string | null;
   runConfigResult: any | null;
   pendingWorktree: WorktreeInfo | null;
+  info: {title?: string; message: string; onClose?: () => void} | null;
   
   // UI navigation operations - self-documenting methods
   showList: () => void;
@@ -37,6 +38,7 @@ interface UIContextType {
   showRunResults: (result: any) => void;
   showAIToolSelection: (worktree: WorktreeInfo) => void;
   showNoProjectsDialog: () => void;
+  showInfo: (message: string, options?: {title?: string; onClose?: () => void}) => void;
   runWithLoading: (task: () => Promise<unknown> | unknown, options?: {returnToList?: boolean}) => void;
   
   // Branch management
@@ -68,6 +70,7 @@ export function UIProvider({children}: UIProviderProps) {
   const [runPath, setRunPath] = useState<string | null>(null);
   const [runConfigResult, setRunConfigResult] = useState<any | null>(null);
   const [pendingWorktree, setPendingWorktree] = useState<WorktreeInfo | null>(null);
+  const [info, setInfo] = useState<{title?: string; message: string; onClose?: () => void} | null>(null);
   // Removed tmux hint state (dialog no longer used)
 
 
@@ -84,6 +87,7 @@ export function UIProvider({children}: UIProviderProps) {
     setRunPath(null);
     setRunConfigResult(null);
     setPendingWorktree(null);
+    setInfo(null);
   };
 
   // UI Navigation Operations - Self-documenting and encapsulated
@@ -170,6 +174,11 @@ export function UIProvider({children}: UIProviderProps) {
     setMode('noProjects');
   };
 
+  const showInfo = (message: string, options?: {title?: string; onClose?: () => void}) => {
+    setInfo({title: options?.title, message, onClose: options?.onClose});
+    setMode('info');
+  };
+
 
   const requestExit = () => {
     setShouldExit(true);
@@ -191,6 +200,7 @@ export function UIProvider({children}: UIProviderProps) {
     runPath,
     runConfigResult,
     pendingWorktree,
+    info,
     
     // Navigation methods
     showList,
@@ -204,6 +214,7 @@ export function UIProvider({children}: UIProviderProps) {
     showRunProgress,
     showRunResults,
     showAIToolSelection,
+    showInfo,
     runWithLoading,
     showNoProjectsDialog,
     

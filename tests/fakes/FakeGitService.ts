@@ -1,15 +1,69 @@
 import {GitService} from '../../src/services/GitService.js';
 import {GitStatus, ProjectInfo, PRStatus, WorktreeInfo, SessionInfo} from '../../src/models.js';
-import {memoryStore} from './stores.js';
 import {DIR_BRANCHES_SUFFIX, DIR_ARCHIVED_SUFFIX} from '../../src/constants.js';
+import {memoryStore} from './stores.js';
 
 export class FakeGitService extends GitService {
+  private projects = new Map<string, ProjectInfo>();
+  private worktrees = new Map<string, WorktreeInfo>();
+  private gitStatus = new Map<string, GitStatus>();
+  private remoteBranches = new Map<string, Array<{ local_name: string; remote_name: string; pr_number?: number; pr_state?: string; pr_checks?: string; pr_title?: string }>>();
+  private archivedWorktrees = new Map<string, WorktreeInfo[]>();
+
   constructor(basePath: string = '/tmp/test-projects') {
     super(basePath);
   }
 
+  // Test seeding helpers
+  addProject(name: string, path?: string): ProjectInfo {
+    const p = new ProjectInfo({name, path: path || `/fake/projects/${name}`});
+    this.projects.set(name, p);
+    try { memoryStore.projects.set(name, p); } catch {}
+    return p;
+  }
+
+  addWorktree(project: string, featureName: string, overrides: Partial<WorktreeInfo> = {}): WorktreeInfo {
+    const branchesDir = `/fake/projects/${project}${DIR_BRANCHES_SUFFIX}`;
+    const worktreePath = `${branchesDir}/${featureName}`;
+    const wt = new WorktreeInfo({
+      project,
+      feature: featureName,
+      path: worktreePath,
+      branch: overrides.branch || `feature/${featureName}`,
+      git: new GitStatus(),
+      session: new SessionInfo({session_name: `dev-${project}-${featureName}`, attached: false, claude_status: 'not_running'}),
+      pr: new PRStatus(),
+      ...overrides,
+    });
+    this.worktrees.set(worktreePath, wt);
+    try { memoryStore.worktrees.set(worktreePath, wt); } catch {}
+    return wt;
+  }
+
+  setGitStatus(path: string, partial: Partial<GitStatus>): void {
+    const status = new GitStatus({
+      has_changes: false,
+      modified_files: 0,
+      added_lines: 0,
+      deleted_lines: 0,
+      has_remote: true,
+      ahead: 0,
+      behind: 0,
+      is_pushed: true,
+      ...partial,
+    });
+    this.gitStatus.set(path, status);
+    try { memoryStore.gitStatus.set(path, status); } catch {}
+  }
+
+  setRemoteBranches(project: string, branches: Array<{local_name: string; remote_name: string; pr_number?: number; pr_state?: string; pr_checks?: string; pr_title?: string;}>): void {
+    this.remoteBranches.set(project, branches);
+    try { memoryStore.remoteBranches.set(project, branches as any); } catch {}
+  }
+
   discoverProjects(): ProjectInfo[] {
-    return Array.from(memoryStore.projects.values())
+    const merged = new Map<string, ProjectInfo>([...this.projects, ...memoryStore.projects]);
+    return Array.from(merged.values())
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
@@ -21,7 +75,8 @@ export class FakeGitService extends GitService {
     mtime: number;
     last_commit_ts: number;
   }>> {
-    const worktrees = Array.from(memoryStore.worktrees.values())
+    const merged = new Map<string, WorktreeInfo>([...this.worktrees, ...memoryStore.worktrees]);
+    const worktrees = Array.from(merged.values())
       .filter(w => w.project === project.name)
       .map(w => ({
         project: w.project,
@@ -41,7 +96,7 @@ export class FakeGitService extends GitService {
   }
 
   async getGitStatus(worktreePath: string): Promise<GitStatus> {
-    const stored = memoryStore.gitStatus.get(worktreePath);
+    const stored = this.gitStatus.get(worktreePath) || memoryStore.gitStatus.get(worktreePath);
     if (stored) {
       return stored;
     }
@@ -60,11 +115,13 @@ export class FakeGitService extends GitService {
   }
 
   createProject(projectName: string): void {
-    if (!memoryStore.projects.has(projectName)) {
-      memoryStore.projects.set(projectName, new ProjectInfo({
+    if (!this.projects.has(projectName)) {
+      const proj = new ProjectInfo({
         name: projectName,
         path: `/fake/projects/${projectName}`,
-      }));
+      });
+      this.projects.set(projectName, proj);
+      try { memoryStore.projects.set(projectName, proj); } catch {}
     }
   }
 
@@ -74,7 +131,7 @@ export class FakeGitService extends GitService {
       return false;
     }
 
-    const projectInfo = memoryStore.projects.get(project);
+    const projectInfo = this.projects.get(project) || memoryStore.projects.get(project);
     if (!projectInfo) return false;
 
     const branchesDir = `/fake/projects/${project}${DIR_BRANCHES_SUFFIX}`;
@@ -82,7 +139,7 @@ export class FakeGitService extends GitService {
     const branch = branchName || featureName;
 
     // Check if worktree already exists
-    if (memoryStore.worktrees.has(worktreePath)) {
+    if (this.worktrees.has(worktreePath) || memoryStore.worktrees.has(worktreePath)) {
       return false;
     }
 
@@ -99,17 +156,20 @@ export class FakeGitService extends GitService {
       last_commit_ts: Date.now() / 1000,
     };
 
-    memoryStore.worktrees.set(worktreePath, worktree as any);
+    this.worktrees.set(worktreePath, worktree as any);
+    try { memoryStore.worktrees.set(worktreePath, worktree as any); } catch {}
     
     // Create default git status
-    memoryStore.gitStatus.set(worktreePath, new GitStatus({
+    const status = new GitStatus({
       has_changes: false,
       modified_files: 0,
       has_remote: false, // New branch, no remote yet
       ahead: 1, // One commit ahead (initial commit)
       behind: 0,
       is_pushed: false,
-    }));
+    });
+    this.gitStatus.set(worktreePath, status);
+    try { memoryStore.gitStatus.set(worktreePath, status); } catch {}
 
     return true;
   }
@@ -120,7 +180,7 @@ export class FakeGitService extends GitService {
       return false;
     }
 
-    const projectInfo = memoryStore.projects.get(project);
+    const projectInfo = this.projects.get(project) || memoryStore.projects.get(project);
     if (!projectInfo) return false;
 
     const branchesDir = `/fake/projects/${project}${DIR_BRANCHES_SUFFIX}`;
@@ -128,7 +188,7 @@ export class FakeGitService extends GitService {
     const localBranch = remoteBranch.startsWith('origin/') ? remoteBranch.slice(7) : remoteBranch;
 
     // Check if worktree already exists
-    if (memoryStore.worktrees.has(worktreePath)) {
+    if (this.worktrees.has(worktreePath) || memoryStore.worktrees.has(worktreePath)) {
       return false;
     }
 
@@ -145,23 +205,36 @@ export class FakeGitService extends GitService {
       last_commit_ts: Date.now() / 1000,
     };
 
-    memoryStore.worktrees.set(worktreePath, worktree as any);
+    this.worktrees.set(worktreePath, worktree as any);
+    try { memoryStore.worktrees.set(worktreePath, worktree as any); } catch {}
     
     // Create git status for remote branch
-    memoryStore.gitStatus.set(worktreePath, new GitStatus({
+    const status2 = new GitStatus({
       has_changes: false,
       modified_files: 0,
       has_remote: true,
       ahead: 0,
       behind: 0,
       is_pushed: true,
-    }));
+    });
+    this.gitStatus.set(worktreePath, status2);
+    try { memoryStore.gitStatus.set(worktreePath, status2); } catch {}
 
     return true;
   }
 
-  async getRemoteBranches(project: string): Promise<Array<Record<string, any>>> {
-    const branches = memoryStore.remoteBranches.get(project) || [];
+  async getRemoteBranches(project: string): Promise<Array<{
+    local_name: string;
+    remote_name: string;
+    pr_number?: number;
+    pr_state?: string;
+    pr_checks?: string;
+    pr_title?: string;
+  }>> {
+    const mergedBranches = (this.remoteBranches.get(project) || []).slice();
+    const extra = memoryStore.remoteBranches.get(project) || [];
+    for (const b of extra) mergedBranches.push(b as any);
+    const branches = mergedBranches;
     return branches.map(branch => ({
       local_name: branch.local_name,
       remote_name: branch.remote_name,
@@ -182,7 +255,10 @@ export class FakeGitService extends GitService {
     is_archived: boolean; 
     mtime: number
   }> {
-    const archived = memoryStore.archivedWorktrees.get(project.name) || [];
+    const dedup = new Map<string, WorktreeInfo>();
+    for (const w of this.archivedWorktrees.get(project.name) || []) dedup.set(w.path, w);
+    for (const w of memoryStore.archivedWorktrees.get(project.name) || []) dedup.set(w.path, w);
+    const archived = Array.from(dedup.values());
     return archived.map(w => ({
       project: w.project,
       feature: w.feature,
@@ -199,9 +275,9 @@ export class FakeGitService extends GitService {
     const prByBranch: Record<string, PRStatus> = {};
     
     // Find all PR statuses for this project
-    for (const [path, pr] of memoryStore.prStatus.entries()) {
+    for (const [path, pr] of (memoryStore.prStatus as any as Map<string, PRStatus>).entries()) {
       if (path.includes(repoPath.split('/').pop() || '')) {
-        const worktree = memoryStore.worktrees.get(path);
+        const worktree = this.worktrees.get(path);
         if (worktree) {
           prByBranch[worktree.branch] = pr;
         }
@@ -239,7 +315,7 @@ export class FakeGitService extends GitService {
 
   // Archive a worktree (move from worktrees to archived)
   archiveWorktree(worktreePath: string): string {
-    const worktree = memoryStore.worktrees.get(worktreePath);
+    const worktree = this.worktrees.get(worktreePath) || memoryStore.worktrees.get(worktreePath);
     if (!worktree) throw new Error('Worktree not found');
 
     // Generate archived path
@@ -247,7 +323,8 @@ export class FakeGitService extends GitService {
     const archivedPath = worktreePath.replace(DIR_BRANCHES_SUFFIX, DIR_ARCHIVED_SUFFIX).replace(worktree.feature, `archived-${timestamp}_${worktree.feature}`);
     
     // Remove from worktrees
-    memoryStore.worktrees.delete(worktreePath);
+    this.worktrees.delete(worktreePath);
+    try { memoryStore.worktrees.delete(worktreePath); } catch {}
     
     // Add to archived with updated path
     const archivedWorktree = new WorktreeInfo({
@@ -255,9 +332,14 @@ export class FakeGitService extends GitService {
       path: archivedPath,
       is_archived: true
     });
-    const archived = memoryStore.archivedWorktrees.get(worktree.project) || [];
+    const archived = this.archivedWorktrees.get(worktree.project) || [];
     archived.push(archivedWorktree);
-    memoryStore.archivedWorktrees.set(worktree.project, archived);
+    this.archivedWorktrees.set(worktree.project, archived);
+    try {
+      const arr = memoryStore.archivedWorktrees.get(worktree.project) || [];
+      arr.push(archivedWorktree);
+      memoryStore.archivedWorktrees.set(worktree.project, arr);
+    } catch {}
 
     return archivedPath;
   }
@@ -275,14 +357,28 @@ export class FakeGitService extends GitService {
     let archivedIndex: number = -1;
     let archivedList: any[] = [];
     
-    for (const [proj, list] of memoryStore.archivedWorktrees.entries()) {
+    let found = false;
+    for (const [proj, list] of this.archivedWorktrees.entries()) {
       const index = list.findIndex(w => w.path === archivedPath);
       if (index >= 0) {
         archivedWorktree = list[index];
         project = proj;
         archivedIndex = index;
         archivedList = list;
+        found = true;
         break;
+      }
+    }
+    if (!found) {
+      for (const [proj, list] of memoryStore.archivedWorktrees.entries()) {
+        const index = list.findIndex(w => w.path === archivedPath);
+        if (index >= 0) {
+          archivedWorktree = list[index];
+          project = proj;
+          archivedIndex = index;
+          archivedList = list;
+          break;
+        }
       }
     }
     
@@ -296,7 +392,7 @@ export class FakeGitService extends GitService {
       .replace(/archived-[0-9-]+_/, '');
 
     // Check if restored path already exists
-    if (memoryStore.worktrees.has(restoredPath)) {
+    if (this.worktrees.has(restoredPath) || memoryStore.worktrees.has(restoredPath)) {
       throw new Error(`Feature ${project}/${archivedWorktree.feature} already exists in active worktrees`);
     }
 
@@ -305,7 +401,13 @@ export class FakeGitService extends GitService {
     
     // Remove from archived (simulating removal of archived directory)
     archivedList.splice(archivedIndex, 1);
-    memoryStore.archivedWorktrees.set(project, archivedList);
+    this.archivedWorktrees.set(project, archivedList);
+    try {
+      const other = memoryStore.archivedWorktrees.get(project) || [];
+      const idx = other.findIndex(w => w.path === archivedPath);
+      if (idx >= 0) other.splice(idx, 1);
+      memoryStore.archivedWorktrees.set(project, other);
+    } catch {}
 
     // Create fresh worktree (simulating git worktree add)
     const restoredWorktree = new WorktreeInfo({
@@ -323,7 +425,8 @@ export class FakeGitService extends GitService {
       })
     });
     
-    memoryStore.worktrees.set(restoredPath, restoredWorktree);
+    this.worktrees.set(restoredPath, restoredWorktree);
+    try { memoryStore.worktrees.set(restoredPath, restoredWorktree); } catch {}
     return restoredPath;
   }
 
@@ -335,11 +438,30 @@ export class FakeGitService extends GitService {
     }
 
     // Find and remove from archived worktrees
+    for (const [project, archivedList] of this.archivedWorktrees.entries()) {
+      const index = archivedList.findIndex(w => w.path === archivedPath || w.path.replace(DIR_BRANCHES_SUFFIX, DIR_ARCHIVED_SUFFIX) === archivedPath);
+      if (index >= 0) {
+        archivedList.splice(index, 1);
+        this.archivedWorktrees.set(project, archivedList);
+        try {
+          const other = memoryStore.archivedWorktrees.get(project) || [];
+          const idx = other.findIndex(w => w.path === archivedPath || w.path.replace(DIR_BRANCHES_SUFFIX, DIR_ARCHIVED_SUFFIX) === archivedPath);
+          if (idx >= 0) {
+            other.splice(idx, 1);
+            if (other.length === 0) memoryStore.archivedWorktrees.delete(project);
+            else memoryStore.archivedWorktrees.set(project, other);
+          }
+        } catch {}
+        return true;
+      }
+    }
+    // Try memory store if not found in local map
     for (const [project, archivedList] of memoryStore.archivedWorktrees.entries()) {
       const index = archivedList.findIndex(w => w.path === archivedPath || w.path.replace(DIR_BRANCHES_SUFFIX, DIR_ARCHIVED_SUFFIX) === archivedPath);
       if (index >= 0) {
         archivedList.splice(index, 1);
-        memoryStore.archivedWorktrees.set(project, archivedList);
+        if (archivedList.length === 0) memoryStore.archivedWorktrees.delete(project);
+        else memoryStore.archivedWorktrees.set(project, archivedList);
         return true;
       }
     }

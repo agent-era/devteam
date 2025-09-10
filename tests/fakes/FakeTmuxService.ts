@@ -1,11 +1,12 @@
 import {TmuxService} from '../../src/services/TmuxService.js';
 import {SessionInfo, AIStatus, AITool} from '../../src/models.js';
-import {memoryStore} from './stores.js';
 import {SESSION_PREFIX} from '../../src/constants.js';
 import {FakeAIToolService} from './FakeAIToolService.js';
+import {memoryStore} from './stores.js';
 
 export class FakeTmuxService extends TmuxService {
   private sentKeys: Array<{session: string, keys: string[]}> = [];
+  private sessions = new Map<string, SessionInfo>();
 
   constructor() {
     super(new FakeAIToolService());
@@ -20,15 +21,16 @@ export class FakeTmuxService extends TmuxService {
   }
 
   hasSession(session: string): boolean {
-    return memoryStore.sessions.has(session);
+    return this.sessions.has(session) || memoryStore.sessions.has(session);
   }
 
   async listSessions(): Promise<string[]> {
-    return Array.from(memoryStore.sessions.keys());
+    const set = new Set<string>([...this.sessions.keys(), ...memoryStore.sessions.keys()]);
+    return Array.from(set.values());
   }
 
   async capturePane(session: string): Promise<string> {
-    const sessionInfo = memoryStore.sessions.get(session);
+    const sessionInfo = this.sessions.get(session) || memoryStore.sessions.get(session);
     if (!sessionInfo) return '';
 
     // Simulate different tmux pane outputs based on Claude status
@@ -51,7 +53,7 @@ export class FakeTmuxService extends TmuxService {
   }
 
   async getAIStatus(session: string): Promise<{tool: AITool, status: AIStatus}> {
-    const sessionInfo = memoryStore.sessions.get(session);
+    const sessionInfo = this.sessions.get(session) || memoryStore.sessions.get(session);
     if (!sessionInfo) return {tool: 'none', status: 'not_running'};
     
     return {
@@ -62,8 +64,9 @@ export class FakeTmuxService extends TmuxService {
 
 
   killSession(session: string): string {
-    const deleted = memoryStore.sessions.delete(session);
-    return deleted ? 'Session killed' : 'No such session';
+    const d1 = this.sessions.delete(session);
+    const d2 = memoryStore.sessions.delete(session);
+    return (d1 || d2) ? 'Session killed' : 'No such session';
   }
 
   async cleanupOrphanedSessions(validWorktrees: string[]): Promise<void> {
@@ -83,7 +86,8 @@ export class FakeTmuxService extends TmuxService {
       attached: true,
       claude_status: 'active'
     });
-    memoryStore.sessions.set(sessionName, sessionInfo);
+    this.sessions.set(sessionName, sessionInfo);
+    try { memoryStore.sessions.set(sessionName, sessionInfo); } catch {}
     if (autoExit) {
       // Mock setting remain-on-exit off
       this.recordSentKeys(sessionName, ['remain-on-exit', 'off']);
@@ -112,7 +116,8 @@ export class FakeTmuxService extends TmuxService {
       ai_status: aiStatus,
       claude_status: aiTool === 'claude' ? aiStatus : 'active' // Backward compatibility
     });
-    memoryStore.sessions.set(sessionName, sessionInfo);
+    this.sessions.set(sessionName, sessionInfo);
+    try { memoryStore.sessions.set(sessionName, sessionInfo); } catch {}
     if (autoExit) {
       // Mock setting remain-on-exit off
       this.recordSentKeys(sessionName, ['remain-on-exit', 'off']);
@@ -128,7 +133,8 @@ export class FakeTmuxService extends TmuxService {
       ai_tool: tool,
       ai_status: status
     });
-    memoryStore.sessions.set(sessionName, sessionInfo);
+    this.sessions.set(sessionName, sessionInfo);
+    try { memoryStore.sessions.set(sessionName, sessionInfo); } catch {}
     return sessionName;
   }
 
@@ -171,7 +177,7 @@ export class FakeTmuxService extends TmuxService {
 
   attachSessionInteractive(sessionName: string): void {
     // In tests, just mark as attached
-    const sessionInfo = memoryStore.sessions.get(sessionName);
+    const sessionInfo = this.sessions.get(sessionName) || memoryStore.sessions.get(sessionName);
     if (sessionInfo) {
       sessionInfo.attached = true;
     }
@@ -186,7 +192,7 @@ export class FakeTmuxService extends TmuxService {
   }
 
   async listPanes(session: string): Promise<string> {
-    const sessionInfo = memoryStore.sessions.get(session);
+    const sessionInfo = this.sessions.get(session) || memoryStore.sessions.get(session);
     if (!sessionInfo) return '';
     return '0.0 bash\n1.0 claude'; // Mock pane list
   }
@@ -206,7 +212,8 @@ export class FakeTmuxService extends TmuxService {
       claude_status: aiStatus, // Keep for backward compatibility in models
     });
     
-    memoryStore.sessions.set(sessionName, sessionInfo);
+    this.sessions.set(sessionName, sessionInfo);
+    try { memoryStore.sessions.set(sessionName, sessionInfo); } catch {}
     return sessionName;
   }
 
@@ -218,7 +225,8 @@ export class FakeTmuxService extends TmuxService {
       claude_status: 'active', // Shell sessions are always active
     });
     
-    memoryStore.sessions.set(sessionName, sessionInfo);
+    this.sessions.set(sessionName, sessionInfo);
+    try { memoryStore.sessions.set(sessionName, sessionInfo); } catch {}
     return sessionName;
   }
 
@@ -242,34 +250,37 @@ export class FakeTmuxService extends TmuxService {
       claude_status: 'active', // Run sessions are active when executing
     });
     
-    memoryStore.sessions.set(sessionName, sessionInfo);
+    this.sessions.set(sessionName, sessionInfo);
+    try { memoryStore.sessions.set(sessionName, sessionInfo); } catch {}
     return sessionName;
   }
 
 
   // Helper methods for testing AI tools
   setAITool(session: string, tool: AITool): void {
-    const sessionInfo = memoryStore.sessions.get(session);
+    const sessionInfo = this.sessions.get(session) || memoryStore.sessions.get(session);
     if (sessionInfo) {
       sessionInfo.ai_tool = tool;
-      memoryStore.sessions.set(session, sessionInfo);
+      this.sessions.set(session, sessionInfo);
+      try { memoryStore.sessions.set(session, sessionInfo); } catch {}
     }
   }
 
   setAIStatus(session: string, status: AIStatus): void {
-    const sessionInfo = memoryStore.sessions.get(session);
+    const sessionInfo = (this.sessions.get(session) || memoryStore.sessions.get(session)) as SessionInfo | undefined;
     if (sessionInfo) {
       sessionInfo.ai_status = status;
       // Also update claude_status for backward compatibility
       if (sessionInfo.ai_tool === 'claude' || !sessionInfo.ai_tool) {
         sessionInfo.claude_status = status;
       }
-      memoryStore.sessions.set(session, sessionInfo);
+      this.sessions.set(session, sessionInfo);
+      try { memoryStore.sessions.set(session, sessionInfo); } catch {}
     }
   }
 
   getSessionInfo(session: string): SessionInfo | undefined {
-    return memoryStore.sessions.get(session);
+    return this.sessions.get(session) || memoryStore.sessions.get(session);
   }
 
   // Track sent keys for testing

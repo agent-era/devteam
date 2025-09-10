@@ -1,6 +1,7 @@
 import {WorktreeInfo, ProjectInfo, SessionInfo, AITool} from '../../src/models.js';
 import {FakeGitService} from './FakeGitService.js';
 import {FakeTmuxService} from './FakeTmuxService.js';
+import {DIR_BRANCHES_SUFFIX, DIR_ARCHIVED_SUFFIX} from '../../src/constants.js';
 import {memoryStore} from './stores.js';
 
 /**
@@ -10,7 +11,7 @@ import {memoryStore} from './stores.js';
 export class FakeWorktreeService {
   constructor(
     public gitService = new FakeGitService(),
-    public tmuxService = new FakeTmuxService()
+    public tmuxService = new FakeTmuxService(),
   ) {}
 
   /**
@@ -18,11 +19,9 @@ export class FakeWorktreeService {
    */
   async createFeature(projectName: string, featureName: string): Promise<WorktreeInfo | null> {
     try {
-      // Check if project exists
-      const project = memoryStore.projects.get(projectName);
-      if (!project) {
-        throw new Error(`Project ${projectName} not found`);
-      }
+      // Check if project exists via git service
+      const hasProject = this.gitService.discoverProjects().some(p => p.name === projectName);
+      if (!hasProject) throw new Error(`Project ${projectName} not found`);
 
       // Create worktree through git service
       const success = this.gitService.createWorktree(projectName, featureName);
@@ -30,26 +29,23 @@ export class FakeWorktreeService {
         return null;
       }
 
-      // Get the created worktree
-      const worktrees = Array.from(memoryStore.worktrees.values());
-      const worktree = worktrees.find(w => 
-        w.project === projectName && w.feature === featureName
-      );
-
-      if (!worktree) {
-        throw new Error('Worktree creation succeeded but worktree not found');
-      }
+      // Build expected worktree info
+      const path = `/fake/projects/${projectName}${DIR_BRANCHES_SUFFIX}/${featureName}`;
+      const worktree = new WorktreeInfo({
+        project: projectName,
+        feature: featureName,
+        path,
+        branch: featureName,
+        session: new SessionInfo({session_name: this.tmuxService.sessionName(projectName, featureName)})
+      });
 
       // Create tmux session
       const sessionName = this.tmuxService.sessionName(projectName, featureName);
       this.tmuxService.createSession(sessionName, worktree.path);
 
-      // Link session to worktree
-      const session = memoryStore.sessions.get(sessionName);
-      if (session) {
-        worktree.session = session;
-        memoryStore.worktrees.set(worktree.path, worktree);
-      }
+      // Link session to worktree (session lives in tmuxService)
+      const session = this.tmuxService.getSessionInfo(sessionName);
+      if (session) worktree.session = session;
 
       return worktree;
     } catch (error) {
@@ -73,13 +69,9 @@ export class FakeWorktreeService {
       if (!path || !feature) {
         throw new Error('path and feature required when using project name');
       }
-      const foundWorktree = Array.from(memoryStore.worktrees.values())
-        .find(w => w.project === worktreeOrProject && w.feature === feature);
-      
-      if (!foundWorktree) {
-        throw new Error(`Worktree not found: ${worktreeOrProject}/${feature}`);
-      }
-      worktree = foundWorktree;
+      const branchesDir = `/fake/projects/${worktreeOrProject}${DIR_BRANCHES_SUFFIX}`;
+      const worktreePath = path || `${branchesDir}/${feature}`;
+      worktree = new WorktreeInfo({ project: worktreeOrProject, feature: feature!, path: worktreePath, branch: `feature/${feature}`});
     } else {
       // Called with WorktreeInfo object
       worktree = worktreeOrProject;
@@ -135,20 +127,7 @@ export class FakeWorktreeService {
    */
   async deleteArchived(archivedPath: string): Promise<boolean> {
     try {
-      // Find and remove from archived list
-      for (const [project, archived] of memoryStore.archivedWorktrees.entries()) {
-        const index = archived.findIndex(w => w.path === archivedPath);
-        if (index !== -1) {
-          archived.splice(index, 1);
-          if (archived.length === 0) {
-            memoryStore.archivedWorktrees.delete(project);
-          } else {
-            memoryStore.archivedWorktrees.set(project, archived);
-          }
-          return true;
-        }
-      }
-      return false;
+      return this.gitService.deleteArchived(archivedPath);
     } catch (error) {
       console.error('Failed to delete archived:', error);
       return false;
@@ -160,35 +139,16 @@ export class FakeWorktreeService {
    */
   async unarchiveFeature(archivedPath: string): Promise<{restoredPath: string}> {
     try {
-      // Find the archived worktree to get project info for session creation
-      let archivedWorktree: WorktreeInfo | null = null;
-      
-      for (const [project, archived] of memoryStore.archivedWorktrees.entries()) {
-        const found = archived.find(w => w.path === archivedPath);
-        if (found) {
-          archivedWorktree = found;
-          break;
-        }
-      }
-      
-      if (!archivedWorktree) {
-        throw new Error(`Archived worktree not found: ${archivedPath}`);
-      }
-
       // Restore the worktree through git service
       const restoredPath = this.gitService.unarchiveWorktree(archivedPath);
-
+      // Parse project/feature from path
+      const m = archivedPath.match(/\/([^/]+)-archived\/archived-[^_]+_(.+)$/);
+      const project = m?.[1] || 'unknown';
+      const feature = m?.[2] || 'unknown';
       // Recreate tmux sessions for the restored worktree
-      const sessionName = this.tmuxService.sessionName(archivedWorktree.project, archivedWorktree.feature);
+      const sessionName = this.tmuxService.sessionName(project, feature);
       this.tmuxService.createSession(sessionName, restoredPath);
-
-      // Get the restored worktree and link it to the session
-      const restoredWorktree = memoryStore.worktrees.get(restoredPath);
-      const session = memoryStore.sessions.get(sessionName);
-      if (restoredWorktree && session) {
-        restoredWorktree.session = session;
-        memoryStore.worktrees.set(restoredPath, restoredWorktree);
-      }
+      // No internal store to update; session now exists in tmuxService
 
       return {restoredPath};
     } catch (error) {
@@ -263,30 +223,16 @@ export class FakeWorktreeService {
    * Attach to run session
    */
   async attachRunSession(worktree: WorktreeInfo): Promise<'success' | 'no_config'> {
-    const runSessionName = `${worktree.session?.session_name}-run`;
-    
-    // Check if run config exists (simulate)
-    const hasRunConfig = Math.random() > 0.3; // 70% chance of having config
-    
-    if (!hasRunConfig) {
-      return 'no_config';
-    }
-    
-    // Create run session if it doesn't exist
-    if (!this.tmuxService.hasSession(runSessionName)) {
-      this.tmuxService.createSession(runSessionName, worktree.path);
-    }
-    
-    // Simulate attaching to run session
-    // For fake implementation, session creation is sufficient
-    return 'success';
+    // Use tmuxService to create a run session when config exists
+    const created = this.tmuxService.createRunSession(worktree.project, worktree.feature);
+    return created ? 'success' : 'no_config';
   }
 
   /**
    * Discover projects from memory store
    */
   discoverProjects(): ProjectInfo[] {
-    return Array.from(memoryStore.projects.values());
+    return this.gitService.discoverProjects();
   }
 
   /**
@@ -307,7 +253,7 @@ export class FakeWorktreeService {
     pr_checks?: string;
     pr_title?: string;
   }>> {
-    return memoryStore.remoteBranches.get(project) || [];
+    return this.gitService.getRemoteBranches(project);
   }
 
   /**
@@ -359,9 +305,11 @@ export class FakeWorktreeService {
     await new Promise(resolve => setTimeout(resolve, 50));
     
     // Update session statuses randomly
-    for (const session of memoryStore.sessions.values()) {
+    const sessions = await this.tmuxService.listSessions();
+    for (const name of sessions) {
       const statuses = ['idle', 'working', 'waiting', 'thinking'];
-      session.claude_status = statuses[Math.floor(Math.random() * statuses.length)];
+      const status = statuses[Math.floor(Math.random() * statuses.length)] as any;
+      this.tmuxService.setAIStatus(name, status);
     }
   }
 

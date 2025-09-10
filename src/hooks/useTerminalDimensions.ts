@@ -13,19 +13,19 @@ interface TerminalDimensions {
 export function useTerminalDimensions(): TerminalDimensions {
   const {stdout} = useStdout();
 
-  const [dimensions, setDimensions] = useState<TerminalDimensions>(() => ({
-    columns: stdout?.columns || 80,
-    rows: stdout?.rows || 24
-  }));
+  const readDims = (): TerminalDimensions => {
+    const envCols = Number(process.env.E2E_TTY_COLS || '');
+    const envRows = Number(process.env.E2E_TTY_ROWS || '');
+    const columns = (Number.isFinite(envCols) && envCols > 0) ? envCols : (stdout?.columns || 80);
+    const rows = (Number.isFinite(envRows) && envRows > 0) ? envRows : (stdout?.rows || 24);
+    return {columns, rows};
+  };
+
+  const [dimensions, setDimensions] = useState<TerminalDimensions>(readDims);
 
   useEffect(() => {
     if (!stdout) return;
-    const updateDimensions = () => {
-      setDimensions({
-        columns: stdout.columns || 80,
-        rows: stdout.rows || 24
-      });
-    };
+    const updateDimensions = () => setDimensions(readDims());
 
     // Initialize from current stdout and listen for resize on the Ink stdout stream
     updateDimensions();

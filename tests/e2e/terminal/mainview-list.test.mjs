@@ -32,10 +32,10 @@ test('renders list rows via MainView', async () => {
     React.createElement(MainView, {worktrees, selectedIndex: 0, page: 0, pageSize: 20})
   );
 
-  await new Promise(r => setTimeout(r, 100));
-  const frame = lastFrame?.() || '';
-  assert.ok(frame.includes('demo/feature-1'), 'Expected row demo/feature-1');
-  assert.ok(frame.includes('demo/feature-2'), 'Expected row demo/feature-2');
+  const {waitFor, includesWorktree} = await import('./_utils.js');
+  await waitFor(() => {
+    const frame = lastFrame?.() || '';
+    return includesWorktree(frame, 'demo', 'feature-1') && includesWorktree(frame, 'demo', 'feature-2');
+  }, {timeout: 3000, interval: 50, message: 'rows render'});
   try { unmount?.(); } catch {}
 });
-

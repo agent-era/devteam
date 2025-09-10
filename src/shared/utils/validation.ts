@@ -19,3 +19,13 @@ export function getTerminalSize(): [number, number] {
   } catch {}
   return [80, 24];
 }
+
+// Sanitize a feature name for filesystem and session safety
+export function sanitizeFeatureName(name: string): string {
+  const safe = String(name || '')
+    .replace(/[^a-zA-Z0-9_-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 100);
+  return safe || 'feature';
+}

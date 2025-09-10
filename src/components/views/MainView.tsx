@@ -8,6 +8,7 @@ import {calculatePaginationInfo} from '../../utils/pagination.js';
 import {useTerminalDimensions} from '../../hooks/useTerminalDimensions.js';
 import {useColumnWidths} from './MainView/hooks/useColumnWidths.js';
 import {WorktreeRow} from './MainView/WorktreeRow.js';
+import {WorkspaceGroupRow} from './MainView/WorkspaceGroupRow.js';
 import {TableHeader} from './MainView/TableHeader.js';
 import {PaginationFooter} from './MainView/PaginationFooter.js';
 import {EmptyState} from './MainView/EmptyState.js';
@@ -151,9 +152,21 @@ export default function MainView({
           const globalIndex = page * measuredPageSize + index;
           const isSelected = globalIndex === selectedIndex;
           
+          if ((worktree as any).is_workspace_header) {
+            return (
+              <WorkspaceGroupRow
+                key={`ws-${getWorktreeKey(worktree, index)}`}
+                workspace={worktree}
+                index={index}
+                globalIndex={globalIndex}
+                selected={isSelected}
+                columnWidths={columnWidths}
+              />
+            );
+          }
           return (
             <WorktreeRow
-              key={getRowKey(worktree, index)}
+              key={getWorktreeKey(worktree, index)}
               worktree={worktree}
               index={index}
               globalIndex={globalIndex}
