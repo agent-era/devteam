@@ -10,6 +10,7 @@ export class TmuxService {
   private aiToolService: AIToolService;
   // Clean environment for tmux commands to avoid nvm conflicts
   private _tmuxEnv: NodeJS.ProcessEnv | null = null;
+  private sessionNameRegex = /^[a-zA-Z0-9_-]+$/;
 
   constructor(aiToolService?: AIToolService) {
     this.aiToolService = aiToolService || new AIToolService();
@@ -22,7 +23,8 @@ export class TmuxService {
     return this._tmuxEnv;
   }
   sessionName(project: string, feature: string): string {
-    return `${SESSION_PREFIX}${project}-${feature}`;
+    const name = `${SESSION_PREFIX}${project}-${feature}`;
+    return this.sanitizeSessionName(name);
   }
 
   shellSessionName(project: string, feature: string): string {
@@ -31,6 +33,16 @@ export class TmuxService {
 
   runSessionName(project: string, feature: string): string {
     return `${this.sessionName(project, feature)}-run`;
+  }
+
+  private sanitizeSessionName(name: string): string {
+    // Strip disallowed characters and collapse repeats to maintain safety
+    let n = String(name || '').replace(/[^a-zA-Z0-9_-]/g, '-').replace(/-+/g, '-');
+    if (!this.sessionNameRegex.test(n)) {
+      // Fallback to a safe default if needed
+      n = 'dev-safe';
+    }
+    return n;
   }
 
   hasSession(session: string): boolean {
