@@ -87,8 +87,9 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
     if (selected && !isPriorityCell(cellIndex)) return undefined;
     // Color the applicable column's text
     if (isPriorityCell(cellIndex)) {
-      // Special-case: for un-pushed, color CHANGES column text cyan
+      // Special-case colors for specific reasons
       if (highlightInfo?.reason === StatusReason.UNPUSHED_COMMITS) return 'cyan';
+      if (highlightInfo?.reason === StatusReason.PR_CONFLICTS) return 'red';
       // Default: match the STATUS chip's text color
       return statusMeta.fg;
     }
