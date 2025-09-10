@@ -53,6 +53,7 @@
     "ink": "^5.2.1",
     "ink-syntax-highlight": "^2.0.2",
     "isomorphic-ws": "^5.0.0",
+    "chokidar": "^3.6.0",
     "react": "^18.3.1",
     "ws": "^8.17.0"
   },

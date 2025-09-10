@@ -1,6 +1,7 @@
 import http from 'node:http';
 import {WebSocketServer, WebSocket} from 'ws';
 import {parse as parseUrl} from 'node:url';
+import chokidar from 'chokidar';
 import {getProjectsDirectory} from '../config.js';
 import {GitService} from '../services/GitService.js';
 import {TmuxService} from '../services/TmuxService.js';
@@ -16,6 +17,8 @@ export class SyncServer {
   private clients: Set<Client> = new Set();
   private version = 1;
   private timer?: NodeJS.Timeout;
+  private watcher?: chokidar.FSWatcher;
+  private immediatePushTimer?: NodeJS.Timeout;
   private lastSnapshot: WorktreeSummary[] | null = null;
   private lastHash: string | null = null;
 
@@ -35,6 +38,7 @@ export class SyncServer {
     this.wss = new WebSocketServer({server: this.httpServer, path: this.options.path});
     this.wss.on('connection', (ws, req) => this.handleConnection(ws, req));
     this.timer = setInterval(() => void this.pushWorktreesToSubscribers().catch(() => {}), this.options.refreshIntervalMs);
+    this.setupWatchers();
     return {host: this.options.host, port: this.options.port, path: this.options.path};
   }
 
@@ -42,6 +46,7 @@ export class SyncServer {
     if (this.timer) clearInterval(this.timer);
     const closeWss = this.wss ? new Promise<void>((r) => this.wss!.close(() => r())) : Promise.resolve();
     const closeHttp = this.httpServer ? new Promise<void>((r) => this.httpServer!.close(() => r())) : Promise.resolve();
+    try { await this.watcher?.close(); } catch {}
     this.clients.clear();
     await Promise.all([closeWss, closeHttp]);
     this.wss = undefined;
@@ -156,6 +161,32 @@ export class SyncServer {
   private hashItems(items: WorktreeSummary[]): string {
     const json = JSON.stringify(items);
     return createHash('sha1').update(json).digest('hex');
+  }
+
+  private setupWatchers() {
+    try {
+      const base = getProjectsDirectory();
+      // Watch all "*-branches" directories under the base projects dir for file/dir changes
+      const globs = [`${base}/*-branches/**`];
+      this.watcher = chokidar.watch(globs, {ignoreInitial: true, depth: 3});
+      const onFsEvent = () => this.scheduleImmediatePush();
+      this.watcher.on('add', onFsEvent).on('addDir', onFsEvent).on('unlink', onFsEvent).on('unlinkDir', onFsEvent).on('change', onFsEvent);
+    } catch {}
+  }
+
+  private async scheduleImmediatePush() {
+    if (this.immediatePushTimer) clearTimeout(this.immediatePushTimer);
+    this.immediatePushTimer = setTimeout(async () => {
+      const subs = [...this.clients].filter(c => c.subs.has('worktrees'));
+      if (subs.length === 0) return;
+      const changed = await this.refreshSnapshotIfChanged(true);
+      if (!changed) return;
+      const msg: ServerToClient = {type: 'worktrees.snapshot', version: this.version, items: this.lastSnapshot || []};
+      const text = JSON.stringify(msg);
+      for (const c of subs) {
+        try { c.ws.send(text); } catch {}
+      }
+    }, 250); // debounce bursts
   }
 }
 
