@@ -4,6 +4,7 @@ import type {WorktreeInfo} from '../../../models.js';
 import type {ColumnWidths} from './hooks/useColumnWidths.js';
 import {stringDisplayWidth} from '../../../shared/utils/formatting.js';
 import {getAISymbol} from './utils.js';
+import StatusChip from '../../common/StatusChip.js';
 
 interface WorkspaceGroupRowProps {
   workspace: WorktreeInfo; // header item with is_workspace_header
@@ -23,7 +24,6 @@ export const WorkspaceGroupRow = memo<WorkspaceGroupRowProps>(({workspace, globa
     : headerText;
 
   const cells = [
-    {text: numberText, width: columnWidths.number, justify: 'flex-start' as const},
     {text: truncatedHeader, width: columnWidths.projectFeature, justify: 'flex-start' as const},
     {text: ai, width: columnWidths.ai, justify: 'center' as const},
     {text: '', width: columnWidths.diff, justify: 'flex-end' as const},
@@ -90,10 +90,19 @@ export const WorkspaceGroupRow = memo<WorkspaceGroupRowProps>(({workspace, globa
 
   return (
     <Box>
+      {/* First column: # */}
+      <Box width={columnWidths.number} justifyContent="flex-start" marginRight={1}>
+        <Text bold={selected} inverse={selected}>{formatCellText(numberText, columnWidths.number, 'flex-start')}</Text>
+      </Box>
+      {/* Second column: STATUS (blank for workspace rows) */}
+      <Box width={columnWidths.status} justifyContent="flex-start" marginRight={1}>
+        <StatusChip label={''} color={'black'} fg={'white'} width={columnWidths.status} />
+      </Box>
+      {/* Remaining columns: PROJECT/FEATURE, AI, DIFF, CHANGES, PR */}
       {cells.map((cell, idx) => (
         <Box key={idx} width={cell.width} justifyContent={cell.justify} marginRight={idx < cells.length - 1 ? 1 : 0}>
           <Text bold={selected} inverse={selected}>
-            {idx === 1
+            {idx === 0
               ? renderProjectFeatureCell(cell.text, cell.width, cell.justify)
               : formatCellText(cell.text, cell.width, cell.justify)}
           </Text>
@@ -106,6 +115,7 @@ export const WorkspaceGroupRow = memo<WorkspaceGroupRowProps>(({workspace, globa
   const prevW = prev.workspace;
   const nextW = next.workspace;
   const widthsEqual = prev.columnWidths.number === next.columnWidths.number &&
+    prev.columnWidths.status === next.columnWidths.status &&
     prev.columnWidths.projectFeature === next.columnWidths.projectFeature &&
     prev.columnWidths.ai === next.columnWidths.ai &&
     prev.columnWidths.diff === next.columnWidths.diff &&
