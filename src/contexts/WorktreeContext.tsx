@@ -568,12 +568,8 @@ export function WorktreeProvider({
         // No AI tool available or selected, create regular bash session
         tmuxService.createSession(sessionName, worktree.path, true);
       }
-      
-      configureTmuxDisplayTime();
     }
-    
-    configureTmuxDisplayTime();
-    tmuxService.attachSessionInteractive(sessionName);
+    tmuxService.attachSessionWithControls(sessionName);
   }, [tmuxService, availableAITools]);
 
   // Attach AI session for a workspace (cwd = workspaces/<feature>)
@@ -609,9 +605,7 @@ export function WorktreeProvider({
     if (!activeSessions.includes(sessionName)) {
       createShellSession(worktree.project, worktree.feature, worktree.path);
     }
-    
-    configureTmuxDisplayTime();
-    tmuxService.attachSessionInteractive(sessionName);
+    tmuxService.attachSessionWithControls(sessionName);
   }, [tmuxService]);
 
   const attachRunSession = useCallback(async (worktree: WorktreeInfo): Promise<'success' | 'no_config'> => {
@@ -629,9 +623,7 @@ export function WorktreeProvider({
     if (!activeSessions.includes(sessionName)) {
       createRunSession(worktree.project, worktree.feature, worktree.path);
     }
-    
-    configureTmuxDisplayTime();
-    tmuxService.attachSessionInteractive(sessionName);
+    tmuxService.attachSessionWithControls(sessionName);
     return 'success';
   }, [tmuxService]);
 
@@ -786,7 +778,6 @@ export function WorktreeProvider({
       }
     }
     
-    configureTmuxDisplayTime();
     
     return sessionName;
   }, [tmuxService, availableAITools]);
@@ -796,7 +787,6 @@ export function WorktreeProvider({
     const shell = process.env.SHELL || '/bin/bash';
     
     tmuxService.createSessionWithCommand(sessionName, cwd, shell, true);
-    configureTmuxDisplayTime();
     
     return sessionName;
   }, [tmuxService]);
@@ -810,7 +800,6 @@ export function WorktreeProvider({
     tmuxService.createSession(sessionName, cwd);
     // Auto-destroy session when program exits
     tmuxService.setSessionOption(sessionName, 'remain-on-exit', 'off');
-    configureTmuxDisplayTime();
     
     try {
       const configContent = gitService.readRunConfig(project);
@@ -920,10 +909,6 @@ export function WorktreeProvider({
     const projectName = path.basename(projectPath);
     gitService.linkClaudeSettings(projectName, worktreePath);
   }, [gitService]);
-
-  const configureTmuxDisplayTime = useCallback(() => {
-    tmuxService.setOption('display-time', String(TMUX_DISPLAY_TIME));
-  }, [tmuxService]);
 
   // Auto-refresh intervals
   // Regular cache-based refresh cycle
