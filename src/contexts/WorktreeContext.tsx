@@ -76,6 +76,16 @@ interface WorktreeContextType {
 
 const WorktreeContext = createContext<WorktreeContextType | null>(null);
 
+// Exported sorter to enable unit testing of cross-project ordering
+export function sortWorktreeSummaries<T extends {last_commit_ts?: number; project: string; feature: string}>(rows: T[]): T[] {
+  return rows.sort((a, b) => {
+    const d = (b.last_commit_ts || 0) - (a.last_commit_ts || 0);
+    if (d !== 0) return d;
+    if (a.project !== b.project) return a.project.localeCompare(b.project);
+    return a.feature.localeCompare(b.feature);
+  });
+}
+
 // Extracted decision helper for testability and clarity
 export function shouldPromptForAITool(
   availableTools: (keyof typeof AI_TOOLS)[],
@@ -140,7 +150,7 @@ export function WorktreeProvider({
     feature: string; 
     path: string; 
     branch: string; 
-    mtime?: number
+    last_commit_ts?: number;
   }>> => {
     const projects = gitService.discoverProjects();
     // Limit concurrent project scans to reduce fs/process load
@@ -149,11 +159,14 @@ export function WorktreeProvider({
     );
     
     // Flatten the results
-    const rows = [];
+    const rows: Array<{project: string; feature: string; path: string; branch: string; last_commit_ts?: number}> = [];
     for (const worktrees of allWorktrees) {
       for (const wt of worktrees) rows.push(wt);
     }
-    
+
+    // Global sort across all projects: latest commit first
+    sortWorktreeSummaries(rows);
+
     return rows;
   }, [gitService]);
 
@@ -161,7 +174,8 @@ export function WorktreeProvider({
     project: string; 
     feature: string; 
     path: string; 
-    branch: string
+    branch: string;
+    last_commit_ts?: number;
   }>): Promise<WorktreeInfo[]> => {
     // Get existing worktrees to preserve idle timers and kill flags
     const existingWorktrees = new Map(worktrees.map(w => [`${w.project}/${w.feature}`, w]));
@@ -198,7 +212,7 @@ export function WorktreeProvider({
           branch: w.branch,
           git: gitStatus,
           session: sessionInfo,
-          mtime: w.mtime || 0,
+          last_commit_ts: (w as any).last_commit_ts || 0,
         });
       } catch (err) {
         // eslint-disable-next-line no-console
