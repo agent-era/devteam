@@ -81,7 +81,7 @@ export function statusLabelFromReason(reason: string | null | undefined): string
     case 'pr-merged':
       return 'merged';
     case 'claude-ready':
-      return '';
+      return 'ready';
     default:
       return '';
   }
@@ -108,7 +108,8 @@ export function statusColorsFromReason(reason: string | null | undefined): {bg: 
     case 'pr-merged':
       return {bg: 'green', fg};
     case 'claude-ready':
-      return {bg: 'green', fg};
+      // Show text 'ready' but with default (black) background
+      return {bg: 'black', fg};
     default:
       return {bg: 'gray', fg};
   }
