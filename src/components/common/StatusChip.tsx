@@ -22,7 +22,8 @@ export default function StatusChip({label, color, fg = 'white', width}: StatusCh
         visible = visible.slice(0, Math.max(0, width));
       }
       const pad = Math.max(0, width - stringDisplayWidth(visible));
-      const left = Math.floor(pad / 2);
+      // Tie-break toward left: put extra space on the left when pad is odd
+      const left = Math.ceil(pad / 2);
       const right = pad - left;
       return ' '.repeat(left) + visible + ' '.repeat(right);
     };
@@ -48,7 +49,8 @@ export default function StatusChip({label, color, fg = 'white', width}: StatusCh
       return visible;
     }
     const pad = max - stringDisplayWidth(visible);
-    const left = Math.floor(pad / 2);
+    // Tie-break toward left: put extra space on the left when pad is odd
+    const left = Math.ceil(pad / 2);
     const right = pad - left;
     return ' '.repeat(left) + visible + ' '.repeat(right);
   };

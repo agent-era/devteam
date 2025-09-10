@@ -102,7 +102,8 @@ export function statusLabelFromReason(reason: StatusReason | string | null | und
     case StatusReason.CLAUDE_WAITING:
       return 'waiting';
     case StatusReason.UNCOMMITTED_CHANGES:
-      return 'modified';
+      // Rename: show 'uncommitted' instead of 'modified'
+      return 'uncommitted';
     case StatusReason.UNPUSHED_COMMITS:
       return 'un-pushed';
     case StatusReason.PR_CONFLICTS:

@@ -208,7 +208,7 @@ function generateMainListOutput(): string {
     const cs = session?.claude_status || 'not_running';
     if (cs === 'working') statusLabel = 'working';
     else if (cs === 'waiting') statusLabel = 'waiting';
-    else if (gitStatus?.has_changes) statusLabel = 'modified';
+    else if (gitStatus?.has_changes) statusLabel = 'uncommitted';
     else if ((gitStatus?.ahead || 0) > 0) statusLabel = 'un-pushed';
     else if (prStatus?.mergeable === 'CONFLICTING') statusLabel = 'conflict';
     else if (prStatus?.checks === 'failing') statusLabel = 'pr-failed';
