@@ -66,10 +66,6 @@ Use DevTeam to manage a team of agents working in parallel on your projects:
 - Test: `npm test`
 - Terminal E2E tests: `npm run test:terminal`
 
-## Relay (Planned)
-
-The blind relay is part of the target architecture, but its implementation is deferred to a later phase. The current iteration focuses on a local loopback WebSocket sync server for development. See devteam-web/docs/requirements.md for updated phasing notes.
-
 ## Sync Server (Local Mode)
 
 For local development without a relay, a tiny WebSocket sync server exposes basic state. Right now it serves a worktree list snapshot and pushes periodic refreshes.
@@ -91,10 +87,6 @@ const c = new SyncClient({url: 'ws://127.0.0.1:8787/sync', autoSubscribe: true})
 c.on('worktrees', (items, version) => console.log(version, items));
 c.connect();
 ```
-
-## Using The Relay With Sync (Concept)
-
-In a later phase, both the agent and the browser will connect out to a blind relay and exchange the same sync messages (E2E‑encrypted + msgpack). For now, use the local sync server during development.
 
 ## Publishing (scoped public)
 
