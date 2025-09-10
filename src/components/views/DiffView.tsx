@@ -201,6 +201,47 @@ type Props = {
 type ViewMode = 'unified' | 'sidebyside';
 type WrapMode = 'truncate' | 'wrap';
 
+// Exported utility for formatting comments into a Claude-friendly prompt
+export function formatCommentsAsPrompt(
+  comments: any[],
+  opts?: {workspaceFeature?: string; project?: string}
+): string {
+  let prompt = "Please address the following code review comments:\n\n";
+  if (opts?.workspaceFeature && opts?.project) {
+    prompt += `Context: In workspace '${opts.workspaceFeature}', target child directory: ./${opts.project}\n\n`;
+  }
+
+  const commentsByFile: {[key: string]: typeof comments} = {};
+  comments.forEach(comment => {
+    if (!commentsByFile[comment.fileName]) {
+      commentsByFile[comment.fileName] = [];
+    }
+    commentsByFile[comment.fileName].push(comment);
+  });
+
+  Object.entries(commentsByFile).forEach(([fileName, fileComments]) => {
+    prompt += `File: ${fileName}\n`;
+    fileComments.forEach(comment => {
+      if (comment.lineIndex !== undefined) {
+        // Normal line with line number
+        prompt += `  Line ${comment.lineIndex + 1}: ${comment.lineText}\n`;
+      } else if (
+        comment.lineText &&
+        comment.lineText.trim().length > 0 &&
+        !comment.isFileLevel
+      ) {
+        // Removed line or other content - show line content without line number
+        prompt += `  Line content: ${comment.lineText}\n`;
+      }
+      // For file headers (no meaningful lineText), just show the comment
+      prompt += `  Comment: ${comment.commentText}\n`;
+    });
+    prompt += "\n";
+  });
+
+  return prompt;
+}
+
 export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, diffType = 'full', onAttachToSession, workspaceFeature}: Props) {
   const {rows: terminalHeight, columns: terminalWidth} = useTerminalDimensions();
   const [lines, setLines] = useState<DiffLine[]>([]);
@@ -675,38 +716,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     }
   }, [selectedLine, viewMode, wrapMode, terminalWidth, lines, sideBySideLines, measuredPageSize, isFileNavigation]);
 
-  const formatCommentsAsPrompt = (comments: any[], opts?: {workspaceFeature?: string; project?: string}): string => {
-    let prompt = "Please address the following code review comments:\\n\\n";
-    if (opts?.workspaceFeature && opts?.project) {
-      prompt += `Context: In workspace '${opts.workspaceFeature}', target child directory: ./${opts.project}\\n\\n`;
-    }
-    
-    const commentsByFile: {[key: string]: typeof comments} = {};
-    comments.forEach(comment => {
-      if (!commentsByFile[comment.fileName]) {
-        commentsByFile[comment.fileName] = [];
-      }
-      commentsByFile[comment.fileName].push(comment);
-    });
-
-    Object.entries(commentsByFile).forEach(([fileName, fileComments]) => {
-      prompt += `File: ${fileName}\\n`;
-      fileComments.forEach(comment => {
-        if (comment.lineIndex !== undefined) {
-          // Normal line with line number
-          prompt += `  Line ${comment.lineIndex + 1}: ${comment.lineText}\\n`;
-        } else if (comment.lineText && comment.lineText.trim().length > 0) {
-          // Removed line or other content - show line content without line number
-          prompt += `  Line content: ${comment.lineText}\\n`;
-        }
-        // For file headers (no meaningful lineText), just show the comment
-        prompt += `  Comment: ${comment.commentText}\\n`;
-      });
-      prompt += "\\n";
-    });
-    
-    return prompt;
-  };
+  
 
   const getLastTwoCommentLines = (comments: any[]): string[] => {
     const lines: string[] = [];
@@ -779,7 +789,15 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     Object.entries(commentsByFile).forEach(([fileName, fileComments]) => {
       messageLines.push(`File: ${fileName}`);
       fileComments.forEach(comment => {
-        messageLines.push(`  Line ${comment.lineIndex + 1}: ${comment.lineText}`);
+        if (comment.lineIndex !== undefined) {
+          messageLines.push(`  Line ${comment.lineIndex + 1}: ${comment.lineText}`);
+        } else if (
+          comment.lineText &&
+          comment.lineText.trim().length > 0 &&
+          !comment.isFileLevel
+        ) {
+          messageLines.push(`  Line content: ${comment.lineText}`);
+        }
         messageLines.push(`  Comment: ${comment.commentText}`);
       });
       messageLines.push("");
@@ -884,11 +902,12 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
         const perFileIndex = unifiedPerFileIndex[selectedLine];
         if (perFileIndex !== undefined) {
           // Original logic for lines with valid line numbers
-          commentStore.addComment(perFileIndex, currentLine.fileName, currentLine.text, commentText);
+          commentStore.addComment(perFileIndex, currentLine.fileName, currentLine.text, commentText, false);
         } else {
           // New logic for removed lines and file headers
-          const lineText = currentLine.type === 'header' ? currentLine.fileName : currentLine.text;
-          commentStore.addComment(undefined, currentLine.fileName, lineText, commentText);
+          const isFileLevel = currentLine.type === 'header' && currentLine.headerType === 'file';
+          const lineText = isFileLevel ? (currentLine.fileName || '') : currentLine.text;
+          commentStore.addComment(undefined, currentLine.fileName, lineText, commentText, isFileLevel);
         }
       }
     } else {
@@ -900,18 +919,19 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
         const perFileIndex = sideBySidePerFileIndex[selectedLine];
         if (perFileIndex !== undefined) {
           // Original logic for lines with valid line numbers
-          commentStore.addComment(perFileIndex, fileName, lineText, commentText);
+          commentStore.addComment(perFileIndex, fileName, lineText, commentText, false);
         } else {
           // New logic for removed lines and file headers
           let textForComment = '';
-          if (currentLine?.left?.type === 'header' && currentLine.left.headerType === 'file') {
+          const isFileLevel = currentLine?.left?.type === 'header' && currentLine.left.headerType === 'file';
+          if (isFileLevel) {
             // File header - use filename as line text
             textForComment = fileName || '';
           } else {
             // Removed lines - use the line text
             textForComment = currentLine?.left?.text || lineText;
           }
-          commentStore.addComment(undefined, fileName, textForComment, commentText);
+          commentStore.addComment(undefined, fileName, textForComment, commentText, isFileLevel);
         }
       }
     }
