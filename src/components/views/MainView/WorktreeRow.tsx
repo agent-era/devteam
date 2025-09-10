@@ -8,7 +8,7 @@ import type {PRStatus} from '../../../models.js';
 import { formatDiffStats, formatGitChanges, getAISymbol, formatPRStatus, shouldDimRow } from './utils.js';
 import type {ColumnWidths} from './hooks/useColumnWidths.js';
 import StatusChip from '../../common/StatusChip.js';
-import {getStatusMeta} from './highlight.js';
+import {getStatusMeta, COLUMNS} from './highlight.js';
 
 interface WorktreeRowProps {
   worktree: WorktreeInfo;
@@ -140,7 +140,7 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
         <>
           {' '.repeat(pad)}
           {/* Feature keeps the cell's computed color */}
-          <Text color={getCellForeground(1)}>{left}</Text>
+          <Text color={getCellForeground(COLUMNS.PROJECT_FEATURE)}>{left}</Text>
           {/* Project (with brackets) dimmed */}
           {bracketed ? renderBracket(bracketed) : null}
         </>
@@ -152,7 +152,7 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
       return (
         <>
           {' '.repeat(leftPad)}
-          <Text color={getCellForeground(1)}>{left}</Text>
+          <Text color={getCellForeground(COLUMNS.PROJECT_FEATURE)}>{left}</Text>
           {bracketed ? renderBracket(bracketed) : null}
           {' '.repeat(rightPad)}
         </>
@@ -161,7 +161,7 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
     // flex-start
     return (
       <>
-        <Text color={getCellForeground(1)}>{left}</Text>
+        <Text color={getCellForeground(COLUMNS.PROJECT_FEATURE)}>{left}</Text>
         {bracketed ? renderBracket(bracketed) : null}
         {' '.repeat(pad)}
       </>
@@ -172,17 +172,17 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
     <Box key={`worktree-${globalIndex}`}>
       {/* First column: # */}
       <Box
-        width={cells[0].width}
-        justifyContent={cells[0].justify}
+        width={cells[COLUMNS.NUMBER].width}
+        justifyContent={cells[COLUMNS.NUMBER].justify}
         marginRight={1}
       >
         <Text
-          backgroundColor={getCellBackground(0)}
-          color={getCellForeground(0)}
-          bold={selected && !isPriorityCell(0)}
-          inverse={selected && !isPriorityCell(0) && !isDimmed}
+          backgroundColor={getCellBackground(COLUMNS.NUMBER)}
+          color={getCellForeground(COLUMNS.NUMBER)}
+          bold={selected && !isPriorityCell(COLUMNS.NUMBER)}
+          inverse={selected && !isPriorityCell(COLUMNS.NUMBER) && !isDimmed}
         >
-          {formatCellText(cells[0].text, cells[0].width, cells[0].justify)}
+          {formatCellText(cells[COLUMNS.NUMBER].text, cells[COLUMNS.NUMBER].width, cells[COLUMNS.NUMBER].justify)}
         </Text>
       </Box>
 
@@ -204,11 +204,11 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
           >
             <Text
               backgroundColor={getCellBackground(cellIndex)}
-              color={cellIndex === 1 ? undefined : getCellForeground(cellIndex)}
+              color={cellIndex === COLUMNS.PROJECT_FEATURE ? undefined : getCellForeground(cellIndex)}
               bold={selected && !isPriorityCell(cellIndex)}
               inverse={selected && !isPriorityCell(cellIndex) && !isDimmed}
             >
-              {cellIndex === 1
+              {cellIndex === COLUMNS.PROJECT_FEATURE
                 ? renderProjectFeatureCell(cell.text, cell.width, cell.justify)
                 : formatCellText(cell.text, cell.width, cell.justify)}
             </Text>

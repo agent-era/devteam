@@ -94,7 +94,8 @@ export function statusColorsFromReason(reason: string | null | undefined): {bg: 
     case 'claude-waiting':
       return {bg: 'yellow', fg};
     case 'unstaged-changes':
-      return {bg: 'blue', fg};
+      // Show 'modified' as colored text only (no special background)
+      return {bg: 'black', fg: 'blue'};
     case 'unpushed-commits':
       return {bg: 'cyan', fg};
     case 'pr-conflicts':
