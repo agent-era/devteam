@@ -21,13 +21,14 @@ import {
   RUN_CONFIG_CLAUDE_PROMPT,
   TMUX_DISPLAY_TIME,
 } from '../constants.js';
-import {getProjectsDirectory} from '../config.js';
+import {getProjectsDirectory, isAppIntervalsEnabled} from '../config.js';
 import {ensureDirectory, copyWithIgnore} from '../shared/utils/fileSystem.js';
 import {generateTimestamp} from '../shared/utils/formatting.js';
 import {runClaudeSync, detectAvailableAITools, runCommandQuick} from '../shared/utils/commandExecutor.js';
 import {AI_TOOLS} from '../constants.js';
 import type {AITool} from '../models.js';
 import {useInputFocus} from './InputFocusContext.js';
+import {startIntervalIfEnabled} from '../shared/utils/intervals.js';
 import {useGitHubContext} from './GitHubContext.js';
 import {logDebug, logError} from '../shared/utils/logger.js';
 import {Timer} from '../shared/utils/timing.js';
@@ -1006,6 +1007,7 @@ export function WorktreeProvider({
   // Auto-refresh intervals
   // Regular cache-based refresh cycle
   useEffect(() => {
+    if (!isAppIntervalsEnabled()) return;
     const shouldRefresh = Date.now() - lastRefreshed > CACHE_DURATION;
     if (shouldRefresh) {
       refresh('none').catch(error => {
@@ -1016,6 +1018,7 @@ export function WorktreeProvider({
 
   // Initial memory check on mount
   useEffect(() => {
+    if (!isAppIntervalsEnabled()) return;
     refreshMemoryStatus().catch(error => {
       logError('Initial memory status check failed', { error: error instanceof Error ? error.message : String(error) });
     });
@@ -1023,28 +1026,31 @@ export function WorktreeProvider({
 
   // Initial version check on mount + daily
   useEffect(() => {
+    if (!isAppIntervalsEnabled()) return;
     refreshVersionInfo().catch(error => {
       logError('Initial version check failed', { error: error instanceof Error ? error.message : String(error) });
     });
-    const interval = setInterval(() => {
+    const clear = startIntervalIfEnabled(() => {
       refreshVersionInfo().catch(() => {});
     }, VERSION_CHECK_INTERVAL);
-    return () => clearInterval(interval);
+    return clear;
   }, [refreshVersionInfo]);
 
   // Slow discovery: rebuild worktree list every 60s (or when actions change structure)
   useEffect(() => {
-    const interval = setInterval(() => {
+    if (!isAppIntervalsEnabled()) return;
+    const clear = startIntervalIfEnabled(() => {
       if (!isAnyDialogFocused) {
         // Background discovery of worktrees (structure)
         refresh('none').catch(err => logError('Background discovery failed', { error: err instanceof Error ? err.message : String(err) }));
       }
     }, 60_000);
-    return () => clearInterval(interval);
+    return clear;
   }, [refresh, isAnyDialogFocused, tmuxService]);
 
   useEffect(() => {
-    const interval = setInterval(() => {
+    if (!isAppIntervalsEnabled()) return;
+    const clear = startIntervalIfEnabled(() => {
       // Skip memory status refresh if any dialog is focused to avoid interrupting typing
       if (!isAnyDialogFocused) {
         refreshMemoryStatus().catch(error => {
@@ -1052,7 +1058,7 @@ export function WorktreeProvider({
         });
       }
     }, MEMORY_REFRESH_DURATION);
-    return () => clearInterval(interval);
+    return clear;
   }, [refreshMemoryStatus, isAnyDialogFocused]);
 
   const contextValue: WorktreeContextType = {

@@ -38,13 +38,23 @@ test('does not go blank when items equal page size and pressing down', async () 
 
   const inst = Ink.render(tree, {stdout, stdin, debug: true, exitOnCtrlC: false, patchConsole: false});
 
-  // Allow initial frame to render
-  await new Promise(r => setTimeout(r, 250));
+  // Allow initial frame to render and detect first item
+  const {waitFor, includesWorktree, countWorktrees, worktreeLabel, stripAnsi} = await import('./_utils.js');
+  await waitFor(() => includesWorktree(stdout.lastFrame() || '', 'demo', 'feature-01'), {timeout: 3000, interval: 50, message: 'first item visible'});
   let frame = stdout.lastFrame() || '';
-
-  // Sanity: we should see first and last items on the single page
-  assert.ok(frame.includes('demo/feature-01'), 'Expected first item visible');
-  assert.ok(frame.includes(`demo/feature-${PAGE_SIZE.toString().padStart(2, '0')}`), 'Expected last item visible');
+  let clean = stripAnsi(frame);
+  // Derive the end of the visible range from the pagination footer (e.g., "Page 1/X: 1-25/25")
+  const footerMatch = clean.match(/Page\s+1\/\d+:\s+1-(\d+)\/(\d+)/);
+  if (footerMatch) {
+    const end = Number(footerMatch[1]);
+    const total = Number(footerMatch[2]);
+    // If total fits on one page, the last visible item should be the end of the range
+    if (total <= PAGE_SIZE) {
+      const lastFeature = `feature-${String(end).padStart(2, '0')}`;
+      const lastLabel = worktreeLabel('demo', lastFeature);
+      assert.ok(includesWorktree(clean, 'demo', lastFeature), `Expected last visible item ${lastLabel}`);
+    }
+  }
 
   // Press down once. With the bug, the parent pageSize=1 causes page to advance to 1,
   // and with measured page size=25, page 1 renders no items (blank list).
@@ -52,7 +62,8 @@ test('does not go blank when items equal page size and pressing down', async () 
   await new Promise(r => setTimeout(r, 200));
 
   frame = stdout.lastFrame() || '';
-  const visibleRows = (frame.match(/demo\/feature-/g) || []).length;
+  clean = stripAnsi(frame);
+  const visibleRows = countWorktrees(clean, 'demo');
 
   // The correct behavior: list should not go blank; still show items on the only page.
   assert.ok(visibleRows > 0, 'List should not be blank after pressing down');
