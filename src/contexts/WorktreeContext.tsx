@@ -310,7 +310,7 @@ export function WorktreeProvider({
 
       
       const timing = timer.elapsed();
-      logDebug(`[Refresh.Full] Complete: ${enrichedList.length} worktrees in ${timing.formatted}`);
+      logDebug(`[Refresh.Full] Complete: ${finalList.length} worktrees in ${timing.formatted}`);
       
     } catch (error) {
       const timing = timer.elapsed();
@@ -319,7 +319,7 @@ export function WorktreeProvider({
     } finally {
       setLoading(false);
     }
-  }, [loading, collectWorktrees, attachRuntimeData, getPRStatus, setVisibleWorktrees, refreshPRStatus]);
+  }, [loading, collectWorktrees, buildWorkspaceView, getPRStatus, setVisibleWorktrees, refreshPRStatus]);
 
   const forceRefreshVisible = useCallback(async (currentPage: number, pageSize: number) => {
     if (loading || worktrees.length === 0) return;

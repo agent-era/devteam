@@ -154,16 +154,14 @@ export default function MainView({
           
           if ((worktree as any).is_workspace_header) {
             return (
-              <>
-                <WorkspaceGroupRow
-                  key={`ws-${getWorktreeKey(worktree, index)}`}
-                  workspace={worktree}
-                  index={index}
-                  globalIndex={globalIndex}
-                  selected={isSelected}
-                  columnWidths={columnWidths}
-                />
-              </>
+              <WorkspaceGroupRow
+                key={`ws-${getWorktreeKey(worktree, index)}`}
+                workspace={worktree}
+                index={index}
+                globalIndex={globalIndex}
+                selected={isSelected}
+                columnWidths={columnWidths}
+              />
             );
           }
           return (

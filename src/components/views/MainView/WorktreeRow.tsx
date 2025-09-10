@@ -43,8 +43,10 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
   
   // Format all data for display
   const data = {
+    // Hide row number for workspace children to visually nest them
     number: worktree.is_workspace_child ? '' : String(globalIndex + 1),
-    projectFeature: `${worktree.is_workspace_child ? '  ' : ''}${worktree.project}/${worktree.feature}`,
+    // Display as: feature [project]; indent workspace children by two spaces
+    projectFeature: `${worktree.is_workspace_child ? '  ' : ''}${worktree.feature} [${worktree.project}]`,
     ai: getAISymbol(worktree.session?.ai_status || '', worktree.session?.attached || false),
     diff: formatDiffStats(worktree.git?.base_added_lines || 0, worktree.git?.base_deleted_lines || 0),
     changes: formatGitChanges(worktree.git?.ahead || 0, worktree.git?.behind || 0),
@@ -117,6 +119,56 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
     return visible + ' '.repeat(pad);
   };
   
+  // Render helper for the Project/Feature cell to dim bracketed project
+  const renderProjectFeatureCell = (text: string, width: number, justify: 'flex-start' | 'center' | 'flex-end') => {
+    const raw = (text ?? '').trim();
+    let visible = raw;
+    if (stringDisplayWidth(visible) > width) {
+      visible = visible.slice(0, Math.max(0, width));
+    }
+
+    // Expected format: feature [project]; dim the bracketed portion
+    const bracketIndex = visible.indexOf('[');
+    const left = bracketIndex >= 0 ? visible.slice(0, bracketIndex) : visible;
+    // Include brackets if present in "bracketed" segment
+    const bracketed = bracketIndex >= 0 ? visible.slice(bracketIndex) : '';
+
+    const contentWidth = stringDisplayWidth(visible);
+    const pad = Math.max(0, width - contentWidth);
+
+    if (justify === 'flex-end') {
+      return (
+        <>
+          {' '.repeat(pad)}
+          {/* Feature keeps the cell's computed color */}
+          <Text color={getCellForeground(1)}>{left}</Text>
+          {/* Project (with brackets) dimmed */}
+          {bracketed ? <Text dimColor>{bracketed}</Text> : null}
+        </>
+      );
+    }
+    if (justify === 'center') {
+      const leftPad = Math.floor(pad / 2);
+      const rightPad = pad - leftPad;
+      return (
+        <>
+          {' '.repeat(leftPad)}
+          <Text color={getCellForeground(1)}>{left}</Text>
+          {bracketed ? <Text dimColor>{bracketed}</Text> : null}
+          {' '.repeat(rightPad)}
+        </>
+      );
+    }
+    // flex-start
+    return (
+      <>
+        <Text color={getCellForeground(1)}>{left}</Text>
+        {bracketed ? <Text dimColor>{bracketed}</Text> : null}
+        {' '.repeat(pad)}
+      </>
+    );
+  };
+
   return (
     <Box key={`worktree-${globalIndex}`}>
       {cells.map((cell, cellIndex) => (
@@ -128,11 +180,13 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
         >
           <Text
             backgroundColor={getCellBackground(cellIndex)}
-            color={getCellForeground(cellIndex)}
+            color={cellIndex === 1 ? undefined : getCellForeground(cellIndex)}
             bold={selected && !isPriorityCell(cellIndex)}
             inverse={selected && !isPriorityCell(cellIndex) && !isDimmed}
           >
-            {formatCellText(cell.text, cell.width, cell.justify)}
+            {cellIndex === 1
+              ? renderProjectFeatureCell(cell.text, cell.width, cell.justify)
+              : formatCellText(cell.text, cell.width, cell.justify)}
           </Text>
         </Box>
       ))}
