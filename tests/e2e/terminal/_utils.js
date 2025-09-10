@@ -17,6 +17,30 @@ export class StdinStub extends EventEmitter {
   ref(){}
   unref(){}
   read(){ return null; }
+  write(data){
+    const s = typeof data === 'string' ? data : String(data);
+    this.emit('data', Buffer.from(s, 'utf8'));
+    return true;
+  }
+  emit(event, ...args){
+    // Also emit a keypress event for Ink's useInput parsing
+    if (event === 'data') {
+      try {
+        const chunk = args[0];
+        const str = typeof chunk === 'string' ? chunk : String(chunk);
+        const key = {
+          name: str,
+          ctrl: false,
+          meta: false,
+          shift: false,
+          escape: str === '\u001b',
+          return: str === '\r'
+        };
+        super.emit('keypress', str, key);
+      } catch {}
+    }
+    return super.emit(event, ...args);
+  }
 }
 
 // Install global timer guards to prevent hanging between tests
