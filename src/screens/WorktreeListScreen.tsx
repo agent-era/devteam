@@ -34,7 +34,7 @@ export default function WorktreeListScreen({
   const {worktrees, selectedIndex, selectWorktree, refresh, refreshVisibleStatus, forceRefreshVisible, attachSession, attachShellSession, needsToolSelection, lastRefreshed, memoryStatus, versionInfo, discoverProjects} = useWorktreeContext();
   const {setVisibleWorktrees} = useGitHubContext();
   const {isAnyDialogFocused} = useInputFocus();
-  const {showAIToolSelection, tmuxHintShown, showTmuxHintFor, showList, runWithLoading} = useUIContext();
+  const {showAIToolSelection, showList, runWithLoading} = useUIContext();
   const [pageSize, setPageSize] = useState(1);
   const [currentPage, setCurrentPage] = useState(0);
   const [hasProjects, setHasProjects] = useState<boolean>(false);
@@ -135,11 +135,7 @@ export default function WorktreeListScreen({
         // Show AI tool selection dialog
         showAIToolSelection(selectedWorktree);
       } else {
-        // Proceed with session attachment
-        if (!tmuxHintShown) {
-          showTmuxHintFor(selectedWorktree);
-          return;
-        }
+        // Proceed with session attachment immediately (no tmux hint)
         runWithLoading(() => attachSession(selectedWorktree));
       }
     } catch (error) {
