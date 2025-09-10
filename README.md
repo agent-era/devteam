@@ -66,36 +66,9 @@ Use DevTeam to manage a team of agents working in parallel on your projects:
 - Test: `npm test`
 - Terminal E2E tests: `npm run test:terminal`
 
-## Relay (Blind Broker)
+## Relay (Planned)
 
-This package ships a minimal WebSocket relay and a matching client that forward opaque frames by room. Use it to prototype the zero‑knowledge relay described in the Web UI + Remote Sync plan.
-
-- Start the relay (default `ws://0.0.0.0:8080/relay`):
-
-```
-npx devteam-relay
-# or, if installed globally: devteam-relay
-
-# Env overrides:
-PORT=9090 HOST=127.0.0.1 PATHNAME=/relay npx devteam-relay
-```
-
-- Use the client (Node or browser):
-
-```ts
-import {RelayClient} from '@agent-era/devteam/relay/client';
-
-const client = new RelayClient({ url: 'ws://localhost:8080/relay', roomId: 'demo-room' });
-client.on('open', () => console.log('connected'));
-client.on('message', (data) => console.log('got', typeof data, data));
-client.connect();
-client.send('hello');
-```
-
-Notes
-- Payloads are not inspected or stored.
-- Token validation hook exists but currently accepts all tokens. Provide `tokenValidator` to enforce admission.
-- Heartbeats and reconnects are built-in. E2E crypto and MsgPack framing can be layered on later.
+The blind relay is part of the target architecture, but its implementation is deferred to a later phase. The current iteration focuses on a local loopback WebSocket sync server for development. See devteam-web/docs/requirements.md for updated phasing notes.
 
 ## Sync Server (Local Mode)
 
@@ -119,37 +92,9 @@ c.on('worktrees', (items, version) => console.log(version, items));
 c.connect();
 ```
 
-## Using The Relay With Sync
+## Using The Relay With Sync (Concept)
 
-In remote mode, there’s no inbound port. Both the agent and the browser connect out to the relay and exchange the same sync messages (later E2E‑encrypted + msgpack). Conceptually:
-
-```ts
-// Agent side (inside the DevTeam app):
-import {RelayClient} from '@agent-era/devteam/relay/client';
-const relay = new RelayClient({ url: 'wss://relay.example/relay', roomId: 'room-xyz' });
-relay.on('open', async () => {
-  // Build snapshot and send to all peers
-  const items = await collectWorktrees();
-  relay.send(JSON.stringify({ type: 'worktrees.snapshot', version: 1, items }));
-});
-relay.on('message', (data) => {
-  // Handle commands from browser clients (e.g., create worktree)
-});
-relay.connect();
-
-// Browser side:
-import {RelayClient} from '@agent-era/devteam/relay/client';
-const client = new RelayClient({ url: 'wss://relay.example/relay', roomId: 'room-xyz' });
-client.on('message', (data) => {
-  const msg = JSON.parse(typeof data === 'string' ? data : new TextDecoder().decode(data as ArrayBuffer));
-  if (msg.type === 'worktrees.snapshot') render(msg.items);
-});
-client.connect();
-```
-
-Notes
-- Same message shapes as the local sync server; only the transport changes.
-- In production, payloads are E2E‑encrypted and msgpack‑encoded; the relay carries opaque frames.
+In a later phase, both the agent and the browser will connect out to a blind relay and exchange the same sync messages (E2E‑encrypted + msgpack). For now, use the local sync server during development.
 
 ## Publishing (scoped public)
 

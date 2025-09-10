@@ -4,7 +4,6 @@
   "description": "DevTeam: Git/Tmux development workflow TUI (Node + Ink)",
   "bin": {
     "devteam": "dist/bin/devteam.js",
-    "devteam-relay": "dist/bin/devteam-relay.js",
     "devteam-server": "dist/bin/devteam-server.js"
   },
   "type": "module",
@@ -45,9 +44,6 @@
   ],
   "exports": {
     ".": "./dist/index.js",
-    "./relay": "./dist/relay/index.js",
-    "./relay/server": "./dist/relay/server.js",
-    "./relay/client": "./dist/relay/client.js",
     "./sync": "./dist/sync/index.js",
     "./sync/server": "./dist/sync/server.js",
     "./sync/client": "./dist/sync/client.js"
