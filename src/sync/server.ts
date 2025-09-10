@@ -5,6 +5,7 @@ import {getProjectsDirectory} from '../config.js';
 import {GitService} from '../services/GitService.js';
 import {TmuxService} from '../services/TmuxService.js';
 import type {ClientToServer, ServerToClient, SyncServerOptions, WorktreeSummary} from './types.js';
+import {createHash} from 'node:crypto';
 
 type Client = { ws: WebSocket; subs: Set<string> };
 
@@ -15,13 +16,15 @@ export class SyncServer {
   private clients: Set<Client> = new Set();
   private version = 1;
   private timer?: NodeJS.Timeout;
+  private lastSnapshot: WorktreeSummary[] | null = null;
+  private lastHash: string | null = null;
 
   constructor(opts: SyncServerOptions = {}) {
     this.options = {
       host: opts.host ?? '127.0.0.1',
       port: opts.port ?? 8787,
       path: opts.path ?? '/sync',
-      refreshIntervalMs: opts.refreshIntervalMs ?? 30000,
+      refreshIntervalMs: opts.refreshIntervalMs ?? 5000,
     };
   }
 
@@ -114,26 +117,45 @@ export class SyncServer {
         }
       } catch {}
     }
+    items.sort((a, b) => (a.project === b.project) ? a.feature.localeCompare(b.feature) : a.project.localeCompare(b.project));
     return items;
   }
 
   private async sendWorktreesSnapshot(client: Client) {
-    const items = await this.collectWorktrees();
-    this.version += 1;
-    const msg: ServerToClient = {type: 'worktrees.snapshot', version: this.version, items};
+    if (!this.lastSnapshot) {
+      await this.refreshSnapshotIfChanged(true);
+    }
+    const msg: ServerToClient = {type: 'worktrees.snapshot', version: this.version, items: this.lastSnapshot || []};
     try { client.ws.send(JSON.stringify(msg)); } catch {}
   }
 
   private async pushWorktreesToSubscribers() {
     const subs = [...this.clients].filter(c => c.subs.has('worktrees'));
     if (subs.length === 0) return;
-    const items = await this.collectWorktrees();
-    this.version += 1;
-    const msg: ServerToClient = {type: 'worktrees.snapshot', version: this.version, items};
+    const changed = await this.refreshSnapshotIfChanged(false);
+    if (!changed) return;
+    const msg: ServerToClient = {type: 'worktrees.snapshot', version: this.version, items: this.lastSnapshot || []};
     const text = JSON.stringify(msg);
     for (const c of subs) {
       try { c.ws.send(text); } catch {}
     }
+  }
+
+  private async refreshSnapshotIfChanged(force: boolean): Promise<boolean> {
+    const items = await this.collectWorktrees();
+    const hash = this.hashItems(items);
+    if (this.lastHash !== hash || force || !this.lastSnapshot) {
+      this.lastSnapshot = items;
+      this.lastHash = hash;
+      this.version += 1;
+      return true;
+    }
+    return false;
+  }
+
+  private hashItems(items: WorktreeSummary[]): string {
+    const json = JSON.stringify(items);
+    return createHash('sha1').update(json).digest('hex');
   }
 }
 
