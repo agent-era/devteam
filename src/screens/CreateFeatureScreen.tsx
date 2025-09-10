@@ -1,6 +1,7 @@
 import React from 'react';
 import {Box} from 'ink';
 import CreateFeatureDialog from '../components/dialogs/CreateFeatureDialog.js';
+import {sanitizeFeatureName} from '../shared/utils/validation.js';
 import {useWorktreeContext} from '../contexts/WorktreeContext.js';
 import {useUIContext} from '../contexts/UIContext.js';
 
@@ -24,8 +25,9 @@ export default function CreateFeatureScreen({
   // Updated: support multiple projects; if only one selected, do NOT create a workspace
   const handleSubmit = async (selectedProjects: string[], feature: string) => {
     try {
+      const safeFeature = sanitizeFeatureName(feature);
       // Block if a workspace already exists for this feature name
-      if (workspaceExists(feature)) {
+      if (workspaceExists(safeFeature)) {
         showInfo(`A workspace named '${feature}' already exists. Please choose a different feature name.`, {
           title: 'Workspace Exists',
           onClose: onCancel
@@ -35,7 +37,7 @@ export default function CreateFeatureScreen({
       // Create a worktree for each selected project
       const createdResults = [] as any[];
       for (const p of selectedProjects) {
-        const r = await createFeature(p, feature);
+        const r = await createFeature(p, safeFeature);
         if (r) createdResults.push(r);
       }
 
@@ -61,8 +63,8 @@ export default function CreateFeatureScreen({
       }
 
       // Multiple projects selected -> create a workspace and attach in workspace dir
-      const wsPath = await createWorkspace(feature, selectedProjects);
-      const workspaceWorktree = wsPath ? { project: 'workspace', feature, path: wsPath } as any : null;
+      const wsPath = await createWorkspace(safeFeature, selectedProjects);
+      const workspaceWorktree = wsPath ? { project: 'workspace', feature: safeFeature, path: wsPath } as any : null;
       if (workspaceWorktree) {
         const needsSelection = await needsToolSelection(workspaceWorktree);
         onSuccess();
@@ -70,7 +72,7 @@ export default function CreateFeatureScreen({
         if (needsSelection) {
           showAIToolSelection(workspaceWorktree);
         } else {
-          await attachWorkspaceSession(feature);
+          await attachWorkspaceSession(safeFeature);
         }
       } else {
         onSuccess();
