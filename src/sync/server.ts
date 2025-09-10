@@ -4,7 +4,7 @@ import {parse as parseUrl} from 'node:url';
 import chokidar from 'chokidar';
 import {getProjectsDirectory} from '../config.js';
 import type {ClientToServer, ServerToClient, SyncServerOptions} from './types.js';
-import {DevTeamEngine} from '../engines/DevTeamEngine.js';
+import {DevTeamEngine} from '../engine/DevTeamEngine.js';
 
 type Client = { ws: WebSocket; subs: Set<string> };
 
