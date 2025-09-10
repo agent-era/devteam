@@ -37,16 +37,10 @@ test('attach then detach re-renders the main list (no blank screen)', async () =
   let frame = stdout.lastFrame() || '';
   assert.ok(frame.includes('demo/feature-1'), 'Expected initial list with single worktree');
 
-  // Press Enter to select -> should show tmux hint dialog first
+  // Press Enter to select -> directly attach (simulated)
   stdin.emit('data', Buffer.from('\r'));
-  await new Promise(r => setTimeout(r, 200));
-  frame = stdout.lastFrame() || '';
-  assert.ok(frame.includes('devteam uses tmux'), 'Expected tmux detach hint dialog before attach');
-
-  // Press 'c' to continue and attach (simulated); then detach
-  stdin.emit('data', Buffer.from('c'));
-  // Give a moment for simulated attach/detach and redraw
   await new Promise(r => setTimeout(r, 300));
+  // Give a moment for simulated attach/detach and redraw
   frame = stdout.lastFrame() || '';
 
   // After detach, screen should re-render main list (not stay blank)
@@ -55,4 +49,3 @@ test('attach then detach re-renders the main list (no blank screen)', async () =
 
   try { inst.unmount?.(); } catch {}
 });
-

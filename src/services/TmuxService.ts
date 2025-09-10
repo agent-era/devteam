@@ -150,6 +150,49 @@ export class TmuxService {
     runInteractive('tmux', ['attach-session', '-t', sessionName]);
   }
 
+  /**
+   * Configure a tmux session with mouse support and a clickable status bar
+   * that exposes Detach and Kill actions.
+   * Uses tmux status-format ranges (tmux 3.2+) and MouseDown1Status binding.
+   */
+  configureSessionUI(session: string): void {
+    try {
+      // Ensure mouse is enabled and status is visible
+      this.setSessionOption(session, 'mouse', 'on');
+      // Ensure status bar is visible
+      this.setSessionOption(session, 'status', 'on');
+      this.setSessionOption(session, 'status-position', 'bottom');
+      this.setSessionOption(session, 'status-style', 'fg=white,bold,bg=black');
+      this.setSessionOption(session, 'status-interval', '5');
+      runCommand([
+        'tmux', 'set-option', '-t', session, 'status-format[0]',
+        ' #[align=right]Click here to return to devteam (or press Ctrl+b, then d) '
+      ], { env: this.tmuxEnv });
+
+      const bind = (key: string, args: string[]) => {
+        try { runCommand(['tmux', 'unbind-key', '-n', key], { env: this.tmuxEnv }); } catch {}
+        runCommand(['tmux', 'bind-key', '-n', key, ...args], { env: this.tmuxEnv });
+      };
+
+      // Bind MouseUp (release) on all status regions to detach immediately (no menu)
+      for (const k of ['MouseUp1Status', 'MouseUp1StatusLeft', 'MouseUp1StatusRight', 'MouseUp1StatusDefault']) {
+        bind(k, ['detach-client']);
+      }
+      // No debug messages bound
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to configure tmux session UI:', err);
+    }
+  }
+
+  /**
+   * Attach to a session with clickable status bar controls enabled.
+   */
+  attachSessionWithControls(sessionName: string): void {
+    this.configureSessionUI(sessionName);
+    this.attachSessionInteractive(sessionName);
+  }
+
   setOption(option: string, value: string): void {
     runCommand(['tmux', 'set-option', '-g', option, value], { env: this.tmuxEnv });
   }

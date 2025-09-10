@@ -50,14 +50,8 @@ test('preserves page after attach/detach (selectedIndex visible)', async () => {
   stdin.emit('data', Buffer.from('6'));
   await new Promise(r => setTimeout(r, 100));
 
-  // Press Enter to attach -> tmux hint first
+  // Press Enter to attach directly (no tmux hint)
   stdin.emit('data', Buffer.from('\r'));
-  await new Promise(r => setTimeout(r, 200));
-  frame = stdout.lastFrame() || '';
-  assert.ok(frame.includes('devteam uses tmux'), 'Expected tmux detach hint dialog before attach');
-
-  // Continue and simulate attach/detach
-  stdin.emit('data', Buffer.from('c'));
   await new Promise(r => setTimeout(r, 300));
   frame = stdout.lastFrame() || '';
 
@@ -67,4 +61,3 @@ test('preserves page after attach/detach (selectedIndex visible)', async () => {
 
   try { inst.unmount?.(); } catch {}
 });
-
