@@ -65,6 +65,8 @@ export function useColumnWidths(
       if (colIndex === 2) return 0; // dynamic PROJECT/FEATURE
       if (colIndex === 1) return 13; // fixed STATUS column width
       const maxContentWidth = Math.max(...allRows.map(row => stringDisplayWidth(row[colIndex] || '')));
+      // Make PR column a bit wider for readability
+      if (colIndex === 6) return Math.max(4, maxContentWidth + 2);
       return Math.max(4, maxContentWidth);
     });
     
