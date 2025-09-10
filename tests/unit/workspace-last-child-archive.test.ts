@@ -21,6 +21,17 @@ function WithWorktreeContext({onReady}: {onReady: (ctx: ReturnType<typeof useWor
   return h('div');
 }
 
+// Lightweight wrappers to avoid strict prop typing issues in tests
+function TestWorktreeProvider(props: any) {
+  const {children, gitService, tmuxService, workspaceService} = props;
+  return h(WorktreeProvider as any, {gitService, tmuxService, workspaceService, children} as any);
+}
+
+function TestGitHubProvider(props: any) {
+  const {children, gitHubService} = props;
+  return h(GitHubProvider as any, {gitHubService, children} as any);
+}
+
 describe('Workspace archive behavior: last child cleanup', () => {
   beforeEach(() => {
     memoryStore.reset();
@@ -81,8 +92,8 @@ describe('Workspace archive behavior: last child cleanup', () => {
       };
 
       render(
-        h(WorktreeProvider, {gitService, tmuxService, workspaceService},
-          h(GitHubProvider, {gitHubService},
+        h(TestWorktreeProvider, {gitService, tmuxService, workspaceService},
+          h(TestGitHubProvider, {gitHubService},
             h(UIProvider, null,
               h(WithWorktreeContext, {onReady})
             )
