@@ -76,6 +76,14 @@ interface WorktreeContextType {
 
 const WorktreeContext = createContext<WorktreeContextType | null>(null);
 
+type WorktreeSummary = {
+  project: string;
+  feature: string;
+  path: string;
+  branch: string;
+  last_commit_ts?: number;
+};
+
 // Exported sorter to enable unit testing of cross-project ordering
 export function sortWorktreeSummaries<T extends {last_commit_ts?: number; project: string; feature: string}>(rows: T[]): T[] {
   return rows.sort((a, b) => {
@@ -145,13 +153,7 @@ export function WorktreeProvider({
   // Cache available AI tools on startup
   const availableAITools = useMemo(() => detectAvailableAITools(), []);
 
-  const collectWorktrees = useCallback(async (): Promise<Array<{
-    project: string; 
-    feature: string; 
-    path: string; 
-    branch: string; 
-    last_commit_ts?: number;
-  }>> => {
+  const collectWorktrees = useCallback(async (): Promise<WorktreeSummary[]> => {
     const projects = gitService.discoverProjects();
     // Limit concurrent project scans to reduce fs/process load
     const allWorktrees = await mapLimit(projects, 4, async (project) => 
@@ -159,7 +161,7 @@ export function WorktreeProvider({
     );
     
     // Flatten the results
-    const rows: Array<{project: string; feature: string; path: string; branch: string; last_commit_ts?: number}> = [];
+    const rows: WorktreeSummary[] = [];
     for (const worktrees of allWorktrees) {
       for (const wt of worktrees) rows.push(wt);
     }
@@ -170,13 +172,7 @@ export function WorktreeProvider({
     return rows;
   }, [gitService]);
 
-  const attachRuntimeData = useCallback(async (list: Array<{
-    project: string; 
-    feature: string; 
-    path: string; 
-    branch: string;
-    last_commit_ts?: number;
-  }>): Promise<WorktreeInfo[]> => {
+  const attachRuntimeData = useCallback(async (list: WorktreeSummary[]): Promise<WorktreeInfo[]> => {
     // Get existing worktrees to preserve idle timers and kill flags
     const existingWorktrees = new Map(worktrees.map(w => [`${w.project}/${w.feature}`, w]));
     
@@ -184,7 +180,7 @@ export function WorktreeProvider({
     const activeSessions = await tmuxService.listSessions();
     
     // Concurrency-limit git + AI probes across all worktrees
-    const results = await mapLimit(list, 6, async (w: any) => {
+    const results = await mapLimit(list, 6, async (w: WorktreeSummary) => {
       try {
         const key = `${w.project}/${w.feature}`;
         const existing = existingWorktrees.get(key);
@@ -212,7 +208,8 @@ export function WorktreeProvider({
           branch: w.branch,
           git: gitStatus,
           session: sessionInfo,
-          last_commit_ts: (w as any).last_commit_ts || 0,
+          // Use 0 as a safe fallback (older than any real commit)
+          last_commit_ts: w.last_commit_ts ?? 0,
         });
       } catch (err) {
         // eslint-disable-next-line no-console
