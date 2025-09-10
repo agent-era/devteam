@@ -56,11 +56,11 @@ export default function BranchPickerDialog({branches, onSubmit, onCancel, onRefr
     }
     
     // Navigation keys
-    if (key.downArrow || input === 'j') {
+    if (key.downArrow) {
       setSelected((s) => Math.min(filtered.length - 1, s + 1));
       return;
     }
-    if (key.upArrow || input === 'k') {
+    if (key.upArrow) {
       setSelected((s) => Math.max(0, s - 1));
       return;
     }
@@ -242,7 +242,7 @@ export default function BranchPickerDialog({branches, onSubmit, onCancel, onRefr
         );
       })}
       <Box marginTop={1}>
-        <AnnotatedText color="magenta" wrap="truncate" text={`Type to filter, [j]/[k] move, [PgUp]/[PgDn], [1]–[9] jump, [r]efresh, [enter] select, [esc] cancel  [${Math.floor(selected / pageSize) + 1}/${Math.max(1, Math.ceil(filtered.length / pageSize))}]`} />
+        <AnnotatedText color="magenta" wrap="truncate" text={`Type to filter, [PgUp]/[PgDn], [1]–[9] jump, [r]efresh, [enter] select, [esc] cancel  [${Math.floor(selected / pageSize) + 1}/${Math.max(1, Math.ceil(filtered.length / pageSize))}]`} />
       </Box>
     </Box>
   );

@@ -1,5 +1,5 @@
-import React, {useEffect, useMemo, useState} from 'react';
-import {Box, Text, useInput, useStdin} from 'ink';
+import React, {useEffect, useMemo, useRef, useState} from 'react';
+import {Box, Text, useInput, useStdin, measureElement} from 'ink';
 import SyntaxHighlight from 'ink-syntax-highlight';
 import {runCommandAsync, runCommand} from '../../shared/utils/commandExecutor.js';
 import {findBaseBranch} from '../../shared/utils/gitHelpers.js';
@@ -254,18 +254,25 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     })();
   }, [worktreePath, diffType]);
 
-  // Calculate dynamic sticky header count (0, 1, or 2 headers displayed)
-  const stickyHeaderCount = useMemo(() => {
-    let count = 0;
-    if (currentFileHeader) count++;
-    if (currentHunkHeader) count++;
-    return count;
-  }, [currentFileHeader, currentHunkHeader]);
-
-  // Calculate page size dynamically - reserve space for title, help, sticky headers, and optional overlay area
-  const helpReservedRows = showFileTreeOverlay ? 0 : 1; // hide help when overlay shows
+  // Measure-based page size: measure the scroll container height to avoid off-by-one issues
+  const listRef = useRef<any>(null);
+  const [measuredPageSize, setMeasuredPageSize] = useState<number>(1);
   const overlayAreaHeight = showFileTreeOverlay ? Math.max(6, Math.floor(terminalHeight / 2)) : 0;
-  const pageSize = Math.max(1, terminalHeight - 2 - stickyHeaderCount - helpReservedRows - overlayAreaHeight); // -1 title, -N sticky headers, -help, -overlay
+
+  // After render and on resize, measure the diff list container height
+  useEffect(() => {
+    const measureAndUpdate = () => {
+      const h = listRef.current ? measureElement(listRef.current).height : 0;
+      if (h > 0 && h !== measuredPageSize) {
+        setMeasuredPageSize(h);
+      }
+    };
+    // Measure now and on next tick to ensure layout settles
+    measureAndUpdate();
+    const t = setTimeout(measureAndUpdate, 0);
+    return () => clearTimeout(t);
+    // Re-measure on terminal resize and UI elements that affect vertical space
+  }, [terminalHeight, terminalWidth, currentFileHeader, currentHunkHeader, showFileTreeOverlay]);
 
   // Smooth scrolling animation
   useEffect(() => {
@@ -370,10 +377,10 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       setSelectedLine(prev => Math.min(maxLineIndex, prev + 1));
     }
     if (key.pageUp || input === 'b') {
-      setSelectedLine(prev => Math.max(0, prev - Math.floor(pageSize / 2)));
+      setSelectedLine(prev => Math.max(0, prev - Math.floor(measuredPageSize / 2)));
     }
     if (key.pageDown || input === 'f' || input === ' ') {
-      setSelectedLine(prev => Math.min(maxLineIndex, prev + Math.floor(pageSize / 2)));
+      setSelectedLine(prev => Math.min(maxLineIndex, prev + Math.floor(measuredPageSize / 2)));
     }
     if (input === 'g') {
       setSelectedLine(0);
@@ -429,7 +436,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
         }
       } else {
         const currentLine = sideBySideLines[selectedLine];
-        const fileName = currentLine.left?.fileName || currentLine.right?.fileName;
+        const fileName = currentLine?.left?.fileName || currentLine?.right?.fileName;
         if (currentLine && fileName) {
           const perFileIndex = sideBySidePerFileIndex[selectedLine];
           if (perFileIndex !== undefined) {
@@ -551,7 +558,9 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                 const sbsLine = line as SideBySideLine;
                 const leftText = sbsLine.left?.text || '';
                 const rightText = sbsLine.right?.text || '';
-                return leftText.length > rightText.length ? leftText : rightText;
+                const leftH = LineWrapper.calculateHeight(leftText, maxWidth);
+                const rightH = LineWrapper.calculateHeight(rightText, maxWidth);
+                return leftH >= rightH ? leftText : rightText;
               }
             });
             
@@ -600,7 +609,9 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                 const sbsLine = line as SideBySideLine;
                 const leftText = sbsLine.left?.text || '';
                 const rightText = sbsLine.right?.text || '';
-                return leftText.length > rightText.length ? leftText : rightText;
+                const leftH = LineWrapper.calculateHeight(leftText, maxWidth);
+                const rightH = LineWrapper.calculateHeight(rightText, maxWidth);
+                return leftH >= rightH ? leftText : rightText;
               }
             });
             
@@ -643,7 +654,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       textLines,
       selectedLine,
       targetScrollRow,
-      pageSize,
+      measuredPageSize,
       maxWidth,
       wrapMode
     );
@@ -651,10 +662,10 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     // Don't override scroll position during file navigation (Shift+Up/Down)
     // File navigation sets a specific scroll position to make headers sticky
     if (newScrollRow !== targetScrollRow && !isFileNavigation) {
-      const maxScrollRow = ViewportCalculator.getMaxScrollRow(textLines, pageSize, maxWidth, wrapMode);
+      const maxScrollRow = ViewportCalculator.getMaxScrollRow(textLines, measuredPageSize, maxWidth, wrapMode);
       setTargetScrollRow(Math.max(0, Math.min(maxScrollRow, newScrollRow)));
     }
-  }, [selectedLine, viewMode, wrapMode, terminalWidth, lines, sideBySideLines, pageSize, isFileNavigation]);
+  }, [selectedLine, viewMode, wrapMode, terminalWidth, lines, sideBySideLines, measuredPageSize, isFileNavigation]);
 
   const formatCommentsAsPrompt = (comments: any[]): string => {
     let prompt = "Please address the following code review comments:\\n\\n";
@@ -864,8 +875,8 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       }
     } else {
       const currentLine = sideBySideLines[selectedLine];
-      const fileName = currentLine.right?.fileName || currentLine.left?.fileName;
-      const lineText = currentLine.right?.text || currentLine.left?.text;
+      const fileName = currentLine?.right?.fileName || currentLine?.left?.fileName;
+      const lineText = currentLine?.right?.text || currentLine?.left?.text;
       
       if (currentLine && fileName && lineText) {
         const perFileIndex = sideBySidePerFileIndex[selectedLine];
@@ -875,12 +886,12 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
         } else {
           // New logic for removed lines and file headers
           let textForComment = '';
-          if (currentLine.left?.type === 'header' && currentLine.left.headerType === 'file') {
+          if (currentLine?.left?.type === 'header' && currentLine.left.headerType === 'file') {
             // File header - use filename as line text
             textForComment = fileName || '';
           } else {
             // Removed lines - use the line text
-            textForComment = currentLine.left?.text || lineText;
+            textForComment = currentLine?.left?.text || lineText;
           }
           commentStore.addComment(undefined, fileName, textForComment, commentText);
         }
@@ -935,7 +946,9 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
         const sbsLine = line as SideBySideLine;
         const leftText = sbsLine.left?.text || '';
         const rightText = sbsLine.right?.text || '';
-        return leftText.length > rightText.length ? leftText : rightText;
+        const leftH = LineWrapper.calculateHeight(leftText, maxWidth);
+        const rightH = LineWrapper.calculateHeight(rightText, maxWidth);
+        return leftH >= rightH ? leftText : rightText;
       }
     });
     
@@ -943,11 +956,11 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       textLines,
       selectedLine,
       scrollRow,
-      pageSize,
+      measuredPageSize,
       maxWidth,
       wrapMode
     );
-  }, [lines, sideBySideLines, selectedLine, scrollRow, pageSize, viewMode, wrapMode, terminalWidth]);
+  }, [lines, sideBySideLines, selectedLine, scrollRow, measuredPageSize, viewMode, wrapMode, terminalWidth]);
   
   useEffect(() => {
     const currentLines = viewMode === 'unified' ? lines : sideBySideLines;
@@ -1097,7 +1110,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
   // No early return: overlay is drawn on-screen while keeping diff visible
 
   return (
-    <Box flexDirection="column">
+    <Box flexDirection="column" flexGrow={1}>
       <Text bold>{title}</Text>
       {/* Sticky headers - only render when content exists */}
       {currentFileHeader && (
@@ -1118,10 +1131,35 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
           {currentHunkHeader}
         </Text>
       )}
+      <Box ref={listRef} flexDirection="column" flexGrow={1}>
       {(() => {
         const renderedElements: React.ReactNode[] = [];
         let visibleLineIndex = 0;
-        
+        // Enforce row budget when wrapping
+        let rowsRemaining = measuredPageSize;
+        const unifiedMaxWidth = terminalWidth - 4;
+        const sbsPaneWidth = Math.floor((terminalWidth - 2) / 2);
+        const sbsMaxPaneWidth = sbsPaneWidth - 2;
+        // Calculate the starting visual row of the first visible line
+        let firstVisibleLineStartRow = 0;
+        if (wrapMode === 'wrap') {
+          const currentLinesForHeight = viewMode === 'unified' ? lines : sideBySideLines;
+          const firstIdx = viewport.firstVisibleLine;
+          for (let i = 0; i < firstIdx; i++) {
+            if (viewMode === 'unified') {
+              const t = (currentLinesForHeight[i] as DiffLine).text || ' ';
+              firstVisibleLineStartRow += LineWrapper.calculateHeight(t, unifiedMaxWidth);
+            } else {
+              const sbs = currentLinesForHeight[i] as SideBySideLine;
+              const leftText = sbs.left?.text || '';
+              const rightText = sbs.right?.text || '';
+              const hL = LineWrapper.calculateHeight(leftText, sbsMaxPaneWidth);
+              const hR = LineWrapper.calculateHeight(rightText, sbsMaxPaneWidth);
+              firstVisibleLineStartRow += Math.max(hL, hR);
+            }
+          }
+        }
+
         for (const l of visibleLines) {
           const actualLineIndex = viewport.visibleLines[visibleLineIndex];
           const isCurrentLine = actualLineIndex === selectedLine;
@@ -1236,10 +1274,16 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
             }
           } else {
             // Wrap mode with gutter and diff colors
-            const maxWidth = terminalWidth - 4; // -4 for gutter
+            const maxWidth = unifiedMaxWidth; // -4 for gutter
             const segments = LineWrapper.wrapLine(fullText, maxWidth);
-            
-            segments.forEach((segment, segIdx) => {
+            let startSeg = 0;
+            if (visibleLineIndex === 0) {
+              const offsetRows = Math.max(0, viewport.viewportStartRow - firstVisibleLineStartRow);
+              startSeg = Math.min(offsetRows, segments.length);
+            }
+            for (let segIdx = startSeg; segIdx < segments.length; segIdx++) {
+              if (rowsRemaining <= 0) break;
+              const segment = segments[segIdx];
               if (unifiedLine.type === 'header') {
                 const headerColor = unifiedLine.headerType === 'file' ? 'white' : 'cyan';
                 renderedElements.push(
@@ -1252,7 +1296,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                       backgroundColor={isCurrentLine ? 'blue' : undefined}
                       bold={isCurrentLine}
                     >
-                      {segIdx === 0 ? gutterSymbol : '  '}
+                      {segIdx === startSeg ? gutterSymbol : '  '}
                     </Text>
                     <Text
                       color={headerColor}
@@ -1270,13 +1314,13 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                     backgroundColor={isCurrentLine ? 'blue' : undefined}
                     bold={isCurrentLine}
                   >
-                    {segIdx === 0 ? gutterSymbol : '  '}
+                    {segIdx === startSeg ? gutterSymbol : '  '}
                   </Text>
                 );
                 
                 // For wrapped segments, extract the actual code text (removing comment indicator from non-first segments)
                 let codeText = segment;
-                if (segIdx === 0 && hasComment) {
+                if (segIdx === startSeg && hasComment) {
                   codeText = segment.replace('[C] ', '');
                   const commentElement = (
                     <Text
@@ -1331,13 +1375,14 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                     </Box>
                   );
                 }
+              rowsRemaining--;
               }
-            });
+            }
           }
         } else {
           // Side-by-side diff rendering with syntax highlighting
           const sideBySideLine = l as SideBySideLine;
-          const paneWidth = Math.floor((terminalWidth - 2) / 2); // Leave 2 cols slack to avoid terminal wrap
+          const paneWidth = sbsPaneWidth; // Leave 2 cols slack to avoid terminal wrap
           
           // Get comment info based on the original line index
           const sbsFileForComment = sideBySideLine.right?.fileName || sideBySideLine.left?.fileName || '';
@@ -1527,12 +1572,17 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
             );
           } else {
             // Wrap mode: handle wrapped side-by-side content with syntax highlighting
-            const maxPaneWidth = paneWidth - 2;
+            const maxPaneWidth = sbsMaxPaneWidth;
             const leftSegments = leftFullText ? LineWrapper.wrapLine(leftFullText, maxPaneWidth) : [''];
             const rightSegments = rightFullText ? LineWrapper.wrapLine(rightFullText, maxPaneWidth) : [''];
-            const maxSegments = Math.max(leftSegments.length, rightSegments.length);
-            
-            for (let segIdx = 0; segIdx < maxSegments; segIdx++) {
+            const totalSegments = Math.max(leftSegments.length, rightSegments.length);
+            let startSeg = 0;
+            if (visibleLineIndex === 0) {
+              const offsetRows = Math.max(0, viewport.viewportStartRow - firstVisibleLineStartRow);
+              startSeg = Math.min(offsetRows, totalSegments);
+            }
+            for (let segIdx = startSeg; segIdx < totalSegments; segIdx++) {
+              if (rowsRemaining <= 0) break;
               const leftSegment = leftSegments[segIdx] || '';
               const rightSegment = rightSegments[segIdx] || '';
               
@@ -1572,7 +1622,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                   );
                   
                   // Handle comment indicator for first segment
-                  if (leftSegment.includes('[C] ') && segIdx === 0) {
+                  if (leftSegment.includes('[C] ') && segIdx === startSeg) {
                     leftElement = (
                       <Box
                         flexDirection="row"
@@ -1699,15 +1749,20 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                   {rightElement}
                 </Box>
               );
+              rowsRemaining--;
             }
           }
         }
         
         visibleLineIndex++;
+        if (wrapMode === 'wrap' && rowsRemaining <= 0) {
+          break;
+        }
       }
       
         return renderedElements;
       })()}
+      </Box>
       
       {showAllComments && commentStore.count > 0 && (
         <Box flexDirection="column" borderStyle="single" borderColor="blue" padding={1} marginTop={1}>

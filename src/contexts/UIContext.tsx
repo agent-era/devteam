@@ -3,9 +3,9 @@ import {WorktreeInfo} from '../models.js';
 import type {AITool} from '../models.js';
 
 
-type UIMode = 'list' | 'create' | 'confirmArchive' | 'help' | 
-             'pickProjectForBranch' | 'pickBranch' | 'diff' | 'runConfig' | 
-             'runProgress' | 'runResults' | 'selectAITool' | 'tmuxHint' |
+type UIMode = 'list' | 'create' | 'confirmArchive' | 'help' |
+             'pickProjectForBranch' | 'pickBranch' | 'diff' | 'runConfig' |
+             'runProgress' | 'runResults' | 'selectAITool' |
              'tmuxAttachLoading' | 'noProjects';
 
 interface UIContextType {
@@ -24,11 +24,6 @@ interface UIContextType {
   runConfigResult: any | null;
   pendingWorktree: WorktreeInfo | null;
   
-  // One-time tmux hint dialog
-  tmuxHintShown: boolean;
-  tmuxHintWorktree: WorktreeInfo | null;
-  tmuxHintTool: AITool | null;
-  
   // UI navigation operations - self-documenting methods
   showList: () => void;
   showCreateFeature: (projects: any[]) => void;
@@ -41,7 +36,6 @@ interface UIContextType {
   showRunProgress: () => void;
   showRunResults: (result: any) => void;
   showAIToolSelection: (worktree: WorktreeInfo) => void;
-  showTmuxHintFor: (worktree: WorktreeInfo, tool?: AITool) => void;
   showNoProjectsDialog: () => void;
   runWithLoading: (task: () => Promise<unknown> | unknown, options?: {returnToList?: boolean}) => void;
   
@@ -51,7 +45,6 @@ interface UIContextType {
   
   // Application lifecycle
   requestExit: () => void;
-  markTmuxHintShown: () => void;
 }
 
 const UIContext = createContext<UIContextType | null>(null);
@@ -75,10 +68,7 @@ export function UIProvider({children}: UIProviderProps) {
   const [runPath, setRunPath] = useState<string | null>(null);
   const [runConfigResult, setRunConfigResult] = useState<any | null>(null);
   const [pendingWorktree, setPendingWorktree] = useState<WorktreeInfo | null>(null);
-  // Show tmux hint once per app run
-  const [tmuxHintShown, setTmuxHintShown] = useState<boolean>(false);
-  const [tmuxHintWorktree, setTmuxHintWorktree] = useState<WorktreeInfo | null>(null);
-  const [tmuxHintTool, setTmuxHintTool] = useState<AITool | null>(null);
+  // Removed tmux hint state (dialog no longer used)
 
 
   const resetUIState = () => {
@@ -163,14 +153,6 @@ export function UIProvider({children}: UIProviderProps) {
     setPendingWorktree(worktree);
   };
 
-  const showTmuxHintFor = (worktree: WorktreeInfo, tool?: AITool) => {
-    // Only show if not already shown
-    if (tmuxHintShown) return;
-    setMode('tmuxHint');
-    setTmuxHintWorktree(worktree);
-    setTmuxHintTool(tool || null);
-  };
-
   // Central helper to wrap tmux interactions with a minimal loading screen
   const runWithLoading = (task: () => Promise<unknown> | unknown, options?: {returnToList?: boolean}) => {
     const {returnToList = true} = options || {};
@@ -188,14 +170,9 @@ export function UIProvider({children}: UIProviderProps) {
     setMode('noProjects');
   };
 
+
   const requestExit = () => {
     setShouldExit(true);
-  };
-
-  const markTmuxHintShown = () => {
-    setTmuxHintShown(true);
-    setTmuxHintWorktree(null);
-    setTmuxHintTool(null);
   };
 
 
@@ -215,11 +192,6 @@ export function UIProvider({children}: UIProviderProps) {
     runConfigResult,
     pendingWorktree,
     
-    // One-time tmux hint
-    tmuxHintShown,
-    tmuxHintWorktree,
-    tmuxHintTool,
-    
     // Navigation methods
     showList,
     showCreateFeature,
@@ -232,7 +204,6 @@ export function UIProvider({children}: UIProviderProps) {
     showRunProgress,
     showRunResults,
     showAIToolSelection,
-    showTmuxHintFor,
     runWithLoading,
     showNoProjectsDialog,
     
@@ -240,8 +211,7 @@ export function UIProvider({children}: UIProviderProps) {
     setBranchList,
     setBranchProject,
     
-    requestExit,
-    markTmuxHintShown
+    requestExit
   };
 
   return (

@@ -31,11 +31,11 @@ interface CacheData {
 export class PRStatusCacheService {
   private cacheFilePath: string;
   private cache: CacheData;
-  private readonly CACHE_DIR = path.join(os.homedir(), '.cache', 'coding-agent-team');
-  private static MEMORY_CACHE: CacheData = {};
+  private readonly DEFAULT_CACHE_DIR = path.join(os.homedir(), '.cache', 'coding-agent-team');
+  private readonly FALLBACK_CACHE_DIR = path.join(process.cwd(), '.devteam', 'cache');
 
   constructor() {
-    this.cacheFilePath = path.join(this.CACHE_DIR, 'pr-cache.json');
+    this.cacheFilePath = path.join(this.DEFAULT_CACHE_DIR, 'pr-cache.json');
     this.cache = {};
     this.loadFromDisk();
   }
@@ -326,36 +326,51 @@ export class PRStatusCacheService {
   private loadFromDisk(): void {
     try {
       // Ensure cache directory exists
-      if (!fs.existsSync(this.CACHE_DIR)) {
-        fs.mkdirSync(this.CACHE_DIR, {recursive: true});
+      if (!fs.existsSync(this.DEFAULT_CACHE_DIR)) {
+        fs.mkdirSync(this.DEFAULT_CACHE_DIR, {recursive: true});
       }
 
       if (fs.existsSync(this.cacheFilePath)) {
         const content = fs.readFileSync(this.cacheFilePath, 'utf8');
         this.cache = JSON.parse(content);
-      } else if (Object.keys(PRStatusCacheService.MEMORY_CACHE).length > 0) {
-        // Fallback to in-memory cache when file not present
-        this.cache = {...PRStatusCacheService.MEMORY_CACHE};
+        return;
+      }
+
+      // If default cache file doesn't exist, try fallback location
+      const fallbackPath = path.join(this.FALLBACK_CACHE_DIR, 'pr-cache.json');
+      if (fs.existsSync(fallbackPath)) {
+        const content = fs.readFileSync(fallbackPath, 'utf8');
+        this.cache = JSON.parse(content);
+        // Switch to fallback for subsequent writes
+        this.cacheFilePath = fallbackPath;
+        return;
       }
     } catch (error) {
       // Silent failure - start with empty cache
-      this.cache = {...PRStatusCacheService.MEMORY_CACHE};
+      this.cache = {};
     }
   }
 
   private saveToDisk(): void {
     try {
       // Ensure cache directory exists
-      if (!fs.existsSync(this.CACHE_DIR)) {
-        fs.mkdirSync(this.CACHE_DIR, {recursive: true});
+      if (!fs.existsSync(this.DEFAULT_CACHE_DIR)) {
+        fs.mkdirSync(this.DEFAULT_CACHE_DIR, {recursive: true});
       }
 
-      // Keep an in-memory copy to support test environments without filesystem persistence
-      PRStatusCacheService.MEMORY_CACHE = {...this.cache};
       fs.writeFileSync(this.cacheFilePath, JSON.stringify(this.cache, null, 2), 'utf8');
     } catch (error) {
-      // Silent failure - cache continues to work in memory
-      PRStatusCacheService.MEMORY_CACHE = {...this.cache};
+      // Attempt to write to fallback project-local cache directory
+      try {
+        if (!fs.existsSync(this.FALLBACK_CACHE_DIR)) {
+          fs.mkdirSync(this.FALLBACK_CACHE_DIR, {recursive: true});
+        }
+        const fallbackPath = path.join(this.FALLBACK_CACHE_DIR, 'pr-cache.json');
+        fs.writeFileSync(fallbackPath, JSON.stringify(this.cache, null, 2), 'utf8');
+        this.cacheFilePath = fallbackPath;
+      } catch {
+        // Silent failure - cache continues to work in memory
+      }
     }
   }
 }

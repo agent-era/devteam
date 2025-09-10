@@ -522,4 +522,4 @@ When adding features:
 - [ ] Show the user a well-researched, high-level plan to implement the feature that uses above guidelines, best design practices and values simplicity in the implementation.
 - [ ] Implement, and ensure that the feature logic is tested using the above guidelines
 - [ ] Build and test and do a typecheck
-- [ ] Make a PR
+- [ ] Make a PR using the current branch

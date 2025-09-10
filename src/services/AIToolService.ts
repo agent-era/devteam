@@ -42,9 +42,14 @@ export class AIToolService {
     }
     
     // Batch get all process args with a single ps command
+    // Use a BSD/macOS-compatible format string (pid and command on one line)
     if (sessionPids.length > 0) {
       const pids = sessionPids.map(sp => sp.pid).join(',');
-      const psOutput = await runCommandQuickAsync(['ps', '-p', pids, '-o', 'pid=', '-o', 'args=']);
+      // Use Linux-friendly flags by default; switch to BSD/macOS format on darwin
+      const psArgs = process.platform === 'darwin'
+        ? ['ps', '-p', pids, '-o', 'pid=,command=']
+        : ['ps', '-p', pids, '-o', 'pid=', '-o', 'args='];
+      const psOutput = await runCommandQuickAsync(psArgs);
       
       if (psOutput) {
         const psLines = psOutput.split('\n').filter(Boolean);

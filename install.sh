@@ -20,7 +20,11 @@ fi
 # Optional: check tmux presence and warn only
 if ! command -v tmux >/dev/null 2>&1; then
   echo "Warning: tmux not found. DevTeam uses tmux for sessions." >&2
-  echo "Install tmux from your package manager for the best experience." >&2
+  if [ "$(uname -s)" = "Darwin" ]; then
+    echo "Install via Homebrew: brew install tmux" >&2
+  else
+    echo "Install tmux from your package manager for the best experience." >&2
+  fi
 fi
 
 echo "==> Installing @agent-era/devteam globally via npm"
@@ -32,4 +36,3 @@ if command -v devteam >/dev/null 2>&1; then
 else
   echo "Installed, but 'devteam' not on PATH. You may need to rehash your shell or restart terminal."
 fi
-

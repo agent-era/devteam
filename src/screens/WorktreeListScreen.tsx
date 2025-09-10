@@ -35,7 +35,7 @@ export default function WorktreeListScreen({
   const {worktrees, selectedIndex, selectWorktree, refresh, refreshVisibleStatus, forceRefreshVisible, attachSession, attachShellSession, needsToolSelection, lastRefreshed, memoryStatus, versionInfo, discoverProjects} = useWorktreeContext();
   const {setVisibleWorktrees} = useGitHubContext();
   const {isAnyDialogFocused} = useInputFocus();
-  const {showAIToolSelection, tmuxHintShown, showTmuxHintFor, showList, runWithLoading} = useUIContext();
+  const {showAIToolSelection, showList, runWithLoading} = useUIContext();
   const [pageSize, setPageSize] = useState(1);
   const [currentPage, setCurrentPage] = useState(0);
   const [hasProjects, setHasProjects] = useState<boolean>(false);
@@ -98,6 +98,12 @@ export default function WorktreeListScreen({
     
     // Handle page boundaries
     if (nextIndex < 0) {
+      // If page size isn't established yet (<=1), treat as single page navigation
+      if (pageSize <= 1) {
+        setCurrentPage(0);
+        selectWorktree(Math.max(0, worktrees.length - 1));
+        return;
+      }
       // Move to previous page, select last item of that page
       const totalPages = Math.max(1, Math.ceil(worktrees.length / pageSize));
       const newPage = currentPage > 0 ? currentPage - 1 : totalPages - 1;
@@ -109,12 +115,22 @@ export default function WorktreeListScreen({
       setCurrentPage(0);
       selectWorktree(0);
     } else if (nextIndex >= (currentPage + 1) * pageSize) {
+      // If page size isn't established yet (<=1), avoid advancing to a blank page
+      if (pageSize <= 1) {
+        selectWorktree(nextIndex);
+        return;
+      }
       // Move to next page, select first item of that page
       const totalPages = Math.max(1, Math.ceil(worktrees.length / pageSize));
       const newPage = (currentPage + 1) % totalPages;
       setCurrentPage(newPage);
-      selectWorktree(newPage * pageSize);
+      selectWorktree(Math.min(newPage * pageSize, worktrees.length - 1));
     } else if (nextIndex < currentPage * pageSize) {
+      // If page size isn't established yet (<=1), avoid moving pages
+      if (pageSize <= 1) {
+        selectWorktree(Math.max(0, nextIndex));
+        return;
+      }
       // Move to previous page, select last item of that page
       const newPage = currentPage > 0 ? currentPage - 1 : Math.max(0, Math.ceil(worktrees.length / pageSize) - 1);
       const lastItemOnPage = Math.min((newPage + 1) * pageSize - 1, worktrees.length - 1);
@@ -138,11 +154,7 @@ export default function WorktreeListScreen({
         // Show AI tool selection dialog
         showAIToolSelection(selectedWorktree);
       } else {
-        // Proceed with session attachment
-        if (!tmuxHintShown) {
-          showTmuxHintFor(selectedWorktree);
-          return;
-        }
+        // Proceed with session attachment immediately (no tmux hint)
         runWithLoading(() => attachSession(selectedWorktree));
       }
     } catch (error) {

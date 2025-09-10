@@ -27,7 +27,7 @@ import {AI_TOOLS} from '../constants.js';
 import type {AITool} from '../models.js';
 import {useInputFocus} from './InputFocusContext.js';
 import {useGitHubContext} from './GitHubContext.js';
-import {logDebug} from '../shared/utils/logger.js';
+import {logDebug, logError} from '../shared/utils/logger.js';
 import {Timer} from '../shared/utils/timing.js';
 
 
@@ -75,6 +75,25 @@ interface WorktreeContextType {
 }
 
 const WorktreeContext = createContext<WorktreeContextType | null>(null);
+
+type WorktreeSummary = {
+  project: string;
+  feature: string;
+  path: string;
+  branch: string;
+  last_commit_ts?: number;
+};
+
+// Exported sorter to enable unit testing of cross-project ordering
+export function sortWorktreeSummaries<T extends {last_commit_ts?: number; project: string; feature: string}>(rows: T[]): T[] {
+  // Return a new array to avoid mutating inputs
+  return [...rows].sort((a, b) => {
+    const d = (b.last_commit_ts ?? 0) - (a.last_commit_ts ?? 0);
+    if (d !== 0) return d;
+    if (a.project !== b.project) return a.project.localeCompare(b.project);
+    return a.feature.localeCompare(b.feature);
+  });
+}
 
 // Extracted decision helper for testability and clarity
 export function shouldPromptForAITool(
@@ -135,13 +154,7 @@ export function WorktreeProvider({
   // Cache available AI tools on startup
   const availableAITools = useMemo(() => detectAvailableAITools(), []);
 
-  const collectWorktrees = useCallback(async (): Promise<Array<{
-    project: string; 
-    feature: string; 
-    path: string; 
-    branch: string; 
-    mtime?: number
-  }>> => {
+  const collectWorktrees = useCallback(async (): Promise<WorktreeSummary[]> => {
     const projects = gitService.discoverProjects();
     // Limit concurrent project scans to reduce fs/process load
     const allWorktrees = await mapLimit(projects, 4, async (project) => 
@@ -149,20 +162,17 @@ export function WorktreeProvider({
     );
     
     // Flatten the results
-    const rows = [];
+    const rows: WorktreeSummary[] = [];
     for (const worktrees of allWorktrees) {
       for (const wt of worktrees) rows.push(wt);
     }
-    
-    return rows;
+
+    // Global sort across all projects: latest commit first
+    const sorted = sortWorktreeSummaries(rows);
+    return sorted;
   }, [gitService]);
 
-  const attachRuntimeData = useCallback(async (list: Array<{
-    project: string; 
-    feature: string; 
-    path: string; 
-    branch: string
-  }>): Promise<WorktreeInfo[]> => {
+  const attachRuntimeData = useCallback(async (list: WorktreeSummary[]): Promise<WorktreeInfo[]> => {
     // Get existing worktrees to preserve idle timers and kill flags
     const existingWorktrees = new Map(worktrees.map(w => [`${w.project}/${w.feature}`, w]));
     
@@ -170,7 +180,7 @@ export function WorktreeProvider({
     const activeSessions = await tmuxService.listSessions();
     
     // Concurrency-limit git + AI probes across all worktrees
-    const results = await mapLimit(list, 6, async (w: any) => {
+    const results = await mapLimit<WorktreeSummary, WorktreeInfo | undefined>(list, 6, async (w: WorktreeSummary) => {
       try {
         const key = `${w.project}/${w.feature}`;
         const existing = existingWorktrees.get(key);
@@ -198,16 +208,16 @@ export function WorktreeProvider({
           branch: w.branch,
           git: gitStatus,
           session: sessionInfo,
-          mtime: w.mtime || 0,
+          // Use 0 as a safe fallback (older than any real commit)
+          last_commit_ts: w.last_commit_ts ?? 0,
         });
       } catch (err) {
-        // eslint-disable-next-line no-console
-        console.error('[attachRuntimeData] worker failed -', err instanceof Error ? err.message : String(err));
-        return undefined as any;
+        logError('[attachRuntimeData] worker failed', { error: err instanceof Error ? err.message : String(err) });
+        return undefined;
       }
     });
     
-    return results.filter(Boolean) as WorktreeInfo[];
+    return results.filter((r): r is WorktreeInfo => Boolean(r));
   }, [gitService, tmuxService, worktrees]);
 
   const refresh = useCallback(async (refreshPRs: 'all' | 'visible' | 'none' = 'none') => {
@@ -234,7 +244,7 @@ export function WorktreeProvider({
     } catch (error) {
       const timing = timer.elapsed();
       logDebug(`[Refresh.Full] Failed in ${timing.formatted}: ${error instanceof Error ? error.message : String(error)}`);
-      console.error('Failed to refresh worktrees:', error);
+      logError('Failed to refresh worktrees', { error: error instanceof Error ? error.message : String(error) });
     } finally {
       setLoading(false);
     }
@@ -258,7 +268,7 @@ export function WorktreeProvider({
       // No need to update worktrees array here; rows read PRs from context
       setLastRefreshed(Date.now());
     } catch (error) {
-      console.error('Failed to force refresh visible PRs:', error);
+      logError('Failed to force refresh visible PRs', { error: error instanceof Error ? error.message : String(error) });
     }
   }, [loading, worktrees, forceRefreshVisiblePRs]);
 
@@ -285,7 +295,8 @@ export function WorktreeProvider({
       }
       const indices = Array.from({length: endIndex - startIndex}, (_, k) => startIndex + k);
       if (indices.length > 0) {
-        const results = await mapLimit(indices, 3, async (i) => {
+        type UpdateResult = { index: number; updated: WorktreeInfo } | undefined;
+        const results = await mapLimit<number, UpdateResult>(indices, 3, async (i) => {
           try {
             const wt = worktrees[i];
             const sessionName = tmuxService.sessionName(wt.project, wt.feature);
@@ -318,21 +329,20 @@ export function WorktreeProvider({
             });
             return {index: i, updated};
           } catch (err) {
-            // eslint-disable-next-line no-console
-            console.error('[refreshVisibleStatus] worker failed -', err instanceof Error ? err.message : String(err));
-            return undefined as any;
+            logError('[refreshVisibleStatus] worker failed', { error: err instanceof Error ? err.message : String(err) });
+            return undefined;
           }
         });
         const merged = [...worktrees];
         for (const r of results) {
           if (!r) continue;
-          merged[(r as any).index] = (r as any).updated;
+          merged[r.index] = r.updated;
         }
         setWorktrees(merged);
       }
       setLastRefreshed(Date.now());
     } catch (error) {
-      console.error('Failed to refresh visible statuses:', error);
+      logError('Failed to refresh visible statuses', { error: error instanceof Error ? error.message : String(error) });
     } finally {
       refreshingVisibleRef.current = false;
     }
@@ -343,7 +353,7 @@ export function WorktreeProvider({
       const status = await memoryMonitorService.getMemoryStatus();
       setMemoryStatus(status);
     } catch (error) {
-      console.error('Failed to refresh memory status:', error);
+      logError('Failed to refresh memory status', { error: error instanceof Error ? error.message : String(error) });
     }
   }, [memoryMonitorService]);
 
@@ -358,7 +368,7 @@ export function WorktreeProvider({
       const info = await versionServiceRef.current.check();
       if (info && info.hasUpdate) setVersionInfo(info); else setVersionInfo(null);
     } catch (error) {
-      console.error('Failed to check latest version:', error);
+      logError('Failed to check latest version', { error: error instanceof Error ? error.message : String(error) });
     }
   }, []);
   
@@ -378,7 +388,7 @@ export function WorktreeProvider({
         project: projectName,
         feature: featureName,
         path: worktreePath,
-        branch: `feature/${featureName}`
+        branch: featureName
       });
     } finally {
       setLoading(false);
@@ -468,12 +478,8 @@ export function WorktreeProvider({
         // No AI tool available or selected, create regular bash session
         tmuxService.createSession(sessionName, worktree.path, true);
       }
-      
-      configureTmuxDisplayTime();
     }
-    
-    configureTmuxDisplayTime();
-    tmuxService.attachSessionInteractive(sessionName);
+    tmuxService.attachSessionWithControls(sessionName);
   }, [tmuxService, availableAITools]);
 
   const attachShellSession = useCallback(async (worktree: WorktreeInfo) => {
@@ -483,9 +489,7 @@ export function WorktreeProvider({
     if (!activeSessions.includes(sessionName)) {
       createShellSession(worktree.project, worktree.feature, worktree.path);
     }
-    
-    configureTmuxDisplayTime();
-    tmuxService.attachSessionInteractive(sessionName);
+    tmuxService.attachSessionWithControls(sessionName);
   }, [tmuxService]);
 
   const attachRunSession = useCallback(async (worktree: WorktreeInfo): Promise<'success' | 'no_config'> => {
@@ -503,9 +507,7 @@ export function WorktreeProvider({
     if (!activeSessions.includes(sessionName)) {
       createRunSession(worktree.project, worktree.feature, worktree.path);
     }
-    
-    configureTmuxDisplayTime();
-    tmuxService.attachSessionInteractive(sessionName);
+    tmuxService.attachSessionWithControls(sessionName);
     return 'success';
   }, [tmuxService]);
 
@@ -660,7 +662,6 @@ export function WorktreeProvider({
       }
     }
     
-    configureTmuxDisplayTime();
     
     return sessionName;
   }, [tmuxService, availableAITools]);
@@ -670,7 +671,6 @@ export function WorktreeProvider({
     const shell = process.env.SHELL || '/bin/bash';
     
     tmuxService.createSessionWithCommand(sessionName, cwd, shell, true);
-    configureTmuxDisplayTime();
     
     return sessionName;
   }, [tmuxService]);
@@ -684,7 +684,6 @@ export function WorktreeProvider({
     tmuxService.createSession(sessionName, cwd);
     // Auto-destroy session when program exits
     tmuxService.setSessionOption(sessionName, 'remain-on-exit', 'off');
-    configureTmuxDisplayTime();
     
     try {
       const configContent = gitService.readRunConfig(project);
@@ -776,10 +775,6 @@ export function WorktreeProvider({
     gitService.linkClaudeSettings(projectName, worktreePath);
   }, [gitService]);
 
-  const configureTmuxDisplayTime = useCallback(() => {
-    tmuxService.setOption('display-time', String(TMUX_DISPLAY_TIME));
-  }, [tmuxService]);
-
   // Auto-refresh intervals
   // Regular cache-based refresh cycle
   useEffect(() => {
@@ -788,7 +783,7 @@ export function WorktreeProvider({
     const shouldRefresh = Date.now() - lastRefreshed > CACHE_DURATION;
     if (shouldRefresh) {
       refresh('none').catch(error => {
-        console.error('Auto-refresh failed:', error);
+        logError('Auto-refresh failed', { error: error instanceof Error ? error.message : String(error) });
       });
     }
   }, [lastRefreshed, refresh]);
@@ -798,7 +793,7 @@ export function WorktreeProvider({
     const intervalsEnabled = isAppIntervalsEnabled();
     if (!intervalsEnabled) return;
     refreshMemoryStatus().catch(error => {
-      console.error('Initial memory status check failed:', error);
+      logError('Initial memory status check failed', { error: error instanceof Error ? error.message : String(error) });
     });
   }, [refreshMemoryStatus]);
 
@@ -807,7 +802,7 @@ export function WorktreeProvider({
     const intervalsEnabled = isAppIntervalsEnabled();
     if (!intervalsEnabled) return;
     refreshVersionInfo().catch(error => {
-      console.error('Initial version check failed:', error);
+      logError('Initial version check failed', { error: error instanceof Error ? error.message : String(error) });
     });
     const interval = setInterval(() => {
       refreshVersionInfo().catch(() => {});
@@ -822,7 +817,7 @@ export function WorktreeProvider({
     const interval = setInterval(() => {
       if (!isAnyDialogFocused) {
         // Background discovery of worktrees (structure)
-        refresh('none').catch(err => console.error('Background discovery failed:', err));
+        refresh('none').catch(err => logError('Background discovery failed', { error: err instanceof Error ? err.message : String(err) }));
       }
     }, 60_000);
     return () => clearInterval(interval);
@@ -835,7 +830,7 @@ export function WorktreeProvider({
       // Skip memory status refresh if any dialog is focused to avoid interrupting typing
       if (!isAnyDialogFocused) {
         refreshMemoryStatus().catch(error => {
-          console.error('Memory status refresh failed:', error);
+          logError('Memory status refresh failed', { error: error instanceof Error ? error.message : String(error) });
         });
       }
     }, MEMORY_REFRESH_DURATION);

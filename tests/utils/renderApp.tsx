@@ -526,6 +526,10 @@ function generateProjectPickerOutput(viewData: any): string {
   }
   
   let output = 'Select Project\n\n';
+  // Show filter hint only when there are more than 3 projects
+  if (projects.length > 3) {
+    output += 'Type to filter\nFilter:\n\n';
+  }
   
   for (let i = 0; i < projects.length; i++) {
     const project = projects[i];
@@ -534,7 +538,7 @@ function generateProjectPickerOutput(viewData: any): string {
     output += `${isSelected ? '>' : ' '} ${name}\n`;
   }
   
-  output += '\nUse j/k to navigate, ENTER to select, ESC to cancel.';
+  output += '\nUse arrows to navigate, ENTER to select, ESC to cancel.';
   return output;
 }
 
@@ -578,7 +582,7 @@ function generateBranchPickerOutput(viewData: any): string {
     output += line + '\n';
   }
   
-  output += '\nUse j/k to navigate, ENTER to select, ESC to cancel.';
+  output += '\nUse arrows to navigate, ENTER to select, ESC to cancel.';
   return output;
 }
 

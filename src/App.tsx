@@ -1,6 +1,7 @@
 import React, {useEffect} from 'react';
 import {useApp, useStdin, Box} from 'ink';
 import {runInteractive} from './shared/utils/commandExecutor.js';
+import {TmuxService} from './services/TmuxService.js';
 import FullScreen from './components/common/FullScreen.js';
 import HelpOverlay from './components/dialogs/HelpOverlay.js';
 import DiffView from './components/views/DiffView.js';
@@ -10,7 +11,6 @@ import RunConfigDialog from './components/dialogs/RunConfigDialog.js';
 import ProgressDialog from './components/dialogs/ProgressDialog.js';
 import ConfigResultsDialog from './components/dialogs/ConfigResultsDialog.js';
 import AIToolDialog from './components/dialogs/AIToolDialog.js';
-import TmuxDetachHintDialog from './components/dialogs/TmuxDetachHintDialog.js';
 import NoProjectsDialog from './components/dialogs/NoProjectsDialog.js';
 import LoadingScreen from './components/common/LoadingScreen.js';
 
@@ -67,12 +67,7 @@ function AppContent() {
     runConfigResult,
     pendingWorktree,
     
-    // tmux hint
-    tmuxHintShown,
-    tmuxHintWorktree,
-    tmuxHintTool,
-    showTmuxHintFor,
-    markTmuxHintShown,
+    // tmux hint removed
     showList,
     showCreateFeature,
     showArchiveConfirmation,
@@ -98,7 +93,7 @@ function AppContent() {
     }
   }, [isRawModeSupported, exit]);
 
-  // On startup: if no projects discovered, show dialog and wait for exit
+  // On startup: discover projects
   useEffect(() => {
     try {
       const projects = discoverProjects();
@@ -122,7 +117,8 @@ function AppContent() {
   }, [shouldExit, exit]);
 
   const handleAttachToSession = (sessionName: string) => {
-    runWithLoading(() => runInteractive('tmux', ['attach-session', '-t', sessionName]));
+    const tmux = new TmuxService();
+    runWithLoading(() => tmux.attachSessionWithControls(sessionName));
   };
   // Operations simplified to use contexts
   const handleCreateFeature = () => {
@@ -223,12 +219,8 @@ function AppContent() {
             // Show AI tool selection dialog
             showAIToolSelection(newWorktree);
           } else {
-            // Auto-attach to the newly created session, but show tmux hint once
-            if (!tmuxHintShown) {
-              showTmuxHintFor(newWorktree);
-            } else {
-              await attachSession(newWorktree);
-            }
+            // Auto-attach to the newly created session
+            await attachSession(newWorktree);
           }
         }
       } else {
@@ -391,37 +383,14 @@ function AppContent() {
           currentTool={pendingWorktree.session?.ai_tool}
           onSelect={async (tool) => {
             const wt = pendingWorktree;
-            // Attach session with selected tool, but show tmux hint once
+            // Attach session with selected tool immediately
             try {
-              if (!tmuxHintShown) {
-                showTmuxHintFor(wt, tool);
-              } else {
-                runWithLoading(() => attachSession(wt, tool));
-              }
+              runWithLoading(() => attachSession(wt, tool));
             } catch (error) {
               console.error('Failed to attach session with selected tool:', error);
             }
           }}
           onCancel={showList}
-        />
-      </Box>
-    );
-  }
-
-  if (!content && mode === 'tmuxHint') {
-    content = (
-      <Box flexGrow={1} alignItems="center" justifyContent="center">
-        <TmuxDetachHintDialog
-          onContinue={async () => {
-            const wt = tmuxHintWorktree;
-            const tool = tmuxHintTool || undefined;
-            markTmuxHintShown();
-            if (wt) {
-              runWithLoading(() => attachSession(wt, tool));
-            } else {
-              showList();
-            }
-          }}
         />
       </Box>
     );
@@ -434,6 +403,7 @@ function AppContent() {
       </Box>
     );
   }
+
 
   // Default: Main worktree list screen
   if (!content) {

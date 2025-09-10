@@ -136,7 +136,7 @@ export class FakeGitService extends GitService {
 
     const branchesDir = `/fake/projects/${project}${DIR_BRANCHES_SUFFIX}`;
     const worktreePath = `${branchesDir}/${featureName}`;
-    const branch = branchName || `feature/${featureName}`;
+    const branch = branchName || featureName;
 
     // Check if worktree already exists
     if (this.worktrees.has(worktreePath) || memoryStore.worktrees.has(worktreePath)) {
