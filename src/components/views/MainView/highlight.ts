@@ -110,13 +110,13 @@ export function statusLabelFromReason(reason: StatusReason | string | null | und
     case StatusReason.PR_CONFLICTS:
       return 'conflict';
     case StatusReason.PR_FAILING:
-      return 'pr-failed';
+      return 'pr failed';
     case StatusReason.PR_READY_TO_MERGE:
-      return 'pr-passed';
+      return 'pr ready';
     case StatusReason.PR_CHECKING:
-      return 'pr-checking';
+      return 'pr checking';
     case StatusReason.NO_PR:
-      return 'no-pr';
+      return 'no pr';
     case StatusReason.PR_INFORMATIONAL:
       return '';
     case StatusReason.PR_MERGED:
@@ -149,7 +149,7 @@ export function statusColorsFromReason(reason: StatusReason | string | null | un
       // No background; use magenta text
       return {bg: 'none', fg: 'magenta'};
     case StatusReason.NO_PR:
-      // Plain cyan text 'no-pr' with no background
+      // Plain cyan text 'no pr' with no background
       return {bg: 'none', fg: 'cyan'};
     case StatusReason.PR_INFORMATIONAL:
       return {bg: 'magenta', fg};
