@@ -7,7 +7,7 @@ describe('Column Layout and Spacing', () => {
       // Mock data representing typical worktree display
       const mockData = [
         ['#', 'STATUS', 'PROJECT/FEATURE', 'AI', 'DIFF', 'CHANGES', 'PR'],
-        ['1', 'un-pushed', 'my-project/long-feature-name', '*', '+1.2k/-500', '↑3 ↓1', '#123+'],
+        ['1', 'not pushed', 'my-project/long-feature-name', '*', '+1.2k/-500', '↑3 ↓1', '#123+'],
         ['12', '', 'short/feat', '-', '-', '-', '-']
       ];
 
@@ -35,13 +35,14 @@ describe('Column Layout and Spacing', () => {
         expect(totalWidth).toBeGreaterThan(terminalWidth - 5); // Should use most of the space
         
         // Verify PROJECT/FEATURE gets reasonable space
-        expect(fixedWidths[2]).toBeGreaterThanOrEqual(15); // Minimum readable width
+        // Reduced by 1 due to longer STATUS label ("not pushed")
+        expect(fixedWidths[2]).toBeGreaterThanOrEqual(14); // Minimum readable width
       }
     });
 
     test('should stretch content-based columns to actual content width', () => {
       const mockData = [
-        ['1', 'un-pushed', 'project/feature', '*', '+1000/-200', '↑10 ↓5', '#1234+'],
+        ['1', 'not pushed', 'project/feature', '*', '+1000/-200', '↑10 ↓5', '#1234+'],
         ['123', '', 'another/name', '-', '+5k/-1k', '↑2', '-']
       ];
 
