@@ -89,7 +89,7 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
     if (isPriorityCell(cellIndex)) {
       // Apply explicit text colors per status reason for the applicable column
       switch (highlightInfo?.reason) {
-        case StatusReason.CLAUDE_WAITING:
+        case StatusReason.AGENT_WAITING:
           return 'yellow';
         case StatusReason.AGENT_READY:
           return 'green';
