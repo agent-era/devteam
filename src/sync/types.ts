@@ -34,14 +34,13 @@ export type ClientToServer =
   | {type: 'get.worktrees'};
 
 export interface SyncServerOptions {
-  host?: string; // default 127.0.0.1
-  port?: number; // default 8787
-  path?: string; // default '/sync'
+  // HTTP endpoint to post snapshots to (Next.js web server)
+  postUrl?: string; // default 'http://127.0.0.1:3000/api/snapshots/push'
   refreshIntervalMs?: number; // default 30000
   gitRefreshIntervalMs?: number; // default 15000 (lightweight cache refresh)
 }
 
 export interface SyncClientOptions {
-  url: string; // ws://127.0.0.1:8787/sync
+  url: string; // retained for compatibility (unused in HTTP mode)
   autoSubscribe?: boolean; // worktrees
 }
