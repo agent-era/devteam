@@ -66,26 +66,33 @@ Use DevTeam to manage a team of agents working in parallel on your projects:
 - Test: `npm test`
 - Terminal E2E tests: `npm run test:terminal`
 
-## Sync Server (Local Mode)
+## Web Integration (Local Mode)
 
-For local development without a relay, a tiny WebSocket sync server exposes basic state. Right now it serves a worktree list snapshot and pushes periodic refreshes.
+For local development without a relay, the DevTeam agent posts progressive snapshots over HTTP to your web server, and your web app broadcasts updates via Server‑Sent Events (SSE).
 
-- Start the sync server:
+- Start your web app (e.g., Next.js) with endpoints:
+  - `POST /api/snapshots/push` (accepts `{type:'worktrees.snapshot', version, items}`)
+  - `GET /api/snapshots/stream` (SSE; broadcasts the latest snapshot and future updates)
+
+- Start the DevTeam sync agent and point it at your web server:
 
 ```
-PROJECTS_DIR=/path/to/projects npx devteam-server
-# Defaults: ws://127.0.0.1:8787/sync
-# Env overrides: SYNC_HOST, SYNC_PORT, SYNC_PATH, SYNC_REFRESH_MS
+PROJECTS_DIR=/path/to/projects \
+SYNC_POST_URL=http://127.0.0.1:3000/api/snapshots/push \
+npx devteam-server
+# Env overrides: SYNC_POST_URL, SYNC_REFRESH_MS
 ```
 
-- Connect from Node or the browser:
+- In your web client, connect with SSE using the same origin:
 
 ```ts
-import {SyncClient} from '@agent-era/devteam/sync';
-
-const c = new SyncClient({url: 'ws://127.0.0.1:8787/sync', autoSubscribe: true});
-c.on('worktrees', (items, version) => console.log(version, items));
-c.connect();
+const es = new EventSource('/api/snapshots/stream');
+es.onmessage = (ev) => {
+  const msg = JSON.parse(ev.data);
+  if (msg?.type === 'worktrees.snapshot') {
+    // msg.items, msg.version
+  }
+};
 ```
 
 ## Publishing (scoped public)

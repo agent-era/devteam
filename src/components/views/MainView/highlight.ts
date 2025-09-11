@@ -1,5 +1,5 @@
 import type {WorktreeInfo, PRStatus} from '../../../models.js';
-import {computeStatusLabel as engineComputeStatusLabel} from '../../../engine/status.js';
+import {computeStatusLabel as engineComputeStatusLabel} from '../../../shared/status.js';
 
 export interface HighlightInfo {
   columnIndex: number;
@@ -191,4 +191,3 @@ export function getStatusMeta(
   }
   return {label: '', bg: 'black', fg: 'white'};
 }
-

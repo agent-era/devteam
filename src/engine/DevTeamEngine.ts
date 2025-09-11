@@ -6,7 +6,7 @@ import {GitService} from '../services/GitService.js';
 import {TmuxService} from '../services/TmuxService.js';
 import {WorkspaceService} from '../services/WorkspaceService.js';
 import {mapLimit} from '../shared/utils/concurrency.js';
-import {computeStatusLabel} from './status.js';
+import {computeStatusLabel} from '../shared/status.js';
 import {GitHubEngine} from './GitHubEngine.js';
 import type {WorktreeSummary} from '../sync/types.js';
 import type {AITool, AIStatus} from '../models.js';

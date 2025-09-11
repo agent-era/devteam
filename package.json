@@ -45,17 +45,14 @@
   "exports": {
     ".": "./dist/index.js",
     "./sync": "./dist/sync/index.js",
-    "./sync/server": "./dist/sync/server.js",
-    "./sync/client": "./dist/sync/client.js"
+    "./sync/server": "./dist/sync/server.js"
   },
   "dependencies": {
     "@inkjs/ui": "^2.0.0",
     "ink": "^5.2.1",
     "ink-syntax-highlight": "^2.0.2",
-    "isomorphic-ws": "^5.0.0",
     "chokidar": "^3.6.0",
-    "react": "^18.3.1",
-    "ws": "^8.17.0"
+    "react": "^18.3.1"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
@@ -64,7 +61,6 @@
     "@types/jest": "^29.5.14",
     "@types/node": "^22.5.4",
     "@types/react": "^18.3.3",
-    "@types/ws": "^8.18.1",
     "babel-jest": "^29.7.0",
     "ink-testing-library": "^3.0.0",
     "jest": "^29.7.0",
