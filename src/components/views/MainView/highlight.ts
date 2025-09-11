@@ -47,6 +47,7 @@ export function determineStatusReason(worktree: WorktreeInfo, pr: PRStatus | und
     if (pr.has_conflicts) return StatusReason.PR_CONFLICTS;
     if (pr.checks === 'failing') return StatusReason.PR_FAILING;
     if (pr.is_ready_to_merge) return StatusReason.PR_READY_TO_MERGE;
+    // Explicit pending checks
     if (pr.is_open && pr.number && pr.checks === 'pending') return StatusReason.PR_CHECKING;
     if (pr.noPR) {
       const hasCommittedBaseDiff = ((worktree.git?.base_added_lines ?? 0) + (worktree.git?.base_deleted_lines ?? 0)) > 0;
@@ -54,8 +55,8 @@ export function determineStatusReason(worktree: WorktreeInfo, pr: PRStatus | und
       return StatusReason.AGENT_READY;
     }
     if (pr.is_open && pr.number) {
-      // Default open PRs to pending until explicit status arrives
-      return StatusReason.PR_CHECKING;
+      // Open PR with no explicit checks state: treat as ready to merge
+      return StatusReason.PR_READY_TO_MERGE;
     }
     if (pr.is_merged && pr.number) return StatusReason.PR_MERGED;
     if (worktree.session?.attached && (cs.includes('idle') || cs.includes('active'))) return StatusReason.AGENT_READY;
