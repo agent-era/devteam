@@ -1,4 +1,5 @@
 import type {WorktreeInfo, PRStatus} from '../../../models.js';
+import {computeStatusLabel as engineComputeStatusLabel} from '../../../engine/status.js';
 
 export interface HighlightInfo {
   columnIndex: number;
@@ -38,29 +39,26 @@ export enum StatusReason {
 
 // Determine the semantic status reason without presentation concerns
 export function determineStatusReason(worktree: WorktreeInfo, pr: PRStatus | undefined | null): StatusReason | null {
-  const cs = (worktree.session?.claude_status || '').toLowerCase();
-  if (cs.includes('waiting')) return StatusReason.CLAUDE_WAITING;
-  if (worktree.git?.has_changes) return StatusReason.UNCOMMITTED_CHANGES;
-  if ((worktree.git?.ahead || 0) > 0) return StatusReason.UNPUSHED_COMMITS;
-
-  if (pr) {
-    if (pr.has_conflicts) return StatusReason.PR_CONFLICTS;
-    if (pr.checks === 'failing') return StatusReason.PR_FAILING;
-    if (pr.is_ready_to_merge) return StatusReason.PR_READY_TO_MERGE;
-    if (pr.is_open && pr.number && pr.checks === 'pending') return StatusReason.PR_CHECKING;
-    if (pr.noPR) {
-      const hasCommittedBaseDiff = ((worktree.git?.base_added_lines ?? 0) + (worktree.git?.base_deleted_lines ?? 0)) > 0;
-      if (worktree.git?.has_remote && hasCommittedBaseDiff) return StatusReason.NO_PR;
-      return StatusReason.AGENT_READY;
-    }
-    if (pr.is_open && pr.number) {
-      // Default open PRs to pending until explicit status arrives
-      return StatusReason.PR_CHECKING;
-    }
-    if (pr.is_merged && pr.number) return StatusReason.PR_MERGED;
-    if (worktree.session?.attached && (cs.includes('idle') || cs.includes('active'))) return StatusReason.AGENT_READY;
+  const label = engineComputeStatusLabel({
+    ai_status: worktree.session?.ai_status || worktree.session?.claude_status,
+    attached: worktree.session?.attached,
+    has_changes: worktree.git?.has_changes,
+    ahead: worktree.git?.ahead,
+    behind: worktree.git?.behind,
+    pr,
+  } as any);
+  switch (label) {
+    case 'waiting': return StatusReason.CLAUDE_WAITING;
+    case 'uncommitted': return StatusReason.UNCOMMITTED_CHANGES;
+    case 'un-pushed': return StatusReason.UNPUSHED_COMMITS;
+    case 'conflict': return StatusReason.PR_CONFLICTS;
+    case 'pr-failed': return StatusReason.PR_FAILING;
+    case 'pr-passed': return StatusReason.PR_READY_TO_MERGE;
+    case 'pr-checking': return StatusReason.PR_CHECKING;
+    case 'merged': return StatusReason.PR_MERGED;
+    case 'ready': return StatusReason.AGENT_READY;
+    default: return null;
   }
-  return null;
 }
 
 export function computeHighlightInfo(worktree: WorktreeInfo, pr: PRStatus | undefined | null): HighlightInfo | null {
@@ -167,20 +165,20 @@ export function getStatusMeta(
   worktree: WorktreeInfo,
   pr: PRStatus | undefined | null
 ): {label: string; bg: string; fg: string} {
-  const hi = computeHighlightInfo(worktree, pr);
-  if (hi) {
-    const label = statusLabelFromReason(hi.reason);
-    const {bg, fg} = statusColorsFromReason(hi.reason);
-    return {label, bg, fg};
-  }
-  // If AI is working, show plain text label with no highlight
-  const ai = (worktree.session?.ai_status || worktree.session?.claude_status || '').toLowerCase();
-  if (ai.includes('working')) {
-    return {label: 'working', bg: 'none', fg: 'white'};
-  }
-  // If PR is merged, show plain grey 'merged' with no background
-  if (pr && (pr.is_merged || pr.state === 'MERGED')) {
-    return {label: 'merged', bg: 'none', fg: 'gray'};
+  const label = engineComputeStatusLabel({
+    ai_status: worktree.session?.ai_status || worktree.session?.claude_status,
+    attached: worktree.session?.attached,
+    has_changes: worktree.git?.has_changes,
+    ahead: worktree.git?.ahead,
+    behind: worktree.git?.behind,
+    pr,
+  } as any);
+  if (label === 'working') return {label, bg: 'none', fg: 'white'};
+  if (label === 'merged') return {label, bg: 'none', fg: 'gray'};
+  const reason = determineStatusReason(worktree, pr);
+  if (reason) {
+    const {bg, fg} = statusColorsFromReason(reason);
+    return {label: statusLabelFromReason(reason), bg, fg};
   }
   return {label: '', bg: 'black', fg: 'white'};
 }

@@ -2,6 +2,7 @@ import React, {createContext, useContext, useState, useCallback, useEffect, Reac
 import fs from 'node:fs';
 import path from 'node:path';
 import {WorktreeInfo, GitStatus, SessionInfo, ProjectInfo} from '../models.js';
+import type {AIStatus, AITool as AIToolType} from '../models.js';
 import {GitService} from '../services/GitService.js';
 import {TmuxService} from '../services/TmuxService.js';
 import {WorkspaceService} from '../services/WorkspaceService.js';
@@ -33,6 +34,7 @@ import {useGitHubContext} from './GitHubContext.js';
 import {logDebug, logError} from '../shared/utils/logger.js';
 import {Timer} from '../shared/utils/timing.js';
 import {DevTeamEngine} from '../engine/DevTeamEngine.js';
+import type {WorktreeSummary as SnapshotWorktreeSummary} from '../sync/types.js';
 
 
 interface WorktreeContextType {
@@ -81,17 +83,15 @@ interface WorktreeContextType {
   // Run configuration
   getRunConfigPath: (project: string) => string;
   createOrFillRunConfig: (project: string) => Promise<{success: boolean; content?: string; path: string; error?: string}>;
+  // Engine access for other UI contexts (e.g., GitHubContext)
+  getEngine: () => DevTeamEngine | null;
 }
 
 const WorktreeContext = createContext<WorktreeContextType | null>(null);
 
-type WorktreeSummary = {
-  project: string;
-  feature: string;
-  path: string;
-  branch: string;
-  last_commit_ts?: number;
-};
+// Snapshot items come from the engine/sync server and include optional
+// workspace flags and timestamps. Use the shared type.
+type WorktreeSummary = SnapshotWorktreeSummary;
 
 // Exported sorter to enable unit testing of cross-project ordering
 export function sortWorktreeSummaries<T extends {last_commit_ts?: number; project: string; feature: string}>(rows: T[]): T[] {
@@ -174,7 +174,7 @@ export function WorktreeProvider({
   useEffect(() => {
     const engine = new DevTeamEngine({projectsDir: getProjectsDirectory()}, {git: gitService, tmux: tmuxService});
     engineRef.current = engine;
-    const handler = (snap: {version: number; items: Array<{project:string;feature:string;path:string;branch:string; session?: string; attached?: boolean; ai_tool?: any; ai_status?: any}>}) => {
+    const handler = (snap: import('../engine/DevTeamEngine.js').Snapshot) => {
       const prevMap = new Map(worktrees.map(w => [`${w.project}/${w.feature}`, w]));
       const list: WorktreeInfo[] = snap.items.map((it) => {
         const key = `${it.project}/${it.feature}`;
@@ -182,8 +182,8 @@ export function WorktreeProvider({
         const sessionInfo = new SessionInfo({
           session_name: it.session || tmuxService.sessionName(it.project, it.feature),
           attached: !!it.attached,
-          ai_status: (it.ai_status as any) || 'not_running',
-          ai_tool: (it.ai_tool as any) || 'none',
+          ai_status: (it.ai_status ?? 'not_running') as AIStatus,
+          ai_tool: (it.ai_tool ?? 'none') as AIToolType,
         });
         return new WorktreeInfo({
           project: it.project,
@@ -202,7 +202,7 @@ export function WorktreeProvider({
     // prime with initial refresh
     engine.refreshNow().catch(() => {});
     return () => {
-      try { engine.off('snapshot', handler as any); } catch {}
+      try { engine.off('snapshot', handler); } catch {}
       engineRef.current = null;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -218,6 +218,27 @@ export function WorktreeProvider({
     // Concurrency-limit git + AI probes across all worktrees
     const results = await mapLimit<WorktreeSummary, WorktreeInfo | undefined>(list, 6, async (w: WorktreeSummary) => {
       try {
+        // Workspace header rows are not git repos; only compute workspace session
+        if (w.is_workspace_header) {
+          const wsSessionName = tmuxService.sessionName('workspace', w.feature);
+          const wsAttached = activeSessions.includes(wsSessionName);
+          const aiResult = wsAttached ? await tmuxService.getAIStatus(wsSessionName) : {tool: 'none' as const, status: 'not_running' as const};
+          return new WorktreeInfo({
+            project: 'workspace',
+            feature: w.feature,
+            path: w.path,
+            branch: w.branch,
+            session: new SessionInfo({
+              session_name: wsSessionName,
+              attached: wsAttached,
+              ai_status: aiResult.status,
+              ai_tool: aiResult.tool,
+            }),
+            is_workspace: true,
+            is_workspace_header: true,
+          });
+        }
+
         const key = `${w.project}/${w.feature}`;
         const existing = existingWorktrees.get(key);
 
@@ -244,6 +265,10 @@ export function WorktreeProvider({
           branch: w.branch,
           git: gitStatus,
           session: sessionInfo,
+          // Copy workspace flags if present from engine snapshot
+          is_workspace: w.is_workspace ?? false,
+          is_workspace_child: w.is_workspace_child ?? false,
+          parent_feature: w.parent_feature,
           // Use 0 as a safe fallback (older than any real commit)
           last_commit_ts: w.last_commit_ts ?? 0,
         });
@@ -329,8 +354,8 @@ export function WorktreeProvider({
       const engine = engineRef.current;
       if (engine) await engine.refreshNow();
       const snap = engine?.getSnapshot();
-      const rawList = snap?.items?.map(it => ({project: it.project, feature: it.feature, path: it.path, branch: it.branch})) || [];
-      const enrichedList = await attachRuntimeData(rawList);
+      const summaries: WorktreeSummary[] = (snap?.items || []) as WorktreeSummary[];
+      const enrichedList = await attachRuntimeData(summaries);
       setWorktrees(enrichedList);
       setLastRefreshed(Date.now());
 
@@ -668,7 +693,7 @@ export function WorktreeProvider({
       }
 
       // Collect all child worktrees for this feature
-      const children = worktrees.filter(w => (w as any).is_workspace_child && w.feature === featureName);
+      const children = worktrees.filter(w => w.is_workspace_child && w.feature === featureName);
       const timestamp = generateTimestamp();
 
       for (const wt of children) {
@@ -869,23 +894,25 @@ export function WorktreeProvider({
     
     try {
       const configContent = gitService.readRunConfig(project);
-      const raw = JSON.parse(configContent);
-      const cfg = (raw && typeof raw === 'object') ? (raw as any).executionInstructions : undefined;
-      if (!cfg || typeof cfg !== 'object') {
+      const raw: unknown = JSON.parse(configContent);
+      const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
+      const toStringArray = (v: unknown): string[] | undefined => Array.isArray(v) ? v.map((x) => String(x)) : undefined;
+      const rawRec: Record<string, unknown> | null = isRecord(raw) ? (raw as Record<string, unknown>) : null;
+      const execRaw = rawRec && isRecord(rawRec['executionInstructions']) ? (rawRec['executionInstructions'] as Record<string, unknown>) : undefined;
+      const exec = execRaw;
+      if (!exec) {
         throw new Error('Missing executionInstructions in run config');
       }
       
       // Run setup commands if they exist
-      const preRun = Array.isArray((cfg as any).preRunCommands)
-        ? (cfg as any).preRunCommands
-        : [];
+      const preRun = toStringArray((exec as Record<string, unknown>)['preRunCommands']) ?? [];
       for (const setupCmd of preRun) {
         tmuxService.sendText(sessionName, setupCmd, { executeCommand: true });
       }
       
       // Set environment variables if they exist
-      const envVars = ((cfg as any).environmentVariables && typeof (cfg as any).environmentVariables === 'object')
-        ? (cfg as any).environmentVariables
+      const envVars = (exec.environmentVariables && typeof exec.environmentVariables === 'object' && !Array.isArray(exec.environmentVariables))
+        ? (exec.environmentVariables as Record<string, unknown>)
         : undefined;
       if (envVars) {
         for (const [key, value] of Object.entries(envVars)) {
@@ -895,12 +922,12 @@ export function WorktreeProvider({
       }
       
       // Run the main command
-      const command = (cfg as any).mainCommand;
+      const command = typeof exec.mainCommand === 'string' ? exec.mainCommand : undefined;
       // detachOnExit controls whether the tmux session should exit when the command finishes
       // true  => exec the command and exit the session on completion
       // false => run the command normally and keep the session alive
-      const detachOnExit = (typeof (cfg as any).detachOnExit === 'boolean')
-        ? (cfg as any).detachOnExit
+      const detachOnExit = (typeof (exec as Record<string, unknown>)['detachOnExit'] === 'boolean')
+        ? ((exec as Record<string, unknown>)['detachOnExit'] as boolean)
         : false; // default to keeping session alive
 
       if (command) {
@@ -1086,6 +1113,8 @@ export function WorktreeProvider({
     // Run configuration
     getRunConfigPath,
     createOrFillRunConfig
+    ,
+    getEngine: () => engineRef.current
   };
 
   return (

@@ -5,8 +5,7 @@ import chokidar from 'chokidar';
 import {getProjectsDirectory} from '../config.js';
 import type {ClientToServer, ServerToClient, SyncServerOptions} from './types.js';
 import {DevTeamEngine} from '../engine/DevTeamEngine.js';
-import {GitService} from '../services/GitService.js';
-import {mapLimit} from '../shared/utils/concurrency.js';
+// Server now relays engine snapshots directly; engine attaches git/PR/status.
 
 type Client = { ws: WebSocket; subs: Set<string> };
 
@@ -21,8 +20,7 @@ export class SyncServer {
   private watcher?: chokidar.FSWatcher;
   private immediatePushTimer?: NodeJS.Timeout;
   private engine!: DevTeamEngine;
-  private git!: GitService;
-  private gitCache: Map<string, {base_added_lines: number; base_deleted_lines: number; ahead: number; behind: number}> = new Map();
+  // No separate git cache here; engine is source of truth
 
   constructor(opts: SyncServerOptions = {}) {
     this.options = {
@@ -44,12 +42,9 @@ export class SyncServer {
     const projectsDir = getProjectsDirectory();
     this.engine = new DevTeamEngine({projectsDir});
     this.engine.on('snapshot', (snap) => this.broadcastSnapshot(snap));
-    await this.engine.refreshNow();
-    this.timer = setInterval(() => { void this.engine.refreshNow(); }, this.options.refreshIntervalMs);
-    // Initialize GitService and start lightweight cache refresh loop
-    this.git = new GitService(projectsDir);
-    await this.refreshGitCache();
-    this.gitTimer = setInterval(() => { void this.refreshGitCache(); }, this.options.gitRefreshIntervalMs);
+    await (this.engine as any).refreshProgressive?.() || this.engine.refreshNow();
+    this.timer = setInterval(() => { void ((this.engine as any).refreshProgressive?.() || this.engine.refreshNow()); }, this.options.refreshIntervalMs);
+    // Engine handles git/PR/status refresh; no separate server timers
     this.setupWatchers();
     return {host: this.options.host, port: this.options.port, path: this.options.path};
   }
@@ -91,12 +86,10 @@ export class SyncServer {
         const subs = new Set(msg.subs || []);
         client.subs = subs;
         if (subs.has('worktrees')) {
-          // Opportunistic refresh so first snapshot carries counts
-          await this.refreshGitCache();
+          // Send current snapshot
           await this.sendWorktreesSnapshot(client);
-        }
+      }
       } else if (msg.type === 'get.worktrees') {
-        await this.refreshGitCache();
         await this.sendWorktreesSnapshot(client);
       }
     });
@@ -109,7 +102,7 @@ export class SyncServer {
   private async sendWorktreesSnapshot(client: Client) {
     const snap = this.engine.getSnapshot();
     this.version = snap.version;
-    const msg: ServerToClient = {type: 'worktrees.snapshot', version: snap.version, items: this.mergeGitCache(snap.items)};
+    const msg: ServerToClient = {type: 'worktrees.snapshot', version: snap.version, items: snap.items};
     try { client.ws.send(JSON.stringify(msg)); } catch {}
   }
 
@@ -122,52 +115,13 @@ export class SyncServer {
     this.version = snap.version;
     const subs = [...this.clients].filter(c => c.subs.has('worktrees'));
     if (subs.length === 0) return;
-    const items = this.mergeGitCache(snap.items);
-    const text = JSON.stringify({type: 'worktrees.snapshot', version: snap.version, items});
+    const text = JSON.stringify({type: 'worktrees.snapshot', version: snap.version, items: snap.items});
     for (const c of subs) {
       try { c.ws.send(text); } catch {}
     }
   }
 
-  private mergeGitCache(items: any[]): any[] {
-    return items.map((it) => {
-      const key = `${it.project}/${it.feature}`;
-      const cached = this.gitCache.get(key);
-      if (!cached) return it;
-      return {
-        ...it,
-        base_added_lines: cached.base_added_lines,
-        base_deleted_lines: cached.base_deleted_lines,
-        ahead: cached.ahead,
-        behind: cached.behind,
-      };
-    });
-  }
-
-  private async refreshGitCache(): Promise<void> {
-    try {
-      const snap = this.engine.getSnapshot();
-      const list = snap.items || [];
-      // Concurrency limit to avoid extra load
-      const results = await mapLimit(list, 4, async (it) => {
-        try {
-          const st = await this.git.getGitStatus(it.path);
-          return { key: `${it.project}/${it.feature}`, value: {
-            base_added_lines: st.base_added_lines || 0,
-            base_deleted_lines: st.base_deleted_lines || 0,
-            ahead: st.ahead || 0,
-            behind: st.behind || 0,
-          }};
-        } catch {
-          return null;
-        }
-      });
-      for (const r of results) {
-        if (!r) continue;
-        this.gitCache.set(r.key, r.value);
-      }
-    } catch {}
-  }
+  // No mergeGitCache/refreshGitCache; engine drives snapshots
 
   private setupWatchers() {
     try {
@@ -183,7 +137,7 @@ export class SyncServer {
   private async scheduleImmediatePush() {
     if (this.immediatePushTimer) clearTimeout(this.immediatePushTimer);
     this.immediatePushTimer = setTimeout(async () => {
-      await this.engine.refreshNow();
+      await ((this.engine as any).refreshProgressive?.() || this.engine.refreshNow());
     }, 250); // debounce bursts
   }
 }

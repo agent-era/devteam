@@ -9,10 +9,20 @@ export type WorktreeSummary =
     ai_tool?: AITool;    // e.g., 'claude', 'none'
     ai_status?: AIStatus; // e.g., 'working', 'waiting', 'not_running'
     // Lightweight Git status for web UI
+    has_changes?: boolean;
     base_added_lines?: number;
     base_deleted_lines?: number;
     ahead?: number;
     behind?: number;
+    // Centralized status label for clients (TUI-aligned wording)
+    status_label?: string;
+    // Workspace flags (flat snapshot; UI can group)
+    is_workspace?: boolean;
+    is_workspace_header?: boolean;
+    is_workspace_child?: boolean;
+    parent_feature?: string;
+    // Optional timestamp for ordering
+    last_commit_ts?: number;
   };
 
 export type ServerToClient =

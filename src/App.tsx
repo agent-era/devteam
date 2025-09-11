@@ -452,20 +452,14 @@ function AppContent() {
 export default function App() {
   return (
     <InputFocusProvider>
-      <GitHubProvider>
-        <AppWithGitHub />
-      </GitHubProvider>
+      <WorktreeProvider>
+        <GitHubProvider>
+          <UIProvider>
+            <AppContent />
+          </UIProvider>
+        </GitHubProvider>
+      </WorktreeProvider>
     </InputFocusProvider>
-  );
-}
-
-function AppWithGitHub() {
-  return (
-    <WorktreeProvider>
-      <UIProvider>
-        <AppContent />
-      </UIProvider>
-    </WorktreeProvider>
   );
 }
 
@@ -481,13 +475,13 @@ export function TestableApp({
 }) {
   return (
     <InputFocusProvider>
-      <GitHubProvider gitHubService={gitHubService} gitService={gitService}>
-        <WorktreeProvider gitService={gitService} tmuxService={tmuxService}>
+      <WorktreeProvider gitService={gitService} tmuxService={tmuxService}>
+        <GitHubProvider gitHubService={gitHubService} gitService={gitService}>
           <UIProvider>
             <AppContent />
           </UIProvider>
-        </WorktreeProvider>
-      </GitHubProvider>
+        </GitHubProvider>
+      </WorktreeProvider>
     </InputFocusProvider>
   );
 }
