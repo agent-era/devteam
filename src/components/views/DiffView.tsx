@@ -24,8 +24,8 @@ type DiffLine = {
   text: string;
   fileName?: string;
   headerType?: 'file' | 'hunk';
-  oldLineIndex?: number; // 0-based original (left) line index within file
-  newLineIndex?: number; // 0-based current (right) line index within file
+  oldLineIndex?: number; // 1-based original (left) line number from diff output
+  newLineIndex?: number; // 1-based current (right) line number from diff output
 };
 
 type SideBySideLine = {
@@ -64,8 +64,8 @@ async function loadDiff(worktreePath: string, diffType: 'full' | 'uncommitted' =
     const raw = diff.split('\n');
     let currentFileName = '';
     let currentFileLines: DiffLine[] = [];
-    let oldLineCounter = 0;
-    let newLineCounter = 0;
+    let oldLineCounter = 1;
+    let newLineCounter = 1;
     
     for (const line of raw) {
       if (line.startsWith('diff --git')) {
@@ -80,14 +80,16 @@ async function loadDiff(worktreePath: string, diffType: 'full' | 'uncommitted' =
         currentFileName = fp;
         currentFileLines = [];
         currentFileLines.push({type: 'header', text: `📁 ${fp}`, fileName: fp, headerType: 'file'});
+        oldLineCounter = 1;
+        newLineCounter = 1;
       } else if (line.startsWith('@@')) {
         // Parse original and new starting line numbers from hunk header
         const m = line.match(/^@@ -([0-9]+)(?:,([0-9]+))? \+([0-9]+)(?:,([0-9]+))? @@/);
         if (m) {
           const oldStart = parseInt(m[1] || '1', 10);
           const newStart = parseInt(m[3] || '1', 10);
-          oldLineCounter = Math.max(0, oldStart - 1);
-          newLineCounter = Math.max(0, newStart - 1);
+          oldLineCounter = Math.max(1, oldStart);
+          newLineCounter = Math.max(1, newStart);
         }
         const ctx = line.replace(/^@@.*@@ ?/, '');
         if (ctx) currentFileLines.push({type: 'header', text: `  ▼ ${ctx}`, fileName: currentFileName, headerType: 'hunk'});
@@ -257,7 +259,7 @@ export function formatCommentsAsPrompt(
       ) {
         // Removed line or other content - show as removed; include original number when available
         if (comment.isRemoved && comment.originalLineIndex !== undefined) {
-          prompt += `  Removed line ${comment.originalLineIndex + 1}: ${comment.lineText}\n`;
+          prompt += `  Removed line ${comment.originalLineIndex}: ${comment.lineText}\n`;
         } else {
           prompt += `  Removed line: ${comment.lineText}\n`;
         }
@@ -782,7 +784,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       if (lastComment.lineIndex !== undefined) {
         lines.push(`  Line ${lastComment.lineIndex + 1}: ${lastComment.commentText}`);
       } else if (lastComment.isRemoved && lastComment.originalLineIndex !== undefined) {
-        lines.push(`  Removed line ${lastComment.originalLineIndex + 1}: ${lastComment.commentText}`);
+        lines.push(`  Removed line ${lastComment.originalLineIndex}: ${lastComment.commentText}`);
       }
       lines.push(`File: ${lastComment.fileName}`);
     }
@@ -793,7 +795,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       if (secondLastComment.lineIndex !== undefined) {
         lines.push(`  Line ${secondLastComment.lineIndex + 1}: ${secondLastComment.commentText}`);
       } else if (secondLastComment.isRemoved && secondLastComment.originalLineIndex !== undefined) {
-        lines.push(`  Removed line ${secondLastComment.originalLineIndex + 1}: ${secondLastComment.commentText}`);
+        lines.push(`  Removed line ${secondLastComment.originalLineIndex}: ${secondLastComment.commentText}`);
       }
     }
     
@@ -861,7 +863,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
           !comment.isFileLevel
         ) {
           if (comment.isRemoved && comment.originalLineIndex !== undefined) {
-            messageLines.push(`  Removed line ${comment.originalLineIndex + 1}: ${comment.lineText}`);
+            messageLines.push(`  Removed line ${comment.originalLineIndex}: ${comment.lineText}`);
           } else {
             messageLines.push(`  Removed line: ${comment.lineText}`);
           }

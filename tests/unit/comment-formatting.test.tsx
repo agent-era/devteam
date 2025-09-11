@@ -46,7 +46,7 @@ describe('Comment formatting for Claude prompts', () => {
         lineText: 'const removed = 1;',
         commentText: 'Why was this removed?',
         isRemoved: true,
-        originalLineIndex: 0
+        originalLineIndex: 1
       }];
 
       let prompt = "Please address the following code review comments:\n\n";
@@ -92,7 +92,7 @@ describe('Comment formatting for Claude prompts', () => {
           lineText: 'const removed = 1;',
           commentText: 'Why was this removed?',
           isRemoved: true,
-          originalLineIndex: 0
+          originalLineIndex: 1
         },
         {
           lineIndex: undefined,
@@ -121,7 +121,7 @@ describe('Comment formatting for Claude prompts', () => {
           } else if (comment.lineText && comment.lineText.trim().length > 0 && comment.lineText !== fileName) {
             // Removed line or other content - include number when available
             if ((comment as any).isRemoved && (comment as any).originalLineIndex !== undefined) {
-              prompt += `  Removed line ${(comment as any).originalLineIndex + 1}: ${comment.lineText}\n`;
+              prompt += `  Removed line ${(comment as any).originalLineIndex}: ${comment.lineText}\n`;
             } else {
               prompt += `  Removed line: ${comment.lineText}\n`;
             }
@@ -153,7 +153,7 @@ describe('Comment formatting for Claude prompts', () => {
         },
         {
           description: 'removed line with original number',
-          comment: {lineIndex: undefined, fileName: 'test.ts', lineText: 'debugger;', commentText: 'Good removal', isRemoved: true, originalLineIndex: 0},
+          comment: {lineIndex: undefined, fileName: 'test.ts', lineText: 'debugger;', commentText: 'Good removal', isRemoved: true, originalLineIndex: 1},
           expectedFormat: 'Removed line 1: debugger;'
         },
         {
@@ -169,7 +169,7 @@ describe('Comment formatting for Claude prompts', () => {
           result = `Line ${comment.lineIndex + 1}: ${comment.lineText}`;
         } else if (comment.lineText && comment.lineText.trim().length > 0 && comment.lineText !== comment.fileName) {
           if ((comment as any).isRemoved && (comment as any).originalLineIndex !== undefined) {
-            result = `Removed line ${(comment as any).originalLineIndex + 1}: ${comment.lineText}`;
+            result = `Removed line ${(comment as any).originalLineIndex}: ${comment.lineText}`;
           } else {
             result = `Removed line: ${comment.lineText}`;
           }

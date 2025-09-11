@@ -34,7 +34,7 @@ describe('File-level comment formatting', () => {
         commentText: 'This is actually a removed line that equals filename',
         isFileLevel: false,
         isRemoved: true,
-        originalLineIndex: 4
+        originalLineIndex: 5
       }
     ];
 
