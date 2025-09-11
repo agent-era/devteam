@@ -29,7 +29,7 @@ type SideBySideLine = {
 
 // Map file extensions to language identifiers for syntax highlighting is now in shared util
 
-async function loadDiff(worktreePath: string, diffType: 'full' | 'uncommitted' = 'full'): Promise<DiffLine[]> {
+async function loadDiff(worktreePath: string, diffType: 'full' | 'uncommitted' = 'full', baseCommitHash?: string): Promise<DiffLine[]> {
   let diff: string | null = null;
   
   if (diffType === 'uncommitted') {
@@ -37,11 +37,14 @@ async function loadDiff(worktreePath: string, diffType: 'full' | 'uncommitted' =
     diff = await runCommandAsync(['git', '-C', worktreePath, 'diff', '--no-color', '--no-ext-diff', 'HEAD']);
   } else {
     // Show full diff against base branch (default behavior)
-    let target = 'HEAD~1';
-    const base = findBaseBranch(worktreePath, BASE_BRANCH_CANDIDATES);
-    if (base) {
-      const mb = await runCommandAsync(['git', '-C', worktreePath, 'merge-base', 'HEAD', base]);
-      if (mb) target = mb.trim();
+    let target = baseCommitHash;
+    if (!target) {
+      target = 'HEAD~1';
+      const base = findBaseBranch(worktreePath, BASE_BRANCH_CANDIDATES);
+      if (base) {
+        const mb = await runCommandAsync(['git', '-C', worktreePath, 'merge-base', 'HEAD', base]);
+        if (mb) target = mb.trim();
+      }
     }
     diff = await runCommandAsync(['git', '-C', worktreePath, 'diff', '--no-color', '--no-ext-diff', target]);
   }
@@ -295,18 +298,13 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
 
   useEffect(() => {
     (async () => {
-      const lns = await loadDiff(worktreePath, diffType);
-      setLines(lns);
-      setSideBySideLines(convertToSideBySide(lns));
-      // Determine base commit hash used for this diff for context
+      // Compute base hash first (so diff and prompts use the same value)
+      let computedBaseHash = '';
       try {
         if (diffType === 'uncommitted') {
           const head = await runCommandAsync(['git', '-C', worktreePath, 'rev-parse', 'HEAD']);
-          const hash = (head || '').trim();
-          setBaseCommitHash(hash);
-          commentStore.baseCommitHash = hash;
+          computedBaseHash = (head || '').trim();
         } else {
-          // Try merge-base with base branch, fallback to HEAD~1
           let targetRef = 'HEAD~1';
           const base = findBaseBranch(worktreePath, BASE_BRANCH_CANDIDATES);
           if (base) {
@@ -314,14 +312,20 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
             if (mb) targetRef = mb.trim();
           }
           const hash = await runCommandAsync(['git', '-C', worktreePath, 'rev-parse', targetRef]);
-          const h = (hash || '').trim();
-          setBaseCommitHash(h);
-          commentStore.baseCommitHash = h;
+          computedBaseHash = (hash || '').trim();
         }
-      } catch (e) {
-        setBaseCommitHash('');
-        commentStore.baseCommitHash = undefined;
+      } catch {
+        computedBaseHash = '';
       }
+
+      setBaseCommitHash(computedBaseHash);
+      commentStore.baseCommitHash = computedBaseHash || undefined;
+
+      // Now load the diff using the computed base hash (for full diffs)
+      const lns = await loadDiff(worktreePath, diffType, diffType === 'full' ? computedBaseHash : undefined);
+      setLines(lns);
+      setSideBySideLines(convertToSideBySide(lns));
+
       // Reset scroll position when loading new diff
       setScrollRow(0);
       setTargetScrollRow(0);
