@@ -20,8 +20,8 @@ describe('File-level comment formatting', () => {
     expect(prompt).toContain(`File: ${fileName}`);
     expect(prompt).toContain('Comment: Review this new file');
 
-    // It should NOT redundantly include the filename as line content
-    expect(prompt).not.toContain(`Line content: ${fileName}`);
+    // It should NOT redundantly include the filename as a removed line entry
+    expect(prompt).not.toContain(`Removed line: ${fileName}`);
   });
 
   test('includes line content when not file-level even if content equals filename', () => {
@@ -38,7 +38,7 @@ describe('File-level comment formatting', () => {
 
     const prompt = formatCommentsAsPrompt(comments as any);
     expect(prompt).toContain(`File: ${fileName}`);
-    expect(prompt).toContain(`Line content: ${fileName}`);
+    expect(prompt).toContain(`Removed line: ${fileName}`);
     expect(prompt).toContain('Comment: This is actually a removed line that equals filename');
   });
 });

@@ -203,6 +203,7 @@ export class DiffComment {
 
 export class CommentStore {
   comments: DiffComment[];
+  baseCommitHash?: string;
   constructor() {
     this.comments = [];
   }

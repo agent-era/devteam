@@ -204,7 +204,7 @@ type WrapMode = 'truncate' | 'wrap';
 // Exported utility for formatting comments into a Claude-friendly prompt
 export function formatCommentsAsPrompt(
   comments: any[],
-  opts?: {workspaceFeature?: string; project?: string}
+  opts?: {workspaceFeature?: string; project?: string; baseCommitHash?: string}
 ): string {
   let prompt = "Please address the following code review comments:\n\n";
   if (opts?.workspaceFeature && opts?.project) {
@@ -220,7 +220,8 @@ export function formatCommentsAsPrompt(
   });
 
   Object.entries(commentsByFile).forEach(([fileName, fileComments]) => {
-    prompt += `File: ${fileName}\n`;
+    const header = opts?.baseCommitHash ? `File: ${fileName}@${opts.baseCommitHash}` : `File: ${fileName}`;
+    prompt += `${header}\n`;
     fileComments.forEach(comment => {
       if (comment.lineIndex !== undefined) {
         // Normal line with line number
@@ -230,8 +231,8 @@ export function formatCommentsAsPrompt(
         comment.lineText.trim().length > 0 &&
         !comment.isFileLevel
       ) {
-        // Removed line or other content - show line content without line number
-        prompt += `  Line content: ${comment.lineText}\n`;
+        // Removed line or other content - show as removed without line number
+        prompt += `  Removed line: ${comment.lineText}\n`;
       }
       // For file headers (no meaningful lineText), just show the comment
       prompt += `  Comment: ${comment.commentText}\n`;
@@ -258,6 +259,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
   const [wrapMode, setWrapMode] = useState<WrapMode>('truncate');
   const commentStore = useMemo(() => commentStoreManager.getStore(worktreePath), [worktreePath]);
   const [tmuxService] = useState(() => new TmuxService());
+  const [baseCommitHash, setBaseCommitHash] = useState<string>('');
   const [showCommentDialog, setShowCommentDialog] = useState(false);
   const [showAllComments, setShowAllComments] = useState(true);
   const [showSessionWaitingDialog, setShowSessionWaitingDialog] = useState(false);
@@ -296,6 +298,30 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       const lns = await loadDiff(worktreePath, diffType);
       setLines(lns);
       setSideBySideLines(convertToSideBySide(lns));
+      // Determine base commit hash used for this diff for context
+      try {
+        if (diffType === 'uncommitted') {
+          const head = await runCommandAsync(['git', '-C', worktreePath, 'rev-parse', 'HEAD']);
+          const hash = (head || '').trim();
+          setBaseCommitHash(hash);
+          commentStore.baseCommitHash = hash;
+        } else {
+          // Try merge-base with base branch, fallback to HEAD~1
+          let targetRef = 'HEAD~1';
+          const base = findBaseBranch(worktreePath, BASE_BRANCH_CANDIDATES);
+          if (base) {
+            const mb = await runCommandAsync(['git', '-C', worktreePath, 'merge-base', 'HEAD', base]);
+            if (mb) targetRef = mb.trim();
+          }
+          const hash = await runCommandAsync(['git', '-C', worktreePath, 'rev-parse', targetRef]);
+          const h = (hash || '').trim();
+          setBaseCommitHash(h);
+          commentStore.baseCommitHash = h;
+        }
+      } catch (e) {
+        setBaseCommitHash('');
+        commentStore.baseCommitHash = undefined;
+      }
       // Reset scroll position when loading new diff
       setScrollRow(0);
       setTargetScrollRow(0);
@@ -768,7 +794,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     return foundLines > 0;
   };
 
-  const sendCommentsViaAltEnter = (sessionName: string, comments: any[], opts?: {workspaceFeature?: string; project?: string}) => {
+  const sendCommentsViaAltEnter = (sessionName: string, comments: any[], opts?: {workspaceFeature?: string; project?: string; baseCommitHash?: string}) => {
     // Format as lines and send with Alt+Enter (existing logic)
     const messageLines: string[] = [];
     messageLines.push("Please address the following code review comments:");
@@ -787,7 +813,8 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     });
 
     Object.entries(commentsByFile).forEach(([fileName, fileComments]) => {
-      messageLines.push(`File: ${fileName}`);
+      const header = opts?.baseCommitHash ? `File: ${fileName}@${opts.baseCommitHash}` : `File: ${fileName}`;
+      messageLines.push(header);
       fileComments.forEach(comment => {
         if (comment.lineIndex !== undefined) {
           messageLines.push(`  Line ${comment.lineIndex + 1}: ${comment.lineText}`);
@@ -796,7 +823,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
           comment.lineText.trim().length > 0 &&
           !comment.isFileLevel
         ) {
-          messageLines.push(`  Line content: ${comment.lineText}`);
+          messageLines.push(`  Removed line: ${comment.lineText}`);
         }
         messageLines.push(`  Comment: ${comment.commentText}`);
       });
@@ -846,11 +873,11 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
         // For idle/working/thinking/not_running - we can proceed
         if (claudeStatus === 'not_running') {
           // Start Claude with the prompt pre-filled!
-          const commentPrompt = formatCommentsAsPrompt(comments, {workspaceFeature, project});
+          const commentPrompt = formatCommentsAsPrompt(comments, {workspaceFeature, project, baseCommitHash: commentStore.baseCommitHash || baseCommitHash});
           tmuxService.sendText(sessionName, `claude ${JSON.stringify(commentPrompt)}`, { executeCommand: true });
         } else {
           // Claude is idle/working/active - can accept input via Alt+Enter
-          sendCommentsViaAltEnter(sessionName, comments, {workspaceFeature, project});
+          sendCommentsViaAltEnter(sessionName, comments, {workspaceFeature, project, baseCommitHash: commentStore.baseCommitHash || baseCommitHash});
           
           // Wait a brief moment for tmux to process the input
           runCommand(['sleep', '0.5']);
@@ -872,7 +899,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
         const hasClaude = runCommand(['bash', '-lc', 'command -v claude || true']).trim();
         if (hasClaude) {
           // Launch Claude with the comments as the initial prompt!
-          const commentPrompt = formatCommentsAsPrompt(comments, {workspaceFeature, project});
+          const commentPrompt = formatCommentsAsPrompt(comments, {workspaceFeature, project, baseCommitHash: commentStore.baseCommitHash || baseCommitHash});
           tmuxService.sendText(sessionName, `claude ${JSON.stringify(commentPrompt)}`, { executeCommand: true });
           
           // For new sessions, we can assume the prompt was received
@@ -1127,6 +1154,14 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
             (lines[selectedLine]?.text || '') : 
             // Prefer the current version (right) text when available
             (sideBySideLines[selectedLine]?.right?.text || sideBySideLines[selectedLine]?.left?.text || '')}
+          isRemoved={(() => {
+            if (viewMode === 'unified') {
+              return lines[selectedLine]?.type === 'removed';
+            } else {
+              const s = sideBySideLines[selectedLine];
+              return s?.left?.type === 'removed';
+            }
+          })()}
           initialComment={(() => {
             if (viewMode === 'unified') {
               const file = lines[selectedLine]?.fileName || '';

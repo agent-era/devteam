@@ -7,12 +7,13 @@ import {useInputFocus} from '../../contexts/InputFocusContext.js';
 type Props = {
   fileName: string;
   lineText: string;
+  isRemoved?: boolean;
   initialComment?: string;
   onSave: (comment: string) => void;
   onCancel: () => void;
 };
 
-const CommentInputDialog = React.memo(function CommentInputDialog({fileName, lineText, initialComment = '', onSave, onCancel}: Props) {
+const CommentInputDialog = React.memo(function CommentInputDialog({fileName, lineText, isRemoved = false, initialComment = '', onSave, onCancel}: Props) {
   const [comment, setComment] = useState(initialComment);
   const {requestFocus, releaseFocus} = useInputFocus();
 
@@ -53,7 +54,7 @@ const CommentInputDialog = React.memo(function CommentInputDialog({fileName, lin
     >
       <Text bold color="blue">Add Comment</Text>
       <Text color="gray">File: {fileName}</Text>
-      <Text color="gray">Line: {lineText.slice(0, 60)}{lineText.length > 60 ? '...' : ''}</Text>
+      <Text color={isRemoved ? 'red' : 'gray'}>{isRemoved ? 'Removed line' : 'Line'}: {lineText.slice(0, 60)}{lineText.length > 60 ? '...' : ''}</Text>
       <Box
         flexDirection="column"
         borderStyle="single"
