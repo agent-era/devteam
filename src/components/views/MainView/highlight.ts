@@ -23,7 +23,7 @@ export const COLORS = {
 
 // Enum for semantic status reasons (presentation-agnostic)
 export enum StatusReason {
-  CLAUDE_WAITING = 'claude-waiting',
+  AGENT_WAITING = 'agent-waiting',
   UNCOMMITTED_CHANGES = 'uncommitted-changes',
   UNPUSHED_COMMITS = 'unpushed-commits',
   PR_CONFLICTS = 'pr-conflicts',
@@ -39,7 +39,7 @@ export enum StatusReason {
 // Determine the semantic status reason without presentation concerns
 export function determineStatusReason(worktree: WorktreeInfo, pr: PRStatus | undefined | null): StatusReason | null {
   const cs = (worktree.session?.claude_status || '').toLowerCase();
-  if (cs.includes('waiting')) return StatusReason.CLAUDE_WAITING;
+  if (cs.includes('waiting')) return StatusReason.AGENT_WAITING;
   if (worktree.git?.has_changes) return StatusReason.UNCOMMITTED_CHANGES;
   if ((worktree.git?.ahead || 0) > 0) return StatusReason.UNPUSHED_COMMITS;
 
@@ -76,7 +76,7 @@ export function computeHighlightInfo(worktree: WorktreeInfo, pr: PRStatus | unde
 
   // Map reason to table column for highlighting
   const columnIndex =
-    reason === StatusReason.CLAUDE_WAITING || reason === StatusReason.AGENT_READY ? COLUMNS.AI :
+    reason === StatusReason.AGENT_WAITING || reason === StatusReason.AGENT_READY ? COLUMNS.AI :
     reason === StatusReason.UNCOMMITTED_CHANGES ? COLUMNS.DIFF :
     reason === StatusReason.UNPUSHED_COMMITS ? COLUMNS.CHANGES :
     COLUMNS.PR;
@@ -100,7 +100,7 @@ export function computeHighlightInfo(worktree: WorktreeInfo, pr: PRStatus | unde
 
 export function statusLabelFromReason(reason: StatusReason | string | null | undefined): string {
   switch (reason) {
-    case StatusReason.CLAUDE_WAITING:
+    case StatusReason.AGENT_WAITING:
       return 'waiting';
     case StatusReason.UNCOMMITTED_CHANGES:
       // Rename: show 'uncommitted' instead of 'modified'
@@ -132,7 +132,7 @@ export function statusColorsFromReason(reason: StatusReason | string | null | un
   // All statuses default to white text for readability
   const fg = 'white';
   switch (reason) {
-    case StatusReason.CLAUDE_WAITING:
+    case StatusReason.AGENT_WAITING:
       return {bg: 'yellow', fg};
     case StatusReason.UNCOMMITTED_CHANGES:
       // Plain colored text for modified
@@ -182,6 +182,25 @@ export function getStatusMeta(
   // If PR is merged, show plain grey 'merged' with no background
   if (pr && (pr.is_merged || pr.state === 'MERGED')) {
     return {label: 'merged', bg: 'none', fg: 'gray'};
+  }
+  return {label: '', bg: 'black', fg: 'white'};
+}
+
+// AI-only status meta, useful for rows that should reflect just agent state (e.g., workspace headers)
+export function getAIStatusMeta(
+  worktree: WorktreeInfo,
+): {label: string; bg: string; fg: string} {
+  const ai = (worktree.session?.ai_status || worktree.session?.claude_status || '').toLowerCase();
+  if (ai.includes('waiting')) {
+    const {bg, fg} = statusColorsFromReason(StatusReason.AGENT_WAITING);
+    return {label: 'waiting', bg, fg};
+  }
+  if (ai.includes('working')) {
+    return {label: 'working', bg: 'none', fg: 'white'};
+  }
+  if (worktree.session?.attached && (ai.includes('idle') || ai.includes('active'))) {
+    const {bg, fg} = statusColorsFromReason(StatusReason.AGENT_READY);
+    return {label: 'ready', bg, fg};
   }
   return {label: '', bg: 'black', fg: 'white'};
 }

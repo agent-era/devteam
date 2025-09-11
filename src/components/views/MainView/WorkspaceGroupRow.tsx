@@ -5,6 +5,7 @@ import type {ColumnWidths} from './hooks/useColumnWidths.js';
 import {stringDisplayWidth} from '../../../shared/utils/formatting.js';
 import {getAISymbol} from './utils.js';
 import StatusChip from '../../common/StatusChip.js';
+import {getAIStatusMeta} from './highlight.js';
 
 interface WorkspaceGroupRowProps {
   workspace: WorktreeInfo; // header item with is_workspace_header
@@ -30,6 +31,9 @@ export const WorkspaceGroupRow = memo<WorkspaceGroupRowProps>(({workspace, globa
     {text: '', width: columnWidths.changes, justify: 'flex-end' as const},
     {text: '', width: columnWidths.pr, justify: 'flex-end' as const},
   ];
+
+  // Determine STATUS for workspace header based solely on AI agent tool status (centralized mapping)
+  const {label: statusLabel, bg: statusBg, fg: statusFg} = getAIStatusMeta(workspace);
 
   const formatCellText = (text: string, width: number, justify: 'flex-start' | 'center' | 'flex-end'): string => {
     const raw = (text ?? '').trim();
@@ -94,9 +98,9 @@ export const WorkspaceGroupRow = memo<WorkspaceGroupRowProps>(({workspace, globa
       <Box width={columnWidths.number} justifyContent="flex-start" marginRight={1}>
         <Text bold={selected} inverse={selected}>{formatCellText(numberText, columnWidths.number, 'flex-start')}</Text>
       </Box>
-      {/* Second column: STATUS (blank for workspace rows) */}
+      {/* Second column: STATUS (AI tool status for workspace rows) */}
       <Box width={columnWidths.status} justifyContent="flex-start" marginRight={1}>
-        <StatusChip label={''} color={'black'} fg={'white'} width={columnWidths.status} />
+        <StatusChip label={statusLabel} color={statusBg} fg={statusFg} width={columnWidths.status} />
       </Box>
       {/* Remaining columns: PROJECT/FEATURE, AI, DIFF, CHANGES, PR */}
       {cells.map((cell, idx) => (
