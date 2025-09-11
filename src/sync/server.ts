@@ -90,8 +90,13 @@ export class SyncServer {
       if (msg.type === 'hello') {
         const subs = new Set(msg.subs || []);
         client.subs = subs;
-        if (subs.has('worktrees')) await this.sendWorktreesSnapshot(client);
+        if (subs.has('worktrees')) {
+          // Opportunistic refresh so first snapshot carries counts
+          await this.refreshGitCache();
+          await this.sendWorktreesSnapshot(client);
+        }
       } else if (msg.type === 'get.worktrees') {
+        await this.refreshGitCache();
         await this.sendWorktreesSnapshot(client);
       }
     });
