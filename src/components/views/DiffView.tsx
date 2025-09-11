@@ -18,7 +18,6 @@ import {LineWrapper} from '../../shared/utils/lineWrapper.js';
 import {ViewportCalculator} from '../../shared/utils/viewport.js';
 import {computeUnifiedPerFileIndices, computeSideBySidePerFileIndices} from '../../shared/utils/diffLineIndex.js';
 import {getLanguageFromFileName} from '../../shared/utils/languageMapping.js';
-import {enableMouseTracking, disableMouseTracking, parseMouseWheel} from '../../shared/utils/mouse.js';
 
 type DiffLine = {type: 'added'|'removed'|'context'|'header'; text: string; fileName?: string; headerType?: 'file' | 'hunk'};
 
@@ -401,59 +400,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     };
   }, [animationId]);
 
-  // Mouse wheel scrolling: enable SGR mouse tracking and listen for wheel events
-  useEffect(() => {
-    if (showCommentDialog || showSessionWaitingDialog || showUnsubmittedCommentsDialog) return;
-    try { setRawMode?.(true); } catch {}
-    enableMouseTracking();
-    const onData = (buf: Buffer) => {
-      const wheelEvents = parseMouseWheel(buf);
-      if (!wheelEvents.length) return;
-      if (showFileTreeOverlay) setShowFileTreeOverlay(false);
-      const currentLines = viewMode === 'unified' ? lines : sideBySideLines;
-      const maxWidth = viewMode === 'unified' ? terminalWidth - 2 : Math.floor((terminalWidth - 1) / 2) - 2;
-      const textLines = currentLines.map(line => {
-        if (viewMode === 'unified') {
-          return (line as DiffLine).text || ' ';
-        } else {
-          const sbsLine = line as SideBySideLine;
-          const leftText = sbsLine.left?.text || '';
-          const rightText = sbsLine.right?.text || '';
-          const leftH = LineWrapper.calculateHeight(leftText, maxWidth);
-          const rightH = LineWrapper.calculateHeight(rightText, maxWidth);
-          return leftH >= rightH ? leftText : rightText;
-        }
-      });
-      const maxScrollRow = ViewportCalculator.getMaxScrollRow(textLines, measuredPageSize, maxWidth, wrapMode);
-      const deltaRowsPerTick = 3;
-      let tsr = targetScrollRow;
-      for (const e of wheelEvents) {
-        const delta = e.direction === 'up' ? -deltaRowsPerTick : deltaRowsPerTick;
-        tsr = Math.max(0, Math.min(maxScrollRow, tsr + delta));
-      }
-      setIsFileNavigation(false);
-      setTargetScrollRow(tsr);
-    };
-    stdin?.on?.('data', onData as any);
-    return () => {
-      try { stdin?.off?.('data', onData as any); } catch {}
-      disableMouseTracking();
-    };
-  }, [
-    stdin,
-    setRawMode,
-    showCommentDialog,
-    showSessionWaitingDialog,
-    showUnsubmittedCommentsDialog,
-    showFileTreeOverlay,
-    viewMode,
-    lines,
-    sideBySideLines,
-    terminalWidth,
-    measuredPageSize,
-    wrapMode,
-    targetScrollRow
-  ]);
+  // Mouse wheel scrolling was removed; keyboard navigation remains available.
 
   useInput((input, key) => {
     // Don't handle inputs when any dialog is open
