@@ -8,6 +8,7 @@ import {FakeGitService} from '../fakes/FakeGitService.js';
 import {FakeTmuxService} from '../fakes/FakeTmuxService.js';
 import {FakeGitHubService} from '../fakes/FakeGitHubService.js';
 import {FakeMemoryMonitorService} from '../fakes/FakeMemoryMonitorService.js';
+import {FakeWorktreeService} from '../fakes/FakeWorktreeService.js';
 import {memoryStore} from '../fakes/stores.js';
 import {calculatePageSize, calculatePaginationInfo} from '../../src/utils/pagination.js';
 
@@ -58,7 +59,7 @@ export function renderTestApp(props?: TestAppProps, options?: any) {
     tmuxService,
     gitHubService,
     memoryMonitorService,
-    worktreeService: new (require('../fakes/FakeWorktreeService.js').FakeWorktreeService)(gitService, tmuxService)
+    worktreeService: new FakeWorktreeService(gitService, tmuxService)
   };
 
   const result = render(h(TestApp, props as any));
@@ -192,7 +193,7 @@ function generateMainListOutput(): string {
   }
 
   output += `Enter attach, n new, a archive, x exec, d diff, s shell, q quit${paginationText}\n`;
-  output += '#    PROJECT/FEATURE        AI  DIFF     CHANGES  PUSHED  PR\n';
+  output += '#    STATUS        PROJECT/FEATURE        AI  DIFF     CHANGES  PR\n';
   
   // Show only items for current page
   const start = page * pageSize;
@@ -202,7 +203,18 @@ function generateMainListOutput(): string {
     const session = sessions.find(s => s.session_name.includes(worktree.feature));
     const gitStatus = memoryStore.gitStatus.get(worktree.path);
     const prStatus = memoryStore.prStatus.get(worktree.path);
-    
+    // STATUS label based on simple priority
+    let statusLabel = '';
+    const cs = session?.claude_status || 'not_running';
+    if (cs === 'working') statusLabel = 'working';
+    else if (cs === 'waiting') statusLabel = 'waiting';
+    else if (gitStatus?.has_changes) statusLabel = 'uncommitted';
+    else if ((gitStatus?.ahead || 0) > 0) statusLabel = 'un-pushed';
+    else if (prStatus?.mergeable === 'CONFLICTING') statusLabel = 'conflict';
+    else if (prStatus?.checks === 'failing') statusLabel = 'pr-failed';
+    else if (prStatus?.checks === 'passing') statusLabel = 'pr-passed';
+    else if (prStatus?.is_merged && prStatus?.number) statusLabel = 'merged';
+
     // Row number (1-based for display, continuous across pages)
     const absoluteIndex = start + index;
     const rowNum = `${absoluteIndex + 1}`.padStart(4);
@@ -234,9 +246,6 @@ function generateMainListOutput(): string {
     if (behind > 0) changes += `↓${behind}`;
     if (!changes) changes = '-';
     
-    // Pushed status
-    const pushed = gitStatus?.is_pushed ? '✓' : '-';
-    
     // PR status
     let prStr = '-';
     if (prStatus?.number) {
@@ -247,7 +256,8 @@ function generateMainListOutput(): string {
       if (prStatus.is_merged || prStatus.state === 'MERGED') prStr += '⟫';
     }
     
-    output += `${rowNum} ${displayName} ${aiSymbol}   ${diffStr.padEnd(8)} ${changes.padEnd(8)} ${pushed}       ${prStr}\n`;
+    const statusCol = (statusLabel || '').padEnd(13);
+    output += `${rowNum} ${statusCol} ${displayName} ${aiSymbol}   ${diffStr.padEnd(8)} ${changes.padEnd(8)} ${prStr}\n`;
   });
   
   // Add pagination footer if multiple pages
@@ -287,7 +297,6 @@ Column Explanations:
 AI - Claude AI status: idle, working, waiting
 DIFF - Added/removed lines (+10/-5)
 CHANGES - Commits ahead/behind (↑2 ↓1)  
-PUSHED - Whether changes are pushed
 PR - Pull request number and status
 
 Press ESC to close this help.`;

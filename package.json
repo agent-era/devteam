@@ -17,7 +17,7 @@
     "cli": "node dist/bin/devteam.js",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:terminal": "npm run build && tsc -p tsconfig.node-tests.json && node --test tests/e2e/terminal/*.test.mjs",
+    "test:terminal": "npm run build && tsc -p tsconfig.node-tests.json && NO_APP_INTERVALS=1 E2E_IGNORE_RAWMODE=1 E2E_TTY_COLS=100 E2E_TTY_ROWS=30 node --test --test-concurrency=1 --test-timeout=30000 --test-force-exit tests/e2e/terminal/*.test.mjs",
     "prepublishOnly": "npm run build",
     "release:patch": "npm ci && npm version patch && npm publish --access public",
     "release:minor": "npm ci && npm version minor && npm publish --access public",

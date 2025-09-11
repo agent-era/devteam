@@ -122,6 +122,14 @@ export class WorktreeInfo {
   is_archived?: boolean;
   mtime?: number;
   last_commit_ts?: number;
+  // Workspace grouping (optional)
+  is_workspace?: boolean;
+  is_workspace_header?: boolean;
+  is_workspace_child?: boolean;
+  parent_feature?: string;
+  children?: WorktreeInfo[];
+  // Rendering helpers for workspace grouping
+  is_last_workspace_child?: boolean;
   constructor(init: Partial<WorktreeInfo> = {}) {
     this.project = '';
     this.feature = '';
@@ -179,12 +187,14 @@ export class DiffComment {
   lineText: string;
   commentText: string;
   timestamp: number;
+  isFileLevel: boolean;
   constructor(init: Partial<DiffComment> = {}) {
     this.lineIndex = undefined;
     this.fileName = '';
     this.lineText = '';
     this.commentText = '';
     this.timestamp = Date.now();
+    this.isFileLevel = false;
     Object.assign(this, init);
   }
 }
@@ -195,7 +205,7 @@ export class CommentStore {
     this.comments = [];
   }
   
-  addComment(lineIndex: number | undefined, fileName: string, lineText: string, commentText: string): DiffComment {
+  addComment(lineIndex: number | undefined, fileName: string, lineText: string, commentText: string, isFileLevel: boolean = false): DiffComment {
     // Remove existing comment for this line if any
     this.comments = this.comments.filter(c => c.lineIndex !== lineIndex || c.fileName !== fileName);
     
@@ -204,7 +214,8 @@ export class CommentStore {
       fileName,
       lineText,
       commentText,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      isFileLevel
     });
     
     this.comments.push(comment);

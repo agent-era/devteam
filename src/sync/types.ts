@@ -8,6 +8,11 @@ export type WorktreeSummary =
     attached?: boolean;
     ai_tool?: AITool;    // e.g., 'claude', 'none'
     ai_status?: AIStatus; // e.g., 'working', 'waiting', 'not_running'
+    // Lightweight Git status for web UI
+    base_added_lines?: number;
+    base_deleted_lines?: number;
+    ahead?: number;
+    behind?: number;
   };
 
 export type ServerToClient =
@@ -23,6 +28,7 @@ export interface SyncServerOptions {
   port?: number; // default 8787
   path?: string; // default '/sync'
   refreshIntervalMs?: number; // default 30000
+  gitRefreshIntervalMs?: number; // default 15000 (lightweight cache refresh)
 }
 
 export interface SyncClientOptions {

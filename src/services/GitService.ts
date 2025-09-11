@@ -53,11 +53,10 @@ export class GitService {
     feature: string;
     path: string;
     branch: string;
-    mtime: number;
     last_commit_ts: number;
   }>> {
     const timer = new Timer();
-    const worktrees: Array<{project: string; feature: string; path: string; branch: string; mtime: number; last_commit_ts: number}> = [];
+    const worktrees: Array<{project: string; feature: string; path: string; branch: string; last_commit_ts: number}> = [];
     const branchesDirName = `${project.name}${DIR_BRANCHES_SUFFIX}`;
     const output = await runCommandAsync(['git', '-C', project.path, 'worktree', 'list', '--porcelain']);
     if (!output) {
@@ -71,7 +70,6 @@ export class GitService {
         if (current.path && current.path.includes(branchesDirName)) {
           const wtPath = current.path;
           const feature = path.basename(wtPath);
-          const mtime = fs.existsSync(wtPath) ? fs.statSync(wtPath).mtimeMs : 0;
           // Last commit timestamp for the checked-out worktree
           let lastCommitTs = 0;
           try {
@@ -83,7 +81,6 @@ export class GitService {
             feature,
             path: wtPath,
             branch: current.branch || 'unknown',
-            mtime,
             last_commit_ts: lastCommitTs,
           });
         }
@@ -97,7 +94,6 @@ export class GitService {
     if (current.path && current.path.includes(branchesDirName)) {
       const wtPath = current.path;
       const feature = path.basename(wtPath);
-      const mtime = fs.existsSync(wtPath) ? fs.statSync(wtPath).mtimeMs : 0;
       let lastCommitTs = 0;
       try {
         const ts = await runCommandQuickAsync(['git', '-C', wtPath, 'log', '-1', '--format=%at']);
@@ -108,7 +104,6 @@ export class GitService {
         feature,
         path: wtPath,
         branch: current.branch || 'unknown',
-        mtime,
         last_commit_ts: lastCommitTs,
       });
     }

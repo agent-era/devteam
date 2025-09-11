@@ -8,6 +8,7 @@ import {calculatePaginationInfo} from '../../utils/pagination.js';
 import {useTerminalDimensions} from '../../hooks/useTerminalDimensions.js';
 import {useColumnWidths} from './MainView/hooks/useColumnWidths.js';
 import {WorktreeRow} from './MainView/WorktreeRow.js';
+import {WorkspaceGroupRow} from './MainView/WorkspaceGroupRow.js';
 import {TableHeader} from './MainView/TableHeader.js';
 import {PaginationFooter} from './MainView/PaginationFooter.js';
 import {EmptyState} from './MainView/EmptyState.js';
@@ -102,9 +103,17 @@ export default function MainView({
   useEffect(() => {
     const measureAndUpdate = () => {
       const h = listRef.current ? measureElement(listRef.current).height : 0;
-      if (h > 0 && h !== measuredPageSize) {
-        setMeasuredPageSize(h);
-        onMeasuredPageSize?.(h);
+      // Always ensure parent knows the measured size at least once.
+      // If h equals our initial optimistic value, we still want to propagate it
+      // so parent pagination logic (WorktreeListScreen) doesn't use a stale pageSize.
+      if (h > 0) {
+        if (h !== measuredPageSize) {
+          setMeasuredPageSize(h);
+          onMeasuredPageSize?.(h);
+        } else {
+          // Propagate unchanged measurement on first tick to sync parent
+          onMeasuredPageSize?.(h);
+        }
       }
     };
     // Measure now and on next tick to ensure Yoga layout has settled
@@ -113,6 +122,13 @@ export default function MainView({
     return () => clearTimeout(t);
     // Re-measure when terminal size changes or item count might affect footer visibility
   }, [terminalRows, terminalWidth, worktrees.length, onMeasuredPageSize]);
+
+  // Also propagate when our internal measuredPageSize changes due to any reason
+  useEffect(() => {
+    if (measuredPageSize > 0) {
+      onMeasuredPageSize?.(measuredPageSize);
+    }
+  }, [measuredPageSize, onMeasuredPageSize]);
 
   if (mode === 'message') {
     return <MessageView message={message} />;
@@ -136,9 +152,21 @@ export default function MainView({
           const globalIndex = page * measuredPageSize + index;
           const isSelected = globalIndex === selectedIndex;
           
+          if ((worktree as any).is_workspace_header) {
+            return (
+              <WorkspaceGroupRow
+                key={`ws-${getWorktreeKey(worktree, index)}`}
+                workspace={worktree}
+                index={index}
+                globalIndex={globalIndex}
+                selected={isSelected}
+                columnWidths={columnWidths}
+              />
+            );
+          }
           return (
             <WorktreeRow
-              key={getRowKey(worktree, index)}
+              key={getWorktreeKey(worktree, index)}
               worktree={worktree}
               index={index}
               globalIndex={globalIndex}

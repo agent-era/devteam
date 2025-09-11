@@ -161,4 +161,3 @@ export class DevTeamEngine extends EventEmitter {
     return this.git.getRemoteBranches(project);
   }
 }
-

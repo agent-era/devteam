@@ -1,12 +1,9 @@
 import {MemoryMonitorService, MemoryStatus} from '../../src/services/MemoryMonitorService.js';
-import {memoryStore} from './stores.js';
 
 export class FakeMemoryMonitorService extends MemoryMonitorService {
+  private status: MemoryStatus | null = null;
   async getMemoryStatus(): Promise<MemoryStatus> {
-    const stored = memoryStore.memoryStatus;
-    if (stored) {
-      return stored;
-    }
+    if (this.status) return this.status;
     
     // Return default ok status if none stored
     return {
@@ -20,7 +17,7 @@ export class FakeMemoryMonitorService extends MemoryMonitorService {
   
   // Test helper methods
   setMemoryStatus(status: MemoryStatus) {
-    memoryStore.memoryStatus = status;
+    this.status = status;
   }
   
   setLowMemory(availableRAM: number = 0.8) {
@@ -46,6 +43,6 @@ export class FakeMemoryMonitorService extends MemoryMonitorService {
   }
   
   resetMemory() {
-    memoryStore.memoryStatus = null;
+    this.status = null;
   }
 }

@@ -1,8 +1,10 @@
 import React, {createContext, useContext, useState, useCallback, useEffect, ReactNode, useMemo} from 'react';
+import fs from 'node:fs';
 import path from 'node:path';
 import {WorktreeInfo, GitStatus, SessionInfo, ProjectInfo} from '../models.js';
 import {GitService} from '../services/GitService.js';
 import {TmuxService} from '../services/TmuxService.js';
+import {WorkspaceService} from '../services/WorkspaceService.js';
 import {MemoryMonitorService, MemoryStatus} from '../services/MemoryMonitorService.js';
 import type {VersionInfo} from '../services/versionTypes.js';
 import {mapLimit} from '../shared/utils/concurrency.js';
@@ -19,15 +21,16 @@ import {
   RUN_CONFIG_CLAUDE_PROMPT,
   TMUX_DISPLAY_TIME,
 } from '../constants.js';
-import {getProjectsDirectory} from '../config.js';
+import {getProjectsDirectory, isAppIntervalsEnabled} from '../config.js';
 import {ensureDirectory, copyWithIgnore} from '../shared/utils/fileSystem.js';
 import {generateTimestamp} from '../shared/utils/formatting.js';
 import {runClaudeSync, detectAvailableAITools, runCommandQuick} from '../shared/utils/commandExecutor.js';
 import {AI_TOOLS} from '../constants.js';
 import type {AITool} from '../models.js';
 import {useInputFocus} from './InputFocusContext.js';
+import {startIntervalIfEnabled} from '../shared/utils/intervals.js';
 import {useGitHubContext} from './GitHubContext.js';
-import {logDebug} from '../shared/utils/logger.js';
+import {logDebug, logError} from '../shared/utils/logger.js';
 import {Timer} from '../shared/utils/timing.js';
 import {DevTeamEngine} from '../engine/DevTeamEngine.js';
 
@@ -54,6 +57,11 @@ interface WorktreeContextType {
   createFeature: (projectName: string, featureName: string) => Promise<WorktreeInfo | null>;
   createFromBranch: (project: string, remoteBranch: string, localName: string) => Promise<boolean>;
   archiveFeature: (worktreeOrProject: WorktreeInfo | string, path?: string, feature?: string) => Promise<{archivedPath: string}>;
+  archiveWorkspace: (featureName: string) => Promise<void>;
+  // Workspace operations
+  createWorkspace: (featureName: string, projects: string[]) => Promise<string | null>;
+  attachWorkspaceSession: (featureName: string, aiTool?: AITool) => Promise<void>;
+  workspaceExists: (featureName: string) => boolean;
   
   
   // Session operations  
@@ -77,6 +85,25 @@ interface WorktreeContextType {
 
 const WorktreeContext = createContext<WorktreeContextType | null>(null);
 
+type WorktreeSummary = {
+  project: string;
+  feature: string;
+  path: string;
+  branch: string;
+  last_commit_ts?: number;
+};
+
+// Exported sorter to enable unit testing of cross-project ordering
+export function sortWorktreeSummaries<T extends {last_commit_ts?: number; project: string; feature: string}>(rows: T[]): T[] {
+  // Return a new array to avoid mutating inputs
+  return [...rows].sort((a, b) => {
+    const d = (b.last_commit_ts ?? 0) - (a.last_commit_ts ?? 0);
+    if (d !== 0) return d;
+    if (a.project !== b.project) return a.project.localeCompare(b.project);
+    return a.feature.localeCompare(b.feature);
+  });
+}
+
 // Extracted decision helper for testability and clarity
 export function shouldPromptForAITool(
   availableTools: (keyof typeof AI_TOOLS)[],
@@ -94,6 +121,7 @@ interface WorktreeProviderProps {
   tmuxService?: TmuxService;
   memoryMonitorService?: MemoryMonitorService;
   versionCheckService?: any;
+  workspaceService?: WorkspaceService;
 }
 
 export function WorktreeProvider({
@@ -102,6 +130,7 @@ export function WorktreeProvider({
   tmuxService: tmuxServiceOverride,
   memoryMonitorService: memoryMonitorServiceOverride,
   versionCheckService: versionCheckServiceOverride,
+  workspaceService: workspaceServiceOverride,
 }: WorktreeProviderProps) {
   const [worktrees, setWorktrees] = useState<WorktreeInfo[]>([]);
   const [loading, setLoading] = useState(false);
@@ -127,6 +156,10 @@ export function WorktreeProvider({
     if (memoryMonitorServiceOverride) return memoryMonitorServiceOverride;
     return new MemoryMonitorService();
   }, [memoryMonitorServiceOverride]);
+  const workspaceService: WorkspaceService = useMemo(() => {
+    if (workspaceServiceOverride) return workspaceServiceOverride;
+    return new WorkspaceService();
+  }, [workspaceServiceOverride]);
   const versionServiceRef = React.useRef<any>(versionCheckServiceOverride || null);
   const refreshingVisibleRef = React.useRef(false);
   const lastSessionsRef = React.useRef<string[] | null>(null);
@@ -175,12 +208,7 @@ export function WorktreeProvider({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const attachRuntimeData = useCallback(async (list: Array<{
-    project: string; 
-    feature: string; 
-    path: string; 
-    branch: string
-  }>): Promise<WorktreeInfo[]> => {
+  const attachRuntimeData = useCallback(async (list: WorktreeSummary[]): Promise<WorktreeInfo[]> => {
     // Get existing worktrees to preserve idle timers and kill flags
     const existingWorktrees = new Map(worktrees.map(w => [`${w.project}/${w.feature}`, w]));
     
@@ -188,7 +216,7 @@ export function WorktreeProvider({
     const activeSessions = await tmuxService.listSessions();
     
     // Concurrency-limit git + AI probes across all worktrees
-    const results = await mapLimit(list, 6, async (w: any) => {
+    const results = await mapLimit<WorktreeSummary, WorktreeInfo | undefined>(list, 6, async (w: WorktreeSummary) => {
       try {
         const key = `${w.project}/${w.feature}`;
         const existing = existingWorktrees.get(key);
@@ -216,17 +244,76 @@ export function WorktreeProvider({
           branch: w.branch,
           git: gitStatus,
           session: sessionInfo,
-          mtime: w.mtime || 0,
+          // Use 0 as a safe fallback (older than any real commit)
+          last_commit_ts: w.last_commit_ts ?? 0,
         });
       } catch (err) {
-        // eslint-disable-next-line no-console
-        console.error('[attachRuntimeData] worker failed -', err instanceof Error ? err.message : String(err));
-        return undefined as any;
+        logError('[attachRuntimeData] worker failed', { error: err instanceof Error ? err.message : String(err) });
+        return undefined;
       }
     });
     
-    return results.filter(Boolean) as WorktreeInfo[];
+    return results.filter((r): r is WorktreeInfo => Boolean(r));
   }, [gitService, tmuxService, worktrees]);
+
+  // Build final list with workspace headers/children from sorted summaries
+  const buildWorkspaceView = useCallback(async (summaries: WorktreeSummary[]): Promise<WorktreeInfo[]> => {
+    // Group by feature
+    const byFeature = new Map<string, WorktreeSummary[]>();
+    for (const row of summaries) {
+      const list = byFeature.get(row.feature) || [];
+      list.push(row);
+      byFeature.set(row.feature, list);
+    }
+
+    const base = gitService.basePath;
+    const result: WorktreeInfo[] = [];
+    const activeSessions = await tmuxService.listSessions();
+
+    // Order feature groups by the max last_commit_ts among their children (desc)
+    const orderedFeatures = [...byFeature.entries()].sort((a, b) => {
+      const maxA = Math.max(...a[1].map(x => x.last_commit_ts ?? 0), 0);
+      const maxB = Math.max(...b[1].map(x => x.last_commit_ts ?? 0), 0);
+      return maxB - maxA;
+    });
+
+    for (const [feature, items] of orderedFeatures) {
+      const hasWS = workspaceService.hasWorkspaceForFeature(base, feature);
+      if (!hasWS) {
+        const children = await attachRuntimeData(items);
+        result.push(...children);
+      } else {
+        const workspaceDir = path.join(base, 'workspaces', feature);
+        const children = await attachRuntimeData(items);
+        const wsSessionName = tmuxService.sessionName('workspace', feature);
+        const wsAttached = activeSessions.includes(wsSessionName);
+        const aiResult = wsAttached ? await tmuxService.getAIStatus(wsSessionName) : {tool: 'none' as const, status: 'not_running' as const};
+        const header = new WorktreeInfo({
+          project: 'workspace',
+          feature,
+          path: workspaceDir,
+          branch: feature,
+          session: new SessionInfo({
+            session_name: wsSessionName,
+            attached: wsAttached,
+            ai_status: aiResult.status,
+            ai_tool: aiResult.tool,
+          }),
+        });
+        header.is_workspace = true;
+        header.is_workspace_header = true;
+        header.children = children;
+        for (let i = 0; i < children.length; i++) {
+          const c = children[i];
+          c.is_workspace_child = true;
+          c.parent_feature = feature;
+          c.is_last_workspace_child = i === children.length - 1;
+        }
+        result.push(header, ...children);
+      }
+    }
+    return result;
+  }, [gitService.basePath, workspaceService, tmuxService, attachRuntimeData]);
 
   const refresh = useCallback(async (refreshPRs: 'all' | 'visible' | 'none' = 'none') => {
     if (loading) {
@@ -254,7 +341,7 @@ export function WorktreeProvider({
     } catch (error) {
       const timing = timer.elapsed();
       logDebug(`[Refresh.Full] Failed in ${timing.formatted}: ${error instanceof Error ? error.message : String(error)}`);
-      console.error('Failed to refresh worktrees:', error);
+      logError('Failed to refresh worktrees', { error: error instanceof Error ? error.message : String(error) });
     } finally {
       setLoading(false);
     }
@@ -278,7 +365,7 @@ export function WorktreeProvider({
       // No need to update worktrees array here; rows read PRs from context
       setLastRefreshed(Date.now());
     } catch (error) {
-      console.error('Failed to force refresh visible PRs:', error);
+      logError('Failed to force refresh visible PRs', { error: error instanceof Error ? error.message : String(error) });
     }
   }, [loading, worktrees, forceRefreshVisiblePRs]);
 
@@ -305,54 +392,95 @@ export function WorktreeProvider({
       }
       const indices = Array.from({length: endIndex - startIndex}, (_, k) => startIndex + k);
       if (indices.length > 0) {
-        const results = await mapLimit(indices, 3, async (i) => {
+        type UpdateResult = { index: number; updated: WorktreeInfo } | undefined;
+        const results = await mapLimit<number, UpdateResult>(indices, 3, async (i) => {
           try {
             const wt = worktrees[i];
-            const sessionName = tmuxService.sessionName(wt.project, wt.feature);
-            const attached = activeSessions.includes(sessionName);
-            const [gitStatus, aiResult] = await Promise.all([
-              gitService.getGitStatus(wt.path),
-              attached ? tmuxService.getAIStatus(sessionName) : Promise.resolve({tool: 'none' as const, status: 'not_running' as const})
-            ]);
-
-            // Detect push using same logic as pushed column (is_pushed transition)
-            const prevPushed = wt.git?.is_pushed === true;
-            const currPushed = gitStatus.is_pushed === true;
-            if (!prevPushed && currPushed) {
-              const pr = getPRStatus(wt.path);
-              if (pr && pr.state === 'OPEN' && refreshPRForWorktree) {
-                logDebug(`Detected push for ${wt.feature}, refreshing PR status`);
-                await refreshPRForWorktree(wt.path);
+            if (wt.is_workspace_header) {
+              // Refresh only the workspace session
+              const wsSessionName = tmuxService.sessionName('workspace', wt.feature);
+              const wsAttached = activeSessions.includes(wsSessionName);
+              const aiResult = wsAttached ? await tmuxService.getAIStatus(wsSessionName) : {tool: 'none' as const, status: 'not_running' as const};
+              const updated = new WorktreeInfo({
+                ...wt,
+                session: new SessionInfo({
+                  session_name: wsSessionName,
+                  attached: wsAttached,
+                  ai_status: aiResult.status,
+                  ai_tool: aiResult.tool
+                })
+              });
+              return {index: i, updated};
+            } else if (wt.is_workspace_child) {
+              const sessionName = tmuxService.sessionName(wt.project, wt.feature);
+              const attached = activeSessions.includes(sessionName);
+              const [gitStatus, aiResult] = await Promise.all([
+                gitService.getGitStatus(wt.path),
+                attached ? tmuxService.getAIStatus(sessionName) : Promise.resolve({tool: 'none' as const, status: 'not_running' as const})
+              ]);
+              const prevPushed = wt.git?.is_pushed === true;
+              const currPushed = gitStatus.is_pushed === true;
+              if (!prevPushed && currPushed) {
+                const pr = getPRStatus(wt.path);
+                if (pr && pr.state === 'OPEN' && refreshPRForWorktree) {
+                  logDebug(`Detected push for ${wt.feature}, refreshing PR status`);
+                  await refreshPRForWorktree(wt.path);
+                }
               }
+              const updated = new WorktreeInfo({
+                ...wt,
+                git: gitStatus,
+                session: new SessionInfo({
+                  session_name: sessionName,
+                  attached,
+                  ai_status: aiResult.status,
+                  ai_tool: aiResult.tool
+                })
+              });
+              return {index: i, updated};
+            } else {
+              const sessionName = tmuxService.sessionName(wt.project, wt.feature);
+              const attached = activeSessions.includes(sessionName);
+              const [gitStatus, aiResult] = await Promise.all([
+                gitService.getGitStatus(wt.path),
+                attached ? tmuxService.getAIStatus(sessionName) : Promise.resolve({tool: 'none' as const, status: 'not_running' as const})
+              ]);
+              const prevPushed = wt.git?.is_pushed === true;
+              const currPushed = gitStatus.is_pushed === true;
+              if (!prevPushed && currPushed) {
+                const pr = getPRStatus(wt.path);
+                if (pr && pr.state === 'OPEN' && refreshPRForWorktree) {
+                  logDebug(`Detected push for ${wt.feature}, refreshing PR status`);
+                  await refreshPRForWorktree(wt.path);
+                }
+              }
+              const updated = new WorktreeInfo({
+                ...wt,
+                git: gitStatus,
+                session: new SessionInfo({
+                  session_name: sessionName,
+                  attached,
+                  ai_status: aiResult.status,
+                  ai_tool: aiResult.tool
+                })
+              });
+              return {index: i, updated};
             }
-
-            const updated = new WorktreeInfo({
-              ...wt,
-              git: gitStatus,
-              session: new SessionInfo({
-                session_name: sessionName,
-                attached,
-                ai_status: aiResult.status,
-                ai_tool: aiResult.tool
-              }),
-            });
-            return {index: i, updated};
           } catch (err) {
-            // eslint-disable-next-line no-console
-            console.error('[refreshVisibleStatus] worker failed -', err instanceof Error ? err.message : String(err));
-            return undefined as any;
+            logError('[refreshVisibleStatus] worker failed', { error: err instanceof Error ? err.message : String(err) });
+            return undefined;
           }
         });
         const merged = [...worktrees];
         for (const r of results) {
           if (!r) continue;
-          merged[(r as any).index] = (r as any).updated;
+          merged[r.index] = r.updated;
         }
         setWorktrees(merged);
       }
       setLastRefreshed(Date.now());
     } catch (error) {
-      console.error('Failed to refresh visible statuses:', error);
+      logError('Failed to refresh visible statuses', { error: error instanceof Error ? error.message : String(error) });
     } finally {
       refreshingVisibleRef.current = false;
     }
@@ -363,7 +491,7 @@ export function WorktreeProvider({
       const status = await memoryMonitorService.getMemoryStatus();
       setMemoryStatus(status);
     } catch (error) {
-      console.error('Failed to refresh memory status:', error);
+      logError('Failed to refresh memory status', { error: error instanceof Error ? error.message : String(error) });
     }
   }, [memoryMonitorService]);
 
@@ -378,7 +506,7 @@ export function WorktreeProvider({
       const info = await versionServiceRef.current.check();
       if (info && info.hasUpdate) setVersionInfo(info); else setVersionInfo(null);
     } catch (error) {
-      console.error('Failed to check latest version:', error);
+      logError('Failed to check latest version', { error: error instanceof Error ? error.message : String(error) });
     }
   }, []);
   
@@ -434,7 +562,7 @@ export function WorktreeProvider({
     } finally {
       setLoading(false);
     }
-  }, [tmuxService, refresh]);
+  }, [tmuxService, refresh, gitService.basePath, workspaceService, worktrees]);
 
   // Unarchive and delete archived functionality removed
 
@@ -472,6 +600,30 @@ export function WorktreeProvider({
     tmuxService.attachSessionWithControls(sessionName);
   }, [tmuxService, availableAITools]);
 
+  // Attach AI session for a workspace (cwd = workspaces/<feature>)
+  const attachWorkspaceSession = useCallback(async (featureName: string, aiTool?: AITool) => {
+    const workspaceDir = path.join(gitService.basePath, 'workspaces', featureName);
+    const projectTag = 'workspace';
+    const sessionName = tmuxService.sessionName(projectTag, featureName);
+    const activeSessions = await tmuxService.listSessions();
+
+    if (!activeSessions.includes(sessionName)) {
+      // Determine which AI tool to use
+      let selectedTool: AITool = aiTool || 'none';
+      if (selectedTool === 'none') {
+        if (availableAITools.length === 1) selectedTool = availableAITools[0];
+        else if (availableAITools.length > 1) selectedTool = availableAITools[0];
+      }
+      if (selectedTool !== 'none' && availableAITools.includes(selectedTool)) {
+        const toolConfig = AI_TOOLS[selectedTool];
+        tmuxService.createSessionWithCommand(sessionName, workspaceDir, toolConfig.command, true);
+      } else {
+        tmuxService.createSession(sessionName, workspaceDir, true);
+      }
+    }
+    tmuxService.attachSessionWithControls(sessionName);
+  }, [tmuxService, availableAITools, gitService.basePath]);
+
   const attachShellSession = useCallback(async (worktree: WorktreeInfo) => {
     const sessionName = tmuxService.shellSessionName(worktree.project, worktree.feature);
     const activeSessions = await tmuxService.listSessions();
@@ -500,6 +652,45 @@ export function WorktreeProvider({
     tmuxService.attachSessionWithControls(sessionName);
     return 'success';
   }, [tmuxService]);
+
+  // Archive entire workspace: kill workspace sessions, archive all child worktrees, remove workspace dir
+  const archiveWorkspace = useCallback(async (featureName: string) => {
+    setLoading(true);
+    try {
+      const base = gitService.basePath;
+      // Kill workspace-level sessions
+      const wsSession = tmuxService.sessionName('workspace', featureName);
+      const wsShell = tmuxService.shellSessionName('workspace', featureName);
+      const wsRun = tmuxService.runSessionName('workspace', featureName);
+      const active = await tmuxService.listSessions();
+      for (const s of [wsSession, wsShell, wsRun]) {
+        if (active.includes(s)) tmuxService.killSession(s);
+      }
+
+      // Collect all child worktrees for this feature
+      const children = worktrees.filter(w => (w as any).is_workspace_child && w.feature === featureName);
+      const timestamp = generateTimestamp();
+
+      for (const wt of children) {
+        try {
+          await terminateFeatureSessions(wt.project, featureName);
+        } catch {}
+        const archivedRoot = path.join(base, `${wt.project}${DIR_ARCHIVED_SUFFIX}`);
+        ensureDirectory(archivedRoot);
+        const archivedDest = path.join(archivedRoot, `${ARCHIVE_PREFIX}${timestamp}_${featureName}`);
+        moveWorktreeToArchive(wt.path, archivedDest, wt.project);
+        pruneWorktreeReferences(wt.project);
+      }
+
+      // Remove workspace directory
+      const workspaceDir = path.join(base, 'workspaces', featureName);
+      try { fs.rmSync(workspaceDir, {recursive: true, force: true}); } catch {}
+
+      await refresh('none');
+    } finally {
+      setLoading(false);
+    }
+  }, [gitService.basePath, worktrees, refresh]);
 
   const needsToolSelection = useCallback(async (worktree: WorktreeInfo): Promise<boolean> => {
     const sessionName = tmuxService.sessionName(worktree.project, worktree.feature);
@@ -752,6 +943,33 @@ export function WorktreeProvider({
     gitService.archiveWorktree(projectName || '', worktreePath, archivedDest);
   }, [gitService]);
 
+  // Create or update a workspace for feature with symlinks to project worktrees
+  const createWorkspace = useCallback(async (featureName: string, projects: string[]): Promise<string | null> => {
+    try {
+      const base = gitService.basePath;
+      // Build mapping of project -> worktree path
+      const entries = projects.map((p) => ({
+        project: p,
+        worktreePath: path.join(base, `${p}${DIR_BRANCHES_SUFFIX}`, featureName)
+      }));
+      const workspacePath = workspaceService.createWorkspace(base, featureName, entries);
+      // After creating workspace, refresh list (to hide individual worktrees)
+      await refresh('none');
+      return workspacePath;
+    } catch (err) {
+      console.error('Failed to create workspace:', err);
+      return null;
+    }
+  }, [gitService.basePath, refresh]);
+
+  const workspaceExists = useCallback((featureName: string): boolean => {
+    try {
+      return workspaceService.hasWorkspaceForFeature(gitService.basePath, featureName);
+    } catch {
+      return false;
+    }
+  }, [gitService.basePath]);
+
   const pruneWorktreeReferences = useCallback((projectName: string) => {
     gitService.pruneWorktreeReferences(projectName);
   }, [gitService]);
@@ -769,53 +987,58 @@ export function WorktreeProvider({
   // Auto-refresh intervals
   // Regular cache-based refresh cycle
   useEffect(() => {
+    if (!isAppIntervalsEnabled()) return;
     const shouldRefresh = Date.now() - lastRefreshed > CACHE_DURATION;
     if (shouldRefresh) {
       refresh('none').catch(error => {
-        console.error('Auto-refresh failed:', error);
+        logError('Auto-refresh failed', { error: error instanceof Error ? error.message : String(error) });
       });
     }
   }, [lastRefreshed, refresh]);
 
   // Initial memory check on mount
   useEffect(() => {
+    if (!isAppIntervalsEnabled()) return;
     refreshMemoryStatus().catch(error => {
-      console.error('Initial memory status check failed:', error);
+      logError('Initial memory status check failed', { error: error instanceof Error ? error.message : String(error) });
     });
   }, [refreshMemoryStatus]);
 
   // Initial version check on mount + daily
   useEffect(() => {
+    if (!isAppIntervalsEnabled()) return;
     refreshVersionInfo().catch(error => {
-      console.error('Initial version check failed:', error);
+      logError('Initial version check failed', { error: error instanceof Error ? error.message : String(error) });
     });
-    const interval = setInterval(() => {
+    const clear = startIntervalIfEnabled(() => {
       refreshVersionInfo().catch(() => {});
     }, VERSION_CHECK_INTERVAL);
-    return () => clearInterval(interval);
+    return clear;
   }, [refreshVersionInfo]);
 
   // Slow discovery: rebuild worktree list every 60s (or when actions change structure)
   useEffect(() => {
-    const interval = setInterval(() => {
+    if (!isAppIntervalsEnabled()) return;
+    const clear = startIntervalIfEnabled(() => {
       if (!isAnyDialogFocused) {
         // Background discovery of worktrees (structure)
-        refresh('none').catch(err => console.error('Background discovery failed:', err));
+        refresh('none').catch(err => logError('Background discovery failed', { error: err instanceof Error ? err.message : String(err) }));
       }
     }, 60_000);
-    return () => clearInterval(interval);
+    return clear;
   }, [refresh, isAnyDialogFocused, tmuxService]);
 
   useEffect(() => {
-    const interval = setInterval(() => {
+    if (!isAppIntervalsEnabled()) return;
+    const clear = startIntervalIfEnabled(() => {
       // Skip memory status refresh if any dialog is focused to avoid interrupting typing
       if (!isAnyDialogFocused) {
         refreshMemoryStatus().catch(error => {
-          console.error('Memory status refresh failed:', error);
+          logError('Memory status refresh failed', { error: error instanceof Error ? error.message : String(error) });
         });
       }
     }, MEMORY_REFRESH_DURATION);
-    return () => clearInterval(interval);
+    return clear;
   }, [refreshMemoryStatus, isAnyDialogFocused]);
 
   const contextValue: WorktreeContextType = {
@@ -840,6 +1063,11 @@ export function WorktreeProvider({
     createFeature,
     createFromBranch,
     archiveFeature,
+    archiveWorkspace,
+    // Workspace operations
+    createWorkspace,
+    attachWorkspaceSession,
+    workspaceExists,
     
     // Session operations
     attachSession,
