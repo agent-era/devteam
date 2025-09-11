@@ -244,7 +244,7 @@ export function formatCommentsAsPrompt(
 
 export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, diffType = 'full', onAttachToSession, workspaceFeature}: Props) {
   const {rows: terminalHeight, columns: terminalWidth} = useTerminalDimensions();
-  const {stdin, setRawMode} = useStdin();
+  const {stdin} = useStdin();
   const [lines, setLines] = useState<DiffLine[]>([]);
   const [sideBySideLines, setSideBySideLines] = useState<SideBySideLine[]>([]);
   const [selectedLine, setSelectedLine] = useState(0);
@@ -400,7 +400,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     };
   }, [animationId]);
 
-  // Mouse wheel scrolling was removed; keyboard navigation remains available.
+  
 
   useInput((input, key) => {
     // Don't handle inputs when any dialog is open

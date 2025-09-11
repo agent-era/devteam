@@ -58,15 +58,6 @@ export function determineStatusReason(worktree: WorktreeInfo, pr: PRStatus | und
     case 'merged': return StatusReason.PR_MERGED;
     case 'ready': return StatusReason.AGENT_READY;
   }
-  // Additional explicit NO_PR handling using git context if available
-  if (pr?.noPR) {
-    const hasCommittedBaseDiff = ((worktree.git?.base_added_lines ?? 0) + (worktree.git?.base_deleted_lines ?? 0)) > 0;
-    if ((worktree.git as any)?.has_remote && hasCommittedBaseDiff) return StatusReason.NO_PR;
-    return StatusReason.AGENT_READY;
-  }
-  // Fallback: derive from session+git if engine label is empty
-  const cs = (worktree.session?.claude_status || '').toLowerCase();
-  if (worktree.session?.attached && (cs.includes('idle') || cs.includes('active'))) return StatusReason.AGENT_READY;
   return null;
 }
 

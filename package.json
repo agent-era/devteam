@@ -45,7 +45,8 @@
   "exports": {
     ".": "./dist/index.js",
     "./sync": "./dist/sync/index.js",
-    "./sync/server": "./dist/sync/server.js"
+    "./sync/server": "./dist/sync/server.js",
+    "./status": "./dist/shared/status.js"
   },
   "dependencies": {
     "@inkjs/ui": "^2.0.0",

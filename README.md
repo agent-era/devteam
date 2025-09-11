@@ -68,7 +68,7 @@ Use DevTeam to manage a team of agents working in parallel on your projects:
 
 ## Web Integration (Local Mode)
 
-For local development without a relay, the DevTeam agent posts progressive snapshots over HTTP to your web server, and your web app broadcasts updates via Server‑Sent Events (SSE).
+The DevTeam agent posts progressive snapshots over HTTP to your web server, and your web app broadcasts updates via Server‑Sent Events (SSE).
 
 - Start your web app (e.g., Next.js) with endpoints:
   - `POST /api/snapshots/push` (accepts `{type:'worktrees.snapshot', version, items}`)

@@ -1,4 +1,3 @@
-import chokidar from 'chokidar';
 import {getProjectsDirectory} from '../config.js';
 import type {SyncServerOptions} from './types.js';
 import {DevTeamEngine} from '../engine/DevTeamEngine.js';
@@ -7,10 +6,7 @@ import {DevTeamEngine} from '../engine/DevTeamEngine.js';
 export class SyncServer {
   private options: Required<SyncServerOptions>;
   private version = 1;
-  private timer?: NodeJS.Timeout;
-  private gitTimer?: NodeJS.Timeout;
-  private watcher?: chokidar.FSWatcher;
-  private immediatePushTimer?: NodeJS.Timeout;
+  // Server no longer refreshes; engine emits on changes
   private engine!: DevTeamEngine;
   // No separate git cache here; engine is source of truth
 
@@ -27,24 +23,16 @@ export class SyncServer {
     const projectsDir = getProjectsDirectory();
     this.engine = new DevTeamEngine({projectsDir});
     this.engine.on('snapshot', (snap) => this.postSnapshot(snap));
-    await (this.engine as any).refreshProgressive?.() || this.engine.refreshNow();
-    this.timer = setInterval(() => { void ((this.engine as any).refreshProgressive?.() || this.engine.refreshNow()); }, this.options.refreshIntervalMs);
-    // Engine handles git/PR/status refresh; no separate server timers
-    this.setupWatchers();
+    await this.engine.start?.();
     return {postUrl: this.options.postUrl};
   }
 
   async stop(): Promise<void> {
-    if (this.timer) clearInterval(this.timer);
-    if (this.gitTimer) clearInterval(this.gitTimer);
-    try { await this.watcher?.close(); } catch {}
+    try { await this.engine.stop?.(); } catch {}
     // Nothing else to close in HTTP-post mode
   }
 
-  private async pushWorktreesToSubscribers() {
-    // Progressive refresh trigger; engine emits snapshots which will be posted
-    await this.engine.refreshNow();
-  }
+  private async pushWorktreesToSubscribers() { /* no-op */ }
 
   private async postSnapshot(snap: {version: number; items: any[]}) {
     this.version = snap.version;
@@ -63,23 +51,7 @@ export class SyncServer {
 
   // No mergeGitCache/refreshGitCache; engine drives snapshots
 
-  private setupWatchers() {
-    try {
-      const base = getProjectsDirectory();
-      // Watch all "*-branches" directories under the base projects dir for file/dir changes
-      const globs = [`${base}/*-branches/**`];
-      this.watcher = chokidar.watch(globs, {ignoreInitial: true, depth: 3});
-      const onFsEvent = () => this.scheduleImmediatePush();
-      this.watcher.on('add', onFsEvent).on('addDir', onFsEvent).on('unlink', onFsEvent).on('unlinkDir', onFsEvent).on('change', onFsEvent);
-    } catch {}
-  }
-
-  private async scheduleImmediatePush() {
-    if (this.immediatePushTimer) clearTimeout(this.immediatePushTimer);
-    this.immediatePushTimer = setTimeout(async () => {
-      await ((this.engine as any).refreshProgressive?.() || this.engine.refreshNow());
-    }, 250); // debounce bursts
-  }
+  // No watchers here; engine owns change detection
 }
 
 export function createSyncServer(options: SyncServerOptions = {}) {
