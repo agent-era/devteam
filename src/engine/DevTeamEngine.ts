@@ -39,9 +39,7 @@ export class DevTeamEngine extends EventEmitter {
   private gitCache: Map<string, {has_changes: boolean; base_added_lines: number; base_deleted_lines: number; ahead: number; behind: number}> = new Map();
   private lastGitRefreshAt = 0;
   private gitRefreshIntervalMs = Math.max(2000, Number(process.env.GIT_REFRESH_INTERVAL_MS || 15000));
-  private watchersStarted = false;
-  private fsWatcher?: import('chokidar').FSWatcher;
-  private tickTimer?: NodeJS.Timeout;
+  
 
   constructor(opts: DevTeamEngineOptions = {},
               services?: {git?: GitService; tmux?: TmuxService}) {
@@ -529,33 +527,5 @@ export class DevTeamEngine extends EventEmitter {
   async getRemoteBranches(project: string): Promise<Array<Record<string, any>>> {
     return this.git.getRemoteBranches(project);
   }
-  // Start internal change detection: file system watchers + periodic PR/git tick
-  async start(): Promise<void> {
-    if (this.watchersStarted) return;
-    this.watchersStarted = true;
-    // Initial emission
-    await (this as any).refreshProgressive?.() || this.refreshNow();
-    // FS watcher: observe *-branches changes to prompt refresh
-    try {
-      const chokidar = await import('chokidar');
-      const base = this.git.basePath;
-      const globs = [`${base}/*-branches/**`];
-      this.fsWatcher = chokidar.watch(globs, {ignoreInitial: true, depth: 3});
-      const onFsEvent = () => { void this.refreshProgressive(); };
-      this.fsWatcher
-        .on('add', onFsEvent)
-        .on('addDir', onFsEvent)
-        .on('unlink', onFsEvent)
-        .on('unlinkDir', onFsEvent)
-        .on('change', onFsEvent);
-    } catch {}
-    // Periodic tick: lightweight refresh to catch tmux/PR status
-    this.tickTimer = setInterval(() => { void this.refreshProgressive(); }, this.gitRefreshIntervalMs);
-  }
-
-  async stop(): Promise<void> {
-    if (this.tickTimer) clearInterval(this.tickTimer);
-    try { await this.fsWatcher?.close(); } catch {}
-    this.watchersStarted = false;
-  }
+  
 }

@@ -1,13 +1,10 @@
-import {getProjectsDirectory} from '../config.js';
 import type {SyncServerOptions} from './types.js';
-import {DevTeamEngine} from '../engine/DevTeamEngine.js';
-// Server now relays engine snapshots directly; engine attaches git/PR/status.
+import {startSyncBridge} from './bridge.js';
 
 export class SyncServer {
   private options: Required<SyncServerOptions>;
   private version = 1;
-  // Server no longer refreshes; engine emits on changes
-  private engine!: DevTeamEngine;
+  private bridge: {stop: () => void} | null = null;
   // No separate git cache here; engine is source of truth
 
   constructor(opts: SyncServerOptions = {}) {
@@ -19,16 +16,13 @@ export class SyncServer {
   }
 
   async start(): Promise<{postUrl: string}> {
-    // Engine provides snapshots when changed; we still tick to refresh tmux/AI state
-    const projectsDir = getProjectsDirectory();
-    this.engine = new DevTeamEngine({projectsDir});
-    this.engine.on('snapshot', (snap) => this.postSnapshot(snap));
-    await this.engine.start?.();
+    // Start a headless bridge that subscribes to WorktreeContext and posts snapshots
+    this.bridge = startSyncBridge(this.options.postUrl);
     return {postUrl: this.options.postUrl};
   }
 
   async stop(): Promise<void> {
-    try { await this.engine.stop?.(); } catch {}
+    try { this.bridge?.stop(); } catch {}
     // Nothing else to close in HTTP-post mode
   }
 
@@ -49,9 +43,7 @@ export class SyncServer {
     }
   }
 
-  // No mergeGitCache/refreshGitCache; engine drives snapshots
-
-  // No watchers here; engine owns change detection
+  // No mergeGitCache/refreshGitCache; context + services drive updates
 }
 
 export function createSyncServer(options: SyncServerOptions = {}) {
