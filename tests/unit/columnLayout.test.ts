@@ -35,7 +35,8 @@ describe('Column Layout and Spacing', () => {
         expect(totalWidth).toBeGreaterThan(terminalWidth - 5); // Should use most of the space
         
         // Verify PROJECT/FEATURE gets reasonable space
-        expect(fixedWidths[2]).toBeGreaterThanOrEqual(15); // Minimum readable width
+        // Reduced by 1 due to longer STATUS label ("not pushed")
+        expect(fixedWidths[2]).toBeGreaterThanOrEqual(14); // Minimum readable width
       }
     });
 
