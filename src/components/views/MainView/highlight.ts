@@ -105,7 +105,7 @@ export function statusLabelFromReason(reason: StatusReason | string | null | und
       // Rename: show 'uncommitted' instead of 'modified'
       return 'uncommitted';
     case StatusReason.UNPUSHED_COMMITS:
-      return 'un-pushed';
+      return 'not pushed';
     case StatusReason.PR_CONFLICTS:
       return 'conflict';
     case StatusReason.PR_FAILING:
