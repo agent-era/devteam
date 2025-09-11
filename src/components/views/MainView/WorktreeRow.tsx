@@ -8,7 +8,7 @@ import type {PRStatus} from '../../../models.js';
 import { formatDiffStats, formatGitChanges, getAISymbol, formatPRStatus, shouldDimRow } from './utils.js';
 import type {ColumnWidths} from './hooks/useColumnWidths.js';
 import StatusChip from '../../common/StatusChip.js';
-import {getStatusMeta} from './highlight.js';
+import {getStatusMeta, StatusReason} from './highlight.js';
 
 interface WorktreeRowProps {
   worktree: WorktreeInfo;
@@ -73,8 +73,7 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
   const getCellBackground = (cellIndex: number): string | undefined => {
     // Selected merged/archived rows: full-row gray highlight for visibility
     if (selected && isDimmed) return 'gray';
-    // Priority cells use a neutral gray highlight (colors reserved for STATUS chip)
-    if (isPriorityCell(cellIndex)) return 'gray';
+    // No background highlight for priority cells; emphasize via text color instead
     // Otherwise no explicit background; selection (non-dimmed) uses inverse
     return undefined;
   };
@@ -86,11 +85,35 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
     if (isDimmed) return undefined;
     // For selected non-priority cells (non-dimmed), let inverse handle the color
     if (selected && !isPriorityCell(cellIndex)) return undefined;
-    const bg = getCellBackground(cellIndex);
-    if (!bg) return undefined;
-    // Choose readable foregrounds for colored backgrounds
-    if (bg === 'yellow' || bg === 'green') return 'black';
-    return 'white'; // for blue/red and others
+    // Color the applicable column's text
+    if (isPriorityCell(cellIndex)) {
+      // Apply explicit text colors per status reason for the applicable column
+      switch (highlightInfo?.reason) {
+        case StatusReason.CLAUDE_WAITING:
+          return 'yellow';
+        case StatusReason.AGENT_READY:
+          return 'green';
+        case StatusReason.UNCOMMITTED_CHANGES:
+          return 'blue';
+        case StatusReason.UNPUSHED_COMMITS:
+          return 'cyan';
+        case StatusReason.PR_CONFLICTS:
+        case StatusReason.PR_FAILING:
+          return 'red';
+        case StatusReason.PR_READY_TO_MERGE:
+          return 'green';
+        case StatusReason.PR_CHECKING:
+          return 'magenta';
+        case StatusReason.NO_PR:
+          return 'cyan';
+        case StatusReason.PR_MERGED:
+          return 'gray';
+        default:
+          // Fallback to STATUS chip text color
+          return statusMeta.fg;
+      }
+    }
+    return undefined;
   };
 
   // Fit and align cell content to fill full cell width so background covers entire cell

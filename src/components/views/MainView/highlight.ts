@@ -102,7 +102,8 @@ export function statusLabelFromReason(reason: StatusReason | string | null | und
     case StatusReason.CLAUDE_WAITING:
       return 'waiting';
     case StatusReason.UNCOMMITTED_CHANGES:
-      return 'modified';
+      // Rename: show 'uncommitted' instead of 'modified'
+      return 'uncommitted';
     case StatusReason.UNPUSHED_COMMITS:
       return 'un-pushed';
     case StatusReason.PR_CONFLICTS:
@@ -144,7 +145,7 @@ export function statusColorsFromReason(reason: StatusReason | string | null | un
     case StatusReason.PR_READY_TO_MERGE:
       return {bg: 'green', fg};
     case StatusReason.PR_CHECKING:
-      // No background; show text in magenta
+      // No background; use magenta text
       return {bg: 'none', fg: 'magenta'};
     case StatusReason.NO_PR:
       // Plain cyan text 'no-pr' with no background
