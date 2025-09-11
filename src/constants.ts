@@ -147,7 +147,7 @@ export function generateHelpSections(projectsDir: string): string[] {
     '',
     'NAVIGATION:',
     '  [↑]/[↓], [j]/[k]  navigate list',
-    '  [PgUp]/[PgDn]     previous/next page',
+    '  [PgUp]/[PgDn]     scroll half screen',
     '  [<]/[>]           previous/next page',
     '  [1]–[9]           select item on current page',
     '  [enter]           open/create session',

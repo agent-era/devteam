@@ -105,10 +105,13 @@ export function useKeyboardShortcuts(
       }
 
       // Page navigation keys
-      else if (input === '\u001b[6~') { // Page Down
-        actions.onNextPage?.();
+      else if (input === '\u001b[6~' || input === ' ') { // Page Down or Space
+        // Move by approximately half a screen within the list
+        const half = Math.max(1, Math.floor(pageSize / 2));
+        actions.onMove?.(half);
       } else if (input === '\u001b[5~') { // Page Up  
-        actions.onPreviousPage?.();
+        const half = Math.max(1, Math.floor(pageSize / 2));
+        actions.onMove?.(-half);
       }
       
       // Home and End keys for first/last item
