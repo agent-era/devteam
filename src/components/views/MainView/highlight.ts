@@ -114,7 +114,7 @@ export function statusLabelFromReason(reason: StatusReason | string | null | und
     case StatusReason.PR_READY_TO_MERGE:
       return 'pr ready';
     case StatusReason.PR_CHECKING:
-      return 'pr checking';
+      return 'checking pr';
     case StatusReason.NO_PR:
       return 'no pr';
     case StatusReason.PR_INFORMATIONAL:

@@ -14,11 +14,11 @@ function wt(init?: Partial<WorktreeInfo>): WorktreeInfo {
 }
 
 describe('STATUS chip mapping', () => {
-  test('PR checking => plain magenta pr checking', () => {
+  test('PR checking => plain magenta checking pr', () => {
     const worktree = wt();
     const pr = new PRStatus({loadingStatus: 'exists', number: 12, state: 'OPEN', checks: 'pending'});
     const meta = getStatusMeta(worktree, pr);
-    expect(meta.label).toBe('pr checking');
+    expect(meta.label).toBe('checking pr');
     expect(meta.bg).toBe('none');
     expect(meta.fg).toBe('magenta');
   });
