@@ -19,11 +19,18 @@ import {ViewportCalculator} from '../../shared/utils/viewport.js';
 import {computeUnifiedPerFileIndices, computeSideBySidePerFileIndices} from '../../shared/utils/diffLineIndex.js';
 import {getLanguageFromFileName} from '../../shared/utils/languageMapping.js';
 
-type DiffLine = {type: 'added'|'removed'|'context'|'header'; text: string; fileName?: string; headerType?: 'file' | 'hunk'};
+type DiffLine = {
+  type: 'added'|'removed'|'context'|'header';
+  text: string;
+  fileName?: string;
+  headerType?: 'file' | 'hunk';
+  oldLineIndex?: number; // 0-based original (left) line index within file
+  newLineIndex?: number; // 0-based current (right) line index within file
+};
 
 type SideBySideLine = {
-  left: {type: 'removed'|'context'|'header'|'empty'; text: string; fileName?: string; headerType?: 'file' | 'hunk'} | null;
-  right: {type: 'added'|'context'|'header'|'empty'; text: string; fileName?: string; headerType?: 'file' | 'hunk'} | null;
+  left: {type: 'removed'|'context'|'header'|'empty'; text: string; fileName?: string; headerType?: 'file' | 'hunk'; oldLineIndex?: number; newLineIndex?: number} | null;
+  right: {type: 'added'|'context'|'header'|'empty'; text: string; fileName?: string; headerType?: 'file' | 'hunk'; oldLineIndex?: number; newLineIndex?: number} | null;
   lineIndex: number; // Original line index for comments and navigation
 };
 
@@ -57,6 +64,8 @@ async function loadDiff(worktreePath: string, diffType: 'full' | 'uncommitted' =
     const raw = diff.split('\n');
     let currentFileName = '';
     let currentFileLines: DiffLine[] = [];
+    let oldLineCounter = 0;
+    let newLineCounter = 0;
     
     for (const line of raw) {
       if (line.startsWith('diff --git')) {
@@ -72,14 +81,26 @@ async function loadDiff(worktreePath: string, diffType: 'full' | 'uncommitted' =
         currentFileLines = [];
         currentFileLines.push({type: 'header', text: `📁 ${fp}`, fileName: fp, headerType: 'file'});
       } else if (line.startsWith('@@')) {
+        // Parse original and new starting line numbers from hunk header
+        const m = line.match(/^@@ -([0-9]+)(?:,([0-9]+))? \+([0-9]+)(?:,([0-9]+))? @@/);
+        if (m) {
+          const oldStart = parseInt(m[1] || '1', 10);
+          const newStart = parseInt(m[3] || '1', 10);
+          oldLineCounter = Math.max(0, oldStart - 1);
+          newLineCounter = Math.max(0, newStart - 1);
+        }
         const ctx = line.replace(/^@@.*@@ ?/, '');
         if (ctx) currentFileLines.push({type: 'header', text: `  ▼ ${ctx}`, fileName: currentFileName, headerType: 'hunk'});
       } else if (line.startsWith('+') && !line.startsWith('+++')) {
-        currentFileLines.push({type: 'added', text: line.slice(1), fileName: currentFileName});
+        currentFileLines.push({type: 'added', text: line.slice(1), fileName: currentFileName, newLineIndex: newLineCounter});
+        newLineCounter++;
       } else if (line.startsWith('-') && !line.startsWith('---')) {
-        currentFileLines.push({type: 'removed', text: line.slice(1), fileName: currentFileName});
+        currentFileLines.push({type: 'removed', text: line.slice(1), fileName: currentFileName, oldLineIndex: oldLineCounter});
+        oldLineCounter++;
       } else if (line.startsWith(' ')) {
-        currentFileLines.push({type: 'context', text: line.slice(1), fileName: currentFileName});
+        currentFileLines.push({type: 'context', text: line.slice(1), fileName: currentFileName, oldLineIndex: oldLineCounter, newLineIndex: newLineCounter});
+        oldLineCounter++;
+        newLineCounter++;
       } else if (line === '') {
         currentFileLines.push({type: 'context', text: ' ', fileName: currentFileName}); // Empty line gets a space so cursor is visible
       }
@@ -141,8 +162,8 @@ function convertToSideBySide(unifiedLines: DiffLine[]): SideBySideLine[] {
     } else if (line.type === 'context') {
       // Context lines appear on both sides
       sideBySideLines.push({
-        left: {type: 'context', text: line.text, fileName: line.fileName},
-        right: {type: 'context', text: line.text, fileName: line.fileName},
+        left: {type: 'context', text: line.text, fileName: line.fileName, oldLineIndex: line.oldLineIndex, newLineIndex: line.newLineIndex},
+        right: {type: 'context', text: line.text, fileName: line.fileName, oldLineIndex: line.oldLineIndex, newLineIndex: line.newLineIndex},
         lineIndex: lineIndex++
       });
       i++;
@@ -169,8 +190,8 @@ function convertToSideBySide(unifiedLines: DiffLine[]): SideBySideLine[] {
         const addedLine = addedLines[j] || null;
         
         sideBySideLines.push({
-          left: removedLine ? {type: 'removed', text: removedLine.text, fileName: removedLine.fileName} : {type: 'empty', text: '', fileName: line.fileName},
-          right: addedLine ? {type: 'added', text: addedLine.text, fileName: addedLine.fileName} : {type: 'empty', text: '', fileName: line.fileName},
+          left: removedLine ? {type: 'removed', text: removedLine.text, fileName: removedLine.fileName, oldLineIndex: removedLine.oldLineIndex} : {type: 'empty', text: '', fileName: line.fileName},
+          right: addedLine ? {type: 'added', text: addedLine.text, fileName: addedLine.fileName, newLineIndex: addedLine.newLineIndex} : {type: 'empty', text: '', fileName: line.fileName},
           lineIndex: lineIndex++
         });
       }
@@ -178,7 +199,7 @@ function convertToSideBySide(unifiedLines: DiffLine[]): SideBySideLine[] {
       // Added lines without preceding removed lines
       sideBySideLines.push({
         left: {type: 'empty', text: '', fileName: line.fileName},
-        right: {type: 'added', text: line.text, fileName: line.fileName},
+        right: {type: 'added', text: line.text, fileName: line.fileName, newLineIndex: line.newLineIndex},
         lineIndex: lineIndex++
       });
       i++;
@@ -234,8 +255,12 @@ export function formatCommentsAsPrompt(
         comment.lineText.trim().length > 0 &&
         !comment.isFileLevel
       ) {
-        // Removed line or other content - show as removed without line number
-        prompt += `  Removed line: ${comment.lineText}\n`;
+        // Removed line or other content - show as removed; include original number when available
+        if (comment.isRemoved && comment.originalLineIndex !== undefined) {
+          prompt += `  Removed line ${comment.originalLineIndex + 1}: ${comment.lineText}\n`;
+        } else {
+          prompt += `  Removed line: ${comment.lineText}\n`;
+        }
       }
       // For file headers (no meaningful lineText), just show the comment
       prompt += `  Comment: ${comment.commentText}\n`;
@@ -754,14 +779,22 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     // Get the last comment's text and file info
     if (comments.length > 0) {
       const lastComment = comments[comments.length - 1];
-      lines.push(`  Line ${lastComment.lineIndex + 1}: ${lastComment.commentText}`);
+      if (lastComment.lineIndex !== undefined) {
+        lines.push(`  Line ${lastComment.lineIndex + 1}: ${lastComment.commentText}`);
+      } else if (lastComment.isRemoved && lastComment.originalLineIndex !== undefined) {
+        lines.push(`  Removed line ${lastComment.originalLineIndex + 1}: ${lastComment.commentText}`);
+      }
       lines.push(`File: ${lastComment.fileName}`);
     }
     
     // If we have multiple comments, also include the second-to-last one
     if (comments.length > 1) {
       const secondLastComment = comments[comments.length - 2];
-      lines.push(`  Line ${secondLastComment.lineIndex + 1}: ${secondLastComment.commentText}`);
+      if (secondLastComment.lineIndex !== undefined) {
+        lines.push(`  Line ${secondLastComment.lineIndex + 1}: ${secondLastComment.commentText}`);
+      } else if (secondLastComment.isRemoved && secondLastComment.originalLineIndex !== undefined) {
+        lines.push(`  Removed line ${secondLastComment.originalLineIndex + 1}: ${secondLastComment.commentText}`);
+      }
     }
     
     return lines.filter(line => line.trim().length > 0);
@@ -827,7 +860,11 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
           comment.lineText.trim().length > 0 &&
           !comment.isFileLevel
         ) {
-          messageLines.push(`  Removed line: ${comment.lineText}`);
+          if (comment.isRemoved && comment.originalLineIndex !== undefined) {
+            messageLines.push(`  Removed line ${comment.originalLineIndex + 1}: ${comment.lineText}`);
+          } else {
+            messageLines.push(`  Removed line: ${comment.lineText}`);
+          }
         }
         messageLines.push(`  Comment: ${comment.commentText}`);
       });
@@ -938,7 +975,11 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
           // New logic for removed lines and file headers
           const isFileLevel = currentLine.type === 'header' && currentLine.headerType === 'file';
           const lineText = isFileLevel ? (currentLine.fileName || '') : currentLine.text;
-          commentStore.addComment(undefined, currentLine.fileName, lineText, commentText, isFileLevel);
+          if (currentLine.type === 'removed') {
+            commentStore.addComment(undefined, currentLine.fileName, lineText, commentText, false, { originalLineIndex: currentLine.oldLineIndex, isRemoved: true });
+          } else {
+            commentStore.addComment(undefined, currentLine.fileName, lineText, commentText, isFileLevel);
+          }
         }
       }
     } else {
@@ -962,7 +1003,11 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
             // Removed lines - use the line text
             textForComment = currentLine?.left?.text || lineText;
           }
-          commentStore.addComment(undefined, fileName, textForComment, commentText, isFileLevel);
+          if (currentLine?.left?.type === 'removed') {
+            commentStore.addComment(undefined, fileName, textForComment, commentText, false, { originalLineIndex: currentLine.left.oldLineIndex, isRemoved: true });
+          } else {
+            commentStore.addComment(undefined, fileName, textForComment, commentText, isFileLevel);
+          }
         }
       }
     }
