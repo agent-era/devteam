@@ -14,11 +14,11 @@ function wt(init?: Partial<WorktreeInfo>): WorktreeInfo {
 }
 
 describe('STATUS chip mapping', () => {
-  test('PR checking => plain magenta pr-checking', () => {
+  test('PR checking => plain magenta checking pr', () => {
     const worktree = wt();
     const pr = new PRStatus({loadingStatus: 'exists', number: 12, state: 'OPEN', checks: 'pending'});
     const meta = getStatusMeta(worktree, pr);
-    expect(meta.label).toBe('pr-checking');
+    expect(meta.label).toBe('checking pr');
     expect(meta.bg).toBe('none');
     expect(meta.fg).toBe('magenta');
   });
@@ -40,12 +40,12 @@ describe('STATUS chip mapping', () => {
     expect(meta.fg).toBe('gray');
   });
 
-  test('No PR and pushed with committed changes => plain cyan no-pr (no bg)', () => {
+  test('No PR and pushed with committed changes => plain cyan no pr (no bg)', () => {
     const baseGit = wt().git;
     const worktree = wt({git: {...baseGit, has_remote: true, ahead: 0, is_pushed: true, base_added_lines: 10, base_deleted_lines: 2}});
     const pr = new PRStatus({loadingStatus: 'no_pr'});
     const meta = getStatusMeta(worktree, pr);
-    expect(meta.label).toBe('no-pr');
+    expect(meta.label).toBe('no pr');
     expect(meta.bg).toBe('none');
     expect(meta.fg).toBe('cyan');
   });

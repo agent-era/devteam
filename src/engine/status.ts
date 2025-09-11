@@ -44,26 +44,23 @@ export function computeStatusLabel(input: MinimalStatusFields | (WorktreeInfo | 
     const hasConflicts = coerceBool(prIn.has_conflicts) || prIn.mergeable === 'CONFLICTING';
     if (hasConflicts) return 'conflict';
     const checks = lower(prIn.checks);
-    if (checks === 'failing') return 'pr-failed';
-    const isReadyToMerge = coerceBool(prIn.is_ready_to_merge) || (prIn.state === 'OPEN' && prIn.mergeable === 'MERGEABLE' && checks === 'passing');
-    if (isReadyToMerge) return 'pr-passed';
+    if (checks === 'failing') return 'pr failed';
+    const isReadyToMerge = coerceBool(prIn.is_ready_to_merge) || (prIn.state === 'OPEN' && prIn.mergeable === 'MERGEABLE' && (checks === 'passing' || !checks));
+    if (isReadyToMerge) return 'pr ready';
     const isOpen = coerceBool(prIn.is_open) || prIn.state === 'OPEN';
     const hasNumber = prIn.number != null && prIn.number !== undefined;
-    if (isOpen && hasNumber && (checks === 'pending' || !checks)) return 'pr-checking';
+    if (isOpen && hasNumber && (checks === 'pending' || !checks)) return 'checking pr';
     const isMerged = coerceBool(prIn.is_merged) || prIn.state === 'MERGED';
     if (isMerged && hasNumber) return 'merged';
-    if (coerceBool(prIn.noPR)) {
-      // Without remote/base info (committed diff with remote), skip no-pr to avoid false positives.
-    }
+    // 'no pr' handled by callers that have base/remote context
   }
 
   // Local git signals
   if (has_changes) return 'uncommitted';
-  if (Number(ahead) > 0) return 'un-pushed';
+  if (Number(ahead) > 0) return 'not pushed';
 
   // Ready when attached but idle/active
   if (attached && (ai.includes('idle') || ai.includes('active'))) return 'ready';
 
   return '';
 }
-

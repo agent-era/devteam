@@ -209,10 +209,10 @@ function generateMainListOutput(): string {
     if (cs === 'working') statusLabel = 'working';
     else if (cs === 'waiting') statusLabel = 'waiting';
     else if (gitStatus?.has_changes) statusLabel = 'uncommitted';
-    else if ((gitStatus?.ahead || 0) > 0) statusLabel = 'un-pushed';
+    else if ((gitStatus?.ahead || 0) > 0) statusLabel = 'not pushed';
     else if (prStatus?.mergeable === 'CONFLICTING') statusLabel = 'conflict';
-    else if (prStatus?.checks === 'failing') statusLabel = 'pr-failed';
-    else if (prStatus?.checks === 'passing') statusLabel = 'pr-passed';
+    else if (prStatus?.checks === 'failing') statusLabel = 'pr failed';
+    else if (prStatus?.checks === 'passing') statusLabel = 'pr ready';
     else if (prStatus?.is_merged && prStatus?.number) statusLabel = 'merged';
 
     // Row number (1-based for display, continuous across pages)

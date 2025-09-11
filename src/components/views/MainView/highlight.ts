@@ -50,15 +50,24 @@ export function determineStatusReason(worktree: WorktreeInfo, pr: PRStatus | und
   switch (label) {
     case 'waiting': return StatusReason.CLAUDE_WAITING;
     case 'uncommitted': return StatusReason.UNCOMMITTED_CHANGES;
-    case 'un-pushed': return StatusReason.UNPUSHED_COMMITS;
+    case 'not pushed': return StatusReason.UNPUSHED_COMMITS;
     case 'conflict': return StatusReason.PR_CONFLICTS;
-    case 'pr-failed': return StatusReason.PR_FAILING;
-    case 'pr-passed': return StatusReason.PR_READY_TO_MERGE;
-    case 'pr-checking': return StatusReason.PR_CHECKING;
+    case 'pr failed': return StatusReason.PR_FAILING;
+    case 'pr ready': return StatusReason.PR_READY_TO_MERGE;
+    case 'checking pr': return StatusReason.PR_CHECKING;
     case 'merged': return StatusReason.PR_MERGED;
     case 'ready': return StatusReason.AGENT_READY;
-    default: return null;
   }
+  // Additional explicit NO_PR handling using git context if available
+  if (pr?.noPR) {
+    const hasCommittedBaseDiff = ((worktree.git?.base_added_lines ?? 0) + (worktree.git?.base_deleted_lines ?? 0)) > 0;
+    if ((worktree.git as any)?.has_remote && hasCommittedBaseDiff) return StatusReason.NO_PR;
+    return StatusReason.AGENT_READY;
+  }
+  // Fallback: derive from session+git if engine label is empty
+  const cs = (worktree.session?.claude_status || '').toLowerCase();
+  if (worktree.session?.attached && (cs.includes('idle') || cs.includes('active'))) return StatusReason.AGENT_READY;
+  return null;
 }
 
 export function computeHighlightInfo(worktree: WorktreeInfo, pr: PRStatus | undefined | null): HighlightInfo | null {
@@ -103,17 +112,17 @@ export function statusLabelFromReason(reason: StatusReason | string | null | und
       // Rename: show 'uncommitted' instead of 'modified'
       return 'uncommitted';
     case StatusReason.UNPUSHED_COMMITS:
-      return 'un-pushed';
+      return 'not pushed';
     case StatusReason.PR_CONFLICTS:
       return 'conflict';
     case StatusReason.PR_FAILING:
-      return 'pr-failed';
+      return 'pr failed';
     case StatusReason.PR_READY_TO_MERGE:
-      return 'pr-passed';
+      return 'pr ready';
     case StatusReason.PR_CHECKING:
-      return 'pr-checking';
+      return 'checking pr';
     case StatusReason.NO_PR:
-      return 'no-pr';
+      return 'no pr';
     case StatusReason.PR_INFORMATIONAL:
       return '';
     case StatusReason.PR_MERGED:
@@ -146,7 +155,7 @@ export function statusColorsFromReason(reason: StatusReason | string | null | un
       // No background; use magenta text
       return {bg: 'none', fg: 'magenta'};
     case StatusReason.NO_PR:
-      // Plain cyan text 'no-pr' with no background
+      // Plain cyan text 'no pr' with no background
       return {bg: 'none', fg: 'cyan'};
     case StatusReason.PR_INFORMATIONAL:
       return {bg: 'magenta', fg};
@@ -182,3 +191,4 @@ export function getStatusMeta(
   }
   return {label: '', bg: 'black', fg: 'white'};
 }
+

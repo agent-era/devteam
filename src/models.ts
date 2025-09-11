@@ -76,11 +76,13 @@ export class PRStatus {
   
   // Status aggregation helpers
   get needs_attention(): boolean { return this.checks === 'failing' || this.has_conflicts; }
-  get is_ready_to_merge(): boolean { 
-    return this.state === 'OPEN' && 
-           this.checks === 'passing' && 
-           this.mergeable === 'MERGEABLE' && 
-           !this.isLoading; 
+  get is_ready_to_merge(): boolean {
+    // Treat PRs with no checks as not blocking merge when mergeable
+    const checksPassingOrNone = this.checks === 'passing' || this.checks == null;
+    return this.state === 'OPEN' &&
+      checksPassingOrNone &&
+      this.mergeable === 'MERGEABLE' &&
+      !this.isLoading;
   }
 }
 

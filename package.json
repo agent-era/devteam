@@ -1,6 +1,6 @@
 {
   "name": "@agent-era/devteam",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "DevTeam: Git/Tmux development workflow TUI (Node + Ink)",
   "bin": {
     "devteam": "dist/bin/devteam.js",
