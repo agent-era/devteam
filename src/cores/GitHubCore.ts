@@ -1,13 +1,13 @@
-import {CoreBase} from '../core-types.js';
-import {PRStatus} from '../../models.js';
-import {GitHubService} from '../../services/GitHubService.js';
-import {GitService} from '../../services/GitService.js';
-import {getProjectsDirectory} from '../../config.js';
-import {PRStatusCacheService} from '../../services/PRStatusCacheService.js';
-import {createThrottledBatch} from '../../shared/utils/throttle.js';
-import {startIntervalIfEnabled, startTimeoutIfEnabled} from '../../shared/utils/intervals.js';
-import {PR_REFRESH_DURATION} from '../../constants.js';
-import {isAppIntervalsEnabled} from '../../config.js';
+import {CoreBase} from '../engine/core-types.js';
+import {PRStatus} from '../models.js';
+import {GitHubService} from '../services/GitHubService.js';
+import {GitService} from '../services/GitService.js';
+import {getProjectsDirectory} from '../config.js';
+import {PRStatusCacheService} from '../services/PRStatusCacheService.js';
+import {createThrottledBatch} from '../shared/utils/throttle.js';
+import {startIntervalIfEnabled, startTimeoutIfEnabled} from '../shared/utils/intervals.js';
+import {PR_REFRESH_DURATION} from '../constants.js';
+import {isAppIntervalsEnabled} from '../config.js';
 
 type State = {
   pullRequests: Record<string, PRStatus>;

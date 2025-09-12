@@ -23,8 +23,8 @@ import {WorktreeProvider, useWorktreeContext} from './contexts/WorktreeContext.j
 import {GitHubProvider, useGitHubContext} from './contexts/GitHubContext.js';
 import {UIProvider, useUIContext} from './contexts/UIContext.js';
 import {InputFocusProvider} from './contexts/InputFocusContext.js';
-import {WorktreeCore} from './engine/cores/WorktreeCore.js';
-import {GitHubCore} from './engine/cores/GitHubCore.js';
+import {WorktreeCore} from './cores/WorktreeCore.js';
+import {GitHubCore} from './cores/GitHubCore.js';
 
 
 function AppContent() {

@@ -3,7 +3,7 @@ import {WorktreeInfo} from '../models.js';
 import type {AITool} from '../models.js';
 import {MemoryStatus} from '../services/MemoryMonitorService.js';
 import type {VersionInfo} from '../services/versionTypes.js';
-import {WorktreeCore} from '../engine/cores/WorktreeCore.js';
+import {WorktreeCore} from '../cores/WorktreeCore.js';
 
 interface WorktreeContextType {
   // State

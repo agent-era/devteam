@@ -1,6 +1,6 @@
 import React, {createContext, useContext, useCallback, ReactNode} from 'react';
 import {PRStatus, WorktreeInfo} from '../models.js';
-import {GitHubCore} from '../engine/cores/GitHubCore.js';
+import {GitHubCore} from '../cores/GitHubCore.js';
 
 interface GitHubContextType {
   // State

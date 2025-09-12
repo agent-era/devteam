@@ -1,16 +1,16 @@
-import {CoreBase} from '../core-types.js';
-import {WorktreeInfo, SessionInfo, GitStatus, AITool} from '../../models.js';
-import {GitService} from '../../services/GitService.js';
-import {getProjectsDirectory} from '../../config.js';
-import {TmuxService} from '../../services/TmuxService.js';
-import {WorkspaceService} from '../../services/WorkspaceService.js';
-import {MemoryMonitorService, MemoryStatus} from '../../services/MemoryMonitorService.js';
-import {RUN_CONFIG_FILE, DIR_BRANCHES_SUFFIX, TMUX_DISPLAY_TIME} from '../../constants.js';
-import {detectAvailableAITools, runCommandQuick} from '../../shared/utils/commandExecutor.js';
+import {CoreBase} from '../engine/core-types.js';
+import {WorktreeInfo, SessionInfo, GitStatus, AITool} from '../models.js';
+import {GitService} from '../services/GitService.js';
+import {getProjectsDirectory} from '../config.js';
+import {TmuxService} from '../services/TmuxService.js';
+import {WorkspaceService} from '../services/WorkspaceService.js';
+import {MemoryMonitorService, MemoryStatus} from '../services/MemoryMonitorService.js';
+import {RUN_CONFIG_FILE, DIR_BRANCHES_SUFFIX, TMUX_DISPLAY_TIME} from '../constants.js';
+import {detectAvailableAITools, runCommandQuick} from '../shared/utils/commandExecutor.js';
 import path from 'node:path';
 import fs from 'node:fs';
-import {startIntervalIfEnabled} from '../../shared/utils/intervals.js';
-import {logDebug, logError} from '../../shared/utils/logger.js';
+import {startIntervalIfEnabled} from '../shared/utils/intervals.js';
+import {logDebug, logError} from '../shared/utils/logger.js';
 
 type State = {
   worktrees: WorktreeInfo[];
@@ -30,7 +30,7 @@ export class WorktreeCore implements CoreBase<State> {
   private memory: MemoryMonitorService;
   private versionService: any | null = null;
   private timers: Array<() => void> = [];
-  private availableAITools: (keyof typeof import('../../constants.js').AI_TOOLS)[];
+  private availableAITools: (keyof typeof import('../constants.js').AI_TOOLS)[];
 
   constructor(opts?: {git?: GitService; tmux?: TmuxService; workspace?: WorkspaceService; memory?: MemoryMonitorService; versionService?: any}) {
     this.git = opts?.git || new GitService(getProjectsDirectory());
@@ -245,7 +245,7 @@ export class WorktreeCore implements CoreBase<State> {
       }
       if (selected !== 'none') {
         const tool = selected as any;
-        const toolMap = (await import('../../constants.js')).AI_TOOLS as any;
+        const toolMap = (await import('../constants.js')).AI_TOOLS as any;
         const cmd = toolMap[tool]?.command;
         if (cmd) this.tmux.createSessionWithCommand(sessionName, worktree.path, cmd, true);
         else this.tmux.createSession(sessionName, worktree.path, true);
@@ -289,7 +289,7 @@ export class WorktreeCore implements CoreBase<State> {
   }
 
   // AI tool utilities
-  getAvailableAITools(): (keyof typeof import('../../constants.js').AI_TOOLS)[] { return this.availableAITools; }
+  getAvailableAITools(): (keyof typeof import('../constants.js').AI_TOOLS)[] { return this.availableAITools; }
   async needsToolSelection(worktree: WorktreeInfo): Promise<boolean> {
     const current = (worktree.session?.ai_tool as AITool) || 'none';
     return current === 'none' && this.availableAITools.length > 1;
@@ -330,7 +330,7 @@ export class WorktreeCore implements CoreBase<State> {
   private async refreshVersionInfo(): Promise<void> {
     try {
       if (!this.versionService) {
-        const mod = await import('../../services/VersionCheckService.js');
+        const mod = await import('../services/VersionCheckService.js');
         this.versionService = new (mod as any).VersionCheckService();
       }
       const info = await this.versionService.check();
