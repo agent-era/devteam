@@ -8,6 +8,7 @@ import {createThrottledBatch} from '../shared/utils/throttle.js';
 import {startIntervalIfEnabled, startTimeoutIfEnabled} from '../shared/utils/intervals.js';
 import {PR_REFRESH_DURATION} from '../constants.js';
 import {isAppIntervalsEnabled} from '../config.js';
+import { logDebug } from '../shared/utils/logger.js';
 
 type State = {
   pullRequests: Record<string, PRStatus>;
@@ -19,7 +20,6 @@ type State = {
 type WT = {project: string; path: string; is_archived?: boolean};
 
 export class GitHubCore implements CoreBase<State> {
-  private ts(): string { return new Date().toISOString(); }
   private state: State = {pullRequests: {}, loading: false, lastUpdated: 0, visibleWorktrees: []};
   private listeners = new Set<(s: Readonly<State>) => void>();
   private gitHubService: GitHubService;
@@ -221,19 +221,19 @@ export class GitHubCore implements CoreBase<State> {
         if (pr) cached[wt.path] = pr;
       }
       if (Object.keys(cached).length) this.setState({pullRequests: {...this.state.pullRequests, ...cached}, lastUpdated: Date.now()});
-      console.log(`[${this.ts()}] [github-core] visible=${reqCount} cached-only=${Object.keys(cached).length}`);
+      logDebug(`[github-core] visible=${reqCount} cached-only=${Object.keys(cached).length}`);
       return;
     }
     this.setState({loading: true});
     try {
-      console.log(`[${this.ts()}] [github-core] refreshing PRs: requested=${reqCount} toRefresh=${toRefresh.length}`);
+      logDebug(`[github-core] refreshing PRs: requested=${reqCount} toRefresh=${toRefresh.length}`);
       const prMap = await this.gitHubService.batchGetPRStatusForWorktreesAsync(toRefresh, true);
       const updates: Record<string, PRStatus> = {};
       for (const [p, pr] of Object.entries(prMap)) {
         updates[p] = pr;
         if (pr.loadingStatus !== 'error') this.cacheService.set(p, pr);
       }
-      console.log(`[${this.ts()}] [github-core] updated PR entries: ${Object.keys(updates).length}`);
+      logDebug(`[github-core] updated PR entries: ${Object.keys(updates).length}`);
       this.setState({pullRequests: {...this.state.pullRequests, ...updates}, lastUpdated: Date.now()});
     } finally {
       this.setState({loading: false});
