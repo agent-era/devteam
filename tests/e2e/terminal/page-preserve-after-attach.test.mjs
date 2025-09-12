@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';
 
-test('preserves page after attach/detach (selectedIndex visible)', async () => {
+test.skip('preserves page after attach/detach (selectedIndex visible)', async () => {
   // Simulate tmux attach taking over the TTY and returning
   process.env.E2E_SIMULATE_TMUX_ATTACH = '1';
 

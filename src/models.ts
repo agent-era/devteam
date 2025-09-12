@@ -190,6 +190,8 @@ export class DiffComment {
   commentText: string;
   timestamp: number;
   isFileLevel: boolean;
+  originalLineIndex?: number;
+  isRemoved?: boolean;
   constructor(init: Partial<DiffComment> = {}) {
     this.lineIndex = undefined;
     this.fileName = '';
@@ -203,11 +205,12 @@ export class DiffComment {
 
 export class CommentStore {
   comments: DiffComment[];
+  baseCommitHash?: string;
   constructor() {
     this.comments = [];
   }
   
-  addComment(lineIndex: number | undefined, fileName: string, lineText: string, commentText: string, isFileLevel: boolean = false): DiffComment {
+  addComment(lineIndex: number | undefined, fileName: string, lineText: string, commentText: string, isFileLevel: boolean = false, opts?: { originalLineIndex?: number; isRemoved?: boolean }): DiffComment {
     // Remove existing comment for this line if any
     this.comments = this.comments.filter(c => c.lineIndex !== lineIndex || c.fileName !== fileName);
     
@@ -217,7 +220,9 @@ export class CommentStore {
       lineText,
       commentText,
       timestamp: Date.now(),
-      isFileLevel
+      isFileLevel,
+      originalLineIndex: opts?.originalLineIndex,
+      isRemoved: opts?.isRemoved
     });
     
     this.comments.push(comment);

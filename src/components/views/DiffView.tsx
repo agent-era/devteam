@@ -19,17 +19,24 @@ import {ViewportCalculator} from '../../shared/utils/viewport.js';
 import {computeUnifiedPerFileIndices, computeSideBySidePerFileIndices} from '../../shared/utils/diffLineIndex.js';
 import {getLanguageFromFileName} from '../../shared/utils/languageMapping.js';
 
-type DiffLine = {type: 'added'|'removed'|'context'|'header'; text: string; fileName?: string; headerType?: 'file' | 'hunk'};
+type DiffLine = {
+  type: 'added'|'removed'|'context'|'header';
+  text: string;
+  fileName?: string;
+  headerType?: 'file' | 'hunk';
+  oldLineIndex?: number; // 1-based original (left) line number from diff output
+  newLineIndex?: number; // 1-based current (right) line number from diff output
+};
 
 type SideBySideLine = {
-  left: {type: 'removed'|'context'|'header'|'empty'; text: string; fileName?: string; headerType?: 'file' | 'hunk'} | null;
-  right: {type: 'added'|'context'|'header'|'empty'; text: string; fileName?: string; headerType?: 'file' | 'hunk'} | null;
+  left: {type: 'removed'|'context'|'header'|'empty'; text: string; fileName?: string; headerType?: 'file' | 'hunk'; oldLineIndex?: number; newLineIndex?: number} | null;
+  right: {type: 'added'|'context'|'header'|'empty'; text: string; fileName?: string; headerType?: 'file' | 'hunk'; oldLineIndex?: number; newLineIndex?: number} | null;
   lineIndex: number; // Original line index for comments and navigation
 };
 
 // Map file extensions to language identifiers for syntax highlighting is now in shared util
 
-async function loadDiff(worktreePath: string, diffType: 'full' | 'uncommitted' = 'full'): Promise<DiffLine[]> {
+async function loadDiff(worktreePath: string, diffType: 'full' | 'uncommitted' = 'full', baseCommitHash?: string): Promise<DiffLine[]> {
   let diff: string | null = null;
   
   if (diffType === 'uncommitted') {
@@ -37,11 +44,14 @@ async function loadDiff(worktreePath: string, diffType: 'full' | 'uncommitted' =
     diff = await runCommandAsync(['git', '-C', worktreePath, 'diff', '--no-color', '--no-ext-diff', 'HEAD']);
   } else {
     // Show full diff against base branch (default behavior)
-    let target = 'HEAD~1';
-    const base = findBaseBranch(worktreePath, BASE_BRANCH_CANDIDATES);
-    if (base) {
-      const mb = await runCommandAsync(['git', '-C', worktreePath, 'merge-base', 'HEAD', base]);
-      if (mb) target = mb.trim();
+    let target = baseCommitHash;
+    if (!target) {
+      target = 'HEAD~1';
+      const base = findBaseBranch(worktreePath, BASE_BRANCH_CANDIDATES);
+      if (base) {
+        const mb = await runCommandAsync(['git', '-C', worktreePath, 'merge-base', 'HEAD', base]);
+        if (mb) target = mb.trim();
+      }
     }
     diff = await runCommandAsync(['git', '-C', worktreePath, 'diff', '--no-color', '--no-ext-diff', target]);
   }
@@ -54,6 +64,8 @@ async function loadDiff(worktreePath: string, diffType: 'full' | 'uncommitted' =
     const raw = diff.split('\n');
     let currentFileName = '';
     let currentFileLines: DiffLine[] = [];
+    let oldLineCounter = 1;
+    let newLineCounter = 1;
     
     for (const line of raw) {
       if (line.startsWith('diff --git')) {
@@ -68,15 +80,29 @@ async function loadDiff(worktreePath: string, diffType: 'full' | 'uncommitted' =
         currentFileName = fp;
         currentFileLines = [];
         currentFileLines.push({type: 'header', text: `📁 ${fp}`, fileName: fp, headerType: 'file'});
+        oldLineCounter = 1;
+        newLineCounter = 1;
       } else if (line.startsWith('@@')) {
+        // Parse original and new starting line numbers from hunk header
+        const m = line.match(/^@@ -([0-9]+)(?:,([0-9]+))? \+([0-9]+)(?:,([0-9]+))? @@/);
+        if (m) {
+          const oldStart = parseInt(m[1] || '1', 10);
+          const newStart = parseInt(m[3] || '1', 10);
+          oldLineCounter = Math.max(1, oldStart);
+          newLineCounter = Math.max(1, newStart);
+        }
         const ctx = line.replace(/^@@.*@@ ?/, '');
         if (ctx) currentFileLines.push({type: 'header', text: `  ▼ ${ctx}`, fileName: currentFileName, headerType: 'hunk'});
       } else if (line.startsWith('+') && !line.startsWith('+++')) {
-        currentFileLines.push({type: 'added', text: line.slice(1), fileName: currentFileName});
+        currentFileLines.push({type: 'added', text: line.slice(1), fileName: currentFileName, newLineIndex: newLineCounter});
+        newLineCounter++;
       } else if (line.startsWith('-') && !line.startsWith('---')) {
-        currentFileLines.push({type: 'removed', text: line.slice(1), fileName: currentFileName});
+        currentFileLines.push({type: 'removed', text: line.slice(1), fileName: currentFileName, oldLineIndex: oldLineCounter});
+        oldLineCounter++;
       } else if (line.startsWith(' ')) {
-        currentFileLines.push({type: 'context', text: line.slice(1), fileName: currentFileName});
+        currentFileLines.push({type: 'context', text: line.slice(1), fileName: currentFileName, oldLineIndex: oldLineCounter, newLineIndex: newLineCounter});
+        oldLineCounter++;
+        newLineCounter++;
       } else if (line === '') {
         currentFileLines.push({type: 'context', text: ' ', fileName: currentFileName}); // Empty line gets a space so cursor is visible
       }
@@ -138,8 +164,8 @@ function convertToSideBySide(unifiedLines: DiffLine[]): SideBySideLine[] {
     } else if (line.type === 'context') {
       // Context lines appear on both sides
       sideBySideLines.push({
-        left: {type: 'context', text: line.text, fileName: line.fileName},
-        right: {type: 'context', text: line.text, fileName: line.fileName},
+        left: {type: 'context', text: line.text, fileName: line.fileName, oldLineIndex: line.oldLineIndex, newLineIndex: line.newLineIndex},
+        right: {type: 'context', text: line.text, fileName: line.fileName, oldLineIndex: line.oldLineIndex, newLineIndex: line.newLineIndex},
         lineIndex: lineIndex++
       });
       i++;
@@ -166,8 +192,8 @@ function convertToSideBySide(unifiedLines: DiffLine[]): SideBySideLine[] {
         const addedLine = addedLines[j] || null;
         
         sideBySideLines.push({
-          left: removedLine ? {type: 'removed', text: removedLine.text, fileName: removedLine.fileName} : {type: 'empty', text: '', fileName: line.fileName},
-          right: addedLine ? {type: 'added', text: addedLine.text, fileName: addedLine.fileName} : {type: 'empty', text: '', fileName: line.fileName},
+          left: removedLine ? {type: 'removed', text: removedLine.text, fileName: removedLine.fileName, oldLineIndex: removedLine.oldLineIndex} : {type: 'empty', text: '', fileName: line.fileName},
+          right: addedLine ? {type: 'added', text: addedLine.text, fileName: addedLine.fileName, newLineIndex: addedLine.newLineIndex} : {type: 'empty', text: '', fileName: line.fileName},
           lineIndex: lineIndex++
         });
       }
@@ -175,7 +201,7 @@ function convertToSideBySide(unifiedLines: DiffLine[]): SideBySideLine[] {
       // Added lines without preceding removed lines
       sideBySideLines.push({
         left: {type: 'empty', text: '', fileName: line.fileName},
-        right: {type: 'added', text: line.text, fileName: line.fileName},
+        right: {type: 'added', text: line.text, fileName: line.fileName, newLineIndex: line.newLineIndex},
         lineIndex: lineIndex++
       });
       i++;
@@ -204,7 +230,7 @@ type WrapMode = 'truncate' | 'wrap';
 // Exported utility for formatting comments into a Claude-friendly prompt
 export function formatCommentsAsPrompt(
   comments: any[],
-  opts?: {workspaceFeature?: string; project?: string}
+  opts?: {workspaceFeature?: string; project?: string; baseCommitHash?: string}
 ): string {
   let prompt = "Please address the following code review comments:\n\n";
   if (opts?.workspaceFeature && opts?.project) {
@@ -220,7 +246,8 @@ export function formatCommentsAsPrompt(
   });
 
   Object.entries(commentsByFile).forEach(([fileName, fileComments]) => {
-    prompt += `File: ${fileName}\n`;
+    const header = opts?.baseCommitHash ? `File: ${fileName}@${opts.baseCommitHash}` : `File: ${fileName}`;
+    prompt += `${header}\n`;
     fileComments.forEach(comment => {
       if (comment.lineIndex !== undefined) {
         // Normal line with line number
@@ -230,8 +257,12 @@ export function formatCommentsAsPrompt(
         comment.lineText.trim().length > 0 &&
         !comment.isFileLevel
       ) {
-        // Removed line or other content - show line content without line number
-        prompt += `  Line content: ${comment.lineText}\n`;
+        // Removed line or other content - show as removed; include original number when available
+        if (comment.isRemoved && comment.originalLineIndex !== undefined) {
+          prompt += `  Removed line ${comment.originalLineIndex}: ${comment.lineText}\n`;
+        } else {
+          prompt += `  Removed line: ${comment.lineText}\n`;
+        }
       }
       // For file headers (no meaningful lineText), just show the comment
       prompt += `  Comment: ${comment.commentText}\n`;
@@ -258,6 +289,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
   const [wrapMode, setWrapMode] = useState<WrapMode>('truncate');
   const commentStore = useMemo(() => commentStoreManager.getStore(worktreePath), [worktreePath]);
   const [tmuxService] = useState(() => new TmuxService());
+  const [baseCommitHash, setBaseCommitHash] = useState<string>('');
   const [showCommentDialog, setShowCommentDialog] = useState(false);
   const [showAllComments, setShowAllComments] = useState(true);
   const [showSessionWaitingDialog, setShowSessionWaitingDialog] = useState(false);
@@ -293,9 +325,34 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
 
   useEffect(() => {
     (async () => {
-      const lns = await loadDiff(worktreePath, diffType);
+      // Compute base hash first (so diff and prompts use the same value)
+      let computedBaseHash = '';
+      try {
+        if (diffType === 'uncommitted') {
+          const head = await runCommandAsync(['git', '-C', worktreePath, 'rev-parse', 'HEAD']);
+          computedBaseHash = (head || '').trim();
+        } else {
+          let targetRef = 'HEAD~1';
+          const base = findBaseBranch(worktreePath, BASE_BRANCH_CANDIDATES);
+          if (base) {
+            const mb = await runCommandAsync(['git', '-C', worktreePath, 'merge-base', 'HEAD', base]);
+            if (mb) targetRef = mb.trim();
+          }
+          const hash = await runCommandAsync(['git', '-C', worktreePath, 'rev-parse', targetRef]);
+          computedBaseHash = (hash || '').trim();
+        }
+      } catch {
+        computedBaseHash = '';
+      }
+
+      setBaseCommitHash(computedBaseHash);
+      commentStore.baseCommitHash = computedBaseHash || undefined;
+
+      // Now load the diff using the computed base hash (for full diffs)
+      const lns = await loadDiff(worktreePath, diffType, diffType === 'full' ? computedBaseHash : undefined);
       setLines(lns);
       setSideBySideLines(convertToSideBySide(lns));
+
       // Reset scroll position when loading new diff
       setScrollRow(0);
       setTargetScrollRow(0);
@@ -724,14 +781,22 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     // Get the last comment's text and file info
     if (comments.length > 0) {
       const lastComment = comments[comments.length - 1];
-      lines.push(`  Line ${lastComment.lineIndex + 1}: ${lastComment.commentText}`);
+      if (lastComment.lineIndex !== undefined) {
+        lines.push(`  Line ${lastComment.lineIndex + 1}: ${lastComment.commentText}`);
+      } else if (lastComment.isRemoved && lastComment.originalLineIndex !== undefined) {
+        lines.push(`  Removed line ${lastComment.originalLineIndex}: ${lastComment.commentText}`);
+      }
       lines.push(`File: ${lastComment.fileName}`);
     }
     
     // If we have multiple comments, also include the second-to-last one
     if (comments.length > 1) {
       const secondLastComment = comments[comments.length - 2];
-      lines.push(`  Line ${secondLastComment.lineIndex + 1}: ${secondLastComment.commentText}`);
+      if (secondLastComment.lineIndex !== undefined) {
+        lines.push(`  Line ${secondLastComment.lineIndex + 1}: ${secondLastComment.commentText}`);
+      } else if (secondLastComment.isRemoved && secondLastComment.originalLineIndex !== undefined) {
+        lines.push(`  Removed line ${secondLastComment.originalLineIndex}: ${secondLastComment.commentText}`);
+      }
     }
     
     return lines.filter(line => line.trim().length > 0);
@@ -768,7 +833,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     return foundLines > 0;
   };
 
-  const sendCommentsViaAltEnter = (sessionName: string, comments: any[], opts?: {workspaceFeature?: string; project?: string}) => {
+  const sendCommentsViaAltEnter = (sessionName: string, comments: any[], opts?: {workspaceFeature?: string; project?: string; baseCommitHash?: string}) => {
     // Format as lines and send with Alt+Enter (existing logic)
     const messageLines: string[] = [];
     messageLines.push("Please address the following code review comments:");
@@ -787,7 +852,8 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     });
 
     Object.entries(commentsByFile).forEach(([fileName, fileComments]) => {
-      messageLines.push(`File: ${fileName}`);
+      const header = opts?.baseCommitHash ? `File: ${fileName}@${opts.baseCommitHash}` : `File: ${fileName}`;
+      messageLines.push(header);
       fileComments.forEach(comment => {
         if (comment.lineIndex !== undefined) {
           messageLines.push(`  Line ${comment.lineIndex + 1}: ${comment.lineText}`);
@@ -796,7 +862,11 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
           comment.lineText.trim().length > 0 &&
           !comment.isFileLevel
         ) {
-          messageLines.push(`  Line content: ${comment.lineText}`);
+          if (comment.isRemoved && comment.originalLineIndex !== undefined) {
+            messageLines.push(`  Removed line ${comment.originalLineIndex}: ${comment.lineText}`);
+          } else {
+            messageLines.push(`  Removed line: ${comment.lineText}`);
+          }
         }
         messageLines.push(`  Comment: ${comment.commentText}`);
       });
@@ -846,11 +916,11 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
         // For idle/working/thinking/not_running - we can proceed
         if (claudeStatus === 'not_running') {
           // Start Claude with the prompt pre-filled!
-          const commentPrompt = formatCommentsAsPrompt(comments, {workspaceFeature, project});
+          const commentPrompt = formatCommentsAsPrompt(comments, {workspaceFeature, project, baseCommitHash: commentStore.baseCommitHash || baseCommitHash});
           tmuxService.sendText(sessionName, `claude ${JSON.stringify(commentPrompt)}`, { executeCommand: true });
         } else {
           // Claude is idle/working/active - can accept input via Alt+Enter
-          sendCommentsViaAltEnter(sessionName, comments, {workspaceFeature, project});
+          sendCommentsViaAltEnter(sessionName, comments, {workspaceFeature, project, baseCommitHash: commentStore.baseCommitHash || baseCommitHash});
           
           // Wait a brief moment for tmux to process the input
           runCommand(['sleep', '0.5']);
@@ -872,7 +942,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
         const hasClaude = runCommand(['bash', '-lc', 'command -v claude || true']).trim();
         if (hasClaude) {
           // Launch Claude with the comments as the initial prompt!
-          const commentPrompt = formatCommentsAsPrompt(comments, {workspaceFeature, project});
+          const commentPrompt = formatCommentsAsPrompt(comments, {workspaceFeature, project, baseCommitHash: commentStore.baseCommitHash || baseCommitHash});
           tmuxService.sendText(sessionName, `claude ${JSON.stringify(commentPrompt)}`, { executeCommand: true });
           
           // For new sessions, we can assume the prompt was received
@@ -907,7 +977,11 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
           // New logic for removed lines and file headers
           const isFileLevel = currentLine.type === 'header' && currentLine.headerType === 'file';
           const lineText = isFileLevel ? (currentLine.fileName || '') : currentLine.text;
-          commentStore.addComment(undefined, currentLine.fileName, lineText, commentText, isFileLevel);
+          if (currentLine.type === 'removed') {
+            commentStore.addComment(undefined, currentLine.fileName, lineText, commentText, false, { originalLineIndex: currentLine.oldLineIndex, isRemoved: true });
+          } else {
+            commentStore.addComment(undefined, currentLine.fileName, lineText, commentText, isFileLevel);
+          }
         }
       }
     } else {
@@ -931,7 +1005,11 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
             // Removed lines - use the line text
             textForComment = currentLine?.left?.text || lineText;
           }
-          commentStore.addComment(undefined, fileName, textForComment, commentText, isFileLevel);
+          if (currentLine?.left?.type === 'removed') {
+            commentStore.addComment(undefined, fileName, textForComment, commentText, false, { originalLineIndex: currentLine.left.oldLineIndex, isRemoved: true });
+          } else {
+            commentStore.addComment(undefined, fileName, textForComment, commentText, isFileLevel);
+          }
         }
       }
     }
@@ -1127,6 +1205,14 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
             (lines[selectedLine]?.text || '') : 
             // Prefer the current version (right) text when available
             (sideBySideLines[selectedLine]?.right?.text || sideBySideLines[selectedLine]?.left?.text || '')}
+          isRemoved={(() => {
+            if (viewMode === 'unified') {
+              return lines[selectedLine]?.type === 'removed';
+            } else {
+              const s = sideBySideLines[selectedLine];
+              return s?.left?.type === 'removed';
+            }
+          })()}
           initialComment={(() => {
             if (viewMode === 'unified') {
               const file = lines[selectedLine]?.fileName || '';

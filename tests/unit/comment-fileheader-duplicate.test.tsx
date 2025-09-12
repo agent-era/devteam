@@ -20,11 +20,11 @@ describe('File-level comment formatting', () => {
     expect(prompt).toContain(`File: ${fileName}`);
     expect(prompt).toContain('Comment: Review this new file');
 
-    // It should NOT redundantly include the filename as line content
-    expect(prompt).not.toContain(`Line content: ${fileName}`);
+    // It should NOT redundantly include the filename as a removed line entry
+    expect(prompt).not.toContain(`Removed line: ${fileName}`);
   });
 
-  test('includes line content when not file-level even if content equals filename', () => {
+  test('includes removed line with number when not file-level even if content equals filename', () => {
     const fileName = 'src/weird.ts';
     const comments = [
       {
@@ -32,13 +32,15 @@ describe('File-level comment formatting', () => {
         fileName,
         lineText: fileName, // looks like filename but is not a file header
         commentText: 'This is actually a removed line that equals filename',
-        isFileLevel: false
+        isFileLevel: false,
+        isRemoved: true,
+        originalLineIndex: 5
       }
     ];
 
     const prompt = formatCommentsAsPrompt(comments as any);
     expect(prompt).toContain(`File: ${fileName}`);
-    expect(prompt).toContain(`Line content: ${fileName}`);
+    expect(prompt).toContain(`Removed line 5: ${fileName}`);
     expect(prompt).toContain('Comment: This is actually a removed line that equals filename');
   });
 });
