@@ -3,6 +3,8 @@ import {render} from 'ink-testing-library';
 import App from '../../src/App.js';
 import {WorktreeProvider} from '../../src/contexts/WorktreeContext.js';
 import {GitHubProvider} from '../../src/contexts/GitHubContext.js';
+import {WorktreeCore} from '../../src/cores/WorktreeCore.js';
+import {GitHubCore} from '../../src/cores/GitHubCore.js';
 import {UIProvider} from '../../src/contexts/UIContext.js';
 import {FakeGitService} from '../fakes/FakeGitService.js';
 import {FakeTmuxService} from '../fakes/FakeTmuxService.js';
@@ -23,11 +25,13 @@ export interface TestAppProps {
 
 // Create a custom WorktreeProvider for testing that accepts fake services
 function TestWorktreeProvider({children, gitService, tmuxService, memoryMonitorService}: any) {
-  return h(WorktreeProvider, {gitService, tmuxService, memoryMonitorService, children});
+  const core = new WorktreeCore({ git: gitService, tmux: tmuxService, memory: memoryMonitorService });
+  return h(WorktreeProvider, { core, children });
 }
 
 function TestGitHubProvider({children, gitHubService}: any) {
-  return h(GitHubProvider, {gitHubService, children});
+  const core = new GitHubCore({ gitHubService });
+  return h(GitHubProvider, { core, children });
 }
 
 export function TestApp({gitService, tmuxService, gitHubService, memoryMonitorService}: TestAppProps = {}) {
@@ -62,7 +66,7 @@ export function renderTestApp(props?: TestAppProps, options?: any) {
     worktreeService: new FakeWorktreeService(gitService, tmuxService)
   };
 
-  const result = render(h(TestApp, props as any));
+  const result = render(<TestApp {...(props || {})} />);
   
   // Enhance the lastFrame function to provide more realistic output
   const originalLastFrame = result.lastFrame;
