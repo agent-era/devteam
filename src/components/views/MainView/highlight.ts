@@ -1,9 +1,6 @@
 import type {WorktreeInfo, PRStatus} from '../../../models.js';
-import {
-  computeWorktreeStatus,
-  computeAIWorktreeStatus,
-  WorktreeStatusReason as CoreReason,
-} from '../../../cores/WorktreeStatus.js';
+import { computeWorktreeStatus, computeAIWorktreeStatus, WorktreeStatusReason as StatusReason, WorktreeStatusReason as CoreReason } from '../../../cores/WorktreeStatus.js';
+export { WorktreeStatusReason as StatusReason } from '../../../cores/WorktreeStatus.js';
 
 export interface HighlightInfo {
   columnIndex: number;
@@ -27,20 +24,7 @@ export const COLORS = {
 } as const;
 
 // Enum for semantic status reasons (presentation-agnostic)
-export enum StatusReason {
-  AGENT_WAITING = CoreReason.AGENT_WAITING,
-  AGENT_WORKING = CoreReason.AGENT_WORKING,
-  AGENT_READY = CoreReason.AGENT_READY,
-  UNCOMMITTED_CHANGES = CoreReason.UNCOMMITTED_CHANGES,
-  UNPUSHED_COMMITS = CoreReason.UNPUSHED_COMMITS,
-  PR_CONFLICTS = CoreReason.PR_CONFLICTS,
-  PR_FAILING = CoreReason.PR_FAILING,
-  PR_READY_TO_MERGE = CoreReason.PR_READY_TO_MERGE,
-  PR_CHECKING = CoreReason.PR_CHECKING,
-  NO_PR = CoreReason.NO_PR,
-  PR_MERGED = CoreReason.PR_MERGED,
-  NONE = CoreReason.NONE,
-}
+// StatusReason is re-exported from core to avoid duplication
 
 // Determine the semantic status reason without presentation concerns
 export function determineStatusReason(worktree: WorktreeInfo, pr: PRStatus | undefined | null): StatusReason | null {
@@ -142,8 +126,9 @@ export function getStatusMeta(
 ): {label: string; bg: string; fg: string} {
   const st = computeWorktreeStatus(worktree, pr);
   // Colors remain a UI concern here; reuse mapping by reason
-  const { bg, fg } = statusColorsFromReason(st.reason as unknown as StatusReason);
-  return { label: st.label, bg, fg };
+  const reason = st.reason as unknown as StatusReason;
+  const { bg, fg } = statusColorsFromReason(reason);
+  return { label: statusLabelFromReason(reason), bg, fg };
 }
 
 // AI-only status meta, useful for rows that should reflect just agent state (e.g., workspace headers)
@@ -151,6 +136,7 @@ export function getAIStatusMeta(
   worktree: WorktreeInfo,
 ): {label: string; bg: string; fg: string} {
   const st = computeAIWorktreeStatus(worktree);
-  const { bg, fg } = statusColorsFromReason(st.reason as unknown as StatusReason);
-  return { label: st.label, bg, fg };
+  const reason = st.reason as unknown as StatusReason;
+  const { bg, fg } = statusColorsFromReason(reason);
+  return { label: statusLabelFromReason(reason), bg, fg };
 }
