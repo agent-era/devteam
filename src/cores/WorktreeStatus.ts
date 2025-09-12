@@ -83,10 +83,6 @@ export function computeWorktreeStatus(w: WorktreeInfo, pr?: PRStatus | null): Wo
       return { reason: WorktreeStatusReason.PR_READY_TO_MERGE, severity: 'success', aspect: 'pr' };
     }
   }
-
-  // Do not surface committed base diff as 'uncommitted';
-  // base diff is only reflected via PR-derived states (e.g., 'no pr' when applicable).
-
   // Agent idle/active → ready (attachment is implicit in AI status)
   if (ai === 'idle' || ai === 'active') {
     return { reason: WorktreeStatusReason.AGENT_READY, severity: 'success', aspect: 'agent' };
