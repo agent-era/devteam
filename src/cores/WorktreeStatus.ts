@@ -49,7 +49,15 @@ export function computeWorktreeStatus(w: WorktreeInfo, pr?: PRStatus | null): Wo
     return { reason: WorktreeStatusReason.AGENT_WAITING, severity: 'warn', aspect: 'agent' };
   }
 
-  // PR state (evaluate before local git so `no pr` takes precedence over uncommitted base diff)
+  // Local working directory state takes precedence over PR (parity with terminal UI)
+  if (w?.git?.has_changes) {
+    return { reason: WorktreeStatusReason.UNCOMMITTED_CHANGES, severity: 'info', aspect: 'diff' };
+  }
+  if (Number(w?.git?.ahead || 0) > 0) {
+    return { reason: WorktreeStatusReason.UNPUSHED_COMMITS, severity: 'info', aspect: 'sync' };
+  }
+
+  // PR state
   if (pr) {
     if (pr.has_conflicts) {
       return { reason: WorktreeStatusReason.PR_CONFLICTS, severity: 'error', aspect: 'pr' };
@@ -76,12 +84,9 @@ export function computeWorktreeStatus(w: WorktreeInfo, pr?: PRStatus | null): Wo
     }
   }
 
-  // Local git state (after PR checks)
+  // Local committed base diff (commits vs base)
   if (hasCommittedBaseDiff(w)) {
     return { reason: WorktreeStatusReason.UNCOMMITTED_CHANGES, severity: 'info', aspect: 'diff' };
-  }
-  if (Number(w?.git?.ahead || 0) > 0) {
-    return { reason: WorktreeStatusReason.UNPUSHED_COMMITS, severity: 'info', aspect: 'sync' };
   }
 
   // Agent idle/active → ready (attachment is implicit in AI status)
