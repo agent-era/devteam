@@ -3,6 +3,24 @@ import {describe, test, expect} from '@jest/globals';
 describe('Comment formatting for Claude prompts', () => {
   
   describe('formatCommentsAsPrompt logic', () => {
+    test('includes base commit hash with file line when provided', () => {
+      const comments = [{
+        lineIndex: 2,
+        fileName: 'src/test.ts',
+        lineText: 'const value = 42;',
+        commentText: 'Good constant naming'
+      }];
+
+      // Simulate formatting with baseCommitHash
+      const fileHeader = `File: src/test.ts@abc1234`;
+      let prompt = "Please address the following code review comments:\n\n";
+      prompt += `${fileHeader}\n`;
+      prompt += `  Line 3: const value = 42;\n`;
+      prompt += `  Comment: Good constant naming\n`;
+      prompt += "\n";
+
+      expect(prompt).toContain('File: src/test.ts@abc1234');
+    });
     test('formats normal lines with line numbers', () => {
       const comments = [{
         lineIndex: 2,
@@ -21,21 +39,23 @@ describe('Comment formatting for Claude prompts', () => {
       expect(prompt).toContain('Comment: Good constant naming');
     });
 
-    test('formats removed lines without line numbers', () => {
+    test('formats removed lines with original line numbers', () => {
       const comments = [{
         lineIndex: undefined,
         fileName: 'src/test.ts',
         lineText: 'const removed = 1;',
-        commentText: 'Why was this removed?'
+        commentText: 'Why was this removed?',
+        isRemoved: true,
+        originalLineIndex: 1
       }];
 
       let prompt = "Please address the following code review comments:\n\n";
       prompt += `File: src/test.ts\n`;
-      prompt += `  Line content: const removed = 1;\n`;
+      prompt += `  Removed line 1: const removed = 1;\n`;
       prompt += `  Comment: Why was this removed?\n`;
       prompt += "\n";
 
-      expect(prompt).toContain('Line content: const removed = 1;');
+      expect(prompt).toContain('Removed line 1: const removed = 1;');
       expect(prompt).toContain('Comment: Why was this removed?');
       expect(prompt).not.toContain('Line 1:');
     });
@@ -53,7 +73,7 @@ describe('Comment formatting for Claude prompts', () => {
       prompt += `  Comment: Review this new file structure\n`;
       prompt += "\n";
 
-      expect(prompt).not.toContain('Line content:');
+      expect(prompt).not.toContain('Removed line:');
       expect(prompt).not.toContain('Line 1:');
       expect(prompt).toContain('Comment: Review this new file structure');
     });
@@ -70,7 +90,9 @@ describe('Comment formatting for Claude prompts', () => {
           lineIndex: undefined,
           fileName: 'src/test.ts', 
           lineText: 'const removed = 1;',
-          commentText: 'Why was this removed?'
+          commentText: 'Why was this removed?',
+          isRemoved: true,
+          originalLineIndex: 1
         },
         {
           lineIndex: undefined,
@@ -97,8 +119,12 @@ describe('Comment formatting for Claude prompts', () => {
             // Normal line with line number
             prompt += `  Line ${comment.lineIndex + 1}: ${comment.lineText}\n`;
           } else if (comment.lineText && comment.lineText.trim().length > 0 && comment.lineText !== fileName) {
-            // Removed line or other content - show line content without line number
-            prompt += `  Line content: ${comment.lineText}\n`;
+            // Removed line or other content - include number when available
+            if ((comment as any).isRemoved && (comment as any).originalLineIndex !== undefined) {
+              prompt += `  Removed line ${(comment as any).originalLineIndex}: ${comment.lineText}\n`;
+            } else {
+              prompt += `  Removed line: ${comment.lineText}\n`;
+            }
           }
           // For file headers (lineText == fileName), just show the comment
           prompt += `  Comment: ${comment.commentText}\n`;
@@ -108,9 +134,9 @@ describe('Comment formatting for Claude prompts', () => {
 
       // Verify different formatting for each comment type
       expect(prompt).toContain('Line 2: const updated = 3;'); // Normal line with number
-      expect(prompt).toContain('Line content: const removed = 1;'); // Removed line without number
+      expect(prompt).toContain('Removed line 1: const removed = 1;'); // Removed line with number
       expect(prompt).toContain('Comment: Review this new file'); // File header with just comment
-      expect(prompt).not.toContain('Line content: src/newfile.ts'); // File header shouldn't show line content
+      expect(prompt).not.toContain('Removed line: src/newfile.ts'); // File header shouldn't show removed line
     });
   });
 
@@ -126,9 +152,9 @@ describe('Comment formatting for Claude prompts', () => {
           expectedFormat: 'Line 1: console.log("test");'
         },
         {
-          description: 'removed line without line number',
-          comment: {lineIndex: undefined, fileName: 'test.ts', lineText: 'debugger;', commentText: 'Good removal'},
-          expectedFormat: 'Line content: debugger;'
+          description: 'removed line with original number',
+          comment: {lineIndex: undefined, fileName: 'test.ts', lineText: 'debugger;', commentText: 'Good removal', isRemoved: true, originalLineIndex: 1},
+          expectedFormat: 'Removed line 1: debugger;'
         },
         {
           description: 'file header with just comment',
@@ -142,7 +168,11 @@ describe('Comment formatting for Claude prompts', () => {
         if (comment.lineIndex !== undefined) {
           result = `Line ${comment.lineIndex + 1}: ${comment.lineText}`;
         } else if (comment.lineText && comment.lineText.trim().length > 0 && comment.lineText !== comment.fileName) {
-          result = `Line content: ${comment.lineText}`;
+          if ((comment as any).isRemoved && (comment as any).originalLineIndex !== undefined) {
+            result = `Removed line ${(comment as any).originalLineIndex}: ${comment.lineText}`;
+          } else {
+            result = `Removed line: ${comment.lineText}`;
+          }
         } else {
           result = `Comment: ${comment.commentText}`;
         }
@@ -168,4 +198,3 @@ describe('Comment formatting for Claude prompts', () => {
     });
   });
 });
-
