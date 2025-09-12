@@ -4,12 +4,3 @@ export interface CoreBase<TState> {
   start(): void;
   stop(): void;
 }
-
-export interface PRFacade {
-  get(path: string): any;
-  refresh(path: string): Promise<void>;
-  forceRefreshVisible(paths: string[]): Promise<void>;
-}
-
-export type Unsubscribe = () => void;
-
