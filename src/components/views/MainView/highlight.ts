@@ -23,9 +23,6 @@ export const COLORS = {
   GREEN: 'green',
 } as const;
 
-// Enum for semantic status reasons (presentation-agnostic)
-// StatusReason is re-exported from core to avoid duplication
-
 // Determine the semantic status reason without presentation concerns
 export function determineStatusReason(worktree: WorktreeInfo, pr: PRStatus | undefined | null): WorktreeStatusReason | null {
   const st = computeWorktreeStatus(worktree, pr);
@@ -84,38 +81,31 @@ export function statusLabelFromReason(reason: WorktreeStatusReason | string | nu
 }
 
 export function statusColorsFromReason(reason: WorktreeStatusReason | string | null | undefined): {bg: string; fg: string} {
-  // All statuses default to white text for readability
-  const fg = 'white';
   switch (reason) {
     case WorktreeStatusReason.AGENT_WAITING:
-      return {bg: 'yellow', fg};
+      return {bg: 'yellow', fg: 'white'};
     case WorktreeStatusReason.AGENT_WORKING:
       return {bg: 'none', fg: 'white'};
     case WorktreeStatusReason.UNCOMMITTED_CHANGES:
-      // Plain colored text for modified
       return {bg: 'none', fg: 'blue'};
     case WorktreeStatusReason.UNPUSHED_COMMITS:
-      return {bg: 'cyan', fg};
+      return {bg: 'cyan', fg: 'white'};
     case WorktreeStatusReason.PR_CONFLICTS:
-      return {bg: 'red', fg};
+      return {bg: 'red', fg: 'white'};
     case WorktreeStatusReason.PR_FAILING:
-      return {bg: 'red', fg};
+      return {bg: 'red', fg: 'white'};
     case WorktreeStatusReason.PR_READY_TO_MERGE:
-      return {bg: 'green', fg};
+      return {bg: 'green', fg: 'white'};
     case WorktreeStatusReason.PR_CHECKING:
-      // No background; use magenta text
       return {bg: 'none', fg: 'magenta'};
     case WorktreeStatusReason.NO_PR:
-      // Plain cyan text 'no pr' with no background
       return {bg: 'none', fg: 'cyan'};
     case WorktreeStatusReason.PR_MERGED:
-      // Plain grey text 'merged' with no background
       return {bg: 'none', fg: 'gray'};
     case WorktreeStatusReason.AGENT_READY:
-      // Show text 'ready' but with default (black) background
-      return {bg: 'black', fg};
+      return {bg: 'black', fg: 'white'};
     default:
-      return {bg: 'gray', fg};
+      return {bg: 'gray', fg: 'white'};
   }
 }
 

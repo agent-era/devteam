@@ -1,4 +1,4 @@
-import type { WorktreeInfo, PRStatus } from '../models.js';
+import type { WorktreeInfo, PRStatus, AIStatus } from '../models.js';
 
 // Logical aspect of a status — not tied to presentation
 export type StatusAspect = 'agent' | 'diff' | 'sync' | 'pr' | 'none';
@@ -33,12 +33,8 @@ function hasCommittedBaseDiff(w: WorktreeInfo): boolean {
   return (added + deleted) > 0;
 }
 
-function aiString(w: WorktreeInfo): string {
-  return String(w?.session?.ai_status || (w as any)?.session?.claude_status || '').toLowerCase();
-}
-
 export function computeWorktreeStatus(w: WorktreeInfo, pr?: PRStatus | null): WorktreeStatus {
-  const ai = aiString(w);
+  const ai = w?.session?.ai_status as AIStatus | undefined;
   const attached = !!w?.session?.attached;
 
   // Highest-priority terminal states
@@ -47,10 +43,10 @@ export function computeWorktreeStatus(w: WorktreeInfo, pr?: PRStatus | null): Wo
   }
 
   // AI states
-  if (attached && (ai.includes('working') || ai.includes('thinking'))) {
+  if (attached && ai === 'working') {
     return { reason: WorktreeStatusReason.AGENT_WORKING, severity: 'info', aspect: 'agent' };
   }
-  if (attached && ai.includes('waiting')) {
+  if (attached && ai === 'waiting') {
     return { reason: WorktreeStatusReason.AGENT_WAITING, severity: 'warn', aspect: 'agent' };
   }
 
@@ -90,7 +86,7 @@ export function computeWorktreeStatus(w: WorktreeInfo, pr?: PRStatus | null): Wo
   }
 
   // Agent idle/active when attached → ready
-  if (attached && (ai.includes('idle') || ai.includes('active'))) {
+  if (attached && (ai === 'idle' || ai === 'active')) {
     return { reason: WorktreeStatusReason.AGENT_READY, severity: 'success', aspect: 'agent' };
   }
 
@@ -98,11 +94,11 @@ export function computeWorktreeStatus(w: WorktreeInfo, pr?: PRStatus | null): Wo
 }
 
 export function computeAIWorktreeStatus(w: WorktreeInfo): WorktreeStatus {
-  const ai = aiString(w);
+  const ai = w?.session?.ai_status as AIStatus | undefined;
   const attached = !!w?.session?.attached;
   if (!attached) return { reason: WorktreeStatusReason.NONE, severity: 'none', aspect: 'none' };
-  if (ai.includes('waiting')) return { reason: WorktreeStatusReason.AGENT_WAITING, severity: 'warn', aspect: 'agent' };
-  if (ai.includes('working') || ai.includes('thinking')) return { reason: WorktreeStatusReason.AGENT_WORKING, severity: 'info', aspect: 'agent' };
-  if (ai.includes('idle') || ai.includes('active')) return { reason: WorktreeStatusReason.AGENT_READY, severity: 'success', aspect: 'agent' };
+  if (ai === 'waiting') return { reason: WorktreeStatusReason.AGENT_WAITING, severity: 'warn', aspect: 'agent' };
+  if (ai === 'working') return { reason: WorktreeStatusReason.AGENT_WORKING, severity: 'info', aspect: 'agent' };
+  if (ai === 'idle' || ai === 'active') return { reason: WorktreeStatusReason.AGENT_READY, severity: 'success', aspect: 'agent' };
   return { reason: WorktreeStatusReason.NONE, severity: 'none', aspect: 'none' };
 }
