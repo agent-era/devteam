@@ -23,6 +23,8 @@ import {WorktreeProvider, useWorktreeContext} from './contexts/WorktreeContext.j
 import {GitHubProvider, useGitHubContext} from './contexts/GitHubContext.js';
 import {UIProvider, useUIContext} from './contexts/UIContext.js';
 import {InputFocusProvider} from './contexts/InputFocusContext.js';
+import {WorktreeCore} from './cores/WorktreeCore.js';
+import {GitHubCore} from './cores/GitHubCore.js';
 
 
 function AppContent() {
@@ -470,19 +472,13 @@ function AppWithGitHub() {
 }
 
 // Test-friendly entry that allows injecting fake services while using the full App composition
-export function TestableApp({
-  gitService,
-  gitHubService,
-  tmuxService
-}: {
-  gitService?: any;
-  gitHubService?: any;
-  tmuxService?: any;
-}) {
+export function TestableApp({ gitService, gitHubService, tmuxService }: { gitService?: any; gitHubService?: any; tmuxService?: any; }) {
+  const ghCore = React.useMemo(() => new GitHubCore({ gitHubService, gitService }), [gitHubService, gitService]);
+  const wtCore = React.useMemo(() => new WorktreeCore({ git: gitService, tmux: tmuxService }), [gitService, tmuxService]);
   return (
     <InputFocusProvider>
-      <GitHubProvider gitHubService={gitHubService} gitService={gitService}>
-        <WorktreeProvider gitService={gitService} tmuxService={tmuxService}>
+      <GitHubProvider core={ghCore}>
+        <WorktreeProvider core={wtCore}>
           <UIProvider>
             <AppContent />
           </UIProvider>

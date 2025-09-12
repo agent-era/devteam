@@ -1,4 +1,4 @@
-import React, {useState, useEffect} from 'react';
+import React, {useState, useEffect, useMemo} from 'react';
 import {Box} from 'ink';
 import MainView from '../components/views/MainView.js';
 import {useWorktreeContext} from '../contexts/WorktreeContext.js';
@@ -44,8 +44,13 @@ export default function WorktreeListScreen({
   // page jumps once the measured size arrives from MainView).
   const {rows: termRows, columns: termCols} = useTerminalDimensions();
   const [pageSize, setPageSize] = useState<number>(() => calculatePageSize(termRows, termCols));
-  const [currentPage, setCurrentPage] = useState(0);
   const [hasProjects, setHasProjects] = useState<boolean>(false);
+  
+  // Derive currentPage from selectedIndex and pageSize to eliminate timing issues
+  const currentPage = useMemo(() => {
+    if (pageSize <= 0 || worktrees.length === 0) return 0;
+    return Math.floor(selectedIndex / pageSize);
+  }, [selectedIndex, pageSize, worktrees.length]);
 
   // Refresh data when component mounts, but only if data is missing or very stale
   useEffect(() => {
@@ -67,26 +72,18 @@ export default function WorktreeListScreen({
     }
   }, []);
 
-  // Keep GitHub context informed of which worktrees are visible (current page)
-  useEffect(() => {
-    const startIndex = currentPage * pageSize;
-    const endIndex = Math.min(startIndex + pageSize, worktrees.length);
-    const visiblePaths = worktrees.slice(startIndex, endIndex).map(w => w.path);
-    setVisibleWorktrees(visiblePaths);
-  }, [worktrees, currentPage, pageSize, setVisibleWorktrees]);
-
-  // Ensure the page shows the currently selected item (e.g., after reattaching)
-  useEffect(() => {
-    if (pageSize <= 0 || worktrees.length === 0) return;
+  // Inform GitHub context when the set of visible worktrees changes.
+  // Only pass paths for worktrees actually visible on the current page.
+  const visibleWorktreePaths = React.useMemo(() => {
     const start = currentPage * pageSize;
-    const end = Math.min(start + pageSize - 1, Math.max(0, worktrees.length - 1));
-    if (selectedIndex < start || selectedIndex > end) {
-      const newPage = Math.floor(selectedIndex / pageSize);
-      if (Number.isFinite(newPage) && newPage !== currentPage) {
-        setCurrentPage(newPage);
-      }
-    }
-  }, [selectedIndex, pageSize, worktrees.length, currentPage]);
+    const end = start + pageSize;
+    return worktrees.slice(start, end).map(w => w.path).sort();
+  }, [worktrees, currentPage, pageSize]);
+  useEffect(() => {
+    setVisibleWorktrees(visibleWorktreePaths);
+  }, [visibleWorktreePaths, setVisibleWorktrees]);
+
+  // currentPage is now derived, so no manual synchronization needed
 
   // Single loop to refresh git+AI status for visible rows only
   useEffect(() => {
@@ -102,48 +99,15 @@ export default function WorktreeListScreen({
   const handleMove = (delta: number) => {
     const nextIndex = selectedIndex + delta;
     
-    // Handle page boundaries
+    // Handle wrapping at boundaries
     if (nextIndex < 0) {
-      // If page size isn't established yet (<=1), treat as single page navigation
-      if (pageSize <= 1) {
-        setCurrentPage(0);
-        selectWorktree(Math.max(0, worktrees.length - 1));
-        return;
-      }
-      // Move to previous page, select last item of that page
-      const totalPages = Math.max(1, Math.ceil(worktrees.length / pageSize));
-      const newPage = currentPage > 0 ? currentPage - 1 : totalPages - 1;
-      const lastItemOnPage = Math.min((newPage + 1) * pageSize - 1, worktrees.length - 1);
-      setCurrentPage(newPage);
-      selectWorktree(lastItemOnPage);
+      // Wrap to last item
+      selectWorktree(Math.max(0, worktrees.length - 1));
     } else if (nextIndex >= worktrees.length) {
-      // Wrap to first page, first item
-      setCurrentPage(0);
+      // Wrap to first item
       selectWorktree(0);
-    } else if (nextIndex >= (currentPage + 1) * pageSize) {
-      // If page size isn't established yet (<=1), avoid advancing to a blank page
-      if (pageSize <= 1) {
-        selectWorktree(nextIndex);
-        return;
-      }
-      // Move to next page, select first item of that page
-      const totalPages = Math.max(1, Math.ceil(worktrees.length / pageSize));
-      const newPage = (currentPage + 1) % totalPages;
-      setCurrentPage(newPage);
-      selectWorktree(Math.min(newPage * pageSize, worktrees.length - 1));
-    } else if (nextIndex < currentPage * pageSize) {
-      // If page size isn't established yet (<=1), avoid moving pages
-      if (pageSize <= 1) {
-        selectWorktree(Math.max(0, nextIndex));
-        return;
-      }
-      // Move to previous page, select last item of that page
-      const newPage = currentPage > 0 ? currentPage - 1 : Math.max(0, Math.ceil(worktrees.length / pageSize) - 1);
-      const lastItemOnPage = Math.min((newPage + 1) * pageSize - 1, worktrees.length - 1);
-      setCurrentPage(newPage);
-      selectWorktree(lastItemOnPage);
     } else {
-      // Normal movement within current page
+      // Normal movement - page will be derived automatically
       selectWorktree(nextIndex);
     }
   };
@@ -209,21 +173,17 @@ export default function WorktreeListScreen({
   };
 
   const handlePreviousPage = () => {
-    // Move by a full page (wrap-around)
-    const totalPages = Math.max(1, Math.ceil(worktrees.length / Math.max(1, pageSize)));
-    const newPage = currentPage > 0 ? currentPage - 1 : totalPages - 1;
-    setCurrentPage(newPage);
-    const lastItemOnPage = Math.min((newPage + 1) * Math.max(1, pageSize) - 1, worktrees.length - 1);
-    selectWorktree(lastItemOnPage);
+    if (pageSize <= 0 || worktrees.length === 0) return;
+    const halfPage = Math.max(1, Math.floor(pageSize / 2));
+    const newIndex = Math.max(0, selectedIndex - halfPage);
+    selectWorktree(newIndex);
   };
 
   const handleNextPage = () => {
-    // Move by a full page (wrap-around)
-    const totalPages = Math.max(1, Math.ceil(worktrees.length / Math.max(1, pageSize)));
-    const newPage = (currentPage + 1) % totalPages;
-    setCurrentPage(newPage);
-    const firstIndexOnPage = Math.min(newPage * Math.max(1, pageSize), worktrees.length - 1);
-    selectWorktree(firstIndexOnPage);
+    if (pageSize <= 0 || worktrees.length === 0) return;
+    const halfPage = Math.max(1, Math.floor(pageSize / 2));
+    const newIndex = Math.min(worktrees.length - 1, selectedIndex + halfPage);
+    selectWorktree(newIndex);
   };
 
   const handleExecuteRunWrapped = () => {
@@ -271,16 +231,12 @@ export default function WorktreeListScreen({
   };
 
   const handleJumpToFirst = () => {
-    setCurrentPage(0);  // First item is always on page 0
     selectWorktree(0);
   };
 
   const handleJumpToLast = () => {
     if (worktrees.length > 0) {
-      const lastIndex = worktrees.length - 1;
-      const lastPage = Math.floor(lastIndex / pageSize);
-      setCurrentPage(lastPage);  // Navigate to the page containing the last item
-      selectWorktree(lastIndex);
+      selectWorktree(worktrees.length - 1);
     }
   };
 

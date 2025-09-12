@@ -3,7 +3,6 @@ import {Box, Text} from 'ink';
 import type {WorktreeInfo} from '../../../models.js';
 import {stringDisplayWidth} from '../../../shared/utils/formatting.js';
 import {useHighlightPriority} from './hooks/useHighlightPriority.js';
-import {useGitHubContext} from '../../../contexts/GitHubContext.js';
 import type {PRStatus} from '../../../models.js';
 import { formatDiffStats, formatGitChanges, getAISymbol, formatPRStatus, shouldDimRow } from './utils.js';
 import type {ColumnWidths} from './hooks/useColumnWidths.js';
@@ -16,6 +15,7 @@ interface WorktreeRowProps {
   globalIndex: number;
   selected: boolean;
   columnWidths: ColumnWidths;
+  prStatus?: PRStatus;
 }
 
 export const WorktreeRow = memo<WorktreeRowProps>(({ 
@@ -24,15 +24,10 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
   globalIndex,
   selected,
   columnWidths,
+  prStatus,
 }) => {
-  // Read PR status from provider state; fallback to undefined in standalone renders
-  let pr: PRStatus | undefined;
-  try {
-    const {pullRequests} = useGitHubContext() as any;
-    pr = pullRequests?.[worktree.path];
-  } catch {
-    pr = undefined;
-  }
+  // Use PR status passed as prop
+  const pr = prStatus;
   const highlightInfo = useHighlightPriority(worktree, pr);
   const isDimmed = shouldDimRow(pr);
   

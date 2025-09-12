@@ -12,7 +12,7 @@
   "scripts": {
     "build": "rm -rf dist && tsc -p .",
     "typecheck": "npm install && tsc -p tsconfig.test.json",
-    "start": "node dist/index.js",
+    "start": "node dist/cli.js",
     "cli": "node dist/bin/devteam.js",
     "test": "jest",
     "test:watch": "jest --watch",

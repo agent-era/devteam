@@ -40,35 +40,10 @@ export class PRStatusCacheService {
     this.loadFromDisk();
   }
 
-  /**
-   * Get PR status from cache if valid, otherwise return null
-   */
+  /** Returns valid or expired entries. */
   get(worktreePath: string): PRStatus | null {
     const entry = this.cache[worktreePath];
     if (!entry) return null;
-
-    // Check if cache entry has expired
-    if (Date.now() - entry.timestamp > entry.ttl) {
-      delete this.cache[worktreePath];
-      this.saveToDisk();
-      return null;
-    }
-
-    // Check git-aware invalidation (local commits)
-    if (entry.commitHash && !this.isCommitHashValid(worktreePath, entry.commitHash)) {
-      delete this.cache[worktreePath];
-      this.saveToDisk();
-      return null;
-    }
-
-    // Check remote commit invalidation
-    if (entry.remoteCommitHash && !this.isRemoteCommitHashValid(worktreePath, entry.remoteCommitHash)) {
-      delete this.cache[worktreePath];
-      this.saveToDisk();
-      return null;
-    }
-
-    // Reconstruct PRStatus with methods
     const prStatus = this.reconstructPRStatus(entry.data);
     
     // Safety check: don't return cached entries with invalid loadingStatus
