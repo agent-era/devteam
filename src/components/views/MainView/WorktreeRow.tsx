@@ -7,7 +7,8 @@ import type {PRStatus} from '../../../models.js';
 import { formatDiffStats, formatGitChanges, getAISymbol, formatPRStatus, shouldDimRow } from './utils.js';
 import type {ColumnWidths} from './hooks/useColumnWidths.js';
 import StatusChip from '../../common/StatusChip.js';
-import {getStatusMeta, StatusReason} from './highlight.js';
+import {getStatusMeta} from './highlight.js';
+import { WorktreeStatusReason as StatusReason } from '../../../cores/WorktreeStatus.js';
 
 interface WorktreeRowProps {
   worktree: WorktreeInfo;
