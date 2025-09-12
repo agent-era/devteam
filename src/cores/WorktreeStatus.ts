@@ -35,7 +35,6 @@ function hasCommittedBaseDiff(w: WorktreeInfo): boolean {
 
 export function computeWorktreeStatus(w: WorktreeInfo, pr?: PRStatus | null): WorktreeStatus {
   const ai = w?.session?.ai_status as AIStatus | undefined;
-  const attached = !!w?.session?.attached;
 
   // Highest-priority terminal states
   if (pr && (pr.is_merged || pr.state === 'MERGED')) {
@@ -43,10 +42,10 @@ export function computeWorktreeStatus(w: WorktreeInfo, pr?: PRStatus | null): Wo
   }
 
   // AI states
-  if (attached && ai === 'working') {
+  if (ai === 'working') {
     return { reason: WorktreeStatusReason.AGENT_WORKING, severity: 'info', aspect: 'agent' };
   }
-  if (attached && ai === 'waiting') {
+  if (ai === 'waiting') {
     return { reason: WorktreeStatusReason.AGENT_WAITING, severity: 'warn', aspect: 'agent' };
   }
 
@@ -85,8 +84,8 @@ export function computeWorktreeStatus(w: WorktreeInfo, pr?: PRStatus | null): Wo
     return { reason: WorktreeStatusReason.UNPUSHED_COMMITS, severity: 'info', aspect: 'sync' };
   }
 
-  // Agent idle/active when attached → ready
-  if (attached && (ai === 'idle' || ai === 'active')) {
+  // Agent idle/active → ready (attachment is implicit in AI status)
+  if (ai === 'idle' || ai === 'active') {
     return { reason: WorktreeStatusReason.AGENT_READY, severity: 'success', aspect: 'agent' };
   }
 
@@ -95,8 +94,6 @@ export function computeWorktreeStatus(w: WorktreeInfo, pr?: PRStatus | null): Wo
 
 export function computeAIWorktreeStatus(w: WorktreeInfo): WorktreeStatus {
   const ai = w?.session?.ai_status as AIStatus | undefined;
-  const attached = !!w?.session?.attached;
-  if (!attached) return { reason: WorktreeStatusReason.NONE, severity: 'none', aspect: 'none' };
   if (ai === 'waiting') return { reason: WorktreeStatusReason.AGENT_WAITING, severity: 'warn', aspect: 'agent' };
   if (ai === 'working') return { reason: WorktreeStatusReason.AGENT_WORKING, severity: 'info', aspect: 'agent' };
   if (ai === 'idle' || ai === 'active') return { reason: WorktreeStatusReason.AGENT_READY, severity: 'success', aspect: 'agent' };
