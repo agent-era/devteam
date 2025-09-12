@@ -7,6 +7,7 @@ import type {VersionInfo} from '../../services/versionTypes.js';
 import {calculatePaginationInfo} from '../../utils/pagination.js';
 import {useTerminalDimensions} from '../../hooks/useTerminalDimensions.js';
 import {useColumnWidths} from './MainView/hooks/useColumnWidths.js';
+import {useGitHubContext} from '../../contexts/GitHubContext.js';
 import {WorktreeRow} from './MainView/WorktreeRow.js';
 import {WorkspaceGroupRow} from './MainView/WorkspaceGroupRow.js';
 import {TableHeader} from './MainView/TableHeader.js';
@@ -47,6 +48,15 @@ export default function MainView({
   hasProjects,
 }: Props) {
   const {rows: terminalRows, columns: terminalWidth} = useTerminalDimensions();
+  
+  // Get PR status data to pass to child components
+  let pullRequests: Record<string, any> = {};
+  try {
+    ({pullRequests} = useGitHubContext() as any);
+  } catch {
+    // In non-context renders (tests), fall back to empty map
+    pullRequests = {} as any;
+  }
 
   // Measure-based calculation to ensure we don't render more rows than fit.
   const listRef = useRef<any>(null);
@@ -121,7 +131,7 @@ export default function MainView({
     const t = setTimeout(measureAndUpdate, 0);
     return () => clearTimeout(t);
     // Re-measure when terminal size changes or item count might affect footer visibility
-  }, [terminalRows, terminalWidth, worktrees.length, onMeasuredPageSize]);
+  }, [terminalRows, terminalWidth, onMeasuredPageSize]);
 
   // Also propagate when our internal measuredPageSize changes due to any reason
   useEffect(() => {
@@ -172,6 +182,7 @@ export default function MainView({
               globalIndex={globalIndex}
               selected={isSelected}
               columnWidths={columnWidths}
+              prStatus={pullRequests?.[worktree.path]}
             />
           );
         })}

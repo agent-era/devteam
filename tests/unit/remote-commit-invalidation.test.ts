@@ -109,9 +109,10 @@ describe('PR Cache Remote Commit Invalidation', () => {
       return '';
     });
 
-    // Then: Cache should be invalidated (returns null)
+    // Then: Cache should be marked invalid (stale is still returned by get())
+    expect(cacheService.isValid(testWorktreePath)).toBe(false);
     cached = cacheService.get(testWorktreePath);
-    expect(cached).toBeNull();
+    expect(cached).not.toBeNull();
   });
 
   test('should not invalidate cache when remote commit stays same', () => {
@@ -167,9 +168,10 @@ describe('PR Cache Remote Commit Invalidation', () => {
       return '';
     });
 
-    // Then: Cache should be invalidated
+    // Then: Cache should be marked invalid (stale still readable)
     const cached = cacheService.get(testWorktreePath);
-    expect(cached).toBeNull();
+    expect(cacheService.isValid(testWorktreePath)).toBe(false);
+    expect(cached).not.toBeNull();
   });
 
   test('should handle missing remote branch gracefully', () => {
@@ -305,9 +307,10 @@ describe('PR Cache Remote Commit Invalidation', () => {
       return '';
     });
 
-    // Then: Cache should be automatically invalidated
+    // Then: Cache should be marked invalid (stale still readable)
+    expect(cacheService.isValid(testWorktreePath)).toBe(false);
     const afterFetch = cacheService.get(testWorktreePath);
-    expect(afterFetch).toBeNull(); // Cache is invalid
+    expect(afterFetch).not.toBeNull();
 
     // And: New PR status would be fetched (with potentially updated checks)
     const updatedPR = new PRStatus({
