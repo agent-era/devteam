@@ -23,7 +23,7 @@ export function useColumnWidths(
       number: 3,        // # column
       status: 13,       // STATUS column (already fixed)
       ai: 5,           // AGENT column (renamed from AI)
-      diff: 9,         // DIFF column 
+      diff: 11,        // DIFF column (increased by 2)
       changes: 8,      // CHANGES column
       pr: 8,           // PR column
     };
