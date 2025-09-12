@@ -84,10 +84,8 @@ export function computeWorktreeStatus(w: WorktreeInfo, pr?: PRStatus | null): Wo
     }
   }
 
-  // Local committed base diff (commits vs base)
-  if (hasCommittedBaseDiff(w)) {
-    return { reason: WorktreeStatusReason.UNCOMMITTED_CHANGES, severity: 'info', aspect: 'diff' };
-  }
+  // Do not surface committed base diff as 'uncommitted';
+  // base diff is only reflected via PR-derived states (e.g., 'no pr' when applicable).
 
   // Agent idle/active → ready (attachment is implicit in AI status)
   if (ai === 'idle' || ai === 'active') {
