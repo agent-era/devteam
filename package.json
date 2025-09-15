@@ -36,8 +36,14 @@
   "private": false,
   "preferGlobal": true,
   "main": "dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./cores/*": "./dist/cores/*.js",
+    "./test-helpers/*": "./dist-tests/tests/fakes/*.js"
+  },
   "files": [
     "dist",
+    "dist-tests",
     "README.md",
     "CLAUDE.md"
   ],
