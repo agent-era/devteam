@@ -12,16 +12,6 @@ on:
       - 'tsconfig.json'
       - 'tsconfig.node-tests.json'
       - 'jest.config.js'
-  push:
-    branches: [ main ]
-    paths:
-      - 'src/**'
-      - 'tests/**'
-      - 'package.json'
-      - 'package-lock.json' 
-      - 'tsconfig.json'
-      - 'tsconfig.node-tests.json'
-      - 'jest.config.js'
 
 jobs:
   test:
