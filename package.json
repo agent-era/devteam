@@ -39,7 +39,8 @@
   "exports": {
     ".": "./dist/index.js",
     "./cores/*": "./dist/cores/*.js",
-    "./test-helpers/*": "./dist-tests/tests/fakes/*.js"
+    "./test-helpers/*": "./dist-tests/tests/fakes/*.js",
+    "./config": "./dist/config.js"
   },
   "files": [
     "dist",
