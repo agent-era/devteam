@@ -86,6 +86,9 @@ export function statusColorsFromReason(reason: WorktreeStatusReason | string | n
       return {bg: 'yellow', fg: 'white'};
     case WorktreeStatusReason.AGENT_WORKING:
       return {bg: 'none', fg: 'white'};
+    case WorktreeStatusReason.AGENT_READY:
+      // Render "ready" as plain text (no background)
+      return {bg: 'none', fg: 'green'};
     case WorktreeStatusReason.UNCOMMITTED_CHANGES:
       return {bg: 'none', fg: 'blue'};
     case WorktreeStatusReason.UNPUSHED_COMMITS:
@@ -102,10 +105,9 @@ export function statusColorsFromReason(reason: WorktreeStatusReason | string | n
       return {bg: 'none', fg: 'cyan'};
     case WorktreeStatusReason.PR_MERGED:
       return {bg: 'none', fg: 'gray'};
-    case WorktreeStatusReason.AGENT_READY:
-      return {bg: 'black', fg: 'white'};
     default:
-      return {bg: 'gray', fg: 'white'};
+      // No explicit status (e.g., NONE) → no background
+      return {bg: 'none', fg: 'white'};
   }
 }
 
