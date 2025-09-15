@@ -65,11 +65,12 @@ export function computeWorktreeStatus(w: WorktreeInfo, pr?: PRStatus | null): Wo
     if (pr.checks === 'failing') {
       return { reason: WorktreeStatusReason.PR_FAILING, severity: 'error', aspect: 'pr' };
     }
-    if (pr.is_ready_to_merge) {
-      return { reason: WorktreeStatusReason.PR_READY_TO_MERGE, severity: 'success', aspect: 'pr' };
-    }
+    // When checks are pending, surface that status over "ready"
     if (pr.is_open && pr.number && pr.checks === 'pending') {
       return { reason: WorktreeStatusReason.PR_CHECKING, severity: 'warn', aspect: 'pr' };
+    }
+    if (pr.is_ready_to_merge) {
+      return { reason: WorktreeStatusReason.PR_READY_TO_MERGE, severity: 'success', aspect: 'pr' };
     }
     if (pr.noPR) {
       const remote = !!w?.git?.has_remote;
