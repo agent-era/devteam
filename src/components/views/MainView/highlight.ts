@@ -87,8 +87,8 @@ export function statusColorsFromReason(reason: WorktreeStatusReason | string | n
     case WorktreeStatusReason.AGENT_WORKING:
       return {bg: 'none', fg: 'white'};
     case WorktreeStatusReason.AGENT_READY:
-      // Render "ready" as plain text (no background)
-      return {bg: 'none', fg: 'green'};
+      // Render "ready" as plain text (no background), keep white like before
+      return {bg: 'none', fg: 'white'};
     case WorktreeStatusReason.UNCOMMITTED_CHANGES:
       return {bg: 'none', fg: 'blue'};
     case WorktreeStatusReason.UNPUSHED_COMMITS:
