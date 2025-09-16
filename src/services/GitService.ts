@@ -125,6 +125,21 @@ export class GitService {
     const timer = new Timer();
     const status = new GitStatus();
     const worktreeName = path.basename(worktreePath);
+    // Validate the repo root being queried for status; helpful to diagnose workspace child paths
+    try {
+      const repoRoot = await runCommandQuickAsync(['git', '-C', worktreePath, 'rev-parse', '--show-toplevel']);
+      const root = (repoRoot || '').trim();
+      if (!root) {
+        logDebug(`[Git.Status] No repo at path`, {path: worktreePath});
+      } else {
+        const resolvedRoot = path.resolve(root);
+        const resolvedPath = path.resolve(worktreePath);
+        if (process.env.DEVTEAM_DEBUG_GIT || resolvedRoot !== resolvedPath) {
+          // Always log when mismatch; or when debug flag is set
+          logDebug(`[Git.Status] Repo root`, {path: resolvedPath, repoRoot: resolvedRoot, name: worktreeName});
+        }
+      }
+    } catch {}
     
     const porcelainStatus = await runCommandQuickAsync(['git', '-C', worktreePath, 'status', '--porcelain']);
     if (porcelainStatus) {
@@ -259,27 +274,37 @@ export class GitService {
   }
 
   private async addRemoteTrackingInfo(worktreePath: string, status: GitStatus): Promise<void> {
-    const upstream = await runCommandQuickAsync(['git', '-C', worktreePath, 'rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']);
-    if (upstream && !/fatal|no upstream/i.test(upstream)) {
-      status.has_remote = true;
-      const revList = await runCommandQuickAsync(['git', '-C', worktreePath, 'rev-list', '--left-right', '--count', 'HEAD...@{u}']);
-      if (revList) {
-        const [ahead, behind] = revList.split('\t').map((x) => Number(x.trim()));
-        status.ahead = ahead || 0;
-        status.behind = behind || 0;
-      }
-      status.is_pushed = status.ahead === 0 && !status.has_changes;
-    } else {
-      const base = findBaseBranch(worktreePath);
-      if (base) {
-        const revList = await runCommandQuickAsync(['git', '-C', worktreePath, 'rev-list', '--left-right', '--count', `HEAD...${base}`]);
-        if (revList) {
-          const [ahead, behind] = revList.split('\t').map((x) => Number(x.trim()));
-          status.ahead = ahead || 0;
-          status.behind = behind || 0;
+    // First, compute ahead/behind relative to the base branch (consistent display semantics)
+    const base = findBaseBranch(worktreePath);
+    if (base) {
+      try {
+        const revListBase = await runCommandQuickAsync(['git', '-C', worktreePath, 'rev-list', '--left-right', '--count', `HEAD...${base}`]);
+        if (revListBase) {
+          const [aheadBase, behindBase] = revListBase.split('\t').map((x) => Number(x.trim()));
+          status.ahead = aheadBase || 0;
+          status.behind = behindBase || 0;
         }
+      } catch {}
+    }
+
+    // Independently, check upstream info for push/sync state without altering display counts
+    try {
+      const upstream = await runCommandQuickAsync(['git', '-C', worktreePath, 'rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']);
+      if (upstream && !/fatal|no upstream/i.test(upstream)) {
+        status.has_remote = true;
+        const revListUp = await runCommandQuickAsync(['git', '-C', worktreePath, 'rev-list', '--left-right', '--count', 'HEAD...@{u}']);
+        if (revListUp) {
+          const [aheadUp, _behindUp] = revListUp.split('\t').map((x) => Number(x.trim()));
+          status.is_pushed = (aheadUp || 0) === 0 && !status.has_changes;
+        } else {
+          status.is_pushed = !status.has_changes;
+        }
+      } else if (base) {
+        // No upstream; can't be considered pushed
         status.is_pushed = false;
       }
+    } catch {
+      // Silent: upstream may not exist
     }
   }
 
