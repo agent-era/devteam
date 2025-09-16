@@ -88,7 +88,8 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
         case StatusReason.AGENT_WAITING:
           return 'yellow';
         case StatusReason.AGENT_READY:
-          return 'green';
+          // Match status chip which renders plain white
+          return 'white';
         case StatusReason.UNCOMMITTED_CHANGES:
           return 'blue';
         case StatusReason.UNPUSHED_COMMITS:

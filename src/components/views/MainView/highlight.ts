@@ -52,8 +52,10 @@ export function computeHighlightInfo(worktree: WorktreeInfo, pr: PRStatus | unde
     case WorktreeStatusReason.PR_FAILING:
       color = COLORS.RED; break;
     case WorktreeStatusReason.PR_READY_TO_MERGE:
-    case WorktreeStatusReason.AGENT_READY:
       color = COLORS.GREEN; break;
+    case WorktreeStatusReason.AGENT_READY:
+      // Match chip: plain white text for "ready"
+      color = 'white'; break;
     default:
       color = COLORS.YELLOW; break;
   }
@@ -86,6 +88,9 @@ export function statusColorsFromReason(reason: WorktreeStatusReason | string | n
       return {bg: 'yellow', fg: 'white'};
     case WorktreeStatusReason.AGENT_WORKING:
       return {bg: 'none', fg: 'white'};
+    case WorktreeStatusReason.AGENT_READY:
+      // Render "ready" as plain text (no background), keep white like before
+      return {bg: 'none', fg: 'white'};
     case WorktreeStatusReason.UNCOMMITTED_CHANGES:
       return {bg: 'none', fg: 'blue'};
     case WorktreeStatusReason.UNPUSHED_COMMITS:
@@ -102,10 +107,9 @@ export function statusColorsFromReason(reason: WorktreeStatusReason | string | n
       return {bg: 'none', fg: 'cyan'};
     case WorktreeStatusReason.PR_MERGED:
       return {bg: 'none', fg: 'gray'};
-    case WorktreeStatusReason.AGENT_READY:
-      return {bg: 'black', fg: 'white'};
     default:
-      return {bg: 'gray', fg: 'white'};
+      // No explicit status (e.g., NONE) → no background
+      return {bg: 'none', fg: 'white'};
   }
 }
 
