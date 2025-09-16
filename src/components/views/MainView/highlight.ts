@@ -52,8 +52,10 @@ export function computeHighlightInfo(worktree: WorktreeInfo, pr: PRStatus | unde
     case WorktreeStatusReason.PR_FAILING:
       color = COLORS.RED; break;
     case WorktreeStatusReason.PR_READY_TO_MERGE:
-    case WorktreeStatusReason.AGENT_READY:
       color = COLORS.GREEN; break;
+    case WorktreeStatusReason.AGENT_READY:
+      // Match chip: plain white text for "ready"
+      color = 'white'; break;
     default:
       color = COLORS.YELLOW; break;
   }
