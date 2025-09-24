@@ -12,7 +12,7 @@ export class FakeAIToolService extends AIToolService {
    */
   isAIPaneCommand(command: string): boolean {
     const lower = command.toLowerCase();
-    if (lower.includes('claude') || lower.includes('codex') || lower.includes('gemini')) return true;
+    if (lower.includes('claude') || lower.includes('codex') || lower.includes('gemini') || lower.includes('auggie')) return true;
     if (lower.includes('node')) return true; // both codex and gemini use node
     return false;
   }
@@ -50,6 +50,9 @@ export class FakeAIToolService extends AIToolService {
         break;
       case 'claude':
         if (lowerText.includes('❯') && /\d+\./.test(text)) return 'waiting';
+        break;
+      case 'auggie':
+        if (lowerText.includes('>') && /\w+/.test(text)) return 'waiting';
         break;
     }
     
@@ -130,5 +133,6 @@ export class FakeAIToolService extends AIToolService {
     this.createTestSessionWithTool('dev-project1-feature1', 'claude', 'idle');
     this.createTestSessionWithTool('dev-project2-feature2', 'codex', 'working');
     this.createTestSessionWithTool('dev-project3-feature3', 'gemini', 'waiting');
+    this.createTestSessionWithTool('dev-project4-feature4', 'auggie', 'idle');
   }
 }

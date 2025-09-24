@@ -75,7 +75,7 @@ export class AIToolService {
    */
   private detectToolFromArgs(args: string): AITool {
     const argsLower = args.toLowerCase();
-    
+
     if (argsLower.includes('/claude') || argsLower.includes('claude')) {
       return 'claude';
     }
@@ -85,7 +85,10 @@ export class AIToolService {
     if (argsLower.includes('/gemini') || argsLower.includes('gemini')) {
       return 'gemini';
     }
-    
+    if (argsLower.includes('/auggie') || argsLower.includes('auggie')) {
+      return 'auggie';
+    }
+
     return 'none';
   }
 
@@ -128,14 +131,17 @@ export class AIToolService {
     switch (tool) {
       case 'gemini':
         return text.toLowerCase().includes('waiting for user');
-      
+
       case 'codex':
         // Codex is waiting if it does NOT have "⏎ send" (when not working)
         return !text.includes('⏎ send');
-      
+
       case 'claude':
         return this.isWaiting(text, patterns.waiting_numbered);
-      
+
+      case 'auggie':
+        return this.isWaiting(text, patterns.waiting_numbered);
+
       default:
         return false;
     }
@@ -182,10 +188,10 @@ export class AIToolService {
    */
   switchTool(tool: AITool, sessionName: string): void {
     if (tool === 'none') return;
-    
+
     const config = AI_TOOLS[tool];
     const command = config.command;
-    
+
     // Send Ctrl+C to interrupt current process, then start new tool
     runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 'C-c']);
     setTimeout(() => {

@@ -152,6 +152,7 @@ random-session:33333`);
       expect(tools).toContain('claude');
       expect(tools).toContain('codex');
       expect(tools).toContain('gemini');
+      expect(tools).toContain('auggie');
       expect(tools.length).toBe(Object.keys(AI_TOOLS).length);
     });
 
@@ -159,6 +160,7 @@ random-session:33333`);
       expect(aiToolService.getToolName('claude')).toBe('Claude');
       expect(aiToolService.getToolName('codex')).toBe('OpenAI Codex');
       expect(aiToolService.getToolName('gemini')).toBe('Gemini');
+      expect(aiToolService.getToolName('auggie')).toBe('Auggie');
       expect(aiToolService.getToolName('none')).toBe('None');
     });
 
