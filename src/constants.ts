@@ -101,6 +101,16 @@ export const AI_TOOLS = {
       waiting_numbered: ['Waiting for user', String.raw`\d+\.`],
       idle_prompt: ['│ >', '']  // Just check for prompt, idle is default state
     }
+  },
+  auggie: {
+    name: 'Auggie',
+    command: 'auggie',
+    processPatterns: ['auggie'],
+    statusPatterns: {
+      working: 'processing',
+      waiting_numbered: ['>', String.raw`\w+`],  // Generic prompt pattern
+      idle_prompt: ['$', '']  // Shell-like prompt for idle state
+    }
   }
 } as const;
 
