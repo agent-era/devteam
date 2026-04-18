@@ -22,7 +22,6 @@ interface WorktreeListScreenProps {
   onDiff: (type: 'full' | 'uncommitted') => void;
   onQuit: () => void;
   onExecuteRun: () => void;
-  onConfigureRun: () => void;
   onSettings: () => void;
 }
 
@@ -34,7 +33,6 @@ export default function WorktreeListScreen({
   onDiff,
   onQuit,
   onExecuteRun,
-  onConfigureRun,
   onSettings
 }: WorktreeListScreenProps) {
   const {worktrees, selectedIndex, selectWorktree, refresh, refreshVisibleStatus, forceRefreshVisible, attachSession, attachShellSession, attachWorkspaceSession, needsToolSelection, getAvailableAITools, lastRefreshed, memoryStatus, versionInfo, discoverProjects} = useWorktreeContext();
@@ -216,15 +214,6 @@ export default function WorktreeListScreen({
     onExecuteRun();
   };
 
-  const handleConfigureRunWrapped = () => {
-    const selectedWorktree = worktrees[selectedIndex];
-    if (selectedWorktree && (selectedWorktree as any).is_workspace_header) {
-      showInfo('Run is per project. Select a project row.', {title: 'Workspace Run'});
-      return;
-    }
-    onConfigureRun();
-  };
-
   const handleRefresh = async () => {
     // Force refresh visible PRs, ignoring cache TTLs
     await forceRefreshVisible(currentPage, pageSize);
@@ -279,7 +268,6 @@ export default function WorktreeListScreen({
     onJumpToLast: handleJumpToLast,
     onQuit: onQuit,
     onExecuteRun: handleExecuteRunWrapped,
-    onConfigureRun: handleConfigureRunWrapped,
     onSettings: onSettings,
     onUpdate: handleUpdate
   }, {

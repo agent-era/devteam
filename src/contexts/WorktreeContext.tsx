@@ -50,7 +50,6 @@ interface WorktreeContextType {
   
   // Run configuration
   getRunConfigPath: (project: string) => string;
-  createOrFillRunConfig: (project: string) => Promise<{success: boolean; content?: string; path: string; error?: string}>;
   readConfigContent: (project: string) => string | null;
   generateConfigWithAI: (project: string) => Promise<{success: boolean; content?: string; path: string; error?: string}>;
   editConfigWithAI: (project: string, userPrompt: string) => Promise<{success: boolean; content?: string; path: string; error?: string}>;
@@ -108,7 +107,6 @@ export function WorktreeProvider({children, core: coreOverride}: WorktreeProvide
 
   // Run config
   const getRunConfigPath = useCallback((project: string) => core.getRunConfigPath(project), [core]);
-  const createOrFillRunConfig = useCallback(async (project: string) => core.createOrFillRunConfig(project), [core]);
   const readConfigContent = useCallback((project: string) => core.readConfigContent(project), [core]);
   const generateConfigWithAI = useCallback(async (project: string) => core.generateConfigWithAI(project), [core]);
   const editConfigWithAI = useCallback(async (project: string, userPrompt: string) => core.editConfigWithAI(project, userPrompt), [core]);
@@ -159,7 +157,6 @@ export function WorktreeProvider({children, core: coreOverride}: WorktreeProvide
     
     // Run configuration
     getRunConfigPath,
-    createOrFillRunConfig,
     readConfigContent,
     generateConfigWithAI,
     editConfigWithAI,

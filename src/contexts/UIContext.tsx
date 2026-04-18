@@ -4,8 +4,7 @@ import type {AITool} from '../models.js';
 
 
 type UIMode = 'list' | 'create' | 'confirmArchive' | 'help' |
-             'pickProjectForBranch' | 'pickBranch' | 'diff' | 'runConfig' |
-             'runProgress' | 'runResults' | 'selectAITool' |
+             'pickProjectForBranch' | 'pickBranch' | 'diff' | 'selectAITool' |
              'tmuxAttachLoading' | 'noProjects' | 'info' | 'settings';
 
 export type SettingsAIResult = {
@@ -25,10 +24,6 @@ interface UIContextType {
   branchList: any[];
   diffWorktree: string | null;
   diffType: 'full' | 'uncommitted';
-  runProject: string | null;
-  runFeature: string | null;
-  runPath: string | null;
-  runConfigResult: any | null;
   pendingWorktree: WorktreeInfo | null;
   info: {title?: string; message: string; onClose?: () => void} | null;
   settingsProject: string | null;
@@ -43,9 +38,6 @@ interface UIContextType {
   showBranchPicker: (projects: any[], defaultProject?: string) => void;
   showBranchListForProject: (project: string, branches: any[]) => void;
   showDiffView: (worktreePath: string, type: 'full' | 'uncommitted') => void;
-  showRunConfig: (project: string, feature: string, path: string) => void;
-  showRunProgress: () => void;
-  showRunResults: (result: any) => void;
   showAIToolSelection: (worktree: WorktreeInfo) => void;
   showNoProjectsDialog: () => void;
   showInfo: (message: string, options?: {title?: string; onClose?: () => void}) => void;
@@ -79,10 +71,6 @@ export function UIProvider({children}: UIProviderProps) {
   const [branchList, setBranchList] = useState<any[]>([]);
   const [diffWorktree, setDiffWorktree] = useState<string | null>(null);
   const [diffType, setDiffType] = useState<'full' | 'uncommitted'>('full');
-  const [runProject, setRunProject] = useState<string | null>(null);
-  const [runFeature, setRunFeature] = useState<string | null>(null);
-  const [runPath, setRunPath] = useState<string | null>(null);
-  const [runConfigResult, setRunConfigResult] = useState<any | null>(null);
   const [pendingWorktree, setPendingWorktree] = useState<WorktreeInfo | null>(null);
   const [info, setInfo] = useState<{title?: string; message: string; onClose?: () => void} | null>(null);
   const [settingsProject, setSettingsProject] = useState<string | null>(null);
@@ -99,10 +87,6 @@ export function UIProvider({children}: UIProviderProps) {
     setBranchList([]);
     setDiffWorktree(null);
     setDiffType('full'); // Reset diff type to default
-    setRunProject(null);
-    setRunFeature(null);
-    setRunPath(null);
-    setRunConfigResult(null);
     setPendingWorktree(null);
     setInfo(null);
     setSettingsProject(null);
@@ -154,22 +138,6 @@ export function UIProvider({children}: UIProviderProps) {
     setMode('diff');
     setDiffWorktree(worktreePath);
     setDiffType(type);
-  };
-
-  const showRunConfig = (project: string, feature: string, path: string) => {
-    setMode('runConfig');
-    setRunProject(project);
-    setRunFeature(feature);
-    setRunPath(path);
-  };
-
-  const showRunProgress = () => {
-    setMode('runProgress');
-  };
-
-  const showRunResults = (result: any) => {
-    setMode('runResults');
-    setRunConfigResult(result);
   };
 
   const showAIToolSelection = (worktree: WorktreeInfo) => {
@@ -233,10 +201,6 @@ export function UIProvider({children}: UIProviderProps) {
     branchList,
     diffWorktree,
     diffType,
-    runProject,
-    runFeature,
-    runPath,
-    runConfigResult,
     pendingWorktree,
     info,
     settingsProject,
@@ -251,9 +215,6 @@ export function UIProvider({children}: UIProviderProps) {
     showBranchPicker,
     showBranchListForProject,
     showDiffView,
-    showRunConfig,
-    showRunProgress,
-    showRunResults,
     showAIToolSelection,
     showInfo,
     showSettings,

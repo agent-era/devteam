@@ -7,11 +7,9 @@ import HelpOverlay from './components/dialogs/HelpOverlay.js';
 import DiffView from './components/views/DiffView.js';
 import ProjectPickerDialog from './components/dialogs/ProjectPickerDialog.js';
 import BranchPickerDialog from './components/dialogs/BranchPickerDialog.js';
-import RunConfigDialog from './components/dialogs/RunConfigDialog.js';
 import SettingsDialog from './components/dialogs/SettingsDialog.js';
 import InfoDialog from './components/dialogs/InfoDialog.js';
 import ProgressDialog from './components/dialogs/ProgressDialog.js';
-import ConfigResultsDialog from './components/dialogs/ConfigResultsDialog.js';
 import AIToolDialog from './components/dialogs/AIToolDialog.js';
 import NoProjectsDialog from './components/dialogs/NoProjectsDialog.js';
 import LoadingScreen from './components/common/LoadingScreen.js';
@@ -49,7 +47,6 @@ function AppContent() {
     
     getRemoteBranches,
     getRunConfigPath,
-    createOrFillRunConfig,
     readConfigContent,
     generateConfigWithAI,
     editConfigWithAI,
@@ -69,25 +66,17 @@ function AppContent() {
     branchList,
     diffWorktree,
     diffType,
-    runProject,
-    runFeature,
-    runPath,
-    runConfigResult,
     pendingWorktree,
     info,
-    
-    // tmux hint removed
+
     showList,
     showCreateFeature,
     showArchiveConfirmation,
-    
+
     showHelp,
     showBranchPicker,
     showBranchListForProject,
     showDiffView,
-    showRunConfig,
-    showRunProgress,
-    showRunResults,
     showAIToolSelection,
     showNoProjectsDialog,
     showInfo,
@@ -175,12 +164,11 @@ function AppContent() {
   const handleExecuteRun = async () => {
     const selectedWorktree = getSelectedWorktree();
     if (!selectedWorktree) return;
-    
-    // Use loading screen; handle no-config by navigating to config dialog
+
     runWithLoading(async () => {
       const result = await attachRunSession(selectedWorktree);
       if (result === 'no_config') {
-        showRunConfig(selectedWorktree.project, selectedWorktree.feature, selectedWorktree.path);
+        showSettings(selectedWorktree.project);
       } else {
         showList();
       }
@@ -201,13 +189,6 @@ function AppContent() {
       </Box>
     );
   }
-
-  const handleConfigureRun = () => {
-    const selectedWorktree = getSelectedWorktree();
-    if (!selectedWorktree) return;
-
-    showRunConfig(selectedWorktree.project, selectedWorktree.feature, selectedWorktree.path);
-  };
 
   const handleSettings = () => {
     const selectedWorktree = getSelectedWorktree();
@@ -381,63 +362,6 @@ function AppContent() {
     );
   }
 
-  if (!content && mode === 'runConfig' && runProject) {
-    content = (
-      <Box flexGrow={1} alignItems="center" justifyContent="center">
-        <RunConfigDialog
-          project={runProject}
-          configPath={getRunConfigPath(runProject)}
-          claudePrompt="Analyze this project and generate run config"
-          onCancel={showList}
-          onCreateConfig={() => {
-            showRunProgress();
-            // Generate config in background
-            setTimeout(async () => {
-              const result = await createOrFillRunConfig(runProject!);
-              showRunResults(result);
-            }, 100);
-          }}
-        />
-      </Box>
-    );
-  }
-
-  if (!content && mode === 'runProgress' && runProject) {
-    content = (
-      <Box flexGrow={1} alignItems="center" justifyContent="center">
-        <ProgressDialog
-          title="Generating Run Configuration"
-          message="Claude is analyzing your project and generating a run configuration..."
-          project={runProject}
-        />
-      </Box>
-    );
-  }
-
-  if (!content && mode === 'runResults' && runConfigResult && runProject && runFeature && runPath) {
-    content = (
-      <Box flexGrow={1} alignItems="center" justifyContent="center">
-        <ConfigResultsDialog
-          success={runConfigResult.success}
-          content={runConfigResult.content}
-          configPath={runConfigResult.path}
-          error={runConfigResult.error}
-          onClose={() => {
-            // If successful, execute the run session with loading screen
-            if (runConfigResult.success) {
-              try {
-                const worktreeInfo = {project: runProject!, feature: runFeature!, path: runPath!};
-                runWithLoading(() => attachRunSession(worktreeInfo as any));
-              } catch { showList(); }
-            } else {
-              showList();
-            }
-          }}
-        />
-      </Box>
-    );
-  }
-
   if (!content && mode === 'settings' && settingsProject) {
     content = (
       <Box flexGrow={1} alignItems="center" justifyContent="center">
@@ -498,7 +422,6 @@ function AppContent() {
         onDiff={handleDiff}
         onQuit={requestExit}
         onExecuteRun={handleExecuteRun}
-        onConfigureRun={handleConfigureRun}
         onSettings={handleSettings}
       />
     );

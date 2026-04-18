@@ -5,7 +5,7 @@ import {getProjectsDirectory} from '../config.js';
 import {TmuxService} from '../services/TmuxService.js';
 import {WorkspaceService} from '../services/WorkspaceService.js';
 import {MemoryMonitorService, MemoryStatus} from '../services/MemoryMonitorService.js';
-import {RUN_CONFIG_FILE, DIR_BRANCHES_SUFFIX, TMUX_DISPLAY_TIME, RUN_CONFIG_CLAUDE_PROMPT, SETTINGS_EDIT_CLAUDE_PROMPT, CONFIG_SCHEMA, AI_TOOLS, type ProjectConfig, type SchemaNode} from '../constants.js';
+import {RUN_CONFIG_FILE, DIR_BRANCHES_SUFFIX, TMUX_DISPLAY_TIME, RUN_CONFIG_CLAUDE_PROMPT, SETTINGS_EDIT_CLAUDE_PROMPT, AI_TOOLS, type ProjectConfig} from '../constants.js';
 import {detectAvailableAITools, runCommandQuick, runClaudeAsync} from '../shared/utils/commandExecutor.js';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -336,18 +336,6 @@ export class WorktreeCore implements CoreBase<State> {
 
   // Run config
   getRunConfigPath(project: string): string { return path.join(this.git.basePath, project, RUN_CONFIG_FILE); }
-  async createOrFillRunConfig(project: string): Promise<{success: boolean; content?: string; path: string; error?: string}> {
-    const cfgPath = this.getRunConfigPath(project);
-    try {
-      const existing = readFileOrNull(cfgPath);
-      if (existing !== null) return {success: true, content: existing, path: cfgPath};
-      const content = JSON.stringify(buildDefaultConfig(), null, 2);
-      this.git.writeRunConfig(project, content);
-      return {success: true, content, path: cfgPath};
-    } catch (e) {
-      return {success: false, path: cfgPath, error: e instanceof Error ? e.message : String(e)};
-    }
-  }
 
   readConfigContent(project: string): string | null {
     return readFileOrNull(this.getRunConfigPath(project));
@@ -452,14 +440,4 @@ export class WorktreeCore implements CoreBase<State> {
     this.state = Object.freeze({...this.state, ...partial});
     for (const l of this.listeners) l(this.state);
   }
-}
-
-// Build a default config by recursively using the schema's example values. Keeps
-// the generated template in sync with the schema — no manual duplication.
-function buildDefaultConfig(schema: Record<string, SchemaNode> = CONFIG_SCHEMA): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const [key, node] of Object.entries(schema)) {
-    out[key] = node.children ? buildDefaultConfig(node.children) : (node.example ?? null);
-  }
-  return out;
 }
