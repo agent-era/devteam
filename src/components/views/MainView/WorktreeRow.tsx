@@ -4,7 +4,7 @@ import type {WorktreeInfo} from '../../../models.js';
 import {stringDisplayWidth} from '../../../shared/utils/formatting.js';
 import {useHighlightPriority} from './hooks/useHighlightPriority.js';
 import type {PRStatus} from '../../../models.js';
-import { formatDiffStats, formatGitChanges, getAIStatusLabel, getAIStatusColor, formatPRStatus, shouldDimRow } from './utils.js';
+import { formatDiffStats, formatGitChanges, getAIToolLabel, formatPRStatus, shouldDimRow } from './utils.js';
 import type {ColumnWidths} from './hooks/useColumnWidths.js';
 import StatusChip from '../../common/StatusChip.js';
 import {getStatusMeta, COLUMNS} from './highlight.js';
@@ -37,7 +37,7 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
     projectFeature: worktree.is_workspace_child
       ? `${worktree.is_last_workspace_child ? '└─' : '├─'} [${worktree.project}]`
       : `${worktree.feature} [${worktree.project}]`,
-    ai: getAIStatusLabel(worktree.session?.ai_status || '', worktree.session?.attached || false),
+    ai: getAIToolLabel(worktree.session?.ai_tool, worktree.session?.attached || false),
     diff: formatDiffStats(worktree.git?.base_added_lines || 0, worktree.git?.base_deleted_lines || 0),
     changes: formatGitChanges(worktree.git?.ahead || 0, worktree.git?.behind || 0),
     pr: formatPRStatus(pr),
@@ -219,10 +219,6 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
       {cells.slice(1).map((cell, offsetIndex, arr) => {
         const cellIndex = offsetIndex + 1;
         const isLast = offsetIndex === arr.length - 1;
-        // AI column: color by status, not by priority highlight
-        const aiColor = isPriorityCell(COLUMNS.AI)
-          ? getCellForeground(COLUMNS.PROJECT_FEATURE)
-          : getAIStatusColor(worktree.session?.ai_status || '', worktree.session?.attached || false);
         return (
           <Box
             key={cellIndex}
@@ -232,8 +228,8 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
           >
             <Text
               backgroundColor={getCellBackground(cellIndex)}
-              color={cellIndex === COLUMNS.AI ? aiColor : cellIndex === COLUMNS.PROJECT_FEATURE ? undefined : getCellForeground(cellIndex)}
-              dimColor={isDimmed && !selected}
+              color={cellIndex === COLUMNS.PROJECT_FEATURE ? undefined : getCellForeground(cellIndex)}
+              dimColor={isDimmed && !selected || cellIndex === COLUMNS.AI}
               bold={selected && !isPriorityCell(cellIndex)}
               inverse={selected && !isPriorityCell(cellIndex) && !isDimmed}
             >

@@ -83,11 +83,6 @@ export function computeWorktreeStatus(w: WorktreeInfo, pr?: PRStatus | null): Wo
       return { reason: WorktreeStatusReason.PR_READY_TO_MERGE, severity: 'success', aspect: 'pr' };
     }
   }
-  // Agent idle/active → ready (attachment is implicit in AI status)
-  if (ai === 'idle' || ai === 'active') {
-    return { reason: WorktreeStatusReason.AGENT_READY, severity: 'success', aspect: 'agent' };
-  }
-
   return { reason: WorktreeStatusReason.NONE, severity: 'none', aspect: 'none' };
 }
 
@@ -115,10 +110,3 @@ export function computeCodeStatus(w: WorktreeInfo, pr?: PRStatus | null): Worktr
   return {reason: WorktreeStatusReason.NONE, severity: 'none', aspect: 'none'};
 }
 
-export function computeAIWorktreeStatus(w: WorktreeInfo): WorktreeStatus {
-  const ai = w?.session?.ai_status as AIStatus | undefined;
-  if (ai === 'waiting') return { reason: WorktreeStatusReason.AGENT_WAITING, severity: 'warn', aspect: 'agent' };
-  if (ai === 'working') return { reason: WorktreeStatusReason.AGENT_WORKING, severity: 'info', aspect: 'agent' };
-  if (ai === 'idle' || ai === 'active') return { reason: WorktreeStatusReason.AGENT_READY, severity: 'success', aspect: 'agent' };
-  return { reason: WorktreeStatusReason.NONE, severity: 'none', aspect: 'none' };
-}

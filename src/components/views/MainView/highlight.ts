@@ -1,5 +1,5 @@
 import type {WorktreeInfo, PRStatus} from '../../../models.js';
-import { computeCodeStatus, computeAIWorktreeStatus, WorktreeStatusReason } from '../../../cores/WorktreeStatus.js';
+import { computeCodeStatus, computeWorktreeStatus, WorktreeStatusReason } from '../../../cores/WorktreeStatus.js';
 export { WorktreeStatusReason as StatusReason } from '../../../cores/WorktreeStatus.js';
 
 export interface HighlightInfo {
@@ -62,6 +62,8 @@ export function computeHighlightInfo(worktree: WorktreeInfo, pr: PRStatus | unde
 
 export function statusLabelFromReason(reason: WorktreeStatusReason | string | null | undefined): string {
   switch (reason) {
+    case WorktreeStatusReason.AGENT_WORKING: return 'working';
+    case WorktreeStatusReason.AGENT_WAITING: return 'waiting';
     case WorktreeStatusReason.UNCOMMITTED_CHANGES: return 'uncommitted';
     case WorktreeStatusReason.UNPUSHED_COMMITS: return 'not pushed';
     case WorktreeStatusReason.PR_CONFLICTS: return 'conflict';
@@ -76,6 +78,8 @@ export function statusLabelFromReason(reason: WorktreeStatusReason | string | nu
 
 export function statusColorsFromReason(reason: WorktreeStatusReason | string | null | undefined): {bg: string; fg: string} {
   switch (reason) {
+    case WorktreeStatusReason.AGENT_WORKING: return {bg: 'cyan', fg: 'black'};
+    case WorktreeStatusReason.AGENT_WAITING: return {bg: 'yellow', fg: 'black'};
     case WorktreeStatusReason.UNCOMMITTED_CHANGES: return {bg: 'none', fg: 'blue'};
     case WorktreeStatusReason.UNPUSHED_COMMITS: return {bg: 'cyan', fg: 'white'};
     case WorktreeStatusReason.PR_CONFLICTS: return {bg: 'red', fg: 'white'};
@@ -92,18 +96,8 @@ export function getStatusMeta(
   worktree: WorktreeInfo,
   pr: PRStatus | undefined | null
 ): {label: string; bg: string; fg: string} {
-  const st = computeCodeStatus(worktree, pr);
+  const st = computeWorktreeStatus(worktree, pr);
   const reason = st.reason;
   const {bg, fg} = statusColorsFromReason(reason);
   return {label: statusLabelFromReason(reason), bg, fg};
-}
-
-// AI-only status meta, useful for rows that should reflect just agent state (e.g., workspace headers)
-export function getAIStatusMeta(
-  worktree: WorktreeInfo,
-): {label: string; bg: string; fg: string} {
-  const st = computeAIWorktreeStatus(worktree);
-  const reason = st.reason;
-  const { bg, fg } = statusColorsFromReason(reason);
-  return { label: statusLabelFromReason(reason), bg, fg };
 }

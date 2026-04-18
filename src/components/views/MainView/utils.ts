@@ -32,22 +32,14 @@ export function formatPushStatus(worktree: WorktreeInfo): string {
   return 'x';
 }
 
-export function getAIStatusLabel(aiStatus: string, attached: boolean): string {
-  if (!attached) return '';
-  const s = aiStatus.toLowerCase();
-  if (s.includes('waiting')) return 'waiting';
-  if (s.includes('working')) return 'working';
-  if (s.includes('idle') || s.includes('active')) return 'idle';
-  return '';
-}
-
-export function getAIStatusColor(aiStatus: string, attached: boolean): string | undefined {
-  if (!attached) return undefined;
-  const s = aiStatus.toLowerCase();
-  if (s.includes('waiting')) return 'yellow';
-  if (s.includes('working')) return 'cyan';
-  if (s.includes('idle') || s.includes('active')) return 'gray';
-  return undefined;
+export function getAIToolLabel(aiTool: string | undefined, attached: boolean): string {
+  if (!attached || !aiTool) return '';
+  switch (aiTool.toLowerCase()) {
+    case 'claude': return 'Claude';
+    case 'codex': return 'Codex';
+    case 'gemini': return 'Gemini';
+    default: return '';
+  }
 }
 
 export function formatPRStatus(pr: WorktreeInfo['pr']): string {

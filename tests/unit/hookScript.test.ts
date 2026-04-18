@@ -7,7 +7,6 @@ function mapStatus(tool: string, event: string, payload: Record<string, unknown>
   if (event === 'SessionEnd') return '__delete__';
   if (event === 'Stop' || event === 'AfterAgent' || event === 'agent-turn-complete') return 'idle';
   if (['UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'BeforeAgent', 'BeforeModel'].includes(event)) return 'working';
-  if (event === 'approval-requested') return 'waiting';
   if (event === 'Notification') {
     const t = payload.notification_type as string || '';
     if (t === 'permission_prompt' || t === 'idle_prompt' || t === 'ToolPermission') return 'waiting';
@@ -53,8 +52,8 @@ describe('hook script mapStatus', () => {
     expect(mapStatus('claude', 'SessionEnd', {})).toBe('__delete__');
   });
 
-  test('approval-requested → waiting (Codex)', () => {
-    expect(mapStatus('codex', 'approval-requested', {})).toBe('waiting');
+  test('approval-requested → null (no such Codex event)', () => {
+    expect(mapStatus('codex', 'approval-requested', {})).toBeNull();
   });
 
   test('BeforeAgent → working (Gemini)', () => {

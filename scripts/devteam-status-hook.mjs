@@ -65,8 +65,7 @@ function mapStatus(tool, event, payload) {
     event === 'BeforeModel'
   ) return 'working';
 
-  // Waiting for user (permission, idle prompt, approval)
-  if (event === 'approval-requested') return 'waiting';
+  // Waiting for user (permission prompt from Claude Code / Gemini)
   if (event === 'Notification') {
     const t = payload.notification_type || '';
     if (t === 'permission_prompt' || t === 'idle_prompt' || t === 'ToolPermission') return 'waiting';

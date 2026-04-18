@@ -3,7 +3,7 @@ import {Box, Text} from 'ink';
 import type {WorktreeInfo} from '../../../models.js';
 import type {ColumnWidths} from './hooks/useColumnWidths.js';
 import {stringDisplayWidth} from '../../../shared/utils/formatting.js';
-import {getAIStatusLabel, getAIStatusColor} from './utils.js';
+import {getAIToolLabel} from './utils.js';
 import StatusChip from '../../common/StatusChip.js';
 import {getStatusMeta} from './highlight.js';
 
@@ -17,8 +17,7 @@ interface WorkspaceGroupRowProps {
 
 export const WorkspaceGroupRow = memo<WorkspaceGroupRowProps>(({workspace, globalIndex, selected, columnWidths}) => {
   const numberText = String(globalIndex + 1);
-  const aiLabel = getAIStatusLabel(workspace.session?.ai_status || '', workspace.session?.attached || false);
-  const aiColor = getAIStatusColor(workspace.session?.ai_status || '', workspace.session?.attached || false);
+  const aiLabel = getAIToolLabel(workspace.session?.ai_tool, workspace.session?.attached || false);
   const headerText = `${workspace.feature} [workspace]`;
   const truncatedHeader = stringDisplayWidth(headerText) > columnWidths.projectFeature
     ? headerText.slice(0, Math.max(0, columnWidths.projectFeature - 3)) + '...'
@@ -102,7 +101,7 @@ export const WorkspaceGroupRow = memo<WorkspaceGroupRowProps>(({workspace, globa
         <Box key={idx} width={cell.width} justifyContent={cell.justify} marginRight={idx < cells.length - 1 ? 1 : 0}>
           {idx === 0
             ? (
-              <Text color={aiColor}>
+              <Text dimColor>
                 {formatCellText(cell.text, cell.width, cell.justify)}
               </Text>
             )

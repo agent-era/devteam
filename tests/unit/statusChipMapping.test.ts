@@ -23,8 +23,22 @@ describe('STATUS chip mapping', () => {
     expect(meta.fg).toBe('magenta');
   });
 
-  test('AI working with no code state => empty STATUS chip (AI column handles it)', () => {
-    const worktree = wt({session: new SessionInfo({attached: true, session_name: 's', ai_status: 'working', ai_tool: 'none'})});
+  test('AI working => cyan bg working chip', () => {
+    const worktree = wt({session: new SessionInfo({attached: true, session_name: 's', ai_status: 'working', ai_tool: 'claude'})});
+    const meta = getStatusMeta(worktree, undefined as any);
+    expect(meta.label).toBe('working');
+    expect(meta.bg).toBe('cyan');
+  });
+
+  test('AI waiting => yellow bg waiting chip', () => {
+    const worktree = wt({session: new SessionInfo({attached: true, session_name: 's', ai_status: 'waiting', ai_tool: 'claude'})});
+    const meta = getStatusMeta(worktree, undefined as any);
+    expect(meta.label).toBe('waiting');
+    expect(meta.bg).toBe('yellow');
+  });
+
+  test('AI idle with no code state => empty STATUS chip', () => {
+    const worktree = wt({session: new SessionInfo({attached: true, session_name: 's', ai_status: 'idle', ai_tool: 'claude'})});
     const meta = getStatusMeta(worktree, undefined as any);
     expect(meta.label).toBe('');
   });
