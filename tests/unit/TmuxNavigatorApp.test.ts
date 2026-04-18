@@ -18,6 +18,12 @@ describe('TmuxNavigatorApp layout helpers', () => {
     expect(layout.pageStart).toBe(0);
   });
 
+  test('reduces column count when multiple tiles would overflow the pane', () => {
+    expect(computeLayout(48, 11, 12, 0).tileColumns).toBe(1);
+    expect(computeLayout(49, 11, 12, 0).tileColumns).toBe(2);
+    expect(computeLayout(74, 11, 12, 0).tileColumns).toBe(3);
+  });
+
   test('maps tile clicks across three-line tile rows', () => {
     const layout = computeLayout(120, 11, 12, 0);
     expect(tileHitTarget(2, 1, layout)).toBe(0);

@@ -318,7 +318,8 @@ export default function TmuxNavigatorApp(props: {sessionName: string}) {
 const STATUS_CHIP_WIDTH = 13;
 const AGENT_CELL_WIDTH = 5;
 const STATUS_AGENT_WIDTH = STATUS_CHIP_WIDTH + 1 + AGENT_CELL_WIDTH;
-const MIN_TILE_WIDTH = 30;
+const MIN_TILE_WIDTH = 24;
+const MAX_TILE_COLUMNS = 3;
 const TILE_LINE_COUNT = 3;
 const SUMMARY_LINE_Y = 1;
 const ACTION_LINE_Y = 2;
@@ -332,15 +333,22 @@ export type LayoutInfo = {
 };
 
 export function computeLayout(columns: number, rows: number, itemCount: number, selectedIndex: number): LayoutInfo {
-  const tileColumns = Math.min(3, Math.max(1, Math.floor((columns + 1) / (MIN_TILE_WIDTH + 1))));
+  const tileColumns = chooseTileColumns(columns);
   const tileRows = rows >= 8 ? 2 : 1;
   const visibleCount = Math.min(6, Math.max(1, tileColumns * tileRows));
-  const computedWidth = Math.floor((columns - Math.max(0, tileColumns - 1)) / tileColumns);
-  const tileWidth = Math.max(18, Math.min(columns, Math.max(MIN_TILE_WIDTH, computedWidth)));
+  const tileWidth = Math.max(1, Math.floor((columns - Math.max(0, tileColumns - 1)) / tileColumns));
   const pageStart = itemCount === 0
     ? 0
     : Math.max(0, Math.floor(selectedIndex / visibleCount) * visibleCount);
   return {tileColumns, tileRows, visibleCount, tileWidth, pageStart};
+}
+
+function chooseTileColumns(columns: number): number {
+  for (let candidate = Math.min(MAX_TILE_COLUMNS, Math.max(1, columns)); candidate >= 1; candidate--) {
+    const width = Math.floor((columns - Math.max(0, candidate - 1)) / candidate);
+    if (width >= MIN_TILE_WIDTH) return candidate;
+  }
+  return 1;
 }
 
 function modeColor(mode: NavMode): 'green' | 'blue' | 'magenta' {
@@ -372,11 +380,11 @@ function sessionState(tmux: TmuxService, sessionName: string, sessions: Set<stri
 function renderTileHeader(item: NavWorktree, selected: boolean, current: boolean, width: number): JSX.Element {
   const statusDisplay = getTileStatusDisplay(item);
   const leftWidth = statusDisplay.spanAgent ? STATUS_AGENT_WIDTH : STATUS_CHIP_WIDTH;
-  const metaWidth = Math.max(8, width - leftWidth - 1);
+  const metaWidth = Math.max(1, width - leftWidth - 1);
   const metaBg = selected ? 'yellow' : current ? 'cyan' : 'gray';
   const metaFg = selected || current ? 'black' : 'white';
   const right = current ? 'LIVE' : `${item.worktree.session?.attached ? 'ATTN' : 'NAV '}`;
-  const left = truncateText(item.project, Math.max(5, metaWidth - right.length - 1));
+  const left = truncateText(item.project, Math.max(1, metaWidth - stringDisplayWidth(right) - 1));
   return (
     <Box>
       {statusDisplay.spanAgent ? (
@@ -394,14 +402,18 @@ function renderTileHeader(item: NavWorktree, selected: boolean, current: boolean
             fg={statusDisplay.fg}
             width={STATUS_CHIP_WIDTH}
           />
-          <Text color={statusDisplay.agentFg}>
-            {padCell(statusDisplay.agentText, AGENT_CELL_WIDTH)}
-          </Text>
+          <Box width={AGENT_CELL_WIDTH}>
+            <Text color={statusDisplay.agentFg}>
+              {padCell(statusDisplay.agentText, AGENT_CELL_WIDTH)}
+            </Text>
+          </Box>
         </>
       )}
-      <Text color={metaFg} backgroundColor={metaBg}>
-        {padTile(left, right, metaWidth)}
-      </Text>
+      <Box width={metaWidth}>
+        <Text color={metaFg} backgroundColor={metaBg}>
+          {padTile(left, right, metaWidth)}
+        </Text>
+      </Box>
     </Box>
   );
 }
