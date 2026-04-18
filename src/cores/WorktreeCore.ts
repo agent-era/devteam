@@ -5,8 +5,10 @@ import {getProjectsDirectory} from '../config.js';
 import {TmuxService} from '../services/TmuxService.js';
 import {WorkspaceService} from '../services/WorkspaceService.js';
 import {MemoryMonitorService, MemoryStatus} from '../services/MemoryMonitorService.js';
-import {RUN_CONFIG_FILE, DIR_BRANCHES_SUFFIX, TMUX_DISPLAY_TIME, RUN_CONFIG_CLAUDE_PROMPT, SETTINGS_EDIT_CLAUDE_PROMPT, AI_TOOLS, type ProjectConfig} from '../constants.js';
+import {RUN_CONFIG_FILE, DIR_BRANCHES_SUFFIX, TMUX_DISPLAY_TIME, HOOK_STATUS_DIR, RUN_CONFIG_CLAUDE_PROMPT, SETTINGS_EDIT_CLAUDE_PROMPT, AI_TOOLS, type ProjectConfig} from '../constants.js';
 import {detectAvailableAITools, runCommandQuick, runClaudeAsync} from '../shared/utils/commandExecutor.js';
+import {HooksService} from '../services/HooksService.js';
+import {ensureDirectory} from '../shared/utils/fileSystem.js';
 import path from 'node:path';
 import fs from 'node:fs';
 import {startIntervalIfEnabled} from '../shared/utils/intervals.js';
@@ -31,6 +33,7 @@ export class WorktreeCore implements CoreBase<State> {
   private tmux: TmuxService;
   private workspace: WorkspaceService;
   private memory: MemoryMonitorService;
+  private hooks: HooksService;
   private versionService: any | null = null;
   private timers: Array<() => void> = [];
   private isRefreshingVisible = false;
@@ -41,6 +44,7 @@ export class WorktreeCore implements CoreBase<State> {
     this.tmux = opts?.tmux || new TmuxService();
     this.workspace = opts?.workspace || new WorkspaceService();
     this.memory = opts?.memory || new MemoryMonitorService();
+    this.hooks = new HooksService();
     this.versionService = opts?.versionService || null;
     this.availableAITools = detectAvailableAITools();
   }
@@ -49,16 +53,68 @@ export class WorktreeCore implements CoreBase<State> {
   get(): Readonly<State> { return this.state; }
   subscribe(fn: (s: Readonly<State>) => void): () => void { this.listeners.add(fn); return () => this.listeners.delete(fn); }
   start(): void {
-    // Periodic refresh and memory check
     const refreshClear = startIntervalIfEnabled(() => { this.refresh().catch(() => {}); }, 60_000);
     const memClear = startIntervalIfEnabled(() => { this.refreshMemoryStatus().catch(() => {}); }, 60_000);
     this.timers.push(refreshClear, memClear);
-    // Initial kick
+    this.startHookStatusWatcher();
     void this.refresh();
     void this.refreshMemoryStatus();
     void this.refreshVersionInfo();
   }
-  stop(): void { for (const t of this.timers) t?.(); this.timers = []; }
+  stop(): void {
+    for (const t of this.timers) t?.();
+    this.timers = [];
+    try { this.hookWatcher?.close(); } catch {}
+    this.hookWatcher = null;
+    for (const t of this.hookWatchDebounces.values()) clearTimeout(t);
+    this.hookWatchDebounces.clear();
+  }
+
+  private hookWatcher: fs.FSWatcher | null = null;
+  private hookWatchDebounces = new Map<string, ReturnType<typeof setTimeout>>();
+  private markerCheckedPaths = new Set<string>();
+
+  private startHookStatusWatcher(): void {
+    try {
+      ensureDirectory(HOOK_STATUS_DIR);
+      this.hookWatcher = fs.watch(HOOK_STATUS_DIR, (_, filename) => {
+        if (!filename?.endsWith('.json')) return;
+        const sessionName = filename.slice(0, -5);
+        // Debounce: some OSes fire multiple events per write
+        const existing = this.hookWatchDebounces.get(sessionName);
+        if (existing) clearTimeout(existing);
+        this.hookWatchDebounces.set(sessionName, setTimeout(() => {
+          this.hookWatchDebounces.delete(sessionName);
+          this.refreshAIStatusForSession(sessionName).catch(() => {});
+        }, 200));
+      });
+      this.hookWatcher.on('error', () => {
+        try { this.hookWatcher?.close(); } catch {}
+        this.hookWatcher = null;
+      });
+    } catch {
+      // fs.watch unavailable in some environments; AI status falls back to periodic polling
+    }
+  }
+
+  private async refreshAIStatusForSession(sessionName: string): Promise<void> {
+    const hookStatus = this.hooks.readStatus(sessionName);
+    const aiStatus = hookStatus?.status ?? 'not_running';
+    const aiTool = (hookStatus?.tool as AITool) ?? 'none';
+    const worktrees = [...this.state.worktrees];
+    let changed = false;
+    for (let i = 0; i < worktrees.length; i++) {
+      const wt = worktrees[i];
+      if (this.tmux.sessionName(wt.project, wt.feature) !== sessionName) continue;
+      if (wt.session?.ai_status === aiStatus && wt.session?.ai_tool === aiTool) continue;
+      worktrees[i] = new WorktreeInfo({
+        ...wt,
+        session: new SessionInfo({...wt.session, ai_status: aiStatus, ai_tool: aiTool, attached: !!hookStatus}),
+      });
+      changed = true;
+    }
+    if (changed) this.setState({worktrees, lastRefreshed: Date.now()});
+  }
 
   // Public API (aligns with current context)
   selectWorktree(index: number): void { this.setState({selectedIndex: Math.max(0, Math.min(index, this.state.worktrees.length - 1))}); }
@@ -75,6 +131,10 @@ export class WorktreeCore implements CoreBase<State> {
         const worktrees = await this.git.getWorktreesForProject(project);
         for (const w of worktrees) {
           const sessionName = this.tmux.sessionName(w.project, w.feature);
+          if (!this.markerCheckedPaths.has(w.path)) {
+            this.markerCheckedPaths.add(w.path);
+            try { this.hooks.writeMarker(w.path, sessionName, w.project, w.feature, 'worktree'); } catch {}
+          }
           const attached = sessions.includes(sessionName);
           const [gitStatus, aiResult] = await Promise.all([
             this.git.getGitStatus(w.path),
@@ -269,6 +329,10 @@ export class WorktreeCore implements CoreBase<State> {
       const base = this.git.basePath;
       const entries = projects.map((p) => ({project: p, worktreePath: path.join(base, `${p}${DIR_BRANCHES_SUFFIX}`, featureName)}));
       const workspacePath = this.workspace.createWorkspace(base, featureName, entries);
+      try {
+        const wsSession = this.tmux.sessionName('workspace', featureName);
+        this.hooks.writeMarker(workspacePath, wsSession, 'workspace', featureName, 'workspace');
+      } catch {}
       await this.refresh();
       return workspacePath;
     } catch (err) {
@@ -449,6 +513,13 @@ export class WorktreeCore implements CoreBase<State> {
       try { this.git.copyEnvironmentFile(projectName, worktreePath); } catch {}
       try { this.git.linkClaudeSettings(projectName, worktreePath); } catch {}
     }
+    // Write hook-status marker so hook scripts can identify the devteam session
+    try {
+      const feature = path.basename(worktreePath);
+      const session = this.tmux.sessionName(projectName, feature);
+      this.hooks.writeMarker(worktreePath, session, projectName, feature, 'worktree');
+    } catch {}
+    // Best-effort: show tmux display message
     try { runCommandQuick(['tmux', 'display-message', '-d', `${TMUX_DISPLAY_TIME}`, `Created ${worktreePath}`]); } catch {}
   }
 

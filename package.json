@@ -45,6 +45,7 @@
   "files": [
     "dist",
     "dist-tests",
+    "scripts",
     "README.md",
     "CLAUDE.md"
   ],

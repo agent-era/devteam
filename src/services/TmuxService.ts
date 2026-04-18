@@ -4,6 +4,7 @@ import {logDebug} from '../shared/utils/logger.js';
 import {Timer} from '../shared/utils/timing.js';
 import {AIStatus, AITool} from '../models.js';
 import {AIToolService} from './AIToolService.js';
+import {HooksService} from './HooksService.js';
 
 type SessionKind = 'agent' | 'execute' | 'shell';
 
@@ -16,12 +17,14 @@ type SessionDisplayMetadata = {
 
 export class TmuxService {
   private aiToolService: AIToolService;
+  private hooksService: HooksService;
   // Clean environment for tmux commands to avoid nvm conflicts
   private _tmuxEnv: NodeJS.ProcessEnv | null = null;
   private sessionNameRegex = /^[a-zA-Z0-9_-]+$/;
 
-  constructor(aiToolService?: AIToolService) {
+  constructor(aiToolService?: AIToolService, hooksService?: HooksService) {
     this.aiToolService = aiToolService || new AIToolService();
+    this.hooksService = hooksService || new HooksService();
   }
 
   private get tmuxEnv(): NodeJS.ProcessEnv {
@@ -74,14 +77,23 @@ export class TmuxService {
   }
 
   async getAIStatus(session: string): Promise<{tool: AITool, status: AIStatus}> {
+    // Prefer hook-based status when fresh
+    const hookStatus = this.hooksService.readStatus(session);
+    if (hookStatus) {
+      const tool = hookStatus.tool as AITool;
+      const status = hookStatus.status as AIStatus;
+      return {tool, status};
+    }
+
+    // Fall back to tmux pane scraping
     const text = await this.capturePane(session);
     if (!text) return {tool: 'none', status: 'not_running'};
-    
+
     // Detect which AI tool is running based on pane process
     const toolsMap = await this.aiToolService.detectAllSessionAITools();
     const aiTool = toolsMap.get(session) || 'none';
     if (aiTool === 'none') return {tool: 'none', status: 'not_running'};
-    
+
     // Get status based on the detected tool's patterns
     const status = this.aiToolService.getStatusForTool(text, aiTool);
     return {tool: aiTool, status};

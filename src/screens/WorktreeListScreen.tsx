@@ -3,7 +3,6 @@ import {Box} from 'ink';
 import MainView from '../components/views/MainView.js';
 import {useWorktreeContext} from '../contexts/WorktreeContext.js';
 import {useGitHubContext} from '../contexts/GitHubContext.js';
-import {useInputFocus} from '../contexts/InputFocusContext.js';
 import {useUIContext} from '../contexts/UIContext.js';
 import {useKeyboardShortcuts} from '../hooks/useKeyboardShortcuts.js';
 // Page size is measured directly in MainView to avoid heuristics
@@ -35,9 +34,8 @@ export default function WorktreeListScreen({
   onExecuteRun,
   onSettings
 }: WorktreeListScreenProps) {
-  const {worktrees, selectedIndex, selectWorktree, refresh, refreshVisibleStatus, forceRefreshVisible, attachSession, attachShellSession, attachWorkspaceSession, needsToolSelection, getAvailableAITools, lastRefreshed, memoryStatus, versionInfo, discoverProjects} = useWorktreeContext();
+  const {worktrees, selectedIndex, selectWorktree, refreshVisibleStatus, forceRefreshVisible, attachSession, attachShellSession, attachWorkspaceSession, needsToolSelection, getAvailableAITools, memoryStatus, versionInfo, discoverProjects} = useWorktreeContext();
   const {setVisibleWorktrees} = useGitHubContext();
-  const {isAnyDialogFocused} = useInputFocus();
   const {showAIToolSelection, showList, runWithLoading, showInfo} = useUIContext();
   // Seed page size with a realistic fallback based on terminal dimensions
   // to avoid early navigation using a placeholder value (which can cause
@@ -51,16 +49,6 @@ export default function WorktreeListScreen({
     if (pageSize <= 0 || worktrees.length === 0) return 0;
     return Math.floor(selectedIndex / pageSize);
   }, [selectedIndex, pageSize, worktrees.length]);
-
-  // Refresh data when component mounts, but only if data is missing or very stale
-  useEffect(() => {
-    const isDataStale = !lastRefreshed || (Date.now() - lastRefreshed > 30000); // 30 seconds
-    const isDataEmpty = !worktrees || worktrees.length === 0;
-    
-    if (isDataEmpty || isDataStale) {
-      refresh('none').catch(() => {});
-    }
-  }, []); // Only on mount
 
   // Detect whether any projects are available (used for zero-state message)
   useEffect(() => {
@@ -85,16 +73,14 @@ export default function WorktreeListScreen({
 
   // currentPage is now derived, so no manual synchronization needed
 
-  // Single loop to refresh git+AI status for visible rows only
+  // Periodic git status refresh for visible rows (AI status handled instantly by fs.watch)
   useEffect(() => {
     if (!isAppIntervalsEnabled()) return;
     const clear = startIntervalIfEnabled(() => {
-      if (!isAnyDialogFocused) {
-        refreshVisibleStatus(currentPage, pageSize).catch(() => {});
-      }
+      refreshVisibleStatus(currentPage, pageSize).catch(() => {});
     }, VISIBLE_STATUS_REFRESH_DURATION);
     return clear;
-  }, [currentPage, pageSize, refreshVisibleStatus, isAnyDialogFocused]);
+  }, [currentPage, pageSize, refreshVisibleStatus]);
 
   const handleMove = (delta: number) => {
     const nextIndex = selectedIndex + delta;
