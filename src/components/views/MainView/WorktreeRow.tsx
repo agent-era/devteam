@@ -20,7 +20,7 @@ interface WorktreeRowProps {
   prStatus?: PRStatus;
 }
 
-export const WorktreeRow = memo<WorktreeRowProps>(({ 
+export const WorktreeRow = memo<WorktreeRowProps>(({
   worktree,
   index,
   globalIndex,
@@ -30,7 +30,7 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
 }) => {
   const highlightInfo = useHighlightPriority(worktree, prStatus);
   const isDimmed = shouldDimRow(prStatus);
-  
+
   const data = {
     number: String(globalIndex + 1),
     projectFeature: worktree.is_workspace_child
@@ -61,47 +61,55 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
     {text: data.pr, width: columnWidths.pr, justify: 'flex-end' as const},
   ];
   const statusMeta = getStatusMeta(worktree, prStatus);
-  
+
   const isPriorityCell = (cellIndex: number): boolean =>
     !!(highlightInfo && cellIndex === highlightInfo.columnIndex);
 
   const getCellBackground = (cellIndex: number): string | undefined => {
     if (selected && isDimmed) return 'gray';
+    if (selected && !isDimmed) return 'white';
     return undefined;
+  };
+
+  const getPriorityCellColor = (): string => {
+    switch (highlightInfo?.reason) {
+      case StatusReason.AGENT_WAITING: return 'yellow';
+      case StatusReason.AGENT_READY: return 'white';
+      case StatusReason.UNCOMMITTED_CHANGES: return 'blue';
+      case StatusReason.UNPUSHED_COMMITS: return 'cyan';
+      case StatusReason.PR_CONFLICTS:
+      case StatusReason.PR_FAILING: return 'red';
+      case StatusReason.PR_READY_TO_MERGE: return 'green';
+      case StatusReason.PR_CHECKING: return 'magenta';
+      case StatusReason.NO_PR: return 'cyan';
+      case StatusReason.PR_MERGED: return 'gray';
+      default: return statusMeta.fg;
+    }
   };
 
   const getCellForeground = (cellIndex: number): string | undefined => {
     if (selected && isDimmed) return 'white';
     if (isDimmed) return undefined;
-    if (selected && !isPriorityCell(cellIndex)) return undefined;
-    if (isPriorityCell(cellIndex)) {
-      switch (highlightInfo?.reason) {
-        case StatusReason.AGENT_WAITING:
-          return 'yellow';
-        case StatusReason.AGENT_READY:
-          // Match status chip which renders plain white
-          return 'white';
-        case StatusReason.UNCOMMITTED_CHANGES:
-          return 'blue';
-        case StatusReason.UNPUSHED_COMMITS:
-          return 'cyan';
-        case StatusReason.PR_CONFLICTS:
-        case StatusReason.PR_FAILING:
-          return 'red';
-        case StatusReason.PR_READY_TO_MERGE:
-          return 'green';
-        case StatusReason.PR_CHECKING:
-          return 'magenta';
-        case StatusReason.NO_PR:
-          return 'cyan';
-        case StatusReason.PR_MERGED:
-          return 'gray';
-        default:
-          // Fallback to STATUS chip text color
-          return statusMeta.fg;
+    if (selected) {
+      if (isPriorityCell(cellIndex)) {
+        const c = getPriorityCellColor();
+        return c === 'white' ? 'black' : c;
       }
+      return 'black';
     }
+    if (isPriorityCell(cellIndex)) return getPriorityCellColor();
     return undefined;
+  };
+
+  const getStatusChipProps = (): {color: string; fg: string} => {
+    if (selected && isDimmed) return {color: 'gray', fg: 'white'};
+    if (selected && !isDimmed) {
+      const hasBg = statusMeta.bg && statusMeta.bg !== 'none';
+      return hasBg
+        ? {color: statusMeta.bg, fg: statusMeta.fg}
+        : {color: 'white', fg: statusMeta.fg === 'white' ? 'black' : statusMeta.fg};
+    }
+    return {color: statusMeta.bg, fg: statusMeta.fg};
   };
 
   const formatCellText = (text: string, width: number, justify: 'flex-start' | 'center' | 'flex-end'): string => {
@@ -189,7 +197,6 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
           color={getCellForeground(0)}
           dimColor={isDimmed && !selected}
           bold={selected && !isPriorityCell(0)}
-          inverse={selected && !isPriorityCell(0) && !isDimmed}
         >
           {formatCellText(cells[0].text, cells[0].width, cells[0].justify)}
         </Text>
@@ -197,7 +204,7 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
 
       {/* Second column: STATUS */}
       <Box width={columnWidths.status} justifyContent="flex-start" marginRight={1}>
-        <StatusChip label={statusMeta.label || ''} color={statusMeta.bg} fg={statusMeta.fg} width={columnWidths.status} />
+        {(() => { const s = getStatusChipProps(); return <StatusChip label={statusMeta.label || ''} color={s.color} fg={s.fg} width={columnWidths.status} />; })()}
       </Box>
 
       {cells.slice(1).map((cell, offsetIndex, arr) => {
@@ -205,11 +212,11 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
         const isLast = offsetIndex === arr.length - 1;
         let cellContent: React.ReactNode;
         if (cellIndex === COLUMNS.AI) {
-          cellContent = renderSessionCell(cell.text, agentActive, cell.width);
+          cellContent = renderSessionCell(cell.text, agentActive, cell.width, selected, isDimmed);
         } else if (cellIndex === COLUMNS.SHELL) {
-          cellContent = renderSessionCell(cell.text, shellActive, cell.width);
+          cellContent = renderSessionCell(cell.text, shellActive, cell.width, selected, isDimmed);
         } else if (cellIndex === COLUMNS.RUN) {
-          cellContent = renderSessionCell(cell.text, runActive, cell.width);
+          cellContent = renderSessionCell(cell.text, runActive, cell.width, selected, isDimmed);
         } else {
           cellContent = (
             <Text
@@ -217,7 +224,6 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
               color={cellIndex === COLUMNS.PROJECT_FEATURE ? undefined : getCellForeground(cellIndex)}
               dimColor={isDimmed && !selected}
               bold={selected && !isPriorityCell(cellIndex)}
-              inverse={selected && !isPriorityCell(cellIndex) && !isDimmed}
             >
               {cellIndex === COLUMNS.PROJECT_FEATURE
                 ? renderProjectFeatureCell(cell.text, cell.width, cell.justify)
