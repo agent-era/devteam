@@ -35,7 +35,7 @@ export default function WorktreeListScreen({
   onExecuteRun,
   onConfigureRun
 }: WorktreeListScreenProps) {
-  const {worktrees, selectedIndex, selectWorktree, refresh, refreshVisibleStatus, forceRefreshVisible, attachSession, attachShellSession, attachWorkspaceSession, needsToolSelection, lastRefreshed, memoryStatus, versionInfo, discoverProjects} = useWorktreeContext();
+  const {worktrees, selectedIndex, selectWorktree, refresh, refreshVisibleStatus, forceRefreshVisible, attachSession, attachShellSession, attachWorkspaceSession, needsToolSelection, getAvailableAITools, lastRefreshed, memoryStatus, versionInfo, discoverProjects} = useWorktreeContext();
   const {setVisibleWorktrees} = useGitHubContext();
   const {isAnyDialogFocused} = useInputFocus();
   const {showAIToolSelection, showList, runWithLoading, showInfo} = useUIContext();
@@ -115,7 +115,7 @@ export default function WorktreeListScreen({
   const handleSelect = async () => {
     const selectedWorktree = worktrees[selectedIndex];
     if (!selectedWorktree) return;
-    
+
     try {
       // If a workspace child is selected, inform and attach/create the parent workspace session
       if ((selectedWorktree as any).is_workspace_child) {
@@ -128,7 +128,7 @@ export default function WorktreeListScreen({
       }
       // Check if tool selection is needed
       const needsSelection = await needsToolSelection(selectedWorktree);
-      
+
       if (needsSelection) {
         // Show AI tool selection dialog
         showAIToolSelection(selectedWorktree);
@@ -139,6 +139,25 @@ export default function WorktreeListScreen({
     } catch (error) {
       console.error('Failed to handle selection:', error);
     }
+  };
+
+  // Force the AI tool picker even when a tool is already remembered for this worktree.
+  // Only meaningful when no tmux session is running yet and more than one AI tool is installed.
+  const handleSelectWithToolPicker = () => {
+    const selectedWorktree = worktrees[selectedIndex];
+    if (!selectedWorktree) return;
+    if ((selectedWorktree as any).is_workspace_child) {
+      // For workspace children, fall through to normal handling.
+      void handleSelect();
+      return;
+    }
+    const sessionExists = !!selectedWorktree.session?.attached;
+    const tools = getAvailableAITools();
+    if (sessionExists || tools.length <= 1) {
+      void handleSelect();
+      return;
+    }
+    showAIToolSelection(selectedWorktree);
   };
 
   const handleShell = () => {
@@ -243,6 +262,7 @@ export default function WorktreeListScreen({
   useKeyboardShortcuts({
     onMove: handleMove,
     onSelect: handleSelect,
+    onSelectWithToolPicker: handleSelectWithToolPicker,
     onCreate: onCreateFeature,
     onArchive: onArchiveFeature,
     onRefresh: handleRefresh,

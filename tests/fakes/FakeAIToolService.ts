@@ -4,7 +4,6 @@ import {AI_TOOLS} from '../../src/constants.js';
 
 export class FakeAIToolService extends AIToolService {
   private launchedSessions: Array<{tool: AITool, session: string, cwd: string}> = [];
-  private switchedSessions: Array<{tool: AITool, session: string}> = [];
   private toolBySession = new Map<string, {tool: AITool, status: AIStatus}>();
 
   /**
@@ -61,59 +60,8 @@ export class FakeAIToolService extends AIToolService {
    */
   launchTool(tool: AITool, sessionName: string, cwd: string): void {
     if (tool === 'none') return;
-    
+
     this.launchedSessions.push({tool, session: sessionName, cwd});
-  }
-
-  /**
-   * Override switchTool to track switches instead of actually running commands
-   */
-  switchTool(tool: AITool, sessionName: string): void {
-    if (tool === 'none') return;
-    
-    this.switchedSessions.push({tool, session: sessionName});
-  }
-
-  // Test helper methods
-
-  /**
-   * Get all launched sessions for testing
-   */
-  getLaunchedSessions(): Array<{tool: AITool, session: string, cwd: string}> {
-    return [...this.launchedSessions];
-  }
-
-  /**
-   * Get all switched sessions for testing
-   */
-  getSwitchedSessions(): Array<{tool: AITool, session: string}> {
-    return [...this.switchedSessions];
-  }
-
-  /**
-   * Check if a specific session was launched with a tool
-   */
-  wasSessionLaunched(sessionName: string, tool?: AITool): boolean {
-    return this.launchedSessions.some(launch => 
-      launch.session === sessionName && (tool === undefined || launch.tool === tool)
-    );
-  }
-
-  /**
-   * Check if a specific session had its tool switched
-   */
-  wasSessionSwitched(sessionName: string, tool?: AITool): boolean {
-    return this.switchedSessions.some(switchOp => 
-      switchOp.session === sessionName && (tool === undefined || switchOp.tool === tool)
-    );
-  }
-
-  /**
-   * Clear all tracking for fresh test state
-   */
-  clearTrackingData(): void {
-    this.launchedSessions = [];
-    this.switchedSessions = [];
   }
 
   /**

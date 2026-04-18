@@ -129,12 +129,12 @@ export function commandExists(command: string): boolean {
  */
 export function detectAvailableAITools(): (keyof typeof AI_TOOLS)[] {
   const available: (keyof typeof AI_TOOLS)[] = [];
-  
+
   for (const [tool, config] of Object.entries(AI_TOOLS)) {
     if (commandExists(config.command)) {
       available.push(tool as keyof typeof AI_TOOLS);
     }
   }
-  
+
   return available;
 }

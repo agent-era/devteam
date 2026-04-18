@@ -179,40 +179,16 @@ random-session:33333`);
   });
 
   describe('Tool launching', () => {
-    test('launchTool creates tmux session with AI tool', () => {
+    test('launchTool creates tmux session with AI tool (resume flag baked in)', () => {
       aiToolService.launchTool('claude', 'test-session', '/test/path');
-      
+
       expect(runCommand).toHaveBeenCalledWith([
-        'tmux', 'new-session', '-ds', 'test-session', '-c', '/test/path', 'claude'
+        'tmux', 'new-session', '-ds', 'test-session', '-c', '/test/path', 'claude --continue'
       ]);
     });
 
     test('launchTool ignores none tool', () => {
       aiToolService.launchTool('none', 'test-session', '/test/path');
-      expect(runCommand).not.toHaveBeenCalled();
-    });
-
-    test('switchTool interrupts and starts new tool', () => {
-      jest.useFakeTimers();
-      
-      aiToolService.switchTool('claude', 'test-session');
-      
-      expect(runCommand).toHaveBeenCalledWith([
-        'tmux', 'send-keys', '-t', 'test-session:0.0', 'C-c'
-      ]);
-      
-      // Fast-forward past setTimeout
-      jest.advanceTimersByTime(100);
-      
-      expect(runCommand).toHaveBeenCalledWith([
-        'tmux', 'send-keys', '-t', 'test-session:0.0', 'claude', 'C-m'
-      ]);
-      
-      jest.useRealTimers();
-    });
-
-    test('switchTool ignores none tool', () => {
-      aiToolService.switchTool('none', 'test-session');
       expect(runCommand).not.toHaveBeenCalled();
     });
   });

@@ -21,7 +21,7 @@ export interface KeyboardActions {
   onNumberSelect?: (number: number) => void;
   onExecuteRun?: () => void;
   onConfigureRun?: () => void;
-  onToolSwitch?: () => void;
+  onSelectWithToolPicker?: () => void;
   onUpdate?: () => void;
 }
 
@@ -70,6 +70,8 @@ export function useKeyboardShortcuts(
         actions.onMove?.(1);
       } else if (input === 'k' || input === '\u001b[A') { // k or up arrow
         actions.onMove?.(-1);
+      } else if (input === '\u001b[13;2u') { // Shift+Enter (CSI-u capable terminals)
+        actions.onSelectWithToolPicker?.();
       } else if (input === '\r' || input === '\n') { // Enter
         actions.onSelect?.();
       } else if (input === 'q' || input === '\u001b') { // q or Escape
@@ -87,7 +89,7 @@ export function useKeyboardShortcuts(
       else if (input === 'D') actions.onDiffUncommitted?.();
       else if (input === 'x') actions.onExecuteRun?.();
       else if (input === 'X') actions.onConfigureRun?.();
-      else if (input === 't') actions.onToolSwitch?.();
+      else if (input === 'T') actions.onSelectWithToolPicker?.();
       else if (input === 'u') actions.onUpdate?.();
 
       // Pagination

@@ -72,7 +72,7 @@ describe('Session Management E2E', () => {
 
       // Should not create a new session
       expect(memoryStore.sessions.size).toBe(sessionsCountBefore);
-      
+
       // Should still have the same session
       const existingSession = expectSessionInMemory(session.session_name);
       expect(existingSession.claude_status).toBe('idle');

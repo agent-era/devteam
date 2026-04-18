@@ -1,6 +1,13 @@
 // Jest setup for E2E tests using real Ink + ink-testing-library
+import os from 'node:os';
+import path from 'node:path';
+import fs from 'node:fs';
 
 // Keep real timers for ink-testing-library
+
+// Keep per-worktree AI-session memory out of the user's real cache during tests.
+const aiSessionTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'devteam-ai-sessions-'));
+process.env.DEVTEAM_AI_SESSION_DIR = aiSessionTmp;
 
 // Stub process.exit so App's exit paths don't terminate the test process
 const mockExit = jest.fn();
