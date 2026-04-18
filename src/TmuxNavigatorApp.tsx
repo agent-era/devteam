@@ -202,12 +202,15 @@ export default function TmuxNavigatorApp(props: {sessionName: string}) {
     setStatusMessage(`closed ${mode} for ${item.feature}`);
   };
 
-  const tabsPerRow = Math.max(1, Math.floor((columns - 2) / TAB_WIDTH));
-  const tabsPerPage = tabsPerRow * 2;
-  const pageStart = Math.max(0, Math.floor(selectedIndex / tabsPerPage) * tabsPerPage);
-  const visible = items.slice(pageStart, pageStart + tabsPerPage);
+  const tileColumns = Math.min(3, Math.max(1, Math.floor((columns + 1) / (MIN_TILE_WIDTH + 1))));
+  const tileRows = rows >= 9 ? 2 : 1;
+  const visibleCount = Math.min(6, tileColumns * tileRows);
+  const tileWidth = Math.max(18, Math.floor((columns - Math.max(0, tileColumns - 1)) / tileColumns));
+  const pageStart = Math.max(0, Math.floor(selectedIndex / Math.max(1, visibleCount)) * Math.max(1, visibleCount));
+  const visible = items.slice(pageStart, pageStart + visibleCount);
   const selectedItem = items[selectedIndex] || null;
   const statusTone: 'cyan' | 'yellow' = items.length ? 'cyan' : 'yellow';
+  const tileGroups = Array.from({length: tileRows}, (_, row) => visible.slice(row * tileColumns, (row + 1) * tileColumns));
 
   return (
     <FullScreen enableAltScreen={false}>
@@ -217,15 +220,34 @@ export default function TmuxNavigatorApp(props: {sessionName: string}) {
           <Text color="gray">{truncateText(selectedItem ? `${selectedItem.feature} [${selectedItem.project}]` : 'no selection', Math.max(12, columns - 22))}</Text>
         </Box>
         <Box justifyContent="space-between">
-          <Text color="magenta">{`tiles ${pageStart + 1}-${Math.min(pageStart + visible.length, items.length)} of ${items.length}`}</Text>
+          <Text color="magenta">{`recent ${pageStart + 1}-${Math.min(pageStart + visible.length, items.length)} / ${items.length}`}</Text>
           <Text color={statusTone}>{truncateText(statusMessage, Math.max(16, Math.floor(columns / 2)))} </Text>
         </Box>
-        <Box>
-          <Text>{renderTileRow(visible.slice(0, tabsPerRow), selectedIndex, pageStart, currentBase, columns)}</Text>
-        </Box>
-        <Box>
-          <Text>{renderTileRow(visible.slice(tabsPerRow, tabsPerPage), selectedIndex, pageStart + tabsPerRow, currentBase, columns)}</Text>
-        </Box>
+        {tileGroups.map((group, rowIndex) => (
+          <Box key={`tile-row-${rowIndex}`} marginTop={rowIndex === 0 ? 0 : 0}>
+            {group.map((item, columnIndex) => {
+              const absoluteIndex = pageStart + (rowIndex * tileColumns) + columnIndex;
+              return (
+                <Box key={`${item.project}-${item.feature}`} marginRight={columnIndex === group.length - 1 ? 0 : 1} width={tileWidth} flexDirection="column">
+                  {renderTileLine(
+                    item,
+                    absoluteIndex === selectedIndex,
+                    itemSessionBase(item) === currentBase,
+                    tileWidth,
+                    0
+                  )}
+                  {renderTileLine(
+                    item,
+                    absoluteIndex === selectedIndex,
+                    itemSessionBase(item) === currentBase,
+                    tileWidth,
+                    1
+                  )}
+                </Box>
+              );
+            })}
+          </Box>
+        ))}
         <Box justifyContent="space-between">
           <Text color="white">
             {selectedItem ? `${truncateText(selectedItem.feature, 20)} [${truncateText(selectedItem.project, 16)}]` : 'no selection'}
@@ -234,7 +256,7 @@ export default function TmuxNavigatorApp(props: {sessionName: string}) {
         </Box>
         <Box>
           {selectedItem ? (
-            <Text>
+            <Text color="gray">
               {modeOrder.map((mode) => renderInlineMode(mode, selectedItem.sessions[mode], selectedActionMode === mode, mode === currentMode)).join('  ')}
             </Text>
           ) : (
@@ -242,10 +264,10 @@ export default function TmuxNavigatorApp(props: {sessionName: string}) {
           )}
         </Box>
         <Box>
-          <Text>{renderBottomActions(selectedActionMode, currentMode)}</Text>
+          {renderBottomActions(selectedItem, selectedActionMode, currentMode)}
         </Box>
         <Box justifyContent="space-between">
-          <Text color="magenta">click tile to switch current mode  1/2/3 open  x close selected mode</Text>
+          <Text color="magenta">click tile to open current mode  click bottom to switch/close</Text>
           <Text color="gray">esc back</Text>
         </Box>
       </Box>
@@ -253,7 +275,7 @@ export default function TmuxNavigatorApp(props: {sessionName: string}) {
   );
 }
 
-const TAB_WIDTH = 22;
+const MIN_TILE_WIDTH = 20;
 
 function modeColor(mode: NavMode): 'green' | 'blue' | 'magenta' {
   if (mode === 'agent') return 'green';
@@ -281,26 +303,26 @@ function sessionState(tmux: TmuxService, sessionName: string, sessions: Set<stri
   };
 }
 
-function renderTileRow(items: NavWorktree[], selectedIndex: number, baseIndex: number, currentBase: string, columns: number): string {
-  if (!items.length) return '';
-  const tabsPerRow = Math.max(1, Math.floor((columns - 2) / TAB_WIDTH));
-  return items
-    .slice(0, tabsPerRow)
-    .map((item, offset) => renderTile(
-      item,
-      baseIndex + offset === selectedIndex,
-      itemSessionBase(item) === currentBase
-    ))
-    .join(' ');
-}
+function renderTileLine(item: NavWorktree, selected: boolean, current: boolean, width: number, line: 0 | 1): JSX.Element {
+  const bg = selected ? 'yellow' : current ? 'cyan' : 'blue';
+  const fg = selected || current ? 'black' : 'white';
+  if (line === 0) {
+    const left = truncateText(item.feature, Math.max(8, width - 6));
+    const right = current ? 'LIVE' : '    ';
+    return (
+      <Text color={fg} backgroundColor={bg}>
+        {padTile(`${left}`, `${right}`, width)}
+      </Text>
+    );
+  }
 
-function renderTile(item: NavWorktree, selected: boolean, current: boolean): string {
-  const label = truncateText(item.feature, 11).padEnd(11, ' ');
-  const project = truncateText(item.project, 6).padEnd(6, ' ');
-  const badges = modeOrder.map((mode) => item.sessions[mode].usable ? modeLabel(mode) : item.sessions[mode].exists ? '!' : '-').join('');
-  const live = current ? '*' : ' ';
-  const content = `${live}${label} ${project} ${badges}`;
-  return selected ? `[${content}]` : ` ${content} `;
+  const project = truncateText(item.project, Math.max(5, width - 8));
+  const badges = modeOrder.map((mode) => compactModeState(mode, item.sessions[mode])).join(' ');
+  return (
+    <Text color={fg} backgroundColor={bg}>
+      {padTile(project, badges, width)}
+    </Text>
+  );
 }
 
 function renderInlineMode(mode: NavMode, state: {exists: boolean; usable: boolean}, selected: boolean, current: boolean): string {
@@ -310,20 +332,32 @@ function renderInlineMode(mode: NavMode, state: {exists: boolean; usable: boolea
   return `${prefix}${live}${modePill(mode).trim()} ${status}`;
 }
 
-function renderBottomActions(selectedMode: NavMode, currentMode: NavMode): string {
-  return [
-    renderAction('agent', selectedMode === 'agent', currentMode === 'agent'),
-    renderAction('shell', selectedMode === 'shell', currentMode === 'shell'),
-    renderAction('run', selectedMode === 'run', currentMode === 'run'),
-    '[Close]',
-    '[Back]',
-  ].join(' ');
+function renderBottomActions(
+  selectedItem: NavWorktree | null,
+  selectedMode: NavMode,
+  currentMode: NavMode
+): JSX.Element {
+  return (
+    <Box>
+      {modeOrder.map((mode, index) => (
+        <Text
+          key={mode}
+          color={selectedMode === mode ? 'black' : 'white'}
+          backgroundColor={selectedMode === mode ? modeColor(mode) : undefined}
+        >
+          {`${index === 0 ? '' : ' '}${renderActionLabel(mode, selectedItem?.sessions[mode], currentMode === mode)}`}
+        </Text>
+      ))}
+      <Text color="black" backgroundColor="red">{' Close '}</Text>
+      <Text color="black" backgroundColor="gray">{' Back '}</Text>
+    </Box>
+  );
 }
 
-function renderAction(mode: NavMode, selected: boolean, current: boolean): string {
-  const currentMark = current ? '*' : ' ';
-  const selectedMark = selected ? '>' : ' ';
-  return `[${selectedMark}${currentMark}${modePill(mode).trim()}]`;
+function renderActionLabel(mode: NavMode, state: {exists: boolean; usable: boolean} | undefined, current: boolean): string {
+  const label = modePill(mode).trim();
+  const status = state ? compactModeState(mode, state) : '--';
+  return `${current ? '*' : ' '}${label} ${status} `;
 }
 
 function itemSessionBase(item: NavWorktree): string {
@@ -331,24 +365,29 @@ function itemSessionBase(item: NavWorktree): string {
 }
 
 function tileHitTarget(x: number, y: number, columns: number, visibleCount: number): number | null {
-  if (y < 3 || y > 4 || visibleCount === 0) return null;
-  const tabsPerRow = Math.max(1, Math.floor((columns - 2) / TAB_WIDTH));
-  const row = y - 3;
-  const localIndex = Math.floor((x - 1) / (TAB_WIDTH + 1));
-  if (localIndex < 0 || localIndex >= tabsPerRow) return null;
-  const absoluteLocal = row * tabsPerRow + localIndex;
+  if (y < 3 || y > 6 || visibleCount === 0) return null;
+  const tileColumns = Math.min(3, Math.max(1, Math.floor((columns + 1) / (MIN_TILE_WIDTH + 1))));
+  const tileWidth = Math.max(18, Math.floor((columns - Math.max(0, tileColumns - 1)) / tileColumns));
+  const row = Math.floor((y - 3) / 2);
+  const rowY = (y - 3) % 2;
+  if (rowY < 0 || rowY > 1) return null;
+  const localIndex = Math.floor((x - 1) / (tileWidth + 1));
+  if (localIndex < 0 || localIndex >= tileColumns) return null;
+  const xOffset = (x - 1) % (tileWidth + 1);
+  if (xOffset >= tileWidth) return null;
+  const absoluteLocal = row * tileColumns + localIndex;
   if (absoluteLocal >= visibleCount) return null;
   return absoluteLocal;
 }
 
 function bottomActionHit(x: number, y: number, columns: number): NavMode | 'close' | 'back' | null {
-  if (y !== 7) return null;
+  if (y !== 9) return null;
   const labels: Array<{kind: NavMode | 'close' | 'back'; label: string}> = [
-    {kind: 'agent', label: '[ 1 Agent]'},
-    {kind: 'shell', label: '[ 2 Shell]'},
-    {kind: 'run', label: '[ 3 Run]'},
-    {kind: 'close', label: '[Close]'},
-    {kind: 'back', label: '[Back]'},
+    {kind: 'agent', label: ' 1 Agent up '},
+    {kind: 'shell', label: ' 2 Shell up '},
+    {kind: 'run', label: ' 3 Run up '},
+    {kind: 'close', label: ' Close '},
+    {kind: 'back', label: ' Back '},
   ];
   let cursor = 1;
   for (const item of labels) {
@@ -359,6 +398,20 @@ function bottomActionHit(x: number, y: number, columns: number): NavMode | 'clos
     if (cursor > columns) break;
   }
   return null;
+}
+
+function compactModeState(mode: NavMode, state: {exists: boolean; usable: boolean}): string {
+  if (state.usable) return modeLabel(mode);
+  if (state.exists) return '!';
+  return '-';
+}
+
+function padTile(left: string, right: string, width: number): string {
+  const innerWidth = Math.max(4, width);
+  const availableLeft = Math.max(1, innerWidth - right.length - 1);
+  const leftText = truncateText(left, availableLeft);
+  const gap = Math.max(1, innerWidth - leftText.length - right.length);
+  return `${leftText}${' '.repeat(gap)}${right}`;
 }
 
 function thisRunSession(tmux: TmuxService, item: NavWorktree, exists: boolean): boolean {

@@ -8,7 +8,7 @@ import {getProjectsDirectory} from '../config.js';
 
 const NAV_PANE_TITLE = 'devteam-nav';
 const MAIN_PANE_TITLE = 'devteam-main';
-const NAV_PANE_HEIGHT = 8;
+const NAV_PANE_HEIGHT = 11;
 
 export class TmuxService {
   private aiToolService: AIToolService;
