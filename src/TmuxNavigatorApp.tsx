@@ -255,20 +255,7 @@ export default function TmuxNavigatorApp(props: {sessionName: string}) {
           <Text color="gray">{selectedItem ? truncateText(selectedItem.branch, 18) : ''}</Text>
         </Box>
         <Box>
-          {selectedItem ? (
-            <Text color="gray">
-              {modeOrder.map((mode) => renderInlineMode(mode, selectedItem.sessions[mode], selectedActionMode === mode, mode === currentMode)).join('  ')}
-            </Text>
-          ) : (
-            <Text color="gray">no worktrees discovered</Text>
-          )}
-        </Box>
-        <Box>
           {renderBottomActions(selectedItem, selectedActionMode, currentMode)}
-        </Box>
-        <Box justifyContent="space-between">
-          <Text color="magenta">click tile to open current mode  click bottom to switch/close</Text>
-          <Text color="gray">esc back</Text>
         </Box>
       </Box>
     </FullScreen>
@@ -323,13 +310,6 @@ function renderTileLine(item: NavWorktree, selected: boolean, current: boolean, 
       {padTile(project, badges, width)}
     </Text>
   );
-}
-
-function renderInlineMode(mode: NavMode, state: {exists: boolean; usable: boolean}, selected: boolean, current: boolean): string {
-  const status = state.usable ? 'up' : state.exists ? 'stale' : 'off';
-  const prefix = selected ? '>' : ' ';
-  const live = current ? '*' : ' ';
-  return `${prefix}${live}${modePill(mode).trim()} ${status}`;
 }
 
 function renderBottomActions(
