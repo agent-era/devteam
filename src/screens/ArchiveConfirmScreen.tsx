@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useEffect, useState} from 'react';
 import {Box, Text, useInput, useStdin} from 'ink';
 import {useWorktreeContext} from '../contexts/WorktreeContext.js';
 import ProgressDialog from '../components/dialogs/ProgressDialog.js';
@@ -16,14 +16,26 @@ interface ArchiveConfirmScreenProps {
   onSuccess: () => void;
 }
 
+const UNTRACKED_PREVIEW_LIMIT = 5;
+
 export default function ArchiveConfirmScreen({
   featureInfo,
   onCancel,
   onSuccess
 }: ArchiveConfirmScreenProps) {
-  const {archiveFeature, archiveWorkspace} = useWorktreeContext();
+  const {archiveFeature, archiveWorkspace, getUntrackedNonIgnoredFiles} = useWorktreeContext();
   const {isRawModeSupported} = useStdin();
   const [isArchiving, setIsArchiving] = useState(false);
+  const [untrackedFiles, setUntrackedFiles] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (featureInfo.project === 'workspace') return;
+    try {
+      setUntrackedFiles(getUntrackedNonIgnoredFiles(featureInfo.path));
+    } catch {
+      setUntrackedFiles([]);
+    }
+  }, [featureInfo.path, featureInfo.project, getUntrackedNonIgnoredFiles]);
 
   const handleConfirm = async () => {
     try {
@@ -74,6 +86,19 @@ export default function ArchiveConfirmScreen({
               <Text>Archive {featureInfo.project}/{featureInfo.feature}?</Text>
             )}
           </Box>
+          {untrackedFiles.length > 0 && (
+            <Box flexDirection="column" marginTop={1}>
+              <Text color="yellow">
+                Warning: {untrackedFiles.length} untracked file{untrackedFiles.length === 1 ? '' : 's'} will be deleted (git clean -fdx):
+              </Text>
+              {untrackedFiles.slice(0, UNTRACKED_PREVIEW_LIMIT).map((f) => (
+                <Text key={f} color="yellow">  • {f}</Text>
+              ))}
+              {untrackedFiles.length > UNTRACKED_PREVIEW_LIMIT && (
+                <Text color="yellow">  … and {untrackedFiles.length - UNTRACKED_PREVIEW_LIMIT} more</Text>
+              )}
+            </Box>
+          )}
           <Box marginTop={1}>
             <Text color="magenta" wrap="truncate">Press y to confirm, n to cancel</Text>
           </Box>

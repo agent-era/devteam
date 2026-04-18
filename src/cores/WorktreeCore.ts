@@ -201,6 +201,10 @@ export class WorktreeCore implements CoreBase<State> {
     return true;
   }
 
+  getUntrackedNonIgnoredFiles(worktreePath: string): string[] {
+    return this.git.getUntrackedNonIgnoredFiles(worktreePath);
+  }
+
   async archiveFeature(worktreeOrProject: WorktreeInfo | string, worktreePath?: string, feature?: string): Promise<{archivedPath: string}> {
     let project: string, workPath: string, featureName: string;
     if (typeof worktreeOrProject === 'string') { project = worktreeOrProject; workPath = worktreePath!; featureName = feature!; }

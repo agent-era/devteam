@@ -28,6 +28,7 @@ interface WorktreeContextType {
   createFromBranch: (project: string, remoteBranch: string, localName: string) => Promise<boolean>;
   archiveFeature: (worktreeOrProject: WorktreeInfo | string, path?: string, feature?: string) => Promise<{archivedPath: string}>;
   archiveWorkspace: (featureName: string) => Promise<void>;
+  getUntrackedNonIgnoredFiles: (worktreePath: string) => string[];
   // Workspace operations
   createWorkspace: (featureName: string, projects: string[]) => Promise<string | null>;
   attachWorkspaceSession: (featureName: string, aiTool?: AITool) => Promise<void>;
@@ -79,6 +80,7 @@ export function WorktreeProvider({children, core: coreOverride}: WorktreeProvide
   const createFromBranch = useCallback(async (project: string, remoteBranch: string, localName: string) => core.createFromBranch(project, remoteBranch, localName), [core]);
   const archiveFeature = useCallback(async (wtOrProject: WorktreeInfo | string, p?: string, f?: string) => core.archiveFeature(wtOrProject, p, f), [core]);
   const archiveWorkspace = useCallback(async (featureName: string) => core.archiveWorkspace(featureName), [core]);
+  const getUntrackedNonIgnoredFiles = useCallback((worktreePath: string) => core.getUntrackedNonIgnoredFiles(worktreePath), [core]);
   const createWorkspace = useCallback(async (featureName: string, projects: string[]) => core.createWorkspace(featureName, projects), [core]);
   const attachWorkspaceSession = useCallback(async (featureName: string, aiTool?: AITool) => {
     // Find workspace header if present
@@ -127,6 +129,7 @@ export function WorktreeProvider({children, core: coreOverride}: WorktreeProvide
     createFromBranch,
     archiveFeature,
     archiveWorkspace,
+    getUntrackedNonIgnoredFiles,
     // Workspace operations
     createWorkspace,
     attachWorkspaceSession,
