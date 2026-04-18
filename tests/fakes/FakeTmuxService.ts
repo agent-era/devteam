@@ -9,6 +9,7 @@ export class FakeTmuxService extends TmuxService {
   private sessions = new Map<string, SessionInfo>();
   private sessionOptions = new Map<string, Map<string, string>>();
   private globalOptions = new Map<string, string>();
+  private paneState = new Map<string, {navPane: string; mainPane: string}>();
 
   constructor() {
     super(new FakeAIToolService());
@@ -186,8 +187,32 @@ export class FakeTmuxService extends TmuxService {
   }
 
   attachSessionWithControls(sessionName: string): void {
-    this.configureSessionUI(sessionName);
+    this.prepareSessionNavigator(sessionName);
     this.attachSessionInteractive(sessionName);
+  }
+
+  prepareSessionNavigator(sessionName: string): void {
+    const panes = this.paneState.get(sessionName) || {
+      navPane: `%${sessionName}-nav`,
+      mainPane: `%${sessionName}-main`,
+    };
+    this.paneState.set(sessionName, panes);
+    this.setSessionOption(sessionName, '@devteam_nav_pane', panes.navPane);
+    this.setSessionOption(sessionName, '@devteam_main_pane', panes.mainPane);
+    this.setSessionOption(sessionName, 'status', 'off');
+    this.setSessionOption(sessionName, 'pane-border-status', 'off');
+    this.setSessionOption(sessionName, 'mouse', 'on');
+  }
+
+  switchClient(sessionName: string): void {
+    this.attachSessionInteractive(sessionName);
+  }
+
+  selectMainPane(sessionName: string): void {
+    const panes = this.paneState.get(sessionName);
+    if (panes) {
+      this.recordSentKeys(sessionName, ['select-pane', panes.mainPane]);
+    }
   }
 
   setOption(option: string, value: string): void {

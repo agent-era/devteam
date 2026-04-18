@@ -23,6 +23,17 @@ function parseProjectsDirectory(): string {
   return process.cwd();
 }
 
+function hasFlag(flag: string): boolean {
+  return process.argv.slice(2).includes(flag);
+}
+
+function readFlagValue(flag: string): string | null {
+  const args = process.argv.slice(2);
+  const index = args.findIndex((arg) => arg === flag);
+  if (index === -1 || index + 1 >= args.length) return null;
+  return args[index + 1];
+}
+
 // Compute configuration once on startup
 export const PROJECTS_DIRECTORY = parseProjectsDirectory();
 
@@ -39,4 +50,12 @@ export function getProjectsDirectory(): string {
  */
 export function isAppIntervalsEnabled(): boolean {
   return process.env.NO_APP_INTERVALS !== '1';
+}
+
+export function isTmuxNavigatorMode(): boolean {
+  return hasFlag('--tmux-nav');
+}
+
+export function getTmuxNavigatorSession(): string | null {
+  return readFlagValue('--tmux-nav-session');
 }

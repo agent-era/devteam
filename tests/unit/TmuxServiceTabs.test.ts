@@ -13,8 +13,8 @@ describe('TmuxService tab formatting', () => {
     const format = (tmux as any).buildTopTabsFormat('dev-alpha-one-shell', families);
 
     expect(format.indexOf('alpha-one')).toBeLessThan(format.indexOf('bravo-two'));
-    expect(format).toContain('#[range=user|$1]');
-    expect(format).toContain('#[range=user|$2]');
+    expect(format).toContain('#[range=user|dt:switch:dev-alpha-one]');
+    expect(format).toContain('#[range=user|dt:switch:dev-bravo-two]');
     expect(format).toContain('click worktrees');
   });
 

@@ -4,7 +4,11 @@ import {logDebug} from '../shared/utils/logger.js';
 import {Timer} from '../shared/utils/timing.js';
 import {AIStatus, AITool} from '../models.js';
 import {AIToolService} from './AIToolService.js';
+import {getProjectsDirectory} from '../config.js';
 
+const NAV_PANE_TITLE = 'devteam-nav';
+const MAIN_PANE_TITLE = 'devteam-main';
+const NAV_PANE_HEIGHT = 8;
 
 export class TmuxService {
   private aiToolService: AIToolService;
@@ -25,6 +29,10 @@ export class TmuxService {
   sessionName(project: string, feature: string): string {
     const name = `${SESSION_PREFIX}${project}-${feature}`;
     return this.sanitizeSessionName(name);
+  }
+
+  workspaceSessionName(sessionName: string): string {
+    return this.sanitizeSessionName(`${SESSION_PREFIX}workspace-${this.getBaseSessionName(sessionName).slice(SESSION_PREFIX.length)}`);
   }
 
   shellSessionName(project: string, feature: string): string {
@@ -110,16 +118,17 @@ export class TmuxService {
     executeCommand?: boolean;
   } = {}): void {
     const { addNewline = false, executeCommand = false } = options;
+    const target = this.getMainPaneTarget(session);
     
     if (executeCommand) {
       // Send as command and execute with Enter
-      runCommand(['tmux', 'send-keys', '-t', `${session}:0.0`, text, 'C-m'], { env: this.tmuxEnv });
+      runCommand(['tmux', 'send-keys', '-t', target, text, 'C-m'], { env: this.tmuxEnv });
     } else if (addNewline) {
       // Send text with newline character
-      runCommand(['tmux', 'send-keys', '-t', `${session}:0.0`, text + '\n'], { env: this.tmuxEnv });
+      runCommand(['tmux', 'send-keys', '-t', target, text + '\n'], { env: this.tmuxEnv });
     } else {
       // Send text as-is
-      runCommand(['tmux', 'send-keys', '-t', `${session}:0.0`, text], { env: this.tmuxEnv });
+      runCommand(['tmux', 'send-keys', '-t', target, text], { env: this.tmuxEnv });
     }
   }
 
@@ -134,18 +143,19 @@ export class TmuxService {
     endWithExecute?: boolean;
   } = {}): void {
     const { endWithAltEnter = false, endWithExecute = false } = options;
+    const target = this.getMainPaneTarget(session);
     
     lines.forEach((line) => {
       this.sendText(session, line);
       if (endWithAltEnter) {
         // Use Alt+Enter for multi-line input (like Claude input)
-        runCommand(['tmux', 'send-keys', '-t', `${session}:0.0`, 'Escape', 'Enter'], { env: this.tmuxEnv });
+        runCommand(['tmux', 'send-keys', '-t', target, 'Escape', 'Enter'], { env: this.tmuxEnv });
       }
     });
     
     if (endWithExecute) {
       // Final execute command
-      runCommand(['tmux', 'send-keys', '-t', `${session}:0.0`, 'C-m'], { env: this.tmuxEnv });
+      runCommand(['tmux', 'send-keys', '-t', target, 'C-m'], { env: this.tmuxEnv });
     }
   }
 
@@ -155,11 +165,78 @@ export class TmuxService {
    * @param keys Key combination (e.g., 'Escape', 'Enter', 'C-m')
    */
   sendSpecialKeys(session: string, ...keys: string[]): void {
-    runCommand(['tmux', 'send-keys', '-t', `${session}:0.0`, ...keys], { env: this.tmuxEnv });
+    runCommand(['tmux', 'send-keys', '-t', this.getMainPaneTarget(session), ...keys], { env: this.tmuxEnv });
   }
 
   attachSessionInteractive(sessionName: string): void {
     runInteractive('tmux', ['attach-session', '-t', sessionName]);
+  }
+
+  switchClient(sessionName: string): void {
+    runCommand(['tmux', 'switch-client', '-t', sessionName], { env: this.tmuxEnv });
+  }
+
+  selectMainPane(sessionName: string): void {
+    runCommand(['tmux', 'select-pane', '-t', this.getMainPaneTarget(sessionName)], { env: this.tmuxEnv });
+  }
+
+  focusNavigatorPane(sessionName: string): void {
+    const navPane = this.getSessionOptionValue(sessionName, '@devteam_nav_pane');
+    if (navPane) runCommand(['tmux', 'select-pane', '-t', navPane], { env: this.tmuxEnv });
+  }
+
+  prepareSessionNavigator(sessionName: string): void {
+    if (!this.hasSession(sessionName)) return;
+
+    const panes = this.listPaneDetailsSync(sessionName);
+    let navPane = panes.find((pane) => pane.title === NAV_PANE_TITLE);
+    let mainPane = panes.find((pane) => pane.title === MAIN_PANE_TITLE) || panes.find((pane) => pane.title !== NAV_PANE_TITLE) || panes[0];
+    if (!mainPane) return;
+
+    runCommand(['tmux', 'select-pane', '-t', mainPane.id, '-T', MAIN_PANE_TITLE], { env: this.tmuxEnv });
+
+    if (!navPane) {
+      const cwd = runCommandQuick(['tmux', 'display-message', '-p', '-t', mainPane.id, '#{pane_current_path}'], undefined, this.tmuxEnv) || getProjectsDirectory();
+      navPane = {
+        id: runCommandQuick([
+          'tmux',
+          'split-window',
+          '-bf',
+          '-t',
+          mainPane.id,
+          '-l',
+          String(NAV_PANE_HEIGHT),
+          '-c',
+          cwd,
+          '-P',
+          '-F',
+          '#{pane_id}',
+          this.getNavigatorCommand(sessionName),
+        ], undefined, this.tmuxEnv),
+        index: '0',
+        title: NAV_PANE_TITLE,
+        currentCommand: 'node',
+      };
+      if (navPane.id) {
+        runCommand(['tmux', 'select-pane', '-t', navPane.id, '-T', NAV_PANE_TITLE], { env: this.tmuxEnv });
+      }
+    } else {
+      runCommand(['tmux', 'respawn-pane', '-k', '-t', navPane.id, this.getNavigatorCommand(sessionName)], { env: this.tmuxEnv });
+      runCommand(['tmux', 'select-pane', '-t', navPane.id, '-T', NAV_PANE_TITLE], { env: this.tmuxEnv });
+    }
+
+    if (navPane?.id) {
+      runCommand(['tmux', 'resize-pane', '-t', navPane.id, '-y', String(NAV_PANE_HEIGHT)], { env: this.tmuxEnv });
+      this.setSessionOption(sessionName, '@devteam_nav_pane', navPane.id);
+    }
+    if (mainPane.id) {
+      this.setSessionOption(sessionName, '@devteam_main_pane', mainPane.id);
+    }
+
+    this.setSessionOption(sessionName, 'status', 'off');
+    this.setSessionOption(sessionName, 'pane-border-status', 'off');
+    this.setSessionOption(sessionName, 'mouse', 'on');
+    this.selectMainPane(sessionName);
   }
 
   configureSessionUI(session: string): void {
@@ -176,6 +253,7 @@ export class TmuxService {
       this.setSessionOption(session, 'status-justify', 'left');
       this.setSessionOption(session, 'status-left-length', '0');
       this.setSessionOption(session, 'status-right-length', '0');
+      this.setSessionOption(session, 'status', 'on');
       this.setSessionOption(session, 'status-left', '');
       this.setSessionOption(session, 'status-right', '');
       this.setSessionOption(session, 'status-interval', '5');
@@ -204,6 +282,7 @@ export class TmuxService {
         'tmux', 'set-option', '-t', session, 'status-format[0]',
         this.buildTopTabsFormat(session, families)
       ], { env: this.tmuxEnv });
+      runCommand(['tmux', 'set-option', '-u', '-t', session, 'status-format[1]'], { env: this.tmuxEnv });
       this.setSessionOption(session, 'pane-border-format', this.buildBottomTabsFormat(session, family));
     } catch (err) {
       // eslint-disable-next-line no-console
@@ -215,13 +294,7 @@ export class TmuxService {
    * Attach to a session with clickable status bar controls enabled.
    */
   attachSessionWithControls(sessionName: string): void {
-    const sessions = this.listManagedSessionsSync();
-    for (const session of sessions) {
-      this.configureSessionUI(session.name);
-    }
-    if (!sessions.some((session) => session.name === sessionName)) {
-      this.configureSessionUI(sessionName);
-    }
+    this.prepareSessionNavigator(sessionName);
     this.attachSessionInteractive(sessionName);
   }
 
@@ -250,7 +323,7 @@ export class TmuxService {
   // Private helper methods
   private async findAIPaneTarget(session: string): Promise<string | null> {
     const panes = await this.listPanes(session);
-    if (!panes) return `${session}:0.0`;
+    if (!panes) return this.getMainPaneTarget(session);
     
     const lines = panes.split('\n').filter(Boolean);
     
@@ -264,8 +337,9 @@ export class TmuxService {
     }
     
     // Fallback to first pane
-    const firstIdx = lines[0]?.split(' ')[0] || '0.0';
-    return `${session}:${firstIdx}`;
+    const firstIdx = lines[0]?.split(' ')[0];
+    if (firstIdx) return `${session}:${firstIdx}`;
+    return this.getMainPaneTarget(session);
   }
 
 
@@ -289,24 +363,24 @@ export class TmuxService {
       runCommand(['tmux', 'bind-key', '-n', key, ...args], { env: this.tmuxEnv });
     };
 
-    bind('MouseDown1Status', [
+    const statusBinding = [
       'run-shell',
       '-b',
       'range="#{mouse_status_range}"; ' +
         'role="#{@devteam_current_role}"; ' +
         'case "$range" in ' +
-        '$*) base="$(tmux display-message -p -t "$range" "#{session_name}")"; ' +
+        'dt:switch:*) base="${range#dt:switch:}"; ' +
             'target="$base"; ' +
             'if [ "$role" = "shell" ] && tmux has-session -t "=${base}-shell" 2>/dev/null; then target="${base}-shell"; fi; ' +
             'if [ "$role" = "run" ] && tmux has-session -t "=${base}-run" 2>/dev/null; then target="${base}-run"; fi; ' +
             'tmux switch-client -t "$target" ;; ' +
         'esac'
-    ]);
+    ];
 
-    bind('MouseDown1Border', [
+    const borderBinding = [
       'run-shell',
       '-b',
-      'word="#{mouse_word}"; ' +
+      'word="$(printf %s "#{mouse_word}" | tr "[:upper:]" "[:lower:]")"; ' +
         'case "$word" in ' +
         'agent) target="#{@devteam_agent_session}" ;; ' +
         'shell) target="#{@devteam_shell_session}" ;; ' +
@@ -318,7 +392,24 @@ export class TmuxService {
         'else ' +
           'tmux display-message "Open $word from devteam first"; ' +
         'fi'
-    ]);
+    ];
+
+    for (const key of [
+      'MouseDown1Status',
+      'MouseDown1StatusLeft',
+      'MouseDown1StatusRight',
+      'MouseDown1StatusDefault',
+      'MouseUp1Status',
+      'MouseUp1StatusLeft',
+      'MouseUp1StatusRight',
+      'MouseUp1StatusDefault',
+    ]) {
+      bind(key, statusBinding);
+    }
+
+    for (const key of ['MouseDown1Border', 'MouseUp1Border']) {
+      bind(key, borderBinding);
+    }
   }
 
   private listManagedSessionsSync(): TmuxManagedSession[] {
@@ -373,13 +464,12 @@ export class TmuxService {
       .sort((a, b) => b.lastAttached - a.lastAttached || a.displayName.localeCompare(b.displayName))
       .map((family) => {
         const active = family.base === currentBase;
-        const id = family.agent?.id || family.shell?.id || family.run?.id || '';
         const label = this.trimLabel(family.displayName, 28);
         const style = active
           ? '#[fg=colour235,bg=colour45,bold]'
           : '#[fg=colour252,bg=colour238]';
         const spacer = active ? '#[fg=colour45,bg=colour235]' : '#[fg=colour238,bg=colour235]';
-        return `#[range=user|${id}]${style} ${label} ${spacer} `;
+        return `#[range=user|dt:switch:${family.base}]${style} ${label} ${spacer} `;
       })
       .join('');
 
@@ -422,6 +512,42 @@ export class TmuxService {
     if (label.length <= maxLength) return label;
     return `${label.slice(0, Math.max(0, maxLength - 3))}...`;
   }
+
+  private getNavigatorCommand(sessionName: string): string {
+    const cliEntry = process.argv[1] || 'devteam';
+    return `${JSON.stringify(process.execPath)} ${JSON.stringify(cliEntry)} --dir ${JSON.stringify(getProjectsDirectory())} --tmux-nav --tmux-nav-session ${JSON.stringify(sessionName)}`;
+  }
+
+  private getMainPaneTarget(session: string): string {
+    const stored = this.getSessionOptionValue(session, '@devteam_main_pane');
+    if (stored) return stored;
+    const panes = this.listPaneDetailsSync(session);
+    const main = panes.find((pane) => pane.title === MAIN_PANE_TITLE) || panes.find((pane) => pane.title !== NAV_PANE_TITLE) || panes[0];
+    return main?.id || `${session}:0.0`;
+  }
+
+  private getSessionOptionValue(session: string, option: string): string {
+    return runCommandQuick(['tmux', 'show-options', '-v', '-t', session, option], undefined, this.tmuxEnv) || '';
+  }
+
+  private listPaneDetailsSync(session: string): TmuxPaneInfo[] {
+    const output = runCommandQuick([
+      'tmux',
+      'list-panes',
+      '-t',
+      `=${session}:0`,
+      '-F',
+      '#{pane_id}\t#{pane_index}\t#{pane_title}\t#{pane_current_command}'
+    ], undefined, this.tmuxEnv);
+    if (!output) return [];
+    return output
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => {
+        const [id = '', index = '0', title = '', currentCommand = ''] = line.split('\t');
+        return {id, index, title, currentCommand};
+      });
+  }
 }
 
 type TmuxSessionRole = 'agent' | 'shell' | 'run';
@@ -441,4 +567,11 @@ type TmuxSessionFamily = {
   agent?: TmuxManagedSession;
   shell?: TmuxManagedSession;
   run?: TmuxManagedSession;
+};
+
+type TmuxPaneInfo = {
+  id: string;
+  index: string;
+  title: string;
+  currentCommand: string;
 };

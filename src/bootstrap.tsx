@@ -1,13 +1,19 @@
 import {render} from 'ink';
 import React from 'react';
 import App from './App.js';
+import TmuxNavigatorApp from './TmuxNavigatorApp.js';
 import {reinitializeMemoryLogging} from './shared/utils/logger.js';
 import {SESSION_PREFIX} from './constants.js';
 import {runCommandQuickAsync, runCommandQuick, getCleanEnvironment} from './shared/utils/commandExecutor.js';
+import {getTmuxNavigatorSession, isTmuxNavigatorMode} from './config.js';
 
 
 export function run() {
-  const {waitUntilExit} = render(<App />);
+  const navSession = getTmuxNavigatorSession();
+  const root = (isTmuxNavigatorMode() && navSession)
+    ? <TmuxNavigatorApp sessionName={navSession} />
+    : <App />;
+  const {waitUntilExit} = render(root);
   
   // Re-initialize logging after Ink's render() to ensure our overrides work
   reinitializeMemoryLogging();
