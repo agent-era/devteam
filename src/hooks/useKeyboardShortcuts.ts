@@ -80,7 +80,8 @@ export function useKeyboardShortcuts(
 
       // Actions
       else if (input === 'n') actions.onCreate?.();
-      else if (input === 'a') actions.onArchive?.();
+      else if (input === 'a') actions.onSelect?.();
+      else if (input === 'v') actions.onArchive?.();
       else if (input === 'r') actions.onRefresh?.();
       else if (input === '?') actions.onHelp?.();
       else if (input === 'b') actions.onBranch?.();

@@ -146,31 +146,25 @@ describe('Column Layout and Spacing', () => {
   });
 
   describe('Column margins and spacing', () => {
-    test('should account for exactly 6 spaces between 7 columns', () => {
-      // 7 columns with 6 spaces between them
-      const expectedMargins = 6;
-      
-      // Verify our calculation matches expected
-      const columnCount = 7;
+    test('should account for exactly 8 spaces between 9 columns', () => {
+      // 9 columns with 8 spaces between them
+      const expectedMargins = 8;
+
+      const columnCount = 9;
       const marginsCount = columnCount - 1;
-      
+
       expect(marginsCount).toBe(expectedMargins);
     });
 
     test('should maintain consistent spacing regardless of content length', () => {
       const scenarios = [
-        // Short content
-        ['1', 'a/b', '-', '-', '-', '-', '-'],
-        // Long content  
-        ['999', 'very-long-project/very-long-feature', '*', '+999k/-999k', '↑99 ↓99', '+', '#999+']
+        ['1', 'a/b', '-', '-', '-', '-', '-', '-', '-'],
+        ['999', 'very-long-project/very-long-feature', '*', 's', 'r', '+999k/-999k', '↑99 ↓99', '+', '#999+']
       ];
 
-      // Each scenario should use same margin structure
-      scenarios.forEach(scenario => {
-        // The spacing algorithm should be consistent regardless of content
-        // This test ensures we don't accidentally change margin calculation
-        const marginsWidth = 6;
-        expect(marginsWidth).toBe(6); // Always 6 spaces between columns
+      scenarios.forEach(_scenario => {
+        const marginsWidth = 8;
+        expect(marginsWidth).toBe(8); // Always 8 spaces between 9 columns
       });
     });
   });

@@ -4,7 +4,7 @@ import type {WorktreeInfo} from '../../../models.js';
 import {stringDisplayWidth} from '../../../shared/utils/formatting.js';
 import {useHighlightPriority} from './hooks/useHighlightPriority.js';
 import type {PRStatus} from '../../../models.js';
-import { formatDiffStats, formatGitChanges, getAIToolLabel, formatPRStatus, shouldDimRow } from './utils.js';
+import { formatDiffStats, formatGitChanges, formatPRStatus, shouldDimRow } from './utils.js';
 import type {ColumnWidths} from './hooks/useColumnWidths.js';
 import StatusChip from '../../common/StatusChip.js';
 import {getStatusMeta, COLUMNS} from './highlight.js';
@@ -37,20 +37,25 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
     projectFeature: worktree.is_workspace_child
       ? `${worktree.is_last_workspace_child ? '└─' : '├─'} [${worktree.project}]`
       : `${worktree.feature} [${worktree.project}]`,
-    ai: getAIToolLabel(worktree.session?.ai_tool, worktree.session?.attached || false),
     diff: formatDiffStats(worktree.git?.base_added_lines || 0, worktree.git?.base_deleted_lines || 0),
     changes: formatGitChanges(worktree.git?.ahead || 0, worktree.git?.behind || 0),
     pr: formatPRStatus(pr),
   };
-  
+
+  const agentActive = worktree.session?.attached || false;
+  const shellActive = worktree.session?.shell_attached || false;
+  const runActive = worktree.session?.run_attached || false;
+
   // Truncate PROJECT/FEATURE if it's too long
-  const truncatedProjectFeature = stringDisplayWidth(data.projectFeature) > columnWidths.projectFeature 
+  const truncatedProjectFeature = stringDisplayWidth(data.projectFeature) > columnWidths.projectFeature
     ? data.projectFeature.slice(0, Math.max(0, columnWidths.projectFeature - 3)) + '...'
     : data.projectFeature;
-  
+
   const cells = [
     {text: data.number, width: columnWidths.number, justify: 'flex-start' as const},
-    {text: data.ai, width: columnWidths.ai, justify: 'center' as const},
+    {text: '[a]', width: columnWidths.ai, justify: 'center' as const},
+    {text: '[s]', width: columnWidths.shell, justify: 'center' as const},
+    {text: '[x]', width: columnWidths.run, justify: 'center' as const},
     {text: truncatedProjectFeature, width: columnWidths.projectFeature, justify: 'flex-start' as const},
     {text: data.diff, width: columnWidths.diff, justify: 'flex-end' as const},
     {text: data.changes, width: columnWidths.changes, justify: 'flex-end' as const},
@@ -131,6 +136,16 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
     return visible + ' '.repeat(pad);
   };
   
+  const renderSessionCell = (text: string, active: boolean, width: number) => {
+    const pad = Math.max(0, width - stringDisplayWidth(text));
+    const left = Math.floor(pad / 2);
+    const right = pad - left;
+    const content = `${' '.repeat(left)}${text}${' '.repeat(right)}`;
+    return active
+      ? <Text bold>{content}</Text>
+      : <Text dimColor>{content}</Text>;
+  };
+
   // Render helper for the Project/Feature cell to dim bracketed project
   const renderProjectFeatureCell = (text: string, width: number, justify: 'flex-start' | 'center' | 'flex-end') => {
     const raw = (text ?? '').trim();
@@ -226,17 +241,24 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
             justifyContent={cell.justify}
             marginRight={isLast ? 0 : 1}
           >
-            <Text
-              backgroundColor={getCellBackground(cellIndex)}
-              color={cellIndex === COLUMNS.PROJECT_FEATURE ? undefined : getCellForeground(cellIndex)}
-              dimColor={isDimmed && !selected || cellIndex === COLUMNS.AI}
-              bold={selected && !isPriorityCell(cellIndex)}
-              inverse={selected && !isPriorityCell(cellIndex) && !isDimmed}
-            >
-              {cellIndex === COLUMNS.PROJECT_FEATURE
-                ? renderProjectFeatureCell(cell.text, cell.width, cell.justify)
-                : formatCellText(cell.text, cell.width, cell.justify)}
-            </Text>
+            {cellIndex === COLUMNS.AI
+              ? renderSessionCell(cell.text, agentActive, cell.width)
+              : cellIndex === COLUMNS.SHELL
+                ? renderSessionCell(cell.text, shellActive, cell.width)
+                : cellIndex === COLUMNS.RUN
+                  ? renderSessionCell(cell.text, runActive, cell.width)
+                  : <Text
+                      backgroundColor={getCellBackground(cellIndex)}
+                      color={cellIndex === COLUMNS.PROJECT_FEATURE ? undefined : getCellForeground(cellIndex)}
+                      dimColor={isDimmed && !selected}
+                      bold={selected && !isPriorityCell(cellIndex)}
+                      inverse={selected && !isPriorityCell(cellIndex) && !isDimmed}
+                    >
+                      {cellIndex === COLUMNS.PROJECT_FEATURE
+                        ? renderProjectFeatureCell(cell.text, cell.width, cell.justify)
+                        : formatCellText(cell.text, cell.width, cell.justify)}
+                    </Text>
+            }
           </Box>
         );
       })}

@@ -79,7 +79,7 @@ export default function MainView({
   
   const headerText = useMemo(() => {
     // Standardized shortcut notation; embed keys in words when possible
-    return '[enter] attach, [n]ew, [a]rchive, e[x]ec, [d]iff, [s]hell, [q]uit';
+    return '[a]gent, [s]hell, e[x]ec, [n]ew, [v]archive, [d]iff, [?]help, [q]uit';
   }, []);
   
   const getRowKey = useCallback((worktree: WorktreeInfo, index: number) => 

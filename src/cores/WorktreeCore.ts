@@ -139,6 +139,8 @@ export class WorktreeCore implements CoreBase<State> {
             try { this.hooks.writeMarker(w.path, sessionName, w.project, w.feature, 'worktree'); } catch {}
           }
           const attached = sessions.includes(sessionName);
+          const shell_attached = sessions.includes(this.tmux.shellSessionName(w.project, w.feature));
+          const run_attached = sessions.includes(this.tmux.runSessionName(w.project, w.feature));
           const [gitStatus, aiResult] = await Promise.all([
             this.git.getGitStatus(w.path),
             attached ? this.tmux.getAIStatus(sessionName) : Promise.resolve({tool: 'none' as const, status: 'not_running' as const})
@@ -149,7 +151,7 @@ export class WorktreeCore implements CoreBase<State> {
             path: w.path,
             branch: w.branch,
             git: gitStatus,
-            session: new SessionInfo({session_name: sessionName, attached, ai_status: aiResult.status, ai_tool: aiResult.tool}),
+            session: new SessionInfo({session_name: sessionName, attached, ai_status: aiResult.status, ai_tool: aiResult.tool, shell_attached, run_attached}),
             last_commit_ts: w.last_commit_ts || 0,
           }));
         }
@@ -235,6 +237,8 @@ export class WorktreeCore implements CoreBase<State> {
       for (const wt of slice) {
         const sessionName = this.tmux.sessionName(wt.project, wt.feature);
         const attached = sessions.includes(sessionName);
+        const shell_attached = sessions.includes(this.tmux.shellSessionName(wt.project, wt.feature));
+        const run_attached = sessions.includes(this.tmux.runSessionName(wt.project, wt.feature));
         // Fetch AI status first: if agent just finished working, invalidate the git slow-metrics
         // cache before fetching git status so this tick shows fresh committed stats.
         const aiResult = attached
@@ -244,7 +248,7 @@ export class WorktreeCore implements CoreBase<State> {
           this.git.invalidateGitSlowCache(wt.path);
         }
         const gitStatus = await this.git.getGitStatus(wt.path);
-        updated.push(new WorktreeInfo({...wt, git: gitStatus, session: new SessionInfo({session_name: sessionName, attached, ai_status: aiResult.status, ai_tool: aiResult.tool})}));
+        updated.push(new WorktreeInfo({...wt, git: gitStatus, session: new SessionInfo({session_name: sessionName, attached, ai_status: aiResult.status, ai_tool: aiResult.tool, shell_attached, run_attached})}));
       }
       const arr = [...this.state.worktrees];
       for (let i = 0; i < updated.length; i++) arr[start + i] = updated[i];

@@ -3,7 +3,6 @@ import {Box, Text} from 'ink';
 import type {WorktreeInfo} from '../../../models.js';
 import type {ColumnWidths} from './hooks/useColumnWidths.js';
 import {stringDisplayWidth} from '../../../shared/utils/formatting.js';
-import {getAIToolLabel} from './utils.js';
 import StatusChip from '../../common/StatusChip.js';
 import {getStatusMeta} from './highlight.js';
 
@@ -17,14 +16,19 @@ interface WorkspaceGroupRowProps {
 
 export const WorkspaceGroupRow = memo<WorkspaceGroupRowProps>(({workspace, globalIndex, selected, columnWidths}) => {
   const numberText = String(globalIndex + 1);
-  const aiLabel = getAIToolLabel(workspace.session?.ai_tool, workspace.session?.attached || false);
   const headerText = `${workspace.feature} [workspace]`;
   const truncatedHeader = stringDisplayWidth(headerText) > columnWidths.projectFeature
     ? headerText.slice(0, Math.max(0, columnWidths.projectFeature - 3)) + '...'
     : headerText;
 
+  const agentActive = workspace.session?.attached || false;
+  const shellActive = workspace.session?.shell_attached || false;
+  const runActive = workspace.session?.run_attached || false;
+
   const cells = [
-    {text: aiLabel, width: columnWidths.ai, justify: 'center' as const},
+    {text: '[a]', width: columnWidths.ai, justify: 'center' as const},
+    {text: '[s]', width: columnWidths.shell, justify: 'center' as const},
+    {text: '[x]', width: columnWidths.run, justify: 'center' as const},
     {text: truncatedHeader, width: columnWidths.projectFeature, justify: 'flex-start' as const},
     {text: '', width: columnWidths.diff, justify: 'flex-end' as const},
     {text: '', width: columnWidths.changes, justify: 'flex-end' as const},
@@ -46,6 +50,14 @@ export const WorkspaceGroupRow = memo<WorkspaceGroupRowProps>(({workspace, globa
       return ' '.repeat(left) + visible + ' '.repeat(right);
     }
     return visible + ' '.repeat(pad);
+  };
+
+  const renderSessionCell = (text: string, active: boolean, width: number) => {
+    const pad = Math.max(0, width - stringDisplayWidth(text));
+    const left = Math.floor(pad / 2);
+    const right = pad - left;
+    const content = `${' '.repeat(left)}${text}${' '.repeat(right)}`;
+    return active ? <Text bold>{content}</Text> : <Text dimColor>{content}</Text>;
   };
 
   const renderProjectFeatureCell = (text: string, width: number, justify: 'flex-start' | 'center' | 'flex-end') => {
@@ -100,18 +112,18 @@ export const WorkspaceGroupRow = memo<WorkspaceGroupRowProps>(({workspace, globa
       {cells.map((cell, idx) => (
         <Box key={idx} width={cell.width} justifyContent={cell.justify} marginRight={idx < cells.length - 1 ? 1 : 0}>
           {idx === 0
-            ? (
-              <Text dimColor>
-                {formatCellText(cell.text, cell.width, cell.justify)}
-              </Text>
-            )
-            : (
-              <Text bold={selected} inverse={selected}>
-                {idx === 1
-                  ? renderProjectFeatureCell(cell.text, cell.width, cell.justify)
-                  : formatCellText(cell.text, cell.width, cell.justify)}
-              </Text>
-            )
+            ? renderSessionCell(cell.text, agentActive, cell.width)
+            : idx === 1
+              ? renderSessionCell(cell.text, shellActive, cell.width)
+              : idx === 2
+                ? renderSessionCell(cell.text, runActive, cell.width)
+                : (
+                  <Text bold={selected} inverse={selected}>
+                    {idx === 3
+                      ? renderProjectFeatureCell(cell.text, cell.width, cell.justify)
+                      : formatCellText(cell.text, cell.width, cell.justify)}
+                  </Text>
+                )
           }
         </Box>
       ))}
@@ -124,6 +136,8 @@ export const WorkspaceGroupRow = memo<WorkspaceGroupRowProps>(({workspace, globa
     prev.columnWidths.status === next.columnWidths.status &&
     prev.columnWidths.projectFeature === next.columnWidths.projectFeature &&
     prev.columnWidths.ai === next.columnWidths.ai &&
+    prev.columnWidths.shell === next.columnWidths.shell &&
+    prev.columnWidths.run === next.columnWidths.run &&
     prev.columnWidths.diff === next.columnWidths.diff &&
     prev.columnWidths.changes === next.columnWidths.changes &&
     prev.columnWidths.pr === next.columnWidths.pr;
@@ -134,8 +148,9 @@ export const WorkspaceGroupRow = memo<WorkspaceGroupRowProps>(({workspace, globa
     widthsEqual &&
     prevW.feature === nextW.feature &&
     !!prevW.session?.attached === !!nextW.session?.attached &&
-    (prevW.session?.ai_status || 'not_running') === (nextW.session?.ai_status || 'not_running') &&
-    (prevW.session?.ai_tool || 'none') === (nextW.session?.ai_tool || 'none')
+    !!prevW.session?.attached === !!nextW.session?.attached &&
+    !!prevW.session?.shell_attached === !!nextW.session?.shell_attached &&
+    !!prevW.session?.run_attached === !!nextW.session?.run_attached
   );
 });
 

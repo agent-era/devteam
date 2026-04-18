@@ -6,7 +6,7 @@ export function calculatePageSize(
   terminalCols = process.stdout.columns || 80
 ): number {
   // Compact header text using single-letter shortcuts (64 chars)
-  const headerText = 'Enter attach, n new, a archive, x exec, d diff, s shell, q quit';
+  const headerText = 'Enter/a agent, n new, v archive, x exec, d diff, s shell, q quit';
   
   // Calculate how many lines the header will take
   const estimatedHeaderLines = Math.ceil(headerText.length / terminalCols);

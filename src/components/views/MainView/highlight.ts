@@ -11,10 +11,12 @@ export interface HighlightInfo {
 export const COLUMNS = {
   NUMBER: 0,
   AI: 1,
-  PROJECT_FEATURE: 2,
-  DIFF: 3,
-  CHANGES: 4,
-  PR: 5,
+  SHELL: 2,
+  RUN: 3,
+  PROJECT_FEATURE: 4,
+  DIFF: 5,
+  CHANGES: 6,
+  PR: 7,
 } as const;
 
 export const COLORS = {
