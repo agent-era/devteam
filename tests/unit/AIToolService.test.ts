@@ -191,29 +191,5 @@ random-session:33333`);
       aiToolService.launchTool('none', 'test-session', '/test/path');
       expect(runCommand).not.toHaveBeenCalled();
     });
-
-    test('switchTool interrupts and starts new tool', () => {
-      jest.useFakeTimers();
-      
-      aiToolService.switchTool('claude', 'test-session');
-      
-      expect(runCommand).toHaveBeenCalledWith([
-        'tmux', 'send-keys', '-t', 'test-session:0.0', 'C-c'
-      ]);
-      
-      // Fast-forward past setTimeout
-      jest.advanceTimersByTime(100);
-      
-      expect(runCommand).toHaveBeenCalledWith([
-        'tmux', 'send-keys', '-t', 'test-session:0.0', 'claude --continue', 'C-m'
-      ]);
-      
-      jest.useRealTimers();
-    });
-
-    test('switchTool ignores none tool', () => {
-      aiToolService.switchTool('none', 'test-session');
-      expect(runCommand).not.toHaveBeenCalled();
-    });
   });
 });

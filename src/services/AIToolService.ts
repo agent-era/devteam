@@ -174,16 +174,4 @@ export class AIToolService {
     runCommand(['tmux', 'new-session', '-ds', sessionName, '-c', cwd, command]);
     setLastTool(tool, cwd);
   }
-
-  /**
-   * Switch AI tool in an existing session
-   */
-  switchTool(tool: AITool, sessionName: string): void {
-    if (tool === 'none') return;
-    const command = AI_TOOLS[tool].command;
-    runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 'C-c']);
-    setTimeout(() => {
-      runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, command, 'C-m']);
-    }, 100);
-  }
 }

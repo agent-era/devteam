@@ -162,7 +162,6 @@ export function generateHelpSections(projectsDir: string): string[] {
     '  open [s]hell in worktree',
     '  e[x]ec        program in worktree',
     '  [X]           create/update run config with Claude',
-    '  AI [t]ool     switch for session',
     '  [T]           open agent with a different AI tool (also: Shift+Enter)',
     '',
   'NEW FEATURE DIALOG:',
