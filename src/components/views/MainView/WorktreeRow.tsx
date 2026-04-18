@@ -7,7 +7,7 @@ import type {PRStatus} from '../../../models.js';
 import { formatDiffStats, formatGitChanges, getAIStatusLabel, getAIStatusColor, formatPRStatus, shouldDimRow } from './utils.js';
 import type {ColumnWidths} from './hooks/useColumnWidths.js';
 import StatusChip from '../../common/StatusChip.js';
-import {getStatusMeta} from './highlight.js';
+import {getStatusMeta, COLUMNS} from './highlight.js';
 import { WorktreeStatusReason as StatusReason } from '../../../cores/WorktreeStatus.js';
 
 interface WorktreeRowProps {
@@ -157,7 +157,7 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
         <>
           {' '.repeat(pad)}
           {/* Feature keeps the cell's computed color */}
-          <Text color={getCellForeground(2)} dimColor={isDimmed && !selected}>{left}</Text>
+          <Text color={getCellForeground(COLUMNS.PROJECT_FEATURE)} dimColor={isDimmed && !selected}>{left}</Text>
           {/* Project (with brackets) dimmed */}
           {bracketed ? renderBracket(bracketed) : null}
         </>
@@ -169,9 +169,9 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
       return (
         <>
           {' '.repeat(leftPad)}
-          <Text color={getCellForeground(2)} dimColor={isDimmed && !selected}>{left}</Text>
+          <Text color={getCellForeground(COLUMNS.PROJECT_FEATURE)} dimColor={isDimmed && !selected}>{left}</Text>
           {bracketed ? (selected && isDimmed
-            ? <Text color={getCellForeground(2)}>{bracketed}</Text>
+            ? <Text color={getCellForeground(COLUMNS.PROJECT_FEATURE)}>{bracketed}</Text>
             : renderBracket(bracketed))
           : null}
           {' '.repeat(rightPad)}
@@ -181,9 +181,9 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
     // flex-start
     return (
       <>
-        <Text color={getCellForeground(2)} dimColor={isDimmed && !selected}>{left}</Text>
+        <Text color={getCellForeground(COLUMNS.PROJECT_FEATURE)} dimColor={isDimmed && !selected}>{left}</Text>
         {bracketed ? (selected && isDimmed
-          ? <Text color={getCellForeground(2)}>{bracketed}</Text>
+          ? <Text color={getCellForeground(COLUMNS.PROJECT_FEATURE)}>{bracketed}</Text>
           : renderBracket(bracketed))
         : null}
         {' '.repeat(pad)}
@@ -219,9 +219,9 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
       {cells.slice(1).map((cell, offsetIndex, arr) => {
         const cellIndex = offsetIndex + 1;
         const isLast = offsetIndex === arr.length - 1;
-        // AI column (cellIndex=1): color by status, not by priority highlight
-        const aiColor = isPriorityCell(1)
-          ? getCellForeground(2)
+        // AI column: color by status, not by priority highlight
+        const aiColor = isPriorityCell(COLUMNS.AI)
+          ? getCellForeground(COLUMNS.PROJECT_FEATURE)
           : getAIStatusColor(worktree.session?.ai_status || '', worktree.session?.attached || false);
         return (
           <Box
@@ -232,12 +232,12 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
           >
             <Text
               backgroundColor={getCellBackground(cellIndex)}
-              color={cellIndex === 1 ? aiColor : cellIndex === 2 ? undefined : getCellForeground(cellIndex)}
+              color={cellIndex === COLUMNS.AI ? aiColor : cellIndex === COLUMNS.PROJECT_FEATURE ? undefined : getCellForeground(cellIndex)}
               dimColor={isDimmed && !selected}
               bold={selected && !isPriorityCell(cellIndex)}
               inverse={selected && !isPriorityCell(cellIndex) && !isDimmed}
             >
-              {cellIndex === 2
+              {cellIndex === COLUMNS.PROJECT_FEATURE
                 ? renderProjectFeatureCell(cell.text, cell.width, cell.justify)
                 : formatCellText(cell.text, cell.width, cell.justify)}
             </Text>

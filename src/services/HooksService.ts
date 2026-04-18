@@ -35,7 +35,7 @@ export interface HookStatus {
   cwd: string;
 }
 
-const STATUS_STALE_MS = 5 * 60 * 1000;
+const STATUS_STALE_MS = 5 * 60 * 1_000;
 
 const COMMON_EVENTS: Array<{event: string; matcher?: string}> = [
   {event: 'SessionStart'},
@@ -61,11 +61,18 @@ const TOOL_EVENTS: Record<'claude' | 'gemini' | 'codex', Array<{event: string; m
     ...COMMON_EVENTS,
     {event: 'UserPromptSubmit'},
     {event: 'PreToolUse'},
+    {event: 'PostToolUse'},
     {event: 'Stop'},
   ],
 };
 
 export class HooksService {
+  private readonly statusDir: string;
+
+  constructor(opts: {statusDir?: string} = {}) {
+    this.statusDir = opts.statusDir ?? HOOK_STATUS_DIR;
+  }
+
   // --- Marker file ---
 
   writeMarker(worktreePath: string, session: string, project: string, feature: string, kind: 'worktree' | 'workspace'): void {
@@ -80,13 +87,15 @@ export class HooksService {
   // --- Status files ---
 
   readStatus(sessionName: string): HookStatus | null {
-    const data = readJSONFile<HookStatus>(path.join(HOOK_STATUS_DIR, `${sessionName}.json`));
-    if (!data || Date.now() - data.ts > STATUS_STALE_MS) return null;
-    return data;
+    return readJSONFile<HookStatus>(path.join(this.statusDir, `${sessionName}.json`));
+  }
+
+  isStale(status: HookStatus): boolean {
+    return Date.now() - status.ts > STATUS_STALE_MS;
   }
 
   clearStatus(sessionName: string): void {
-    try { fs.unlinkSync(path.join(HOOK_STATUS_DIR, `${sessionName}.json`)); } catch {}
+    try { fs.unlinkSync(path.join(this.statusDir, `${sessionName}.json`)); } catch {}
   }
 
   // --- Install / check ---
@@ -112,16 +121,18 @@ export class HooksService {
 
   getHookScriptPath(): string {
     const scriptName = path.join('scripts', 'devteam-status-hook.mjs');
-    try {
-      const metaUrl = (Function('return import.meta.url') as () => string)();
-      const servicesDir = path.dirname(new URL(metaUrl).pathname);
-      // dist/services/ → up two → package root; src/services/ → up three → repo root
-      for (const root of [path.resolve(servicesDir, '..', '..'), path.resolve(servicesDir, '..', '..', '..')]) {
-        const candidate = path.join(root, scriptName);
-        if (fs.existsSync(candidate)) return candidate;
-      }
-    } catch {}
-    return path.resolve(process.cwd(), scriptName);
+    // Search from the running binary (handles npm global installs) and cwd (dev)
+    const binaryDir = process.argv[1] ? path.dirname(process.argv[1]) : '';
+    const searchRoots = [
+      binaryDir ? path.resolve(binaryDir, '..') : '',   // dist/bin/ → package root
+      binaryDir ? path.resolve(binaryDir, '..', '..') : '', // nested installs
+      process.cwd(),
+    ].filter(Boolean);
+    for (const root of searchRoots) {
+      const candidate = path.join(root, scriptName);
+      if (fs.existsSync(candidate)) return candidate;
+    }
+    return path.resolve(searchRoots[0] || process.cwd(), scriptName);
   }
 
   installAll(): {installed: string[]; errors: string[]} {
@@ -169,12 +180,20 @@ export class HooksService {
     ensureDirectory(path.dirname(CODEX_USER_CONFIG_TOML));
     let content = '';
     try { content = fs.readFileSync(CODEX_USER_CONFIG_TOML, 'utf8'); } catch {}
-    if (!/codex_hooks\s*=\s*true/.test(content)) {
-      const updated = content.includes('codex_hooks')
-        ? content.replace(/codex_hooks\s*=\s*\S+/, 'codex_hooks = true')
-        : content + (content && !content.endsWith('\n') ? '\n' : '') + '[features]\ncodex_hooks = true\n';
-      fs.writeFileSync(CODEX_USER_CONFIG_TOML, updated);
+    if (/codex_hooks\s*=\s*true/.test(content)) return;
+
+    let updated: string;
+    if (/codex_hooks\s*=/.test(content)) {
+      // Key exists with wrong value — update it
+      updated = content.replace(/codex_hooks\s*=\s*\S+/, 'codex_hooks = true');
+    } else if (/^\[features\]/m.test(content)) {
+      // [features] section exists but lacks codex_hooks — insert key right after header
+      updated = content.replace(/^\[features\]/m, '[features]\ncodex_hooks = true');
+    } else {
+      // No [features] section — append it
+      updated = content + (content && !content.endsWith('\n') ? '\n' : '') + '[features]\ncodex_hooks = true\n';
     }
+    fs.writeFileSync(CODEX_USER_CONFIG_TOML, updated);
   }
 
   private isDevteamEntry(entry: unknown): boolean {

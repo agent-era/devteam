@@ -6,7 +6,7 @@ type StatusResult = 'working' | 'waiting' | 'idle' | '__delete__' | null;
 function mapStatus(tool: string, event: string, payload: Record<string, unknown>): StatusResult {
   if (event === 'SessionEnd') return '__delete__';
   if (event === 'Stop' || event === 'AfterAgent' || event === 'agent-turn-complete') return 'idle';
-  if (['UserPromptSubmit', 'PreToolUse', 'BeforeAgent', 'BeforeModel', 'BeforeTool'].includes(event)) return 'working';
+  if (['UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'BeforeAgent', 'BeforeModel'].includes(event)) return 'working';
   if (event === 'approval-requested') return 'waiting';
   if (event === 'Notification') {
     const t = payload.notification_type as string || '';
@@ -65,8 +65,16 @@ describe('hook script mapStatus', () => {
     expect(mapStatus('claude', 'PreToolUse', {})).toBe('working');
   });
 
+  test('PostToolUse → working (Codex)', () => {
+    expect(mapStatus('codex', 'PostToolUse', {})).toBe('working');
+  });
+
   test('SessionStart → idle (tool is running but idle)', () => {
     expect(mapStatus('claude', 'SessionStart', {})).toBe('idle');
+  });
+
+  test('BeforeTool → null (not registered)', () => {
+    expect(mapStatus('claude', 'BeforeTool', {})).toBeNull();
   });
 
   test('unknown event → null', () => {

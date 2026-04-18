@@ -50,33 +50,31 @@ function findMarker(startCwd) {
 // Map (tool, event, payload) to an AI status value.
 // Returns 'working' | 'waiting' | 'idle' | '__delete__' | null.
 function mapStatus(tool, event, payload) {
-  const e = event;
-
   // SessionEnd always clears the status file
-  if (e === 'SessionEnd') return '__delete__';
+  if (event === 'SessionEnd') return '__delete__';
 
   // Turn-complete / idle
-  if (e === 'Stop' || e === 'AfterAgent' || e === 'agent-turn-complete') return 'idle';
+  if (event === 'Stop' || event === 'AfterAgent' || event === 'agent-turn-complete') return 'idle';
 
   // Actively working
   if (
-    e === 'UserPromptSubmit' ||
-    e === 'PreToolUse' ||
-    e === 'BeforeAgent' ||
-    e === 'BeforeModel' ||
-    e === 'BeforeTool'
+    event === 'UserPromptSubmit' ||
+    event === 'PreToolUse' ||
+    event === 'PostToolUse' ||
+    event === 'BeforeAgent' ||
+    event === 'BeforeModel'
   ) return 'working';
 
   // Waiting for user (permission, idle prompt, approval)
-  if (e === 'approval-requested') return 'waiting';
-  if (e === 'Notification') {
+  if (event === 'approval-requested') return 'waiting';
+  if (event === 'Notification') {
     const t = payload.notification_type || '';
     if (t === 'permission_prompt' || t === 'idle_prompt' || t === 'ToolPermission') return 'waiting';
     return null;
   }
 
   // SessionStart: tool just opened — mark as idle so the UI shows it as running
-  if (e === 'SessionStart') return 'idle';
+  if (event === 'SessionStart') return 'idle';
 
   return null;
 }

@@ -39,12 +39,12 @@ export class WorktreeCore implements CoreBase<State> {
   private isRefreshingVisible = false;
   private availableAITools: (keyof typeof import('../constants.js').AI_TOOLS)[];
 
-  constructor(opts?: {git?: GitService; tmux?: TmuxService; workspace?: WorkspaceService; memory?: MemoryMonitorService; versionService?: any}) {
+  constructor(opts?: {git?: GitService; tmux?: TmuxService; workspace?: WorkspaceService; memory?: MemoryMonitorService; versionService?: any; hooks?: HooksService}) {
     this.git = opts?.git || new GitService(getProjectsDirectory());
     this.tmux = opts?.tmux || new TmuxService();
     this.workspace = opts?.workspace || new WorkspaceService();
     this.memory = opts?.memory || new MemoryMonitorService();
-    this.hooks = new HooksService();
+    this.hooks = opts?.hooks || new HooksService();
     this.versionService = opts?.versionService || null;
     this.availableAITools = detectAvailableAITools();
   }
@@ -99,6 +99,8 @@ export class WorktreeCore implements CoreBase<State> {
 
   private async refreshAIStatusForSession(sessionName: string): Promise<void> {
     const hookStatus = this.hooks.readStatus(sessionName);
+    // File exists but is stale (agent idle >5min with no new events) — don't override with not_running
+    if (hookStatus && this.hooks.isStale(hookStatus)) return;
     const aiStatus = hookStatus?.status ?? 'not_running';
     const aiTool = (hookStatus?.tool as AITool) ?? 'none';
     const worktrees = [...this.state.worktrees];
@@ -131,8 +133,9 @@ export class WorktreeCore implements CoreBase<State> {
         const worktrees = await this.git.getWorktreesForProject(project);
         for (const w of worktrees) {
           const sessionName = this.tmux.sessionName(w.project, w.feature);
-          if (!this.markerCheckedPaths.has(w.path)) {
-            this.markerCheckedPaths.add(w.path);
+          const markerKey = `${w.path}::${sessionName}`;
+          if (!this.markerCheckedPaths.has(markerKey)) {
+            this.markerCheckedPaths.add(markerKey);
             try { this.hooks.writeMarker(w.path, sessionName, w.project, w.feature, 'worktree'); } catch {}
           }
           const attached = sessions.includes(sessionName);

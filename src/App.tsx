@@ -31,6 +31,7 @@ import InstallHooksDialog from './components/dialogs/InstallHooksDialog.js';
 function AppContent() {
   const {exit} = useApp();
   const {isRawModeSupported} = useStdin();
+  const installHooksService = React.useRef(new HooksService());
   
   // Use our new contexts
   const {
@@ -419,7 +420,7 @@ function AppContent() {
   }
 
   if (!content && mode === 'installHooks') {
-    const hooks = new HooksService();
+    const hooks = installHooksService.current;
     content = (
       <Box flexGrow={1} alignItems="center" justifyContent="center">
         <InstallHooksDialog
