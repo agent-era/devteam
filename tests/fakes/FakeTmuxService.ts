@@ -202,18 +202,29 @@ export class FakeTmuxService extends TmuxService {
     return '0.0 bash\n1.0 claude'; // Mock pane list
   }
 
-  configureSessionUI(session: string, metadata?: {project: string; worktree: string; sessionKind: 'agent' | 'execute' | 'shell'}): void {
+  configureSessionUI(session: string, metadata?: {project: string; worktree: string; sessionKind: 'agent' | 'execute' | 'shell'; aiTool?: AITool}): void {
     if (!metadata) return;
     this.setSessionOption(session, '@devteam_project', metadata.project);
     this.setSessionOption(session, '@devteam_worktree', metadata.worktree);
-    this.setSessionOption(
-      session,
-      '@devteam_session_kind',
-      metadata.sessionKind === 'agent' ? 'Agent' : metadata.sessionKind === 'execute' ? 'Execute' : 'Shell'
-    );
+    const label = metadata.sessionKind === 'agent' ? 'AGENT' : metadata.sessionKind === 'execute' ? 'EXECUTE' : 'SHELL';
+    const value = metadata.sessionKind === 'agent'
+      ? metadata.aiTool === 'claude'
+        ? 'claude'
+        : metadata.aiTool === 'codex'
+          ? 'codex'
+          : metadata.aiTool === 'gemini'
+            ? 'gemini'
+            : ''
+      : '';
+    const labelBg = 'colour31';
+    const valueBg = 'colour117';
+    const chip = value
+      ? `#[fg=colour231,bg=${labelBg},bold] ${label} #[fg=colour232,bg=${valueBg},bold] ${value} `
+      : `#[fg=colour231,bg=${labelBg},bold] ${label} `;
+    this.setSessionOption(session, '@devteam_session_chip', chip);
   }
 
-  attachSessionWithControls(sessionName: string, metadata?: {project: string; worktree: string; sessionKind: 'agent' | 'execute' | 'shell'}): void {
+  attachSessionWithControls(sessionName: string, metadata?: {project: string; worktree: string; sessionKind: 'agent' | 'execute' | 'shell'; aiTool?: AITool}): void {
     this.configureSessionUI(sessionName, metadata);
     this.attachSessionInteractive(sessionName);
   }

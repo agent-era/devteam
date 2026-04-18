@@ -11,6 +11,7 @@ type SessionDisplayMetadata = {
   project: string;
   worktree: string;
   sessionKind: SessionKind;
+  aiTool?: AITool;
 };
 
 export class TmuxService {
@@ -180,6 +181,7 @@ export class TmuxService {
       this.storeSessionDisplayMetadata(session, sessionMeta);
 
       // Ensure mouse is enabled and status is visible
+      this.setOption('mouse', 'on');
       this.setSessionOption(session, 'mouse', 'on');
       // Ensure status bar is visible
       this.setSessionOption(session, 'status', 'on');
@@ -198,8 +200,17 @@ export class TmuxService {
         runCommand(['tmux', 'bind-key', '-n', key, ...args], { env: this.tmuxEnv });
       };
 
-      // Bind MouseUp (release) on all status regions to detach immediately (no menu)
-      for (const k of ['MouseUp1Status', 'MouseUp1StatusLeft', 'MouseUp1StatusRight', 'MouseUp1StatusDefault']) {
+      // Bind both mouse down and mouse up on status regions for compatibility across tmux versions.
+      for (const k of [
+        'MouseDown1Status',
+        'MouseDown1StatusLeft',
+        'MouseDown1StatusRight',
+        'MouseDown1StatusDefault',
+        'MouseUp1Status',
+        'MouseUp1StatusLeft',
+        'MouseUp1StatusRight',
+        'MouseUp1StatusDefault',
+      ]) {
         bind(k, ['detach-client']);
       }
       // No debug messages bound
@@ -274,7 +285,7 @@ export class TmuxService {
   private storeSessionDisplayMetadata(session: string, metadata: SessionDisplayMetadata): void {
     this.setSessionOption(session, '@devteam_project', metadata.project || 'unknown');
     this.setSessionOption(session, '@devteam_worktree', metadata.worktree || 'unknown');
-    this.setSessionOption(session, '@devteam_session_kind', this.sessionKindLabel(metadata.sessionKind));
+    this.setSessionOption(session, '@devteam_session_chip', this.sessionChip(metadata.sessionKind, metadata.aiTool));
   }
 
   private inferSessionDisplayMetadata(session: string): SessionDisplayMetadata {
@@ -295,25 +306,52 @@ export class TmuxService {
   }
 
   private sessionKindLabel(kind: SessionKind): string {
-    if (kind === 'shell') return 'Shell';
-    if (kind === 'execute') return 'Execute';
-    return 'Agent';
+    if (kind === 'shell') return 'SHELL';
+    if (kind === 'execute') return 'EXECUTE';
+    return 'AGENT';
+  }
+
+  private sessionKindValue(kind: SessionKind, aiTool: AITool = 'none'): string {
+    if (kind === 'shell' || kind === 'execute') return '';
+    if (aiTool === 'claude') return 'claude';
+    if (aiTool === 'codex') return 'codex';
+    if (aiTool === 'gemini') return 'gemini';
+    return '';
+  }
+
+  private sessionKindLabelBg(kind: SessionKind): string {
+    return 'colour31';
+  }
+
+  private sessionKindValueBg(kind: SessionKind): string {
+    return 'colour117';
+  }
+
+  private sessionChip(kind: SessionKind, aiTool: AITool = 'none'): string {
+    const label = this.sessionKindLabel(kind);
+    const value = this.sessionKindValue(kind, aiTool);
+    const labelBg = this.sessionKindLabelBg(kind);
+    const valueBg = this.sessionKindValueBg(kind);
+
+    if (!value) {
+      return `#[fg=colour231,bg=${labelBg},bold] ${label} `;
+    }
+
+    return `#[fg=colour231,bg=${labelBg},bold] ${label} #[fg=colour232,bg=${valueBg},bold] ${value} `;
   }
 
   private buildStatusFormat(): string {
     return (
       ' ' +
-      '#[fg=colour231,bg=colour31,bold] DEVTEAM ' +
-      '#[fg=colour31,bg=colour117] PROJECT ' +
       '#[fg=colour255,bg=colour24,bold] #{@devteam_project} ' +
-      '#[fg=colour130,bg=colour223] WORKTREE ' +
+      '#[default]  ' +
       '#[fg=colour255,bg=colour95,bold] #{@devteam_worktree} ' +
-      '#[fg=colour235,bg=colour186] SESSION ' +
-      '#[fg=colour255,bg=colour60,bold] #{@devteam_session_kind} ' +
+      '#[default]  ' +
+      '#{@devteam_session_chip}' +
       '#[default]' +
       '#[align=right]' +
-      '#[fg=colour255,bg=colour238] PROC #{pane_current_command} ' +
-      '#[fg=colour232,bg=colour117,bold] Return to devteam: Prefix+d '
+      '#[fg=colour232,bg=colour117,bold] Click here to return (or Ctrl+b, then d) ' +
+      '#[fg=colour231,bg=colour31,bold] DEVTEAM '
     );
   }
 }

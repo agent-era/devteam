@@ -244,25 +244,23 @@ export class WorktreeCore implements CoreBase<State> {
   async attachSession(worktree: WorktreeInfo, aiTool?: AITool): Promise<void> {
     const sessionName = this.tmux.sessionName(worktree.project, worktree.feature);
     const sessions = await this.tmux.listSessions();
+    const sessionTool = worktree.session?.ai_tool as AITool | undefined;
+    let selectedTool: AITool = sessionTool && sessionTool !== 'none' ? sessionTool : 'none';
     if (!sessions.includes(sessionName)) {
       // Preference order for which tool to launch:
       //   1. Explicit argument (e.g. from the tool-picker dialog)
       //   2. Tool currently running in the session (won't apply when there's no session)
       //   3. Last tool devteam launched here, remembered across restarts
       //   4. First available installed tool
-      const sessionTool = worktree.session?.ai_tool as AITool | undefined;
       const remembered = getLastTool(worktree.path);
-      let selected: AITool = 'none';
-      if (aiTool && aiTool !== 'none') selected = aiTool;
-      else if (sessionTool && sessionTool !== 'none') selected = sessionTool;
-      else if (remembered) selected = remembered;
-      if (selected === 'none' && this.availableAITools.length >= 1) {
-        selected = this.availableAITools[0];
-      }
-      if (selected !== 'none') {
-        if (selected === 'claude') await this.launchClaudeSessionWithFallback(sessionName, worktree.path);
-        else this.tmux.createSessionWithCommand(sessionName, worktree.path, aiLaunchCommand(selected), true);
-        setLastTool(selected, worktree.path);
+      selectedTool = 'none';
+      if (aiTool && aiTool !== 'none') selectedTool = aiTool;
+      else if (sessionTool && sessionTool !== 'none') selectedTool = sessionTool;
+      else if (remembered) selectedTool = remembered;
+      if (selectedTool !== 'none') {
+        if (selectedTool === 'claude') await this.launchClaudeSessionWithFallback(sessionName, worktree.path);
+        else this.tmux.createSessionWithCommand(sessionName, worktree.path, aiLaunchCommand(selectedTool), true);
+        setLastTool(selectedTool, worktree.path);
       } else {
         this.tmux.createSession(sessionName, worktree.path, true);
       }
@@ -271,6 +269,7 @@ export class WorktreeCore implements CoreBase<State> {
       project: worktree.project,
       worktree: worktree.feature,
       sessionKind: 'agent',
+      aiTool: selectedTool,
     });
   }
   async attachShellSession(worktree: WorktreeInfo): Promise<void> {
