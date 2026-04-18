@@ -7,6 +7,8 @@ import fs from 'node:fs';
 // Using mkdtempSync gives each test process its own isolated dir.
 const aiSessionTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'devteam-ai-sessions-'));
 process.env.DEVTEAM_AI_SESSION_DIR = aiSessionTmp;
+const sessionMarkerTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'devteam-session-markers-'));
+process.env.DEVTEAM_SESSION_MARKER_DIR = sessionMarkerTmp;
 
 // Enable fake timers for all tests to speed up delays
 jest.useFakeTimers();

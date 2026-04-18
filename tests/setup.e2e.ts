@@ -8,6 +8,8 @@ import fs from 'node:fs';
 // Keep per-worktree AI-session memory out of the user's real cache during tests.
 const aiSessionTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'devteam-ai-sessions-'));
 process.env.DEVTEAM_AI_SESSION_DIR = aiSessionTmp;
+const sessionMarkerTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'devteam-session-markers-'));
+process.env.DEVTEAM_SESSION_MARKER_DIR = sessionMarkerTmp;
 
 // Stub process.exit so App's exit paths don't terminate the test process
 const mockExit = jest.fn();

@@ -1,9 +1,11 @@
 import {run} from './bootstrap.js';
 import {initializeMemoryLogging, logError, dumpLogsToConsole} from './shared/utils/logger.js';
 import {commandExists} from './shared/utils/commandExecutor.js';
+import {writeCurrentSessionMarker} from './shared/utils/sessionMarker.js';
 
 // Initialize memory logging before running the app
 initializeMemoryLogging();
+writeCurrentSessionMarker();
 
 // Proactive check for tmux availability with macOS guidance
 try {
@@ -46,4 +48,3 @@ run().catch((err) => {
   handleExit();
   process.exit(1);
 });
-

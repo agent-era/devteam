@@ -145,3 +145,6 @@ vite.config.ts.timestamp-*
 
 # Devteam local cache
 .devteam
+
+# Legacy local session marker
+.devteam-session
