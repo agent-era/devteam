@@ -258,7 +258,6 @@ export class WorktreeCore implements CoreBase<State> {
       if (aiTool && aiTool !== 'none') selectedTool = aiTool;
       else if (sessionTool && sessionTool !== 'none') selectedTool = sessionTool;
       else if (remembered) selectedTool = remembered;
-      else if (this.availableAITools.length >= 1) selectedTool = this.availableAITools[0];
       if (selectedTool !== 'none') {
         const flags = this.getAIToolFlags(worktree.project, selectedTool);
         const flagStr = flags.length > 0 ? ' ' + flags.map(shellQuote).join(' ') : '';
@@ -347,9 +346,10 @@ export class WorktreeCore implements CoreBase<State> {
 
   async editConfigWithAI(project: string, userPrompt: string): Promise<{success: boolean; content?: string; path: string; error?: string}> {
     const current = this.readConfigContent(project) || '{}';
-    const prompt = SETTINGS_EDIT_CLAUDE_PROMPT
-      .replace('{CURRENT_CONFIG}', current)
-      .replace('{USER_PROMPT}', userPrompt.replace(/"/g, '\\"'));
+    // Single-pass substitution so a {USER_PROMPT} literal inside the config isn't
+    // replaced by the user's text (or vice versa).
+    const tokens: Record<string, string> = {'{CURRENT_CONFIG}': current, '{USER_PROMPT}': userPrompt};
+    const prompt = SETTINGS_EDIT_CLAUDE_PROMPT.replace(/\{CURRENT_CONFIG\}|\{USER_PROMPT\}/g, m => tokens[m]);
     return this.runConfigPrompt(project, prompt);
   }
 
@@ -390,7 +390,9 @@ export class WorktreeCore implements CoreBase<State> {
 
   private setupWorktreeEnvironment(projectName: string, worktreePath: string): void {
     const setup = this.readProjectConfig(projectName)?.worktreeSetup;
-    if (setup && (Array.isArray(setup.copyFiles) || Array.isArray(setup.symlinkPaths))) {
+    if (setup) {
+      // Config present (even if arrays are empty) means the user has opted in to
+      // config-driven setup — honor it exactly. Missing/empty arrays = do nothing.
       for (const rel of setup.copyFiles || []) {
         if (typeof rel === 'string' && rel.trim()) {
           try { this.git.copyPath(projectName, worktreePath, rel); } catch {}
@@ -402,7 +404,7 @@ export class WorktreeCore implements CoreBase<State> {
         }
       }
     } else {
-      // No config: fall back to the pre-config hardcoded behavior so existing projects still work.
+      // No worktreeSetup section: fall back to the pre-config hardcoded behavior.
       try { this.git.copyEnvironmentFile(projectName, worktreePath); } catch {}
       try { this.git.linkClaudeSettings(projectName, worktreePath); } catch {}
     }

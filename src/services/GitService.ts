@@ -501,8 +501,10 @@ export class GitService {
   symlinkPath(project: string, worktreePath: string, relativePath: string): void {
     const src = path.join(this.basePath, project, relativePath);
     const dst = path.join(worktreePath, relativePath);
+    // Resolve through symlinks so the 'dir'/'file' hint matches the final target
+    // (critical on Windows; no-op on POSIX, but still the correct signal).
     let stat: fs.Stats;
-    try { stat = fs.lstatSync(src); } catch { return; }
+    try { stat = fs.statSync(src); } catch { return; }
     ensureDirectory(path.dirname(dst));
     try { fs.rmSync(dst, {recursive: true, force: true}); } catch {}
     fs.symlinkSync(src, dst, stat.isDirectory() ? 'dir' : 'file');
