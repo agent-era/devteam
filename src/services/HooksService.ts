@@ -109,6 +109,7 @@ export class HooksService {
   }
 
   isInstallSkipped(): boolean {
+    if (process.env.E2E_SKIP_HOOKS_INSTALL === '1') return true;
     return fs.existsSync(HOOK_INSTALL_SKIP_FILE);
   }
 
