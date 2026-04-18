@@ -26,13 +26,15 @@ test('App renders EmptyState when projects exist but no worktrees', async () => 
   const tree = React.createElement(TestableApp, {gitService, gitHubService, tmuxService});
   const inst = Ink.render(tree, {stdout, stdin, debug: true, exitOnCtrlC: false, patchConsole: false});
   try {
-    await new Promise(r => setTimeout(r, 400));
-  const {stripAnsi} = await import('./_utils.js');
-  const raw = stdout.lastFrame() || '';
-  const frame = stripAnsi(raw);
-  assert.ok(frame.includes('Welcome to DevTeam'), 'Expected EmptyState welcome text');
-  assert.ok(frame.includes('Press [n] to create a new branch'), 'Expected create-branch hint');
-  assert.ok(frame.includes('Press [q] to quit'), 'Expected quit hint');
+    const {waitFor, stripAnsi} = await import('./_utils.js');
+    await waitFor(() => {
+      const f = stripAnsi(stdout.lastFrame() || '');
+      return f.includes('Welcome to DevTeam');
+    }, {timeout: 10000, interval: 50, message: 'EmptyState visible'});
+    const frame = stripAnsi(stdout.lastFrame() || '');
+    assert.ok(frame.includes('Welcome to DevTeam'), 'Expected EmptyState welcome text');
+    assert.ok(frame.includes('Press [n] to create a new branch'), 'Expected create-branch hint');
+    assert.ok(frame.includes('Press [q] to quit'), 'Expected quit hint');
   } finally {
     try { inst.unmount?.(); } catch {}
     try { restoreTimers?.(); } catch {}
