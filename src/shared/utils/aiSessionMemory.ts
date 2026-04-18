@@ -7,12 +7,12 @@ import {ensureDirectory} from './fileSystem.js';
 import {logError} from './logger.js';
 
 // Remembers which AI tool the user most recently opened for each worktree, so Enter can
-// re-open the same tool after a restart. Stored under ~/.cache/coding-agent-team/
-// ai-sessions/<sha1(worktreePath)>.json; tests override DEVTEAM_AI_SESSION_DIR.
+// re-open the same tool after a restart. Stored under ~/.cache/devteam/ai-sessions/
+// <sha1(worktreePath)>.json; tests override DEVTEAM_AI_SESSION_DIR.
 
 function baseDir(): string {
   return process.env.DEVTEAM_AI_SESSION_DIR
-    || path.join(os.homedir(), '.cache', 'coding-agent-team', 'ai-sessions');
+    || path.join(os.homedir(), '.cache', 'devteam', 'ai-sessions');
 }
 
 function fileFor(worktreePath: string): string {
