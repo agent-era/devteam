@@ -4,14 +4,20 @@ import path from 'node:path';
 import fs from 'node:fs';
 import FullScreen from './components/common/FullScreen.js';
 import {GitService} from './services/GitService.js';
+import {GitHubService} from './services/GitHubService.js';
 import {TmuxService} from './services/TmuxService.js';
 import {getProjectsDirectory, isAppIntervalsEnabled} from './config.js';
 import {aiLaunchCommand, RUN_CONFIG_FILE} from './constants.js';
 import {detectAvailableAITools} from './shared/utils/commandExecutor.js';
 import {getLastTool, setLastTool} from './shared/utils/aiSessionMemory.js';
 import {baseSessionName, modeLabel, modeOrder, modeSessionName, sessionMode, type NavMode} from './shared/utils/tmuxNav.js';
+import {PRStatus, SessionInfo, WorktreeInfo} from './models.js';
 import type {AITool} from './models.js';
 import {useTerminalDimensions} from './hooks/useTerminalDimensions.js';
+import StatusChip from './components/common/StatusChip.js';
+import {getStatusMeta} from './components/views/MainView/highlight.js';
+import {formatDiffStats, formatGitChanges, formatPRStatus} from './components/views/MainView/utils.js';
+import {stringDisplayWidth} from './shared/utils/formatting.js';
 
 type NavWorktree = {
   project: string;
@@ -19,6 +25,11 @@ type NavWorktree = {
   path: string;
   branch: string;
   lastCommitTs: number;
+  worktree: WorktreeInfo;
+  statusMeta: {label: string; bg: string; fg: string};
+  diffText: string;
+  changesText: string;
+  prText: string;
   sessions: Record<NavMode, {exists: boolean; usable: boolean}>;
 };
 
@@ -30,6 +41,7 @@ export default function TmuxNavigatorApp(props: {sessionName: string}) {
   const {rows, columns} = useTerminalDimensions();
 
   const git = useMemo(() => new GitService(getProjectsDirectory()), []);
+  const github = useMemo(() => new GitHubService(), []);
   const tmux = useMemo(() => new TmuxService(), []);
   const availableTools = useMemo(() => detectAvailableAITools(), []);
   const currentMode = sessionMode(sessionName);
@@ -43,31 +55,76 @@ export default function TmuxNavigatorApp(props: {sessionName: string}) {
   const load = async () => {
     const projects = git.discoverProjects();
     const sessions = new Set(await tmux.listSessions());
-    const next: NavWorktree[] = [];
+    const discovered: Array<{
+      project: string;
+      feature: string;
+      path: string;
+      branch: string;
+      last_commit_ts: number;
+    }> = [];
 
     for (const project of projects) {
       const worktrees = await git.getWorktreesForProject(project);
-      for (const worktree of worktrees) {
-        next.push({
-          project: worktree.project,
-          feature: worktree.feature,
-          path: worktree.path,
-          branch: worktree.branch,
-          lastCommitTs: worktree.last_commit_ts || 0,
-          sessions: {
-            agent: sessionState(tmux, tmux.sessionName(worktree.project, worktree.feature), sessions),
-            shell: sessionState(tmux, tmux.shellSessionName(worktree.project, worktree.feature), sessions),
-            run: sessionState(tmux, tmux.runSessionName(worktree.project, worktree.feature), sessions),
-          }
-        });
-      }
+      discovered.push(...worktrees);
     }
+
+    const prByPath = await github.batchGetPRStatusForWorktreesAsync(
+      discovered.map((worktree) => ({project: worktree.project, path: worktree.path})),
+      true
+    );
+
+    const next = await Promise.all(discovered.map(async (worktree) => {
+      const agentSession = tmux.sessionName(worktree.project, worktree.feature);
+      const attached = sessions.has(agentSession);
+      const [gitStatus, aiResult] = await Promise.all([
+        git.getGitStatus(worktree.path),
+        attached
+          ? tmux.getAIStatus(agentSession)
+          : Promise.resolve({tool: 'none' as const, status: 'not_running' as const}),
+      ]);
+      const pr = prByPath[worktree.path] || new PRStatus({loadingStatus: 'not_checked'});
+      const info = new WorktreeInfo({
+        project: worktree.project,
+        feature: worktree.feature,
+        path: worktree.path,
+        branch: worktree.branch,
+        git: gitStatus,
+        pr,
+        session: new SessionInfo({
+          session_name: agentSession,
+          attached,
+          ai_status: aiResult.status,
+          ai_tool: aiResult.tool,
+        }),
+        last_commit_ts: worktree.last_commit_ts || 0,
+      });
+      return {
+        project: worktree.project,
+        feature: worktree.feature,
+        path: worktree.path,
+        branch: worktree.branch,
+        lastCommitTs: worktree.last_commit_ts || 0,
+        worktree: info,
+        statusMeta: getStatusMeta(info, pr),
+        diffText: formatDiffStats(info.git?.base_added_lines || 0, info.git?.base_deleted_lines || 0),
+        changesText: formatGitChanges(info.git?.ahead || 0, info.git?.behind || 0),
+        prText: formatPRStatus(pr) || '-',
+        sessions: {
+          agent: sessionState(tmux, agentSession, sessions),
+          shell: sessionState(tmux, tmux.shellSessionName(worktree.project, worktree.feature), sessions),
+          run: sessionState(tmux, tmux.runSessionName(worktree.project, worktree.feature), sessions),
+        }
+      };
+    }));
 
     next.sort((a, b) => (b.lastCommitTs || 0) - (a.lastCommitTs || 0) || `${a.project}/${a.feature}`.localeCompare(`${b.project}/${b.feature}`));
     setItems(next);
 
-    const idx = next.findIndex((item) => tmux.sessionName(item.project, item.feature) === currentBase);
-    if (idx >= 0) setSelectedIndex(idx);
+    const currentSessionIndex = next.findIndex((item) => tmux.sessionName(item.project, item.feature) === currentBase);
+    setSelectedIndex((prev) => {
+      if (currentSessionIndex >= 0) return currentSessionIndex;
+      return Math.max(0, Math.min(prev, next.length - 1));
+    });
     setStatusMessage(next.length ? 'click tile or mode  x closes selected mode  esc back' : 'no worktrees found');
   };
 
@@ -113,7 +170,7 @@ export default function TmuxNavigatorApp(props: {sessionName: string}) {
       else if (input === '2') { setSelectedActionMode('shell'); void activate('shell'); }
       else if (input === '3') { setSelectedActionMode('run'); void activate('run'); }
       else if (input === 'x' || input === 'X') void closeMode(selectedActionMode);
-      else if (input === '\r' || input === '\n') void activate(currentMode);
+      else if (input === '\r' || input === '\n') void activate(selectedActionMode);
       else if (input === '\u001b' || input === 'q') {
         tmux.selectMainPane(sessionName);
         exit();
@@ -138,15 +195,16 @@ export default function TmuxNavigatorApp(props: {sessionName: string}) {
     if (eventType !== 'M') return true;
     if (button >= 64) return true;
 
-    const tileHit = tileHitTarget(x, y, columns, visible.length);
+    const layout = computeLayout(columns, rows, items.length, selectedIndex);
+    const tileHit = tileHitTarget(x, y, layout);
     if (tileHit !== null) {
-      const absoluteIndex = pageStart + tileHit;
+      const absoluteIndex = layout.pageStart + tileHit;
       setSelectedIndex(absoluteIndex);
-      void activate(currentMode, absoluteIndex);
+      void activate(selectedActionMode, absoluteIndex);
       return true;
     }
 
-    const action = bottomActionHit(x, y, columns);
+    const action = bottomActionHit(x, y, columns, layout, items[selectedIndex] || null, currentMode);
     if (action === 'back') {
       tmux.selectMainPane(sessionName);
       exit();
@@ -202,43 +260,38 @@ export default function TmuxNavigatorApp(props: {sessionName: string}) {
     setStatusMessage(`closed ${mode} for ${item.feature}`);
   };
 
-  const tileColumns = Math.min(3, Math.max(1, Math.floor((columns + 1) / (MIN_TILE_WIDTH + 1))));
-  const tileRows = rows >= 9 ? 2 : 1;
-  const visibleCount = Math.min(6, tileColumns * tileRows);
-  const tileWidth = Math.max(18, Math.floor((columns - Math.max(0, tileColumns - 1)) / tileColumns));
-  const pageStart = Math.max(0, Math.floor(selectedIndex / Math.max(1, visibleCount)) * Math.max(1, visibleCount));
-  const visible = items.slice(pageStart, pageStart + visibleCount);
+  const layout = computeLayout(columns, rows, items.length, selectedIndex);
+  const visible = items.slice(layout.pageStart, layout.pageStart + layout.visibleCount);
   const selectedItem = items[selectedIndex] || null;
-  const statusTone: 'cyan' | 'yellow' = items.length ? 'cyan' : 'yellow';
-  const tileGroups = Array.from({length: tileRows}, (_, row) => visible.slice(row * tileColumns, (row + 1) * tileColumns));
+  const tileGroups = Array.from({length: layout.tileRows}, (_, row) => visible.slice(row * layout.tileColumns, (row + 1) * layout.tileColumns));
 
   return (
     <FullScreen enableAltScreen={false}>
       <Box flexDirection="column" paddingX={1}>
-        <Box justifyContent="space-between">
-          <Text color="magenta">{`recent ${pageStart + 1}-${Math.min(pageStart + visible.length, items.length)} / ${items.length}`}</Text>
-          <Text color={statusTone}>{truncateText(selectedItem ? `${selectedItem.feature} [${selectedItem.project}]` : statusMessage, Math.max(16, Math.floor(columns / 2)))} </Text>
-        </Box>
         {tileGroups.map((group, rowIndex) => (
-          <Box key={`tile-row-${rowIndex}`} marginTop={rowIndex === 0 ? 0 : 0}>
+          <Box key={`tile-row-${rowIndex}`}>
             {group.map((item, columnIndex) => {
-              const absoluteIndex = pageStart + (rowIndex * tileColumns) + columnIndex;
+              const absoluteIndex = layout.pageStart + (rowIndex * layout.tileColumns) + columnIndex;
               return (
-                <Box key={`${item.project}-${item.feature}`} marginRight={columnIndex === group.length - 1 ? 0 : 1} width={tileWidth} flexDirection="column">
-                  {renderTileLine(
+                <Box
+                  key={`${item.project}-${item.feature}`}
+                  marginRight={columnIndex === group.length - 1 ? 0 : 1}
+                  width={layout.tileWidth}
+                  flexDirection="column"
+                >
+                  {renderTileHeader(
                     item,
                     absoluteIndex === selectedIndex,
                     itemSessionBase(item) === currentBase,
-                    tileWidth,
-                    0
+                    layout.tileWidth
                   )}
-                  {renderTileLine(
+                  {renderTileFeatureLine(
                     item,
                     absoluteIndex === selectedIndex,
                     itemSessionBase(item) === currentBase,
-                    tileWidth,
-                    1
+                    layout.tileWidth
                   )}
+                  {renderTileMetricsLine(item, absoluteIndex === selectedIndex, itemSessionBase(item) === currentBase, layout.tileWidth)}
                 </Box>
               );
             })}
@@ -246,9 +299,13 @@ export default function TmuxNavigatorApp(props: {sessionName: string}) {
         ))}
         <Box justifyContent="space-between">
           <Text color="white">
-            {selectedItem ? `${truncateText(selectedItem.feature, 20)} [${truncateText(selectedItem.project, 16)}]` : 'no selection'}
+            {selectedItem
+              ? `${truncateText(selectedItem.feature, 24)} [${truncateText(selectedItem.project, 16)}]`
+              : statusMessage}
           </Text>
-          <Text color="gray">{selectedItem ? truncateText(selectedItem.branch, 18) : ''}</Text>
+          <Text color="gray">
+            {selectedItem ? truncateText(`pr ${selectedItem.prText}  diff ${selectedItem.diffText}  sync ${selectedItem.changesText}`, Math.max(20, Math.floor(columns / 2))) : ''}
+          </Text>
         </Box>
         <Box>
           {renderBottomActions(selectedItem, selectedActionMode, currentMode)}
@@ -258,7 +315,31 @@ export default function TmuxNavigatorApp(props: {sessionName: string}) {
   );
 }
 
-const MIN_TILE_WIDTH = 20;
+const STATUS_CHIP_WIDTH = 13;
+const MIN_TILE_WIDTH = 30;
+const TILE_LINE_COUNT = 3;
+const SUMMARY_LINE_Y = 1;
+const ACTION_LINE_Y = 2;
+
+export type LayoutInfo = {
+  tileColumns: number;
+  tileRows: number;
+  visibleCount: number;
+  tileWidth: number;
+  pageStart: number;
+};
+
+export function computeLayout(columns: number, rows: number, itemCount: number, selectedIndex: number): LayoutInfo {
+  const tileColumns = Math.min(3, Math.max(1, Math.floor((columns + 1) / (MIN_TILE_WIDTH + 1))));
+  const tileRows = rows >= 8 ? 2 : 1;
+  const visibleCount = Math.min(6, Math.max(1, tileColumns * tileRows));
+  const computedWidth = Math.floor((columns - Math.max(0, tileColumns - 1)) / tileColumns);
+  const tileWidth = Math.max(18, Math.min(columns, Math.max(MIN_TILE_WIDTH, computedWidth)));
+  const pageStart = itemCount === 0
+    ? 0
+    : Math.max(0, Math.floor(selectedIndex / visibleCount) * visibleCount);
+  return {tileColumns, tileRows, visibleCount, tileWidth, pageStart};
+}
 
 function modeColor(mode: NavMode): 'green' | 'blue' | 'magenta' {
   if (mode === 'agent') return 'green';
@@ -273,7 +354,7 @@ function modePill(mode: NavMode): string {
 }
 
 function truncateText(value: string, width: number): string {
-  if (value.length <= width) return value;
+  if (stringDisplayWidth(value) <= width) return value;
   if (width <= 3) return value.slice(0, width);
   return `${value.slice(0, width - 3)}...`;
 }
@@ -286,24 +367,47 @@ function sessionState(tmux: TmuxService, sessionName: string, sessions: Set<stri
   };
 }
 
-function renderTileLine(item: NavWorktree, selected: boolean, current: boolean, width: number, line: 0 | 1): JSX.Element {
+function renderTileHeader(item: NavWorktree, selected: boolean, current: boolean, width: number): JSX.Element {
+  const metaWidth = Math.max(8, width - STATUS_CHIP_WIDTH - 1);
+  const metaBg = selected ? 'yellow' : current ? 'cyan' : 'gray';
+  const metaFg = selected || current ? 'black' : 'white';
+  const right = current ? 'LIVE' : `${item.worktree.session?.attached ? 'ATTN' : 'NAV '}`;
+  const left = truncateText(item.project, Math.max(5, metaWidth - right.length - 1));
+  return (
+    <Box>
+      <StatusChip
+        label={item.statusMeta.label || ''}
+        color={item.statusMeta.bg}
+        fg={item.statusMeta.fg}
+        width={STATUS_CHIP_WIDTH}
+      />
+      <Text color={metaFg} backgroundColor={metaBg}>
+        {padTile(left, right, metaWidth)}
+      </Text>
+    </Box>
+  );
+}
+
+function renderTileFeatureLine(item: NavWorktree, selected: boolean, current: boolean, width: number): JSX.Element {
   const bg = selected ? 'yellow' : current ? 'cyan' : 'blue';
   const fg = selected || current ? 'black' : 'white';
-  if (line === 0) {
-    const left = truncateText(item.feature, Math.max(8, width - 6));
-    const right = current ? 'LIVE' : '    ';
-    return (
-      <Text color={fg} backgroundColor={bg}>
-        {padTile(`${left}`, `${right}`, width)}
-      </Text>
-    );
-  }
-
-  const project = truncateText(item.project, Math.max(5, width - 8));
-  const badges = modeOrder.map((mode) => compactModeState(mode, item.sessions[mode])).join(' ');
+  const left = truncateText(item.feature, Math.max(8, width - 10));
+  const right = item.branch && item.branch !== item.feature ? truncateText(item.branch.replace(/^refs\/heads\//, ''), 8) : '';
   return (
     <Text color={fg} backgroundColor={bg}>
-      {padTile(project, badges, width)}
+      {padTile(left, right, width)}
+    </Text>
+  );
+}
+
+function renderTileMetricsLine(item: NavWorktree, selected: boolean, current: boolean, width: number): JSX.Element {
+  const bg = selected ? 'yellow' : current ? 'cyan' : 'black';
+  const fg = selected || current ? 'black' : 'white';
+  const left = `${modeStatusSummary(item)} ${item.diffText}`;
+  const right = `${item.changesText} ${item.prText}`.trim();
+  return (
+    <Text color={fg} backgroundColor={bg}>
+      {padTile(left, right, width)}
     </Text>
   );
 }
@@ -330,7 +434,7 @@ function renderBottomActions(
   );
 }
 
-function renderActionLabel(mode: NavMode, state: {exists: boolean; usable: boolean} | undefined, current: boolean): string {
+export function renderActionLabel(mode: NavMode, state: {exists: boolean; usable: boolean} | undefined, current: boolean): string {
   const label = modePill(mode).trim();
   const status = state ? compactModeState(mode, state) : '--';
   return `${current ? '*' : ' '}${label} ${status} `;
@@ -340,28 +444,34 @@ function itemSessionBase(item: NavWorktree): string {
   return `dev-${item.project}-${item.feature}`;
 }
 
-function tileHitTarget(x: number, y: number, columns: number, visibleCount: number): number | null {
-  if (y < 3 || y > 6 || visibleCount === 0) return null;
-  const tileColumns = Math.min(3, Math.max(1, Math.floor((columns + 1) / (MIN_TILE_WIDTH + 1))));
-  const tileWidth = Math.max(18, Math.floor((columns - Math.max(0, tileColumns - 1)) / tileColumns));
-  const row = Math.floor((y - 3) / 2);
-  const rowY = (y - 3) % 2;
-  if (rowY < 0 || rowY > 1) return null;
-  const localIndex = Math.floor((x - 1) / (tileWidth + 1));
-  if (localIndex < 0 || localIndex >= tileColumns) return null;
-  const xOffset = (x - 1) % (tileWidth + 1);
-  if (xOffset >= tileWidth) return null;
-  const absoluteLocal = row * tileColumns + localIndex;
-  if (absoluteLocal >= visibleCount) return null;
+export function tileHitTarget(x: number, y: number, layout: LayoutInfo): number | null {
+  const maxTileY = layout.tileRows * TILE_LINE_COUNT;
+  if (y < 1 || y > maxTileY || layout.visibleCount === 0) return null;
+  const row = Math.floor((y - 1) / TILE_LINE_COUNT);
+  const localIndex = Math.floor((x - 1) / (layout.tileWidth + 1));
+  if (localIndex < 0 || localIndex >= layout.tileColumns) return null;
+  const xOffset = (x - 1) % (layout.tileWidth + 1);
+  if (xOffset >= layout.tileWidth) return null;
+  const absoluteLocal = row * layout.tileColumns + localIndex;
+  if (absoluteLocal >= layout.visibleCount) return null;
   return absoluteLocal;
 }
 
-function bottomActionHit(x: number, y: number, columns: number): NavMode | 'close' | 'back' | null {
-  if (y !== 9) return null;
+export function bottomActionHit(
+  x: number,
+  y: number,
+  columns: number,
+  layout: LayoutInfo,
+  selectedItem: NavWorktree | null,
+  currentMode: NavMode
+): NavMode | 'close' | 'back' | null {
+  const summaryY = (layout.tileRows * TILE_LINE_COUNT) + SUMMARY_LINE_Y;
+  const actionY = summaryY + ACTION_LINE_Y - 1;
+  if (y !== actionY) return null;
   const labels: Array<{kind: NavMode | 'close' | 'back'; label: string}> = [
-    {kind: 'agent', label: ' 1 Agent up '},
-    {kind: 'shell', label: ' 2 Shell up '},
-    {kind: 'run', label: ' 3 Run up '},
+    {kind: 'agent', label: renderActionLabel('agent', selectedItem?.sessions.agent, currentMode === 'agent')},
+    {kind: 'shell', label: renderActionLabel('shell', selectedItem?.sessions.shell, currentMode === 'shell')},
+    {kind: 'run', label: renderActionLabel('run', selectedItem?.sessions.run, currentMode === 'run')},
     {kind: 'close', label: ' Close '},
     {kind: 'back', label: ' Back '},
   ];
@@ -376,10 +486,14 @@ function bottomActionHit(x: number, y: number, columns: number): NavMode | 'clos
   return null;
 }
 
-function compactModeState(mode: NavMode, state: {exists: boolean; usable: boolean}): string {
+export function compactModeState(mode: NavMode, state: {exists: boolean; usable: boolean}): string {
   if (state.usable) return modeLabel(mode);
   if (state.exists) return '!';
   return '-';
+}
+
+export function modeStatusSummary(item: NavWorktree): string {
+  return modeOrder.map((mode) => `${modeLabel(mode)}${compactModeState(mode, item.sessions[mode])}`).join(' ');
 }
 
 function padTile(left: string, right: string, width: number): string {
