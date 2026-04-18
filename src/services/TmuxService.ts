@@ -185,6 +185,43 @@ export class TmuxService {
     if (navPane) runCommand(['tmux', 'select-pane', '-t', navPane], { env: this.tmuxEnv });
   }
 
+  hasUsableMainPane(sessionName: string): boolean {
+    const panes = this.listPaneDetailsSync(sessionName);
+    return panes.some((pane) => pane.title !== NAV_PANE_TITLE && pane.id !== this.getSessionOptionValue(sessionName, '@devteam_nav_pane'));
+  }
+
+  ensureMainPane(sessionName: string, cwd: string, command?: string): void {
+    const panes = this.listPaneDetailsSync(sessionName);
+    const navPane = panes.find((pane) => pane.title === NAV_PANE_TITLE);
+    const mainPane = panes.find((pane) => pane.title !== NAV_PANE_TITLE);
+
+    if (mainPane) {
+      runCommand(['tmux', 'select-pane', '-t', mainPane.id, '-T', MAIN_PANE_TITLE], { env: this.tmuxEnv });
+      this.setSessionOption(sessionName, '@devteam_main_pane', mainPane.id);
+      return;
+    }
+
+    const anchor = navPane?.id || `${sessionName}:0.0`;
+    const created = runCommandQuick([
+      'tmux',
+      'split-window',
+      '-vf',
+      '-t',
+      anchor,
+      '-c',
+      cwd,
+      '-P',
+      '-F',
+      '#{pane_id}',
+      command || (process.env.SHELL || '/bin/bash'),
+    ], undefined, this.tmuxEnv);
+
+    if (created) {
+      runCommand(['tmux', 'select-pane', '-t', created, '-T', MAIN_PANE_TITLE], { env: this.tmuxEnv });
+      this.setSessionOption(sessionName, '@devteam_main_pane', created);
+    }
+  }
+
   prepareSessionNavigator(sessionName: string): void {
     if (!this.hasSession(sessionName)) return;
 

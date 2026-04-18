@@ -144,21 +144,30 @@ export default function TmuxNavigatorApp(props: {sessionName: string}) {
     const item = items[index];
     if (!item) return;
     const targetSession = modeSessionName(tmux, item.project, item.feature, mode);
+    const exists = tmux.hasSession(targetSession);
+    const needsMainPane = exists && !tmux.hasUsableMainPane(targetSession);
 
-    if (!tmux.hasSession(targetSession)) {
+    if (!exists || needsMainPane) {
       if (mode === 'agent') {
         const remembered = getLastTool(item.path);
         const tool = ((remembered && remembered !== 'none') ? remembered : (availableTools[0] || 'none')) as AITool;
-        if (tool === 'none') {
-          tmux.createSession(targetSession, item.path, true);
+        if (!exists) {
+          if (tool === 'none') {
+            tmux.createSession(targetSession, item.path, true);
+          } else {
+            tmux.createSessionWithCommand(targetSession, item.path, aiLaunchCommand(tool), true);
+            setLastTool(tool, item.path);
+          }
+        } else if (tool !== 'none') {
+          tmux.ensureMainPane(targetSession, item.path, aiLaunchCommand(tool as Exclude<AITool, 'none'>));
         } else {
-          tmux.createSessionWithCommand(targetSession, item.path, aiLaunchCommand(tool), true);
-          setLastTool(tool, item.path);
+          tmux.ensureMainPane(targetSession, item.path);
         }
       } else if (mode === 'shell') {
-        tmux.createSession(targetSession, item.path, false);
+        if (!exists) tmux.createSession(targetSession, item.path, false);
+        else tmux.ensureMainPane(targetSession, item.path);
       } else {
-        const configured = thisRunSession(tmux, item);
+        const configured = thisRunSession(tmux, item, exists);
         if (!configured) return;
       }
     }
@@ -277,9 +286,9 @@ function truncateText(value: string, width: number): string {
   return `${value.slice(0, width - 3)}...`;
 }
 
-function thisRunSession(tmux: TmuxService, item: NavWorktree): boolean {
+function thisRunSession(tmux: TmuxService, item: NavWorktree, exists: boolean): boolean {
   const sessionName = tmux.runSessionName(item.project, item.feature);
-  tmux.createSession(sessionName, item.path, false);
+  if (!exists) tmux.createSession(sessionName, item.path, false);
   const configPath = path.join(getProjectsDirectory(), item.project, RUN_CONFIG_FILE);
   if (!fs.existsSync(configPath)) {
     return false;
@@ -294,6 +303,9 @@ function thisRunSession(tmux: TmuxService, item: NavWorktree): boolean {
   try { tmux.setSessionOption(sessionName, 'remain-on-exit', detachOnExit ? 'on' : 'off'); } catch {}
   if (!mainCmd || typeof mainCmd !== 'string' || mainCmd.trim().length === 0) {
     return false;
+  }
+  if (exists) {
+    tmux.ensureMainPane(sessionName, item.path);
   }
   for (const [k, v] of Object.entries(env)) {
     tmux.sendText(sessionName, `export ${k}=${JSON.stringify(String(v))}`, {executeCommand: true});
