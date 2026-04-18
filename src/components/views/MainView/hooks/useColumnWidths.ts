@@ -22,7 +22,7 @@ export function useColumnWidths(
     const fixedWidths = {
       number: 3,
       status: 13,
-      ai: 7,
+      ai: 9,
       diff: 11,
       changes: 8,
       pr: 8,
