@@ -349,15 +349,6 @@ describe('FakeWorktreeService Operations', () => {
       expect(path).toBe('/fake/projects/test-project/run.json');
     });
 
-    test('createOrFillRunConfig should create config successfully', async () => {
-      // When: Creating run config
-      const result = await worktreeService.createOrFillRunConfig('test-project');
-      
-      // Then: Should succeed
-      expect(result.success).toBe(true);
-      expect(result.content).toContain('"commands"');
-      expect(result.path).toContain('test-project');
-    });
   });
 
   describe('batch operations', () => {

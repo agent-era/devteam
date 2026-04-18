@@ -264,40 +264,6 @@ export class FakeWorktreeService {
   }
 
   /**
-   * Create or fill run config
-   */
-  async createOrFillRunConfig(project: string): Promise<{
-    success: boolean; 
-    content?: string; 
-    path: string; 
-    error?: string;
-  }> {
-    const path = this.getRunConfigPath(project);
-    
-    try {
-      const content = JSON.stringify({
-        commands: {
-          dev: "npm run dev",
-          test: "npm test",
-          build: "npm run build"
-        }
-      }, null, 2);
-      
-      return {
-        success: true,
-        content,
-        path
-      };
-    } catch (error) {
-      return {
-        success: false,
-        path,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      };
-    }
-  }
-
-  /**
    * Refresh worktree data (simulate collecting from filesystem)
    */
   async refresh(): Promise<void> {

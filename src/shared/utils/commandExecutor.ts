@@ -1,4 +1,4 @@
-import {execFileSync, spawnSync, execFile} from 'child_process';
+import {execFileSync, spawnSync, execFile, spawn} from 'child_process';
 import {SUBPROCESS_SHORT_TIMEOUT, SUBPROCESS_TIMEOUT, AI_TOOLS} from '../../constants.js';
 
 // Consolidated command executors (sync + async) with options
@@ -80,36 +80,57 @@ export function runInteractive(cmd: string, args: string[], opts: {cwd?: string}
   return result.status ?? 0;
 }
 
-export function runClaudeSync(prompt: string, cwd?: string): {success: boolean; output: string; error?: string} {
-  try {
-    const res = spawnSync('claude', ['-p', prompt], {
-      cwd,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-      timeout: SUBPROCESS_TIMEOUT,
-    });
-    
-    if (res.status === 0 && res.stdout) {
-      return {
-        success: true,
-        output: res.stdout.trim()
-      };
+export function runClaudeAsync(
+  prompt: string,
+  opts: { cwd?: string; timeoutMs?: number } = {}
+): Promise<{success: boolean; output: string; error?: string}> {
+  return new Promise((resolve) => {
+    const timeoutMs = opts.timeoutMs ?? SUBPROCESS_TIMEOUT;
+    let stdout = '';
+    let stderr = '';
+    let settled = false;
+    let child: ReturnType<typeof spawn>;
+    try {
+      child = spawn('claude', ['-p', prompt], {
+        cwd: opts.cwd,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Unknown error running Claude';
+      resolve({success: false, output: '', error: msg});
+      return;
     }
-    
-    const errorMessage = res.stderr || `Claude exited with code ${res.status}`;
-    return {
-      success: false,
-      output: '',
-      error: errorMessage
-    };
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error running Claude';
-    return {
-      success: false,
-      output: '',
-      error: errorMessage
-    };
-  }
+
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      try { child.kill('SIGTERM'); } catch {}
+      resolve({success: false, output: '', error: `Claude timed out after ${timeoutMs}ms`});
+    }, timeoutMs);
+
+    child.stdout?.setEncoding('utf8');
+    child.stderr?.setEncoding('utf8');
+    child.stdout?.on('data', (chunk) => { stdout += chunk; });
+    child.stderr?.on('data', (chunk) => { stderr += chunk; });
+
+    child.on('error', (err) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve({success: false, output: '', error: err.message});
+    });
+
+    child.on('close', (code) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (code === 0 && stdout) {
+        resolve({success: true, output: stdout.trim()});
+      } else {
+        resolve({success: false, output: '', error: stderr.trim() || `Claude exited with code ${code}`});
+      }
+    });
+  });
 }
 
 /**

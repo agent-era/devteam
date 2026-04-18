@@ -24,6 +24,12 @@ function worktreeFor(project: string, feature: string): WorktreeInfo {
   return wt;
 }
 
+function getExecutedCommands(tmux: FakeTmuxService, sessionName: string): string[] {
+  return tmux.getSentKeys(sessionName)
+    .filter(keys => (keys[0] === 'command' && typeof keys[1] === 'string') || keys[keys.length - 1] === 'C-m')
+    .map(keys => keys[0] === 'command' ? keys[1] : keys[0]);
+}
+
 describe('WorktreeCore auto-resume', () => {
   let tmpDir: string;
   let originalEnv: string | undefined;
@@ -40,15 +46,14 @@ describe('WorktreeCore auto-resume', () => {
     fs.rmSync(tmpDir, {recursive: true, force: true});
   });
 
-  test('attachSession launches claude --continue and records lastTool', async () => {
+  test('attachSession launches claude with shell fallback and records lastTool', async () => {
     const {core, tmux} = buildCore();
     const wt = worktreeFor('proj', 'feat');
 
     await core.attachSession(wt, 'claude');
 
     const sessionName = tmux.sessionName('proj', 'feat');
-    const commandEntries = tmux.getSentKeys(sessionName).filter(k => k[0] === 'command');
-    expect(commandEntries.map(k => k[1])).toEqual(['claude --continue']);
+    expect(getExecutedCommands(tmux, sessionName)).toEqual(['claude --continue || claude']);
     expect(getLastTool(wt.path)).toBe('claude');
   });
 
@@ -60,8 +65,7 @@ describe('WorktreeCore auto-resume', () => {
     await core.attachSession(wt);
 
     const sessionName = tmux.sessionName('proj', 'feat');
-    const commandEntries = tmux.getSentKeys(sessionName).filter(k => k[0] === 'command');
-    expect(commandEntries.map(k => k[1])).toEqual(['codex resume --last']);
+    expect(getExecutedCommands(tmux, sessionName)).toEqual(['codex resume --last']);
   });
 
   test('attachSession with existing tmux session does not re-spawn the tool', async () => {

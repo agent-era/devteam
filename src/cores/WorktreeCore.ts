@@ -5,11 +5,12 @@ import {getProjectsDirectory} from '../config.js';
 import {TmuxService} from '../services/TmuxService.js';
 import {WorkspaceService} from '../services/WorkspaceService.js';
 import {MemoryMonitorService, MemoryStatus} from '../services/MemoryMonitorService.js';
-import {RUN_CONFIG_FILE, DIR_BRANCHES_SUFFIX, TMUX_DISPLAY_TIME} from '../constants.js';
-import {detectAvailableAITools, runCommandQuick} from '../shared/utils/commandExecutor.js';
+import {RUN_CONFIG_FILE, DIR_BRANCHES_SUFFIX, TMUX_DISPLAY_TIME, RUN_CONFIG_CLAUDE_PROMPT, SETTINGS_EDIT_CLAUDE_PROMPT, AI_TOOLS, type ProjectConfig} from '../constants.js';
+import {detectAvailableAITools, runCommandQuick, runClaudeAsync} from '../shared/utils/commandExecutor.js';
 import path from 'node:path';
 import fs from 'node:fs';
 import {startIntervalIfEnabled} from '../shared/utils/intervals.js';
+import {readFileOrNull, extractJsonObject, shellQuote} from '../shared/utils/fileSystem.js';
 import {logDebug, logError} from '../shared/utils/logger.js';
 import {aiLaunchCommand} from '../constants.js';
 import {getLastTool, setLastTool} from '../shared/utils/aiSessionMemory.js';
@@ -277,63 +278,80 @@ export class WorktreeCore implements CoreBase<State> {
   async attachSession(worktree: WorktreeInfo, aiTool?: AITool): Promise<void> {
     const sessionName = this.tmux.sessionName(worktree.project, worktree.feature);
     const sessions = await this.tmux.listSessions();
+    const sessionTool = worktree.session?.ai_tool as AITool | undefined;
+    let selectedTool: AITool = sessionTool && sessionTool !== 'none' ? sessionTool : 'none';
     if (!sessions.includes(sessionName)) {
       // Preference order for which tool to launch:
       //   1. Explicit argument (e.g. from the tool-picker dialog)
       //   2. Tool currently running in the session (won't apply when there's no session)
       //   3. Last tool devteam launched here, remembered across restarts
       //   4. First available installed tool
-      const sessionTool = worktree.session?.ai_tool as AITool | undefined;
       const remembered = getLastTool(worktree.path);
-      let selected: AITool = 'none';
-      if (aiTool && aiTool !== 'none') selected = aiTool;
-      else if (sessionTool && sessionTool !== 'none') selected = sessionTool;
-      else if (remembered) selected = remembered;
-      if (selected === 'none' && this.availableAITools.length >= 1) {
-        selected = this.availableAITools[0];
-      }
-      if (selected !== 'none') {
-        this.tmux.createSessionWithCommand(sessionName, worktree.path, aiLaunchCommand(selected), true);
-        setLastTool(selected, worktree.path);
+      selectedTool = 'none';
+      if (aiTool && aiTool !== 'none') selectedTool = aiTool;
+      else if (sessionTool && sessionTool !== 'none') selectedTool = sessionTool;
+      else if (remembered) selectedTool = remembered;
+      if (selectedTool !== 'none') {
+        const flags = this.getAIToolFlags(worktree.project, selectedTool);
+        const flagStr = flags.length > 0 ? ' ' + flags.map(shellQuote).join(' ') : '';
+        if (selectedTool === 'claude') this.launchClaudeSessionWithFallback(sessionName, worktree.path, flagStr);
+        else this.tmux.createSessionWithCommand(sessionName, worktree.path, aiLaunchCommand(selectedTool) + flagStr, true);
+        setLastTool(selectedTool, worktree.path);
       } else {
         this.tmux.createSession(sessionName, worktree.path, true);
       }
     }
-    this.tmux.attachSessionWithControls(sessionName);
+    this.tmux.attachSessionWithControls(sessionName, {
+      project: worktree.project,
+      worktree: worktree.feature,
+      sessionKind: 'agent',
+      aiTool: selectedTool,
+    });
     await this.refreshSingleWorktree(worktree); // working→idle transition handles cache invalidation
   }
   async attachShellSession(worktree: WorktreeInfo): Promise<void> {
     const name = this.tmux.shellSessionName(worktree.project, worktree.feature);
     const sessions = await this.tmux.listSessions();
     if (!sessions.includes(name)) this.tmux.createSession(name, worktree.path, false);
-    this.tmux.attachSessionWithControls(name);
+    this.tmux.attachSessionWithControls(name, {
+      project: worktree.project,
+      worktree: worktree.feature,
+      sessionKind: 'shell',
+    });
     await this.refreshSingleWorktree(worktree, true); // user may have committed
   }
   async attachRunSession(worktree: WorktreeInfo): Promise<'success' | 'no_config'> {
     const name = this.tmux.runSessionName(worktree.project, worktree.feature);
     const sessions = await this.tmux.listSessions();
     if (!sessions.includes(name)) this.tmux.createSession(name, worktree.path, false);
-    const cfgPath = this.getRunConfigPath(worktree.project);
-    if (!fs.existsSync(cfgPath)) return 'no_config';
-    const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
-    const exec = (cfg?.executionInstructions ?? {}) as any;
-    const mainCmd = exec.mainCommand as string | undefined;
-    const pre: string[] = Array.isArray(exec.preRunCommands) ? exec.preRunCommands.filter(Boolean) : [];
-    const env: Record<string, string> = (exec.environmentVariables && typeof exec.environmentVariables === 'object') ? exec.environmentVariables : {};
-    const detachOnExit: boolean = !!exec.detachOnExit;
-    try { this.tmux.setSessionOption(name, 'remain-on-exit', detachOnExit ? 'on' : 'off'); } catch {}
+    const cfg = this.readProjectConfig(worktree.project);
+    if (!cfg) return 'no_config';
+    const exec = cfg.executionInstructions ?? {};
+    const mainCmd = exec.mainCommand;
+    const pre = Array.isArray(exec.preRunCommands) ? exec.preRunCommands.filter(Boolean) : [];
+    const env = exec.environmentVariables && typeof exec.environmentVariables === 'object' ? exec.environmentVariables : {};
+    // detachOnExit=true means the pane detaches (closes) when the command exits.
+    // detachOnExit=false keeps the pane open so the user can read the output.
+    try { this.tmux.setSessionOption(name, 'remain-on-exit', exec.detachOnExit ? 'off' : 'on'); } catch {}
     if (!mainCmd || typeof mainCmd !== 'string' || mainCmd.trim().length === 0) {
-      this.tmux.attachSessionWithControls(name);
+      this.tmux.attachSessionWithControls(name, {
+        project: worktree.project,
+        worktree: worktree.feature,
+        sessionKind: 'execute',
+      });
       await this.refreshSingleWorktree(worktree);
       return 'no_config';
     }
     for (const [k, v] of Object.entries(env)) {
-      const line = `export ${k}=${JSON.stringify(String(v))}`;
-      this.tmux.sendText(name, line, { executeCommand: true });
+      this.tmux.sendText(name, `export ${k}=${JSON.stringify(String(v))}`, { executeCommand: true });
     }
     for (const cmd of pre) this.tmux.sendText(name, cmd, { executeCommand: true });
     this.tmux.sendText(name, mainCmd, { executeCommand: true });
-    this.tmux.attachSessionWithControls(name);
+    this.tmux.attachSessionWithControls(name, {
+      project: worktree.project,
+      worktree: worktree.feature,
+      sessionKind: 'execute',
+    });
     await this.refreshSingleWorktree(worktree);
     return 'success';
   }
@@ -354,28 +372,44 @@ export class WorktreeCore implements CoreBase<State> {
 
   // Run config
   getRunConfigPath(project: string): string { return path.join(this.git.basePath, project, RUN_CONFIG_FILE); }
-  async createOrFillRunConfig(project: string): Promise<{success: boolean; content?: string; path: string; error?: string}> {
+
+  readConfigContent(project: string): string | null {
+    return readFileOrNull(this.getRunConfigPath(project));
+  }
+
+  async generateConfigWithAI(project: string): Promise<{success: boolean; content?: string; path: string; error?: string}> {
+    return this.runConfigPrompt(project, RUN_CONFIG_CLAUDE_PROMPT);
+  }
+
+  async editConfigWithAI(project: string, userPrompt: string): Promise<{success: boolean; content?: string; path: string; error?: string}> {
+    const current = this.readConfigContent(project) || '{}';
+    // Single-pass substitution so a {USER_PROMPT} literal inside the config isn't
+    // replaced by the user's text (or vice versa).
+    const tokens: Record<string, string> = {'{CURRENT_CONFIG}': current, '{USER_PROMPT}': userPrompt};
+    const prompt = SETTINGS_EDIT_CLAUDE_PROMPT.replace(/\{CURRENT_CONFIG\}|\{USER_PROMPT\}/g, m => tokens[m]);
+    return this.runConfigPrompt(project, prompt);
+  }
+
+  applyConfig(project: string, content: string): {success: boolean; error?: string} {
+    try { JSON.parse(content); } catch (e) {
+      return {success: false, error: `Invalid JSON: ${e instanceof Error ? e.message : String(e)}`};
+    }
+    try {
+      this.git.writeRunConfig(project, content);
+      return {success: true};
+    } catch (e) {
+      return {success: false, error: e instanceof Error ? e.message : String(e)};
+    }
+  }
+
+  private async runConfigPrompt(project: string, prompt: string): Promise<{success: boolean; content?: string; path: string; error?: string}> {
     const projectPath = path.join(this.git.basePath, project);
     const cfgPath = this.getRunConfigPath(project);
-    try {
-      let content: string;
-      if (fs.existsSync(cfgPath)) content = fs.readFileSync(cfgPath, 'utf8');
-      else {
-        content = JSON.stringify({
-          executionInstructions: {
-            mainCommand: '',
-            preRunCommands: [],
-            environmentVariables: {},
-            detachOnExit: false
-          },
-          notes: ''
-        }, null, 2);
-        this.git.writeRunConfig(project, content);
-      }
-      return {success: true, content, path: cfgPath};
-    } catch (e) {
-      return {success: false, path: cfgPath, error: e instanceof Error ? e.message : String(e)};
-    }
+    const result = await runClaudeAsync(prompt, {cwd: projectPath});
+    if (!result.success) return {success: false, path: cfgPath, error: result.error || 'Claude failed'};
+    const extracted = extractJsonObject(result.output);
+    if (!extracted) return {success: false, path: cfgPath, error: 'Claude response was not valid JSON'};
+    return {success: true, content: extracted, path: cfgPath};
   }
 
   // Internals
@@ -392,11 +426,39 @@ export class WorktreeCore implements CoreBase<State> {
   }
 
   private setupWorktreeEnvironment(projectName: string, worktreePath: string): void {
-    // Copy .env and link .claude if present
-    try { this.git.copyEnvironmentFile(projectName, worktreePath); } catch {}
-    try { this.git.linkClaudeSettings(projectName, worktreePath); } catch {}
-    // Best-effort: show tmux display message
+    const setup = this.readProjectConfig(projectName)?.worktreeSetup;
+    if (setup) {
+      // Config present (even if arrays are empty) means the user has opted in to
+      // config-driven setup — honor it exactly. Missing/empty arrays = do nothing.
+      for (const rel of setup.copyFiles || []) {
+        if (typeof rel === 'string' && rel.trim()) {
+          try { this.git.copyPath(projectName, worktreePath, rel); } catch {}
+        }
+      }
+      for (const rel of setup.symlinkPaths || []) {
+        if (typeof rel === 'string' && rel.trim()) {
+          try { this.git.symlinkPath(projectName, worktreePath, rel); } catch {}
+        }
+      }
+    } else {
+      // No worktreeSetup section: fall back to the pre-config hardcoded behavior.
+      try { this.git.copyEnvironmentFile(projectName, worktreePath); } catch {}
+      try { this.git.linkClaudeSettings(projectName, worktreePath); } catch {}
+    }
     try { runCommandQuick(['tmux', 'display-message', '-d', `${TMUX_DISPLAY_TIME}`, `Created ${worktreePath}`]); } catch {}
+  }
+
+  private readProjectConfig(project: string): ProjectConfig | null {
+    const raw = this.readConfigContent(project);
+    if (!raw) return null;
+    try { return JSON.parse(raw) as ProjectConfig; } catch { return null; }
+  }
+
+  private getAIToolFlags(project: string, tool: AITool): string[] {
+    if (tool === 'none') return [];
+    const entry = this.readProjectConfig(project)?.aiToolSettings?.[tool];
+    const flags = entry?.flags;
+    return Array.isArray(flags) ? flags.filter((f) => typeof f === 'string' && f.length > 0) : [];
   }
 
   private async terminateFeatureSessions(projectName: string, featureName: string): Promise<void> {
@@ -405,6 +467,12 @@ export class WorktreeCore implements CoreBase<State> {
     const rn = this.tmux.runSessionName(projectName, featureName);
     const active = await this.tmux.listSessions();
     for (const name of [s, sh, rn]) { if (active.includes(name)) this.tmux.killSession(name); }
+  }
+
+  private launchClaudeSessionWithFallback(sessionName: string, cwd: string, flagStr: string = ''): void {
+    const continueCmd = aiLaunchCommand('claude') + flagStr;
+    const fallbackCmd = 'claude' + flagStr;
+    this.tmux.createSessionWithCommand(sessionName, cwd, `${continueCmd} || ${fallbackCmd}`, true);
   }
 
   private setState(partial: Partial<State>): void {

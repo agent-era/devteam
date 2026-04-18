@@ -7,6 +7,8 @@ import {memoryStore} from './stores.js';
 export class FakeTmuxService extends TmuxService {
   private sentKeys: Array<{session: string, keys: string[]}> = [];
   private sessions = new Map<string, SessionInfo>();
+  private failClaudeContinueSessions = new Set<string>();
+  private sessionOptions = new Map<string, Map<string, string>>();
 
   constructor() {
     super(new FakeAIToolService());
@@ -145,6 +147,7 @@ export class FakeTmuxService extends TmuxService {
     const { addNewline = false, executeCommand = false } = options;
     
     if (executeCommand) {
+      this.applyCommandEffect(session, text);
       this.recordSentKeys(session, [text, 'C-m']);
     } else if (addNewline) {
       this.recordSentKeys(session, [text + '\n']);
@@ -188,13 +191,42 @@ export class FakeTmuxService extends TmuxService {
   }
 
   setSessionOption(session: string, option: string, value: string): void {
-    // Mock implementation - just store for testing if needed
+    const existing = this.sessionOptions.get(session) || new Map<string, string>();
+    existing.set(option, value);
+    this.sessionOptions.set(session, existing);
   }
 
   async listPanes(session: string): Promise<string> {
     const sessionInfo = this.sessions.get(session) || memoryStore.sessions.get(session);
     if (!sessionInfo) return '';
     return '0.0 bash\n1.0 claude'; // Mock pane list
+  }
+
+  configureSessionUI(session: string, metadata?: {project: string; worktree: string; sessionKind: 'agent' | 'execute' | 'shell'; aiTool?: AITool}): void {
+    if (!metadata) return;
+    this.setSessionOption(session, '@devteam_project', metadata.project);
+    this.setSessionOption(session, '@devteam_worktree', metadata.worktree);
+    const label = metadata.sessionKind === 'agent' ? 'AGENT' : metadata.sessionKind === 'execute' ? 'EXECUTE' : 'SHELL';
+    const value = metadata.sessionKind === 'agent'
+      ? metadata.aiTool === 'claude'
+        ? 'claude'
+        : metadata.aiTool === 'codex'
+          ? 'codex'
+          : metadata.aiTool === 'gemini'
+            ? 'gemini'
+            : ''
+      : '';
+    const labelBg = 'colour31';
+    const valueBg = 'colour117';
+    const chip = value
+      ? `#[fg=colour231,bg=${labelBg},bold] ${label} #[fg=colour232,bg=${valueBg},bold] ${value} `
+      : `#[fg=colour231,bg=${labelBg},bold] ${label} `;
+    this.setSessionOption(session, '@devteam_session_chip', chip);
+  }
+
+  attachSessionWithControls(sessionName: string, metadata?: {project: string; worktree: string; sessionKind: 'agent' | 'execute' | 'shell'; aiTool?: AITool}): void {
+    this.configureSessionUI(sessionName, metadata);
+    this.attachSessionInteractive(sessionName);
   }
 
   // Test helpers
@@ -257,6 +289,10 @@ export class FakeTmuxService extends TmuxService {
 
 
   // Helper methods for testing AI tools
+  failNextClaudeContinue(session: string): void {
+    this.failClaudeContinueSessions.add(session);
+  }
+
   setAITool(session: string, tool: AITool): void {
     const sessionInfo = this.sessions.get(session) || memoryStore.sessions.get(session);
     if (sessionInfo) {
@@ -298,6 +334,37 @@ export class FakeTmuxService extends TmuxService {
   // Clear sent keys history
   clearSentKeys(): void {
     this.sentKeys = [];
+  }
+
+  private applyCommandEffect(session: string, text: string): void {
+    const sessionInfo = this.sessions.get(session) || memoryStore.sessions.get(session);
+    if (!sessionInfo) return;
+    const command = text.trim();
+
+    if (command === 'claude --continue') {
+      if (this.failClaudeContinueSessions.delete(session)) {
+        sessionInfo.ai_tool = 'none';
+        sessionInfo.ai_status = 'active';
+        sessionInfo.claude_status = 'active';
+      } else {
+        sessionInfo.ai_tool = 'claude';
+        sessionInfo.ai_status = 'idle';
+        sessionInfo.claude_status = 'idle';
+      }
+    } else if (command === 'claude') {
+      sessionInfo.ai_tool = 'claude';
+      sessionInfo.ai_status = 'idle';
+      sessionInfo.claude_status = 'idle';
+    } else if (command.includes('codex')) {
+      sessionInfo.ai_tool = 'codex';
+      sessionInfo.ai_status = 'idle';
+    } else if (command.includes('gemini')) {
+      sessionInfo.ai_tool = 'gemini';
+      sessionInfo.ai_status = 'idle';
+    }
+
+    this.sessions.set(session, sessionInfo);
+    try { memoryStore.sessions.set(session, sessionInfo); } catch {}
   }
   
   // Helper method to determine if a session should be preserved
