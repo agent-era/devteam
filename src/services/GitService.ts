@@ -17,9 +17,18 @@ import {Timer} from '../shared/utils/timing.js';
 
 export class GitService {
   basePath: string;
+  private baseBranchCache = new Map<string, string>();
 
   constructor(basePath: string) {
     this.basePath = basePath;
+  }
+
+  private getBaseBranch(repoPath: string): string {
+    const cached = this.baseBranchCache.get(repoPath);
+    if (cached !== undefined) return cached;
+    const result = findBaseBranch(repoPath, BASE_BRANCH_CANDIDATES);
+    this.baseBranchCache.set(repoPath, result);
+    return result;
   }
 
   discoverProjects(): ProjectInfo[] {
@@ -158,8 +167,9 @@ export class GitService {
       status.untracked_lines = await this.countUntrackedLines(worktreePath, porcelainStatus);
     }
     
-    await this.addBaseBranchComparison(worktreePath, status);
-    await this.addRemoteTrackingInfo(worktreePath, status);
+    const base = this.getBaseBranch(worktreePath);
+    await this.addBaseBranchComparison(worktreePath, status, base);
+    await this.addRemoteTrackingInfo(worktreePath, status, base);
     
     // Only log if there are significant changes
     if (status.modified_files > 5 || status.added_lines + status.deleted_lines > 50) {
@@ -184,7 +194,7 @@ export class GitService {
     runCommand(['git', '-C', mainRepo, 'fetch', 'origin'], {timeout: 30000});
     
     // Find the base branch (main or master)
-    const baseBranch = findBaseBranch(mainRepo, BASE_BRANCH_CANDIDATES);
+    const baseBranch = this.getBaseBranch(mainRepo);
     if (!baseBranch) return false;
     
     // Ensure we use the origin version of the base branch
@@ -223,7 +233,7 @@ export class GitService {
 
     const worktrees = await this.getWorktreesForProject(new ProjectInfo({name: project, path: mainRepo}));
     const existing = worktrees.map((wt) => wt.branch.replace('refs/heads/', ''));
-    const base = findBaseBranch(mainRepo, BASE_BRANCH_CANDIDATES);
+    const base = this.getBaseBranch(mainRepo);
     if (!base) return branches;
 
     const candidateBranches = this.parseBranchCandidates(output, existing, base);
@@ -260,8 +270,7 @@ export class GitService {
     return untracked;
   }
 
-  private async addBaseBranchComparison(worktreePath: string, status: GitStatus): Promise<void> {
-    const base = findBaseBranch(worktreePath);
+  private async addBaseBranchComparison(worktreePath: string, status: GitStatus, base: string): Promise<void> {
     if (base) {
       const mergeBase = await runCommandQuickAsync(['git', '-C', worktreePath, 'merge-base', 'HEAD', base]);
       if (mergeBase) {
@@ -273,9 +282,8 @@ export class GitService {
     }
   }
 
-  private async addRemoteTrackingInfo(worktreePath: string, status: GitStatus): Promise<void> {
+  private async addRemoteTrackingInfo(worktreePath: string, status: GitStatus, base: string): Promise<void> {
     // First, compute ahead/behind relative to the base branch (consistent display semantics)
-    const base = findBaseBranch(worktreePath);
     if (base) {
       try {
         const revListBase = await runCommandQuickAsync(['git', '-C', worktreePath, 'rev-list', '--left-right', '--count', `HEAD...${base}`]);
