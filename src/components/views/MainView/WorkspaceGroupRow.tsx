@@ -3,9 +3,9 @@ import {Box, Text} from 'ink';
 import type {WorktreeInfo} from '../../../models.js';
 import type {ColumnWidths} from './hooks/useColumnWidths.js';
 import {stringDisplayWidth} from '../../../shared/utils/formatting.js';
-import {getAIToolLabel, getAIStatusColor} from './utils.js';
+import {getAIStatusLabel, getAIStatusColor} from './utils.js';
 import StatusChip from '../../common/StatusChip.js';
-import {getAIStatusMeta} from './highlight.js';
+import {getStatusMeta} from './highlight.js';
 
 interface WorkspaceGroupRowProps {
   workspace: WorktreeInfo; // header item with is_workspace_header
@@ -17,7 +17,7 @@ interface WorkspaceGroupRowProps {
 
 export const WorkspaceGroupRow = memo<WorkspaceGroupRowProps>(({workspace, globalIndex, selected, columnWidths}) => {
   const numberText = String(globalIndex + 1);
-  const aiLabel = getAIToolLabel(workspace.session?.ai_tool || '', workspace.session?.attached || false);
+  const aiLabel = getAIStatusLabel(workspace.session?.ai_status || '', workspace.session?.attached || false);
   const aiColor = getAIStatusColor(workspace.session?.ai_status || '', workspace.session?.attached || false);
   const headerText = `${workspace.feature} [workspace]`;
   const truncatedHeader = stringDisplayWidth(headerText) > columnWidths.projectFeature
@@ -32,7 +32,7 @@ export const WorkspaceGroupRow = memo<WorkspaceGroupRowProps>(({workspace, globa
     {text: '', width: columnWidths.pr, justify: 'flex-end' as const},
   ];
 
-  const {label: statusLabel, bg: statusBg, fg: statusFg} = getAIStatusMeta(workspace);
+  const {label: statusLabel, bg: statusBg, fg: statusFg} = getStatusMeta(workspace, undefined);
 
   const formatCellText = (text: string, width: number, justify: 'flex-start' | 'center' | 'flex-end'): string => {
     const raw = (text ?? '').trim();

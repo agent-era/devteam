@@ -4,7 +4,7 @@ import type {WorktreeInfo} from '../../../models.js';
 import {stringDisplayWidth} from '../../../shared/utils/formatting.js';
 import {useHighlightPriority} from './hooks/useHighlightPriority.js';
 import type {PRStatus} from '../../../models.js';
-import { formatDiffStats, formatGitChanges, getAIToolLabel, getAIStatusColor, formatPRStatus, shouldDimRow } from './utils.js';
+import { formatDiffStats, formatGitChanges, getAIStatusLabel, getAIStatusColor, formatPRStatus, shouldDimRow } from './utils.js';
 import type {ColumnWidths} from './hooks/useColumnWidths.js';
 import StatusChip from '../../common/StatusChip.js';
 import {getStatusMeta} from './highlight.js';
@@ -37,7 +37,7 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
     projectFeature: worktree.is_workspace_child
       ? `${worktree.is_last_workspace_child ? '└─' : '├─'} [${worktree.project}]`
       : `${worktree.feature} [${worktree.project}]`,
-    ai: getAIToolLabel(worktree.session?.ai_tool || '', worktree.session?.attached || false),
+    ai: getAIStatusLabel(worktree.session?.ai_status || '', worktree.session?.attached || false),
     diff: formatDiffStats(worktree.git?.base_added_lines || 0, worktree.git?.base_deleted_lines || 0),
     changes: formatGitChanges(worktree.git?.ahead || 0, worktree.git?.behind || 0),
     pr: formatPRStatus(pr),

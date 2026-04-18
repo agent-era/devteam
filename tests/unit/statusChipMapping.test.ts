@@ -23,12 +23,10 @@ describe('STATUS chip mapping', () => {
     expect(meta.fg).toBe('magenta');
   });
 
-  test('AI working => plain working, no bg', () => {
+  test('AI working with no code state => empty STATUS chip (AI column handles it)', () => {
     const worktree = wt({session: new SessionInfo({attached: true, session_name: 's', ai_status: 'working', ai_tool: 'none'})});
-    const pr = undefined;
-    const meta = getStatusMeta(worktree, pr as any);
-    expect(meta.label).toBe('working');
-    expect(meta.bg).toBe('none');
+    const meta = getStatusMeta(worktree, undefined as any);
+    expect(meta.label).toBe('');
   });
 
   test('PR merged => plain grey merged, no bg', () => {
@@ -50,12 +48,11 @@ describe('STATUS chip mapping', () => {
     expect(meta.fg).toBe('cyan');
   });
 
-  test('No PR and no base diff => ready', () => {
+  test('No PR and no base diff => empty STATUS chip', () => {
     const baseGit = wt().git;
-    // No base diff, nothing to push
     const worktree = wt({git: {...baseGit, has_remote: true, ahead: 0, is_pushed: false, base_added_lines: 0, base_deleted_lines: 0}});
     const pr = new PRStatus({loadingStatus: 'no_pr'});
     const meta = getStatusMeta(worktree, pr);
-    expect(meta.label).toBe('ready');
+    expect(meta.label).toBe('');
   });
 });

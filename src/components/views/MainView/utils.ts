@@ -32,9 +32,13 @@ export function formatPushStatus(worktree: WorktreeInfo): string {
   return 'x';
 }
 
-export function getAIToolLabel(aiTool: string, attached: boolean): string {
-  if (!attached || !aiTool || aiTool === 'none') return '';
-  return aiTool;
+export function getAIStatusLabel(aiStatus: string, attached: boolean): string {
+  if (!attached) return '';
+  const s = aiStatus.toLowerCase();
+  if (s.includes('waiting')) return 'waiting';
+  if (s.includes('working')) return 'working';
+  if (s.includes('idle') || s.includes('active')) return 'idle';
+  return '';
 }
 
 export function getAIStatusColor(aiStatus: string, attached: boolean): string | undefined {
@@ -43,7 +47,7 @@ export function getAIStatusColor(aiStatus: string, attached: boolean): string | 
   if (s.includes('waiting')) return 'yellow';
   if (s.includes('working')) return 'cyan';
   if (s.includes('idle') || s.includes('active')) return 'gray';
-  return 'gray';
+  return undefined;
 }
 
 export function formatPRStatus(pr: WorktreeInfo['pr']): string {

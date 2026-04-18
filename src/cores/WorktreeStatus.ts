@@ -92,6 +92,29 @@ export function computeWorktreeStatus(w: WorktreeInfo, pr?: PRStatus | null): Wo
   return { reason: WorktreeStatusReason.NONE, severity: 'none', aspect: 'none' };
 }
 
+export function computeCodeStatus(w: WorktreeInfo, pr?: PRStatus | null): WorktreeStatus {
+  if (pr && (pr.is_merged || pr.state === 'MERGED')) {
+    return {reason: WorktreeStatusReason.PR_MERGED, severity: 'info', aspect: 'pr'};
+  }
+  if (w?.git?.has_changes) {
+    return {reason: WorktreeStatusReason.UNCOMMITTED_CHANGES, severity: 'info', aspect: 'diff'};
+  }
+  if (Number(w?.git?.ahead || 0) > 0) {
+    return {reason: WorktreeStatusReason.UNPUSHED_COMMITS, severity: 'info', aspect: 'sync'};
+  }
+  if (pr) {
+    if (pr.has_conflicts) return {reason: WorktreeStatusReason.PR_CONFLICTS, severity: 'error', aspect: 'pr'};
+    if (pr.checks === 'failing') return {reason: WorktreeStatusReason.PR_FAILING, severity: 'error', aspect: 'pr'};
+    if (pr.is_open && pr.number && pr.checks === 'pending') return {reason: WorktreeStatusReason.PR_CHECKING, severity: 'warn', aspect: 'pr'};
+    if (pr.is_ready_to_merge) return {reason: WorktreeStatusReason.PR_READY_TO_MERGE, severity: 'success', aspect: 'pr'};
+    if (pr.noPR) {
+      if (!!w?.git?.has_remote && hasCommittedBaseDiff(w)) return {reason: WorktreeStatusReason.NO_PR, severity: 'info', aspect: 'pr'};
+    }
+    if (pr.is_open && pr.number) return {reason: WorktreeStatusReason.PR_READY_TO_MERGE, severity: 'success', aspect: 'pr'};
+  }
+  return {reason: WorktreeStatusReason.NONE, severity: 'none', aspect: 'none'};
+}
+
 export function computeAIWorktreeStatus(w: WorktreeInfo): WorktreeStatus {
   const ai = w?.session?.ai_status as AIStatus | undefined;
   if (ai === 'waiting') return { reason: WorktreeStatusReason.AGENT_WAITING, severity: 'warn', aspect: 'agent' };
