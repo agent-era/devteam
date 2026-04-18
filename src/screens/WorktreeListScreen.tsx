@@ -23,6 +23,7 @@ interface WorktreeListScreenProps {
   onQuit: () => void;
   onExecuteRun: () => void;
   onConfigureRun: () => void;
+  onSettings: () => void;
 }
 
 export default function WorktreeListScreen({
@@ -33,7 +34,8 @@ export default function WorktreeListScreen({
   onDiff,
   onQuit,
   onExecuteRun,
-  onConfigureRun
+  onConfigureRun,
+  onSettings
 }: WorktreeListScreenProps) {
   const {worktrees, selectedIndex, selectWorktree, refresh, refreshVisibleStatus, forceRefreshVisible, attachSession, attachShellSession, attachWorkspaceSession, needsToolSelection, getAvailableAITools, lastRefreshed, memoryStatus, versionInfo, discoverProjects} = useWorktreeContext();
   const {setVisibleWorktrees} = useGitHubContext();
@@ -278,6 +280,7 @@ export default function WorktreeListScreen({
     onQuit: onQuit,
     onExecuteRun: handleExecuteRunWrapped,
     onConfigureRun: handleConfigureRunWrapped,
+    onSettings: onSettings,
     onUpdate: handleUpdate
   }, {
     page: currentPage,

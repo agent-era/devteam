@@ -477,25 +477,35 @@ export class GitService {
   }
 
   copyEnvironmentFile(project: string, worktreePath: string): void {
-    const projectPath = path.join(this.basePath, project);
-    const envSrc = path.join(projectPath, ENV_FILE);
-    const envDst = path.join(worktreePath, ENV_FILE);
-    if (fs.existsSync(envSrc)) {
-      const dir = path.dirname(envDst);
-      if (!fs.existsSync(dir)) fs.mkdirSync(dir, {recursive: true});
-      fs.copyFileSync(envSrc, envDst);
-    }
+    this.copyPath(project, worktreePath, ENV_FILE);
   }
 
   linkClaudeSettings(project: string, worktreePath: string): void {
-    const projectPath = path.join(this.basePath, project);
-    const claudeDirSrc = path.join(projectPath, '.claude');
-    const claudeDirDst = path.join(worktreePath, '.claude');
-    if (fs.existsSync(claudeDirSrc)) {
-      // Replace destination with a symlink to project .claude
-      try { fs.rmSync(claudeDirDst, {recursive: true, force: true}); } catch {}
-      fs.symlinkSync(claudeDirSrc, claudeDirDst, 'dir');
+    this.symlinkPath(project, worktreePath, '.claude');
+  }
+
+  copyPath(project: string, worktreePath: string, relativePath: string): void {
+    const src = path.join(this.basePath, project, relativePath);
+    const dst = path.join(worktreePath, relativePath);
+    let stat: fs.Stats;
+    try { stat = fs.lstatSync(src); } catch { return; }
+    ensureDirectory(path.dirname(dst));
+    try { fs.rmSync(dst, {recursive: true, force: true}); } catch {}
+    if (stat.isDirectory()) {
+      fs.cpSync(src, dst, {recursive: true, dereference: false});
+    } else {
+      fs.copyFileSync(src, dst);
     }
+  }
+
+  symlinkPath(project: string, worktreePath: string, relativePath: string): void {
+    const src = path.join(this.basePath, project, relativePath);
+    const dst = path.join(worktreePath, relativePath);
+    let stat: fs.Stats;
+    try { stat = fs.lstatSync(src); } catch { return; }
+    ensureDirectory(path.dirname(dst));
+    try { fs.rmSync(dst, {recursive: true, force: true}); } catch {}
+    fs.symlinkSync(src, dst, stat.isDirectory() ? 'dir' : 'file');
   }
   
   

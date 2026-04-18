@@ -1,4 +1,4 @@
-import React, {useEffect} from 'react';
+import React, {useEffect, useMemo} from 'react';
 import {useApp, useStdin, Box} from 'ink';
 import {runInteractive} from './shared/utils/commandExecutor.js';
 import {TmuxService} from './services/TmuxService.js';
@@ -8,6 +8,7 @@ import DiffView from './components/views/DiffView.js';
 import ProjectPickerDialog from './components/dialogs/ProjectPickerDialog.js';
 import BranchPickerDialog from './components/dialogs/BranchPickerDialog.js';
 import RunConfigDialog from './components/dialogs/RunConfigDialog.js';
+import SettingsDialog from './components/dialogs/SettingsDialog.js';
 import InfoDialog from './components/dialogs/InfoDialog.js';
 import ProgressDialog from './components/dialogs/ProgressDialog.js';
 import ConfigResultsDialog from './components/dialogs/ConfigResultsDialog.js';
@@ -49,6 +50,10 @@ function AppContent() {
     getRemoteBranches,
     getRunConfigPath,
     createOrFillRunConfig,
+    readConfigContent,
+    generateConfigWithAI,
+    editConfigWithAI,
+    applyConfig,
     getAvailableAITools,
     needsToolSelection
   } = useWorktreeContext();
@@ -86,6 +91,13 @@ function AppContent() {
     showAIToolSelection,
     showNoProjectsDialog,
     showInfo,
+    showSettings,
+    beginSettingsAI,
+    finishSettingsAI,
+    clearSettingsAIResult,
+    settingsProject,
+    settingsAIResult,
+    settingsAILoadingProject,
     runWithLoading,
     requestExit
   } = useUIContext();
@@ -193,9 +205,38 @@ function AppContent() {
   const handleConfigureRun = () => {
     const selectedWorktree = getSelectedWorktree();
     if (!selectedWorktree) return;
-    
+
     showRunConfig(selectedWorktree.project, selectedWorktree.feature, selectedWorktree.path);
   };
+
+  const handleSettings = () => {
+    const selectedWorktree = getSelectedWorktree();
+    if (!selectedWorktree) return;
+    showSettings(selectedWorktree.project);
+  };
+
+  const runSettingsAI = (project: string, work: () => Promise<{success: boolean; content?: string; error?: string}>) => {
+    if (settingsAILoadingProject === project) return;
+    clearSettingsAIResult();
+    beginSettingsAI(project);
+    void (async () => {
+      const r = await work();
+      finishSettingsAI({project, success: r.success, content: r.content, error: r.error});
+    })();
+  };
+
+  const applyProposedConfig = (project: string, content: string) => {
+    const result = applyConfig(project, content);
+    if (result.success) clearSettingsAIResult();
+    else finishSettingsAI({project, success: false, error: result.error});
+  };
+
+  // Read the on-disk config only when we need it — when the settings screen opens, when an AI
+  // result arrives, or after an apply (which flips settingsAIResult back to null).
+  const settingsCurrentContent = useMemo(
+    () => settingsProject ? readConfigContent(settingsProject) : null,
+    [settingsProject, settingsAIResult, readConfigContent]
+  );
 
   // Branch creation from remote branches
   const handleCreateFromBranch = async (remoteBranch: string, localName: string) => {
@@ -397,6 +438,25 @@ function AppContent() {
     );
   }
 
+  if (!content && mode === 'settings' && settingsProject) {
+    content = (
+      <Box flexGrow={1} alignItems="center" justifyContent="center">
+        <SettingsDialog
+          project={settingsProject}
+          configPath={getRunConfigPath(settingsProject)}
+          currentContent={settingsCurrentContent}
+          aiLoadingProject={settingsAILoadingProject}
+          pendingResult={settingsAIResult}
+          onGenerate={() => runSettingsAI(settingsProject, () => generateConfigWithAI(settingsProject))}
+          onEdit={(userPrompt: string) => runSettingsAI(settingsProject, () => editConfigWithAI(settingsProject, userPrompt))}
+          onApply={(proposed: string) => applyProposedConfig(settingsProject, proposed)}
+          onDiscardResult={() => clearSettingsAIResult()}
+          onCancel={showList}
+        />
+      </Box>
+    );
+  }
+
   if (!content && mode === 'selectAITool' && pendingWorktree) {
     content = (
       <Box flexGrow={1} alignItems="center" justifyContent="center">
@@ -439,6 +499,7 @@ function AppContent() {
         onQuit={requestExit}
         onExecuteRun={handleExecuteRun}
         onConfigureRun={handleConfigureRun}
+        onSettings={handleSettings}
       />
     );
   }

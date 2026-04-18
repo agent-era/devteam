@@ -22,6 +22,7 @@ export interface KeyboardActions {
   onExecuteRun?: () => void;
   onConfigureRun?: () => void;
   onSelectWithToolPicker?: () => void;
+  onSettings?: () => void;
   onUpdate?: () => void;
 }
 
@@ -90,6 +91,7 @@ export function useKeyboardShortcuts(
       else if (input === 'x') actions.onExecuteRun?.();
       else if (input === 'X') actions.onConfigureRun?.();
       else if (input === 'T') actions.onSelectWithToolPicker?.();
+      else if (input === 'c') actions.onSettings?.();
       else if (input === 'u') actions.onUpdate?.();
 
       // Pagination

@@ -6,7 +6,14 @@ import type {AITool} from '../models.js';
 type UIMode = 'list' | 'create' | 'confirmArchive' | 'help' |
              'pickProjectForBranch' | 'pickBranch' | 'diff' | 'runConfig' |
              'runProgress' | 'runResults' | 'selectAITool' |
-             'tmuxAttachLoading' | 'noProjects' | 'info';
+             'tmuxAttachLoading' | 'noProjects' | 'info' | 'settings';
+
+export type SettingsAIResult = {
+  project: string;
+  success: boolean;
+  content?: string;
+  error?: string;
+} | null;
 
 interface UIContextType {
   // Current UI state values
@@ -24,6 +31,9 @@ interface UIContextType {
   runConfigResult: any | null;
   pendingWorktree: WorktreeInfo | null;
   info: {title?: string; message: string; onClose?: () => void} | null;
+  settingsProject: string | null;
+  settingsAIResult: SettingsAIResult;
+  settingsAILoadingProject: string | null;
   
   // UI navigation operations - self-documenting methods
   showList: () => void;
@@ -39,6 +49,10 @@ interface UIContextType {
   showAIToolSelection: (worktree: WorktreeInfo) => void;
   showNoProjectsDialog: () => void;
   showInfo: (message: string, options?: {title?: string; onClose?: () => void}) => void;
+  showSettings: (project: string) => void;
+  beginSettingsAI: (project: string) => void;
+  finishSettingsAI: (result: SettingsAIResult) => void;
+  clearSettingsAIResult: () => void;
   runWithLoading: (task: () => Promise<unknown> | unknown, options?: {returnToList?: boolean}) => void;
   
   // Branch management
@@ -71,6 +85,9 @@ export function UIProvider({children}: UIProviderProps) {
   const [runConfigResult, setRunConfigResult] = useState<any | null>(null);
   const [pendingWorktree, setPendingWorktree] = useState<WorktreeInfo | null>(null);
   const [info, setInfo] = useState<{title?: string; message: string; onClose?: () => void} | null>(null);
+  const [settingsProject, setSettingsProject] = useState<string | null>(null);
+  const [settingsAIResult, setSettingsAIResultState] = useState<SettingsAIResult>(null);
+  const [settingsAILoadingProject, setSettingsAILoadingProject] = useState<string | null>(null);
   // Removed tmux hint state (dialog no longer used)
 
 
@@ -88,6 +105,9 @@ export function UIProvider({children}: UIProviderProps) {
     setRunConfigResult(null);
     setPendingWorktree(null);
     setInfo(null);
+    setSettingsProject(null);
+    // settingsAIResult / settingsAILoadingProject intentionally preserved so
+    // an in-flight AI run keeps progressing while the user navigates away.
   };
 
   // UI Navigation Operations - Self-documenting and encapsulated
@@ -179,6 +199,24 @@ export function UIProvider({children}: UIProviderProps) {
     setMode('info');
   };
 
+  const showSettings = (project: string) => {
+    setMode('settings');
+    setSettingsProject(project);
+  };
+
+  const beginSettingsAI = (project: string) => {
+    setSettingsAILoadingProject(project);
+  };
+
+  const finishSettingsAI = (result: SettingsAIResult) => {
+    setSettingsAILoadingProject(null);
+    setSettingsAIResultState(result);
+  };
+
+  const clearSettingsAIResult = () => {
+    setSettingsAIResultState(null);
+  };
+
 
   const requestExit = () => {
     setShouldExit(true);
@@ -201,7 +239,10 @@ export function UIProvider({children}: UIProviderProps) {
     runConfigResult,
     pendingWorktree,
     info,
-    
+    settingsProject,
+    settingsAIResult,
+    settingsAILoadingProject,
+
     // Navigation methods
     showList,
     showCreateFeature,
@@ -215,6 +256,10 @@ export function UIProvider({children}: UIProviderProps) {
     showRunResults,
     showAIToolSelection,
     showInfo,
+    showSettings,
+    beginSettingsAI,
+    finishSettingsAI,
+    clearSettingsAIResult,
     runWithLoading,
     showNoProjectsDialog,
     
