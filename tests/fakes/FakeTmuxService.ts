@@ -7,6 +7,8 @@ import {memoryStore} from './stores.js';
 export class FakeTmuxService extends TmuxService {
   private sentKeys: Array<{session: string, keys: string[]}> = [];
   private sessions = new Map<string, SessionInfo>();
+  private sessionOptions = new Map<string, Map<string, string>>();
+  private globalOptions = new Map<string, string>();
 
   constructor() {
     super(new FakeAIToolService());
@@ -183,12 +185,19 @@ export class FakeTmuxService extends TmuxService {
     }
   }
 
+  attachSessionWithControls(sessionName: string): void {
+    this.configureSessionUI(sessionName);
+    this.attachSessionInteractive(sessionName);
+  }
+
   setOption(option: string, value: string): void {
-    // Mock implementation - just store for testing if needed
+    this.globalOptions.set(option, value);
   }
 
   setSessionOption(session: string, option: string, value: string): void {
-    // Mock implementation - just store for testing if needed
+    const current = this.sessionOptions.get(session) || new Map<string, string>();
+    current.set(option, value);
+    this.sessionOptions.set(session, current);
   }
 
   async listPanes(session: string): Promise<string> {
@@ -298,6 +307,14 @@ export class FakeTmuxService extends TmuxService {
   // Clear sent keys history
   clearSentKeys(): void {
     this.sentKeys = [];
+  }
+
+  getSessionOption(session: string, option: string): string | undefined {
+    return this.sessionOptions.get(session)?.get(option);
+  }
+
+  getGlobalOption(option: string): string | undefined {
+    return this.globalOptions.get(option);
   }
   
   // Helper method to determine if a session should be preserved
