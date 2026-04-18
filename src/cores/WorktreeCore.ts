@@ -300,7 +300,7 @@ export class WorktreeCore implements CoreBase<State> {
       }
     }
     this.tmux.attachSessionWithControls(sessionName);
-    await this.refreshSingleWorktree(worktree, true); // user may have committed
+    await this.refreshSingleWorktree(worktree); // working→idle transition handles cache invalidation
   }
   async attachShellSession(worktree: WorktreeInfo): Promise<void> {
     const name = this.tmux.shellSessionName(worktree.project, worktree.feature);
