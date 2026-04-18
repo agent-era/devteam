@@ -6,6 +6,7 @@ type StatusResult = 'working' | 'waiting' | 'idle' | '__delete__' | null;
 function mapStatus(tool: string, event: string, payload: Record<string, unknown>): StatusResult {
   if (event === 'SessionEnd') return '__delete__';
   if (event === 'Stop' || event === 'AfterAgent' || event === 'agent-turn-complete') return 'idle';
+  if (event === 'PreToolUse' && tool === 'codex') return 'waiting';
   if (['UserPromptSubmit', 'PreToolUse', 'BeforeAgent', 'BeforeModel', 'BeforeTool'].includes(event)) return 'working';
   if (event === 'approval-requested') return 'waiting';
   if (event === 'Notification') {
@@ -61,8 +62,13 @@ describe('hook script mapStatus', () => {
     expect(mapStatus('gemini', 'BeforeAgent', {})).toBe('working');
   });
 
-  test('PreToolUse → working', () => {
+  test('PreToolUse → working (claude/gemini)', () => {
     expect(mapStatus('claude', 'PreToolUse', {})).toBe('working');
+    expect(mapStatus('gemini', 'PreToolUse', {})).toBe('working');
+  });
+
+  test('PreToolUse → waiting (codex fires this before blocking for approval)', () => {
+    expect(mapStatus('codex', 'PreToolUse', {})).toBe('waiting');
   });
 
   test('SessionStart → idle (tool is running but idle)', () => {

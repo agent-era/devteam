@@ -58,6 +58,9 @@ function mapStatus(tool, event, payload) {
   // Turn-complete / idle
   if (e === 'Stop' || e === 'AfterAgent' || e === 'agent-turn-complete') return 'idle';
 
+  // Codex fires PreToolUse before blocking for user approval — treat as waiting
+  if (e === 'PreToolUse' && tool === 'codex') return 'waiting';
+
   // Actively working
   if (
     e === 'UserPromptSubmit' ||
