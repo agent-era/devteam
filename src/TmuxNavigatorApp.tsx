@@ -26,7 +26,7 @@ export default function TmuxNavigatorApp(props: {sessionName: string}) {
   const {sessionName} = props;
   const {exit} = useApp();
   const {stdin, setRawMode} = useStdin();
-  const {rows} = useTerminalDimensions();
+  const {rows, columns} = useTerminalDimensions();
 
   const git = useMemo(() => new GitService(getProjectsDirectory()), []);
   const tmux = useMemo(() => new TmuxService(), []);
@@ -82,6 +82,7 @@ export default function TmuxNavigatorApp(props: {sessionName: string}) {
     setRawMode(true);
     const handler = (buf: Buffer) => {
       const input = buf.toString('utf8');
+      if (handleMouseInput(input)) return;
       if (input === 'j' || input === '\u001b[B') setSelectedIndex((prev) => Math.min(prev + 1, Math.max(items.length - 1, 0)));
       else if (input === 'k' || input === '\u001b[A') setSelectedIndex((prev) => Math.max(prev - 1, 0));
       else if (input === 'r') void load();
@@ -101,8 +102,46 @@ export default function TmuxNavigatorApp(props: {sessionName: string}) {
     };
   }, [currentMode, exit, items.length, load, sessionName, setRawMode, stdin, tmux]);
 
-  const activate = async (mode: NavMode) => {
-    const item = items[selectedIndex];
+  const handleMouseInput = (input: string): boolean => {
+    const match = input.match(/\x1b\[<(\d+);(\d+);(\d+)([Mm])/);
+    if (!match) return false;
+
+    const button = Number(match[1]);
+    const x = Number(match[2]);
+    const y = Number(match[3]);
+    const eventType = match[4];
+
+    if (eventType !== 'M') return true;
+    if (button >= 64) return true;
+
+    if (y === 2) {
+      const mode = modeFromHeaderClick(x);
+      if (mode) {
+        void activate(mode);
+        return true;
+      }
+    }
+
+    const listRow = y - 3;
+    if (listRow >= 0 && listRow < visible.length) {
+      const absoluteIndex = start + listRow;
+      setSelectedIndex(absoluteIndex);
+      const clickedMode = modeFromRowClick(x, columns);
+      void activate(clickedMode || currentMode, absoluteIndex);
+      return true;
+    }
+
+    if (y === rows - 1) {
+      tmux.selectMainPane(sessionName);
+      exit();
+      return true;
+    }
+
+    return true;
+  };
+
+  const activate = async (mode: NavMode, index: number = selectedIndex) => {
+    const item = items[index];
     if (!item) return;
     const targetSession = modeSessionName(tmux, item.project, item.feature, mode);
 
@@ -129,30 +168,113 @@ export default function TmuxNavigatorApp(props: {sessionName: string}) {
     tmux.switchClient(targetSession);
   };
 
-  const visibleRows = Math.max(1, rows - 3);
+  const visibleRows = Math.max(1, rows - 4);
   const start = Math.max(0, Math.min(selectedIndex - Math.floor(visibleRows / 2), Math.max(0, items.length - visibleRows)));
   const visible = items.slice(start, start + visibleRows);
+  const selectedItem = items[selectedIndex] || null;
+  const statusTone: 'cyan' | 'yellow' = items.length ? 'cyan' : 'yellow';
 
   return (
     <FullScreen enableAltScreen={false}>
       <Box flexDirection="column" paddingX={1}>
-        <Text>{`devteam nav  current:${modeLabel(currentMode)}  ${statusMessage}`}</Text>
+        <Box justifyContent="space-between">
+          <Text color="black" backgroundColor="cyan">{' DEVTEAM NAV '}</Text>
+          <Text color="gray">{truncateText(selectedItem ? `${selectedItem.feature} [${selectedItem.project}]` : 'no selection', Math.max(12, columns - 22))}</Text>
+        </Box>
+        <Box justifyContent="space-between">
+          <Box>
+            {modeOrder.map((mode, index) => {
+              const active = mode === currentMode;
+              return (
+                <Text
+                  key={mode}
+                  color={active ? 'black' : 'gray'}
+                  backgroundColor={active ? modeColor(mode) : undefined}
+                >
+                  {`${index === 0 ? '' : ' '}${modePill(mode)}`}
+                </Text>
+              );
+            })}
+          </Box>
+          <Text color={statusTone}>{truncateText(statusMessage, Math.max(16, Math.floor(columns / 2)))} </Text>
+        </Box>
         {visible.map((item, offset) => {
           const absoluteIndex = start + offset;
           const isSelected = absoluteIndex === selectedIndex;
           const isCurrent = tmux.sessionName(item.project, item.feature) === currentBase;
-          const modeCells = modeOrder.map((mode) => item.sessions[mode] ? modeLabel(mode) : '-').join(' ');
-          const prefix = isSelected ? '>' : ' ';
-          const current = isCurrent ? '*' : ' ';
+          const maxLabelWidth = Math.max(12, columns - 22);
+          const label = truncateText(item.feature, Math.max(8, maxLabelWidth - item.project.length - 4));
+          const project = truncateText(item.project, 16);
           return (
-            <Text key={`${item.project}-${item.feature}`}>
-              {`${prefix}${current} ${item.feature} [${item.project}]  ${modeCells}`}
-            </Text>
+            <Box key={`${item.project}-${item.feature}`} justifyContent="space-between">
+              <Box>
+                <Text color={isSelected ? 'black' : isCurrent ? 'cyan' : 'white'} backgroundColor={isSelected ? 'yellow' : undefined}>
+                  {`${isSelected ? '>' : ' '} ${label}`}
+                </Text>
+                <Text color={isSelected ? 'black' : 'gray'} backgroundColor={isSelected ? 'yellow' : undefined}>{` [${project}]`}</Text>
+                {isCurrent ? <Text color="green">{'  live'}</Text> : null}
+              </Box>
+              <Box>
+                {modeOrder.map((mode) => (
+                  <Text
+                    key={mode}
+                    color={item.sessions[mode] ? 'black' : 'gray'}
+                    backgroundColor={item.sessions[mode] ? modeColor(mode) : undefined}
+                  >
+                    {`${modeBadge(mode, item.sessions[mode])} `}
+                  </Text>
+                ))}
+              </Box>
+            </Box>
           );
         })}
+        <Box justifyContent="space-between">
+          <Text color="magenta">enter switch  1/2/3 mode  r refresh</Text>
+          <Text color="gray">esc back</Text>
+        </Box>
       </Box>
     </FullScreen>
   );
+}
+
+function modeFromHeaderClick(x: number): NavMode | null {
+  if (x >= 1 && x <= 10) return 'agent';
+  if (x >= 11 && x <= 20) return 'shell';
+  if (x >= 21 && x <= 28) return 'run';
+  return null;
+}
+
+function modeFromRowClick(x: number, columns: number): NavMode | null {
+  const rightStart = Math.max(1, columns - 11);
+  if (x < rightStart) return null;
+  if (x < rightStart + 4) return 'agent';
+  if (x < rightStart + 8) return 'shell';
+  return 'run';
+}
+
+function modeColor(mode: NavMode): 'green' | 'blue' | 'magenta' {
+  if (mode === 'agent') return 'green';
+  if (mode === 'shell') return 'blue';
+  return 'magenta';
+}
+
+function modePill(mode: NavMode): string {
+  if (mode === 'agent') return ' 1 Agent ';
+  if (mode === 'shell') return ' 2 Shell ';
+  return ' 3 Run ';
+}
+
+function modeBadge(mode: NavMode, active: boolean): string {
+  if (!active) return ` ${modeLabel(mode)} `;
+  if (mode === 'agent') return ' A ';
+  if (mode === 'shell') return ' S ';
+  return ' R ';
+}
+
+function truncateText(value: string, width: number): string {
+  if (value.length <= width) return value;
+  if (width <= 3) return value.slice(0, width);
+  return `${value.slice(0, width - 3)}...`;
 }
 
 function thisRunSession(tmux: TmuxService, item: NavWorktree): boolean {
