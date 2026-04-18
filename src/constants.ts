@@ -170,7 +170,7 @@ export function generateHelpSections(projectsDir: string): string[] {
     '  [a]rchive     selected feature',
     '  open [s]hell in worktree',
     '  e[x]ec        program in worktree',
-    '  [X]           create/update run config with Claude',
+    '  [c]onfigure   project settings (AI-assisted)',
     '  [T]           open agent with a different AI tool (also: Shift+Enter)',
     '',
   'NEW FEATURE DIALOG:',
@@ -229,27 +229,163 @@ export const PAGE_SIZE = 10;
 export const MIN_TERMINAL_WIDTH = 40;
 export const MIN_TERMINAL_HEIGHT = 10;
 
-// Claude prompt for generating run configurations
-export const RUN_CONFIG_CLAUDE_PROMPT = `Analyze this project directory and generate a .devteam/config.json file.
+// Single source of truth for the project config schema. Drives both the AI prompts
+// (so Claude can't hallucinate fields) and the settings dialog (which uses the
+// descriptions and the set of keys to show what's present vs. missing).
+export type SchemaNode = {
+  description: string;
+  type: 'string' | 'string[]' | 'boolean' | 'object' | 'record<string,string>';
+  example?: unknown;
+  children?: Record<string, SchemaNode>;
+};
 
-CRITICAL: Your response must be ONLY the JSON object. Do NOT use markdown code blocks or any formatting.
-
-Example of what to output:
-{
-  "executionInstructions": {
-    "mainCommand": "npm start",
-    "preRunCommands": ["npm install"],
-    "environmentVariables": {},
-    "detachOnExit": false
+export const CONFIG_SCHEMA: Record<string, SchemaNode> = {
+  executionInstructions: {
+    type: 'object',
+    description: 'How to run the main project command for a worktree',
+    children: {
+      mainCommand: {
+        type: 'string',
+        description: 'Primary run command',
+        example: 'npm run dev',
+      },
+      preRunCommands: {
+        type: 'string[]',
+        description: 'Commands to run before the main command',
+        example: ['npm install'],
+      },
+      environmentVariables: {
+        type: 'record<string,string>',
+        description: 'Env vars exported before the command runs',
+        example: {},
+      },
+      detachOnExit: {
+        type: 'boolean',
+        description: 'When the program being run exits: true closes the pane; false keeps it open so you can see the output.',
+        example: false,
+      },
+    },
   },
-  "notes": "Optional: add any tips the developer should know."
+  worktreeSetup: {
+    type: 'object',
+    description: 'What gets copied/linked into each new worktree',
+    children: {
+      copyFiles: {
+        type: 'string[]',
+        description: 'Relative paths (files or dirs) to copy from project root into each worktree',
+        example: ['.env.local'],
+      },
+      symlinkPaths: {
+        type: 'string[]',
+        description: 'Relative paths to symlink from project root into each worktree',
+        example: ['.claude'],
+      },
+    },
+  },
+  aiToolSettings: {
+    type: 'object',
+    description: 'Per-AI-tool CLI launch flags',
+    children: {
+      claude: {
+        type: 'object',
+        description: 'Flags for claude CLI',
+        children: {
+          flags: {
+            type: 'string[]',
+            description: 'e.g. ["--dangerously-skip-permissions"] to bypass permission prompts',
+            example: [],
+          },
+        },
+      },
+      codex: {
+        type: 'object',
+        description: 'Flags for codex CLI',
+        children: {
+          flags: {
+            type: 'string[]',
+            description: 'e.g. ["--full-auto"] to skip confirmations',
+            example: [],
+          },
+        },
+      },
+      gemini: {
+        type: 'object',
+        description: 'Flags for gemini CLI',
+        children: {
+          flags: {
+            type: 'string[]',
+            description: 'Additional CLI flags',
+            example: [],
+          },
+        },
+      },
+    },
+  },
+};
+
+export type ProjectConfig = {
+  executionInstructions?: {
+    mainCommand?: string;
+    preRunCommands?: string[];
+    environmentVariables?: Record<string, string>;
+    detachOnExit?: boolean;
+  };
+  worktreeSetup?: {
+    copyFiles?: string[];
+    symlinkPaths?: string[];
+  };
+  aiToolSettings?: Partial<Record<keyof typeof AI_TOOLS, {flags?: string[]}>>;
+};
+
+// Render schema as an annotated JSON example that Claude can use directly.
+// Each field is followed by an inline comment describing its purpose — the
+// strict output rule at the bottom of the prompt forbids returning the comments.
+function renderSchemaForPrompt(schema: Record<string, SchemaNode>, indent = 2): string {
+  const pad = (n: number) => ' '.repeat(n);
+  const render = (nodes: Record<string, SchemaNode>, depth: number): string[] => {
+    const keys = Object.keys(nodes);
+    const out: string[] = [];
+    keys.forEach((key, i) => {
+      const node = nodes[key];
+      const isLast = i === keys.length - 1;
+      const comma = isLast ? '' : ',';
+      if (node.children) {
+        out.push(`${pad(depth)}"${key}": {   // ${node.description}`);
+        out.push(...render(node.children, depth + indent));
+        out.push(`${pad(depth)}}${comma}`);
+      } else {
+        const example = JSON.stringify(node.example ?? null);
+        out.push(`${pad(depth)}"${key}": ${example}${comma}   // ${node.type} — ${node.description}`);
+      }
+    });
+    return out;
+  };
+  return ['{', ...render(schema, indent), '}'].join('\n');
 }
 
-Fill in values based on the project files you see:
-- "executionInstructions.mainCommand": primary run command (e.g. "npm run dev", "python app.py")
-- "executionInstructions.preRunCommands": commands to run before the main command (e.g. ["npm install"]) 
-- "executionInstructions.environmentVariables": key/value env vars needed by the app (often {})
-- "executionInstructions.detachOnExit": true for one-shot tasks (build/test); false for servers/dev loops
-- "notes": optional free-form guidance for humans reading the file
+const SCHEMA_DOC = renderSchemaForPrompt(CONFIG_SCHEMA);
 
-Your response must start with { and end with } - nothing else.`;
+export const RUN_CONFIG_CLAUDE_PROMPT = `Analyze this project directory and generate a .devteam/config.json file that matches EXACTLY this schema. Do not add, rename, or remove any top-level or nested keys.
+
+Schema (values shown are illustrative; the inline // comments are documentation and MUST NOT appear in your output):
+${SCHEMA_DOC}
+
+Fill in values based on the project files you see. For any field you're unsure about, use the illustrative value shown above.
+
+CRITICAL: Your response must be ONLY the final JSON object — no markdown, no code fences, no comments, no explanations. Start with { and end with }. Use the exact keys from the schema above and no others.`;
+
+export const SETTINGS_EDIT_CLAUDE_PROMPT = `You are editing a project config file stored at .devteam/config.json.
+
+The config MUST conform to this schema (values are illustrative; the inline // comments are documentation and MUST NOT appear in your output):
+${SCHEMA_DOC}
+
+Current config on disk:
+---
+{CURRENT_CONFIG}
+---
+
+The user requests: "{USER_PROMPT}"
+
+Output the complete updated JSON config. Preserve any fields you don't need to change. Only use the exact keys defined in the schema above — do not invent new fields.
+
+CRITICAL: Your response must be ONLY the final JSON object — no markdown, no code fences, no comments, no explanations. Start with { and end with }.`;

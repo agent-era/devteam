@@ -22,7 +22,7 @@ interface WorktreeListScreenProps {
   onDiff: (type: 'full' | 'uncommitted') => void;
   onQuit: () => void;
   onExecuteRun: () => void;
-  onConfigureRun: () => void;
+  onSettings: () => void;
 }
 
 export default function WorktreeListScreen({
@@ -33,7 +33,7 @@ export default function WorktreeListScreen({
   onDiff,
   onQuit,
   onExecuteRun,
-  onConfigureRun
+  onSettings
 }: WorktreeListScreenProps) {
   const {worktrees, selectedIndex, selectWorktree, refresh, refreshVisibleStatus, forceRefreshVisible, attachSession, attachShellSession, attachWorkspaceSession, needsToolSelection, getAvailableAITools, lastRefreshed, memoryStatus, versionInfo, discoverProjects} = useWorktreeContext();
   const {setVisibleWorktrees} = useGitHubContext();
@@ -214,13 +214,13 @@ export default function WorktreeListScreen({
     onExecuteRun();
   };
 
-  const handleConfigureRunWrapped = () => {
+  const handleSettingsWrapped = () => {
     const selectedWorktree = worktrees[selectedIndex];
     if (selectedWorktree && (selectedWorktree as any).is_workspace_header) {
-      showInfo('Run is per project. Select a project row.', {title: 'Workspace Run'});
+      showInfo('Settings are per project. Select a project row.', {title: 'Project Settings'});
       return;
     }
-    onConfigureRun();
+    onSettings();
   };
 
   const handleRefresh = async () => {
@@ -277,7 +277,7 @@ export default function WorktreeListScreen({
     onJumpToLast: handleJumpToLast,
     onQuit: onQuit,
     onExecuteRun: handleExecuteRunWrapped,
-    onConfigureRun: handleConfigureRunWrapped,
+    onSettings: handleSettingsWrapped,
     onUpdate: handleUpdate
   }, {
     page: currentPage,
