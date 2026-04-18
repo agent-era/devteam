@@ -5,6 +5,14 @@ import {Timer} from '../shared/utils/timing.js';
 import {AIStatus, AITool} from '../models.js';
 import {AIToolService} from './AIToolService.js';
 
+type SessionKind = 'agent' | 'execute' | 'shell';
+
+type SessionDisplayMetadata = {
+  project: string;
+  worktree: string;
+  sessionKind: SessionKind;
+  aiTool?: AITool;
+};
 
 export class TmuxService {
   private aiToolService: AIToolService;
@@ -167,18 +175,24 @@ export class TmuxService {
    * that exposes Detach and Kill actions.
    * Uses tmux status-format ranges (tmux 3.2+) and MouseDown1Status binding.
    */
-  configureSessionUI(session: string): void {
+  configureSessionUI(session: string, metadata?: SessionDisplayMetadata): void {
     try {
+      const sessionMeta = metadata || this.inferSessionDisplayMetadata(session);
+      this.storeSessionDisplayMetadata(session, sessionMeta);
+
       // Ensure mouse is enabled and status is visible
+      this.setOption('mouse', 'on');
       this.setSessionOption(session, 'mouse', 'on');
       // Ensure status bar is visible
       this.setSessionOption(session, 'status', 'on');
       this.setSessionOption(session, 'status-position', 'bottom');
-      this.setSessionOption(session, 'status-style', 'fg=white,bold,bg=black');
+      this.setSessionOption(session, 'status-style', 'fg=colour255,bg=colour235');
       this.setSessionOption(session, 'status-interval', '5');
+      this.setSessionOption(session, 'status-left-length', '120');
+      this.setSessionOption(session, 'status-right-length', '120');
       runCommand([
         'tmux', 'set-option', '-t', session, 'status-format[0]',
-        ' #[align=right]Click here to return to devteam (or press Ctrl+b, then d) '
+        this.buildStatusFormat()
       ], { env: this.tmuxEnv });
 
       const bind = (key: string, args: string[]) => {
@@ -186,8 +200,17 @@ export class TmuxService {
         runCommand(['tmux', 'bind-key', '-n', key, ...args], { env: this.tmuxEnv });
       };
 
-      // Bind MouseUp (release) on all status regions to detach immediately (no menu)
-      for (const k of ['MouseUp1Status', 'MouseUp1StatusLeft', 'MouseUp1StatusRight', 'MouseUp1StatusDefault']) {
+      // Bind both mouse down and mouse up on status regions for compatibility across tmux versions.
+      for (const k of [
+        'MouseDown1Status',
+        'MouseDown1StatusLeft',
+        'MouseDown1StatusRight',
+        'MouseDown1StatusDefault',
+        'MouseUp1Status',
+        'MouseUp1StatusLeft',
+        'MouseUp1StatusRight',
+        'MouseUp1StatusDefault',
+      ]) {
         bind(k, ['detach-client']);
       }
       // No debug messages bound
@@ -200,8 +223,8 @@ export class TmuxService {
   /**
    * Attach to a session with clickable status bar controls enabled.
    */
-  attachSessionWithControls(sessionName: string): void {
-    this.configureSessionUI(sessionName);
+  attachSessionWithControls(sessionName: string, metadata?: SessionDisplayMetadata): void {
+    this.configureSessionUI(sessionName, metadata);
     this.attachSessionInteractive(sessionName);
   }
 
@@ -257,5 +280,78 @@ export class TmuxService {
     
     // Check if there's a matching worktree
     return validWorktrees.some((wt) => wt.includes(suffix));
+  }
+
+  private storeSessionDisplayMetadata(session: string, metadata: SessionDisplayMetadata): void {
+    this.setSessionOption(session, '@devteam_project', metadata.project || 'unknown');
+    this.setSessionOption(session, '@devteam_worktree', metadata.worktree || 'unknown');
+    this.setSessionOption(session, '@devteam_session_chip', this.sessionChip(metadata.sessionKind, metadata.aiTool));
+  }
+
+  private inferSessionDisplayMetadata(session: string): SessionDisplayMetadata {
+    let baseName = session.startsWith(SESSION_PREFIX) ? session.slice(SESSION_PREFIX.length) : session;
+    let sessionKind: SessionKind = 'agent';
+
+    if (baseName.endsWith('-shell')) {
+      sessionKind = 'shell';
+      baseName = baseName.slice(0, -'-shell'.length);
+    } else if (baseName.endsWith('-run')) {
+      sessionKind = 'execute';
+      baseName = baseName.slice(0, -'-run'.length);
+    }
+
+    const [project = baseName || 'unknown', ...rest] = baseName.split('-');
+    const worktree = rest.join('-') || project;
+    return {project, worktree, sessionKind};
+  }
+
+  private sessionKindLabel(kind: SessionKind): string {
+    if (kind === 'shell') return 'SHELL';
+    if (kind === 'execute') return 'EXECUTE';
+    return 'AGENT';
+  }
+
+  private sessionKindValue(kind: SessionKind, aiTool: AITool = 'none'): string {
+    if (kind === 'shell' || kind === 'execute') return '';
+    if (aiTool === 'claude') return 'claude';
+    if (aiTool === 'codex') return 'codex';
+    if (aiTool === 'gemini') return 'gemini';
+    return '';
+  }
+
+  private sessionKindLabelBg(kind: SessionKind): string {
+    return 'colour31';
+  }
+
+  private sessionKindValueBg(kind: SessionKind): string {
+    return 'colour117';
+  }
+
+  private sessionChip(kind: SessionKind, aiTool: AITool = 'none'): string {
+    const label = this.sessionKindLabel(kind);
+    const value = this.sessionKindValue(kind, aiTool);
+    const labelBg = this.sessionKindLabelBg(kind);
+    const valueBg = this.sessionKindValueBg(kind);
+
+    if (!value) {
+      return `#[fg=colour231,bg=${labelBg},bold] ${label} `;
+    }
+
+    return `#[fg=colour231,bg=${labelBg},bold] ${label} #[fg=colour232,bg=${valueBg},bold] ${value} `;
+  }
+
+  private buildStatusFormat(): string {
+    return (
+      ' ' +
+      '#[fg=colour255,bg=colour24,bold] #{@devteam_project} ' +
+      '#[default]  ' +
+      '#[fg=colour255,bg=colour95,bold] #{@devteam_worktree} ' +
+      '#[default]  ' +
+      '#{@devteam_session_chip}' +
+      '#[default]' +
+      '#[align=right]' +
+      '#[fg=colour232,bg=colour117,bold] Click here to return (or Ctrl+b, then d) ' +
+      '#[fg=colour231,bg=colour31,bold] DEVTEAM '
+    );
   }
 }
