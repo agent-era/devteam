@@ -214,6 +214,15 @@ export default function WorktreeListScreen({
     onExecuteRun();
   };
 
+  const handleSettingsWrapped = () => {
+    const selectedWorktree = worktrees[selectedIndex];
+    if (selectedWorktree && (selectedWorktree as any).is_workspace_header) {
+      showInfo('Settings are per project. Select a project row.', {title: 'Project Settings'});
+      return;
+    }
+    onSettings();
+  };
+
   const handleRefresh = async () => {
     // Force refresh visible PRs, ignoring cache TTLs
     await forceRefreshVisible(currentPage, pageSize);
@@ -268,7 +277,7 @@ export default function WorktreeListScreen({
     onJumpToLast: handleJumpToLast,
     onQuit: onQuit,
     onExecuteRun: handleExecuteRunWrapped,
-    onSettings: onSettings,
+    onSettings: handleSettingsWrapped,
     onUpdate: handleUpdate
   }, {
     page: currentPage,
