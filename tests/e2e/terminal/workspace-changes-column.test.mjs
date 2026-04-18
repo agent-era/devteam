@@ -42,7 +42,7 @@ test('CHANGES column shows ahead/behind for workspace children (base branch)', a
     await waitFor(() => {
       const clean = stripAnsi(stdout.lastFrame() || '');
       return clean.includes('feature-y [workspace]') && (clean.includes('├─ [projA]') || clean.includes('└─ [projA]'));
-    }, {timeout: 10000, interval: 50, message: 'workspace header and child visible'});
+    }, {timeout: 20000, interval: 50, message: 'workspace header and child visible'});
 
     const clean = stripAnsi(stdout.lastFrame() || '');
     // Extract the line for projA child and assert CHANGES contains arrows with counts

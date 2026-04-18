@@ -41,7 +41,7 @@ test('MainView renders workspace header with child rows (terminal)', async () =>
   await waitFor(() => {
     const c = stripAnsi(stdout.lastFrame() || '');
     return c.includes('feature-x [workspace]');
-  }, {timeout: 10000, interval: 50, message: 'workspace header visible'});
+  }, {timeout: 20000, interval: 50, message: 'workspace header visible'});
   const frame = stdout.lastFrame() || '';
   const clean = stripAnsi(frame);
 

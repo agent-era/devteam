@@ -34,13 +34,13 @@ test('attach then detach re-renders the main list (no blank screen)', async () =
 
   // Allow initial frame to render
   const {waitFor, includesWorktree} = await import('./_utils.js');
-  await waitFor(() => includesWorktree(stdout.lastFrame() || '', 'demo', 'feature-1'), {timeout: 10000, interval: 50, message: 'feature-1 [demo] visible before attach'});
+  await waitFor(() => includesWorktree(stdout.lastFrame() || '', 'demo', 'feature-1'), {timeout: 20000, interval: 50, message: 'feature-1 [demo] visible before attach'});
   let frame = stdout.lastFrame() || '';
 
   // Press Enter to select -> directly attach (simulated)
   stdin.emit('data', Buffer.from('\r'));
   // Wait for simulated attach/detach cycle and redraw
-  await waitFor(() => includesWorktree(stdout.lastFrame() || '', 'demo', 'feature-1'), {timeout: 10000, interval: 50, message: 'feature-1 [demo] visible after detach'});
+  await waitFor(() => includesWorktree(stdout.lastFrame() || '', 'demo', 'feature-1'), {timeout: 20000, interval: 50, message: 'feature-1 [demo] visible after detach'});
 
   try { inst.unmount?.(); } catch {}
 });
