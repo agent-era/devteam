@@ -70,11 +70,14 @@ export const GIT_BEHIND = '↓';
 // Keep this false so we treat ambiguous symbols as narrow (width 1) for alignment.
 export const AMBIGUOUS_EMOJI_ARE_WIDE = false;
 
-// AI tool configurations with detection patterns
+// AI tool configurations with detection patterns.
+// `.command` includes the per-tool resume flag so launching always picks up the most
+// recent on-disk session for the worktree's cwd. Each CLI gracefully falls back to a
+// fresh session if there's nothing to resume.
 export const AI_TOOLS = {
   claude: {
     name: 'Claude',
-    command: 'claude',
+    command: 'claude --continue',
     processPatterns: ['claude'],
     statusPatterns: {
       working: 'esc to interrupt',
@@ -84,7 +87,7 @@ export const AI_TOOLS = {
   },
   codex: {
     name: 'OpenAI Codex',
-    command: 'codex',
+    command: 'codex resume --last',
     processPatterns: ['node'],
     statusPatterns: {
       working: 'Esc to interrupt',
@@ -94,7 +97,7 @@ export const AI_TOOLS = {
   },
   gemini: {
     name: 'Gemini',
-    command: 'gemini',
+    command: 'gemini --resume latest',
     processPatterns: ['node'],
     statusPatterns: {
       working: 'esc to cancel',
@@ -160,6 +163,7 @@ export function generateHelpSections(projectsDir: string): string[] {
     '  e[x]ec        program in worktree',
     '  [X]           create/update run config with Claude',
     '  AI [t]ool     switch for session',
+    '  [T]           open agent with a different AI tool (also: Shift+Enter)',
     '',
   'NEW FEATURE DIALOG:',
     '  Type        filter projects',

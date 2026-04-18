@@ -68,9 +68,9 @@ export class FakeAIToolService extends AIToolService {
   /**
    * Override switchTool to track switches instead of actually running commands
    */
-  switchTool(tool: AITool, sessionName: string): void {
+  switchTool(tool: AITool, sessionName: string, _cwd?: string): void {
     if (tool === 'none') return;
-    
+
     this.switchedSessions.push({tool, session: sessionName});
   }
 

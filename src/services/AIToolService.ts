@@ -1,6 +1,7 @@
 import {runCommandQuickAsync, runCommand} from '../shared/utils/commandExecutor.js';
 import {AI_TOOLS} from '../constants.js';
 import {AIStatus, AITool} from '../models.js';
+import {setLastTool} from '../shared/utils/aiSessionMemory.js';
 
 export class AIToolService {
   /**
@@ -169,27 +170,21 @@ export class AIToolService {
    */
   launchTool(tool: AITool, sessionName: string, cwd: string): void {
     if (tool === 'none') return;
-    
-    const config = AI_TOOLS[tool];
-    const command = config.command;
-    
-    // Create session with the AI tool command
+    const command = AI_TOOLS[tool].command;
     runCommand(['tmux', 'new-session', '-ds', sessionName, '-c', cwd, command]);
+    setLastTool(tool, cwd);
   }
 
   /**
    * Switch AI tool in an existing session
    */
-  switchTool(tool: AITool, sessionName: string): void {
+  switchTool(tool: AITool, sessionName: string, cwd?: string): void {
     if (tool === 'none') return;
-    
-    const config = AI_TOOLS[tool];
-    const command = config.command;
-    
-    // Send Ctrl+C to interrupt current process, then start new tool
+    const command = AI_TOOLS[tool].command;
     runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, 'C-c']);
     setTimeout(() => {
       runCommand(['tmux', 'send-keys', '-t', `${sessionName}:0.0`, command, 'C-m']);
+      if (cwd) setLastTool(tool, cwd);
     }, 100);
   }
 }

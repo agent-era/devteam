@@ -167,7 +167,7 @@ random-session:33333`);
       expect(claudeConfig).not.toBeNull();
       if (claudeConfig) {
         expect(claudeConfig.name).toBe('Claude');
-        expect(claudeConfig.command).toBe('claude');
+        expect(claudeConfig.command).toBe('claude --continue');
         expect(claudeConfig.processPatterns).toContain('claude');
       }
     });
@@ -179,11 +179,11 @@ random-session:33333`);
   });
 
   describe('Tool launching', () => {
-    test('launchTool creates tmux session with AI tool', () => {
+    test('launchTool creates tmux session with AI tool (resume flag baked in)', () => {
       aiToolService.launchTool('claude', 'test-session', '/test/path');
-      
+
       expect(runCommand).toHaveBeenCalledWith([
-        'tmux', 'new-session', '-ds', 'test-session', '-c', '/test/path', 'claude'
+        'tmux', 'new-session', '-ds', 'test-session', '-c', '/test/path', 'claude --continue'
       ]);
     });
 
@@ -205,7 +205,7 @@ random-session:33333`);
       jest.advanceTimersByTime(100);
       
       expect(runCommand).toHaveBeenCalledWith([
-        'tmux', 'send-keys', '-t', 'test-session:0.0', 'claude', 'C-m'
+        'tmux', 'send-keys', '-t', 'test-session:0.0', 'claude --continue', 'C-m'
       ]);
       
       jest.useRealTimers();
