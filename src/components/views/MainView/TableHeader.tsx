@@ -15,7 +15,7 @@ export const TableHeader = memo<TableHeaderProps>(({columnWidths}) => {
     {text: 'eXec', width: columnWidths.run, justify: 'center' as const},
     {text: 'PROJECT/FEATURE', width: columnWidths.projectFeature, justify: 'flex-start' as const},
     {text: 'DIFF', width: columnWidths.diff, justify: 'flex-end' as const},
-    {text: 'CHANGES', width: columnWidths.changes, justify: 'flex-end' as const},
+    {text: 'COMMITS', width: columnWidths.changes, justify: 'flex-end' as const},
     {text: 'PR', width: columnWidths.pr, justify: 'flex-end' as const},
   ];
 
