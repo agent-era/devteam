@@ -33,8 +33,8 @@ test('pressing a then ESC with one worktree returns to list (not blank)', async 
   await waitFor(() => includesWorktree(stdout.lastFrame() || '', 'demo', 'feature-1'), {timeout: 3000, interval: 50, message: 'initial feature-1 [demo] visible'});
   let frame = stdout.lastFrame() || '';
 
-  // Press 'a' to open archive confirmation
-  stdin.emit('data', Buffer.from('a'));
+  // Press 'v' to open archive confirmation
+  stdin.emit('data', Buffer.from('v'));
   await waitForText(() => stripAnsi(stdout.lastFrame() || ''), 'Archive Feature', {timeout: 3000}).catch(async () => {
     await waitForText(() => stripAnsi(stdout.lastFrame() || ''), 'Press y to confirm', {timeout: 1000});
   });
