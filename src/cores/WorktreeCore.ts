@@ -11,7 +11,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import {startIntervalIfEnabled} from '../shared/utils/intervals.js';
 import {logDebug, logError} from '../shared/utils/logger.js';
-import {AI_TOOLS} from '../constants.js';
+import {aiLaunchCommand} from '../constants.js';
 import {getLastTool, setLastTool} from '../shared/utils/aiSessionMemory.js';
 
 type State = {
@@ -256,13 +256,8 @@ export class WorktreeCore implements CoreBase<State> {
         selected = this.availableAITools[0];
       }
       if (selected !== 'none') {
-        const cmd = AI_TOOLS[selected]?.command;
-        if (cmd) {
-          this.tmux.createSessionWithCommand(sessionName, worktree.path, cmd, true);
-          setLastTool(selected, worktree.path);
-        } else {
-          this.tmux.createSession(sessionName, worktree.path, true);
-        }
+        this.tmux.createSessionWithCommand(sessionName, worktree.path, aiLaunchCommand(selected), true);
+        setLastTool(selected, worktree.path);
       } else {
         this.tmux.createSession(sessionName, worktree.path, true);
       }

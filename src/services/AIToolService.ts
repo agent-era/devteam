@@ -1,5 +1,5 @@
 import {runCommandQuickAsync, runCommand} from '../shared/utils/commandExecutor.js';
-import {AI_TOOLS} from '../constants.js';
+import {AI_TOOLS, aiLaunchCommand} from '../constants.js';
 import {AIStatus, AITool} from '../models.js';
 import {setLastTool} from '../shared/utils/aiSessionMemory.js';
 
@@ -170,8 +170,7 @@ export class AIToolService {
    */
   launchTool(tool: AITool, sessionName: string, cwd: string): void {
     if (tool === 'none') return;
-    const command = AI_TOOLS[tool].command;
-    runCommand(['tmux', 'new-session', '-ds', sessionName, '-c', cwd, command]);
+    runCommand(['tmux', 'new-session', '-ds', sessionName, '-c', cwd, aiLaunchCommand(tool)]);
     setLastTool(tool, cwd);
   }
 }

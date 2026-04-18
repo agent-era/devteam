@@ -167,7 +167,7 @@ random-session:33333`);
       expect(claudeConfig).not.toBeNull();
       if (claudeConfig) {
         expect(claudeConfig.name).toBe('Claude');
-        expect(claudeConfig.command).toBe('claude --continue');
+        expect(claudeConfig.command).toBe('claude');
         expect(claudeConfig.processPatterns).toContain('claude');
       }
     });

@@ -71,13 +71,15 @@ export const GIT_BEHIND = '↓';
 export const AMBIGUOUS_EMOJI_ARE_WIDE = false;
 
 // AI tool configurations with detection patterns.
-// `.command` includes the per-tool resume flag so launching always picks up the most
-// recent on-disk session for the worktree's cwd. Each CLI gracefully falls back to a
-// fresh session if there's nothing to resume.
+// `.command` is the binary name (used by `which` for availability detection and by `ps`
+// for pane-process matching). `.resumeArgs` is the suffix appended when launching, so
+// a restart picks up the most recent on-disk session for the worktree's cwd. Each CLI
+// gracefully falls back to a fresh session if there's nothing to resume.
 export const AI_TOOLS = {
   claude: {
     name: 'Claude',
-    command: 'claude --continue',
+    command: 'claude',
+    resumeArgs: '--continue',
     processPatterns: ['claude'],
     statusPatterns: {
       working: 'esc to interrupt',
@@ -87,7 +89,8 @@ export const AI_TOOLS = {
   },
   codex: {
     name: 'OpenAI Codex',
-    command: 'codex resume --last',
+    command: 'codex',
+    resumeArgs: 'resume --last',
     processPatterns: ['node'],
     statusPatterns: {
       working: 'Esc to interrupt',
@@ -97,7 +100,8 @@ export const AI_TOOLS = {
   },
   gemini: {
     name: 'Gemini',
-    command: 'gemini --resume latest',
+    command: 'gemini',
+    resumeArgs: '--resume latest',
     processPatterns: ['node'],
     statusPatterns: {
       working: 'esc to cancel',
@@ -106,6 +110,11 @@ export const AI_TOOLS = {
     }
   }
 } as const;
+
+export function aiLaunchCommand(tool: keyof typeof AI_TOOLS): string {
+  const cfg = AI_TOOLS[tool];
+  return `${cfg.command} ${cfg.resumeArgs}`;
+}
 
 // Claude status patterns (Python parity) - kept for backward compatibility
 export const CLAUDE_PATTERNS = {
