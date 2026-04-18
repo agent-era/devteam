@@ -46,27 +46,15 @@ describe('WorktreeCore auto-resume', () => {
     fs.rmSync(tmpDir, {recursive: true, force: true});
   });
 
-  test('attachSession launches claude --continue and records lastTool', async () => {
+  test('attachSession launches claude with shell fallback and records lastTool', async () => {
     const {core, tmux} = buildCore();
     const wt = worktreeFor('proj', 'feat');
 
     await core.attachSession(wt, 'claude');
 
     const sessionName = tmux.sessionName('proj', 'feat');
-    expect(getExecutedCommands(tmux, sessionName)).toEqual(['claude --continue']);
+    expect(getExecutedCommands(tmux, sessionName)).toEqual(['claude --continue || claude']);
     expect(getLastTool(wt.path)).toBe('claude');
-  });
-
-  test('attachSession falls back to plain claude when resume does not start a session', async () => {
-    const {core, tmux} = buildCore();
-    const wt = worktreeFor('proj', 'feat');
-    const sessionName = tmux.sessionName('proj', 'feat');
-    tmux.failNextClaudeContinue(sessionName);
-
-    await core.attachSession(wt, 'claude');
-
-    expect(getExecutedCommands(tmux, sessionName)).toEqual(['claude --continue', 'claude']);
-    expect(tmux.getSessionInfo(sessionName)?.ai_tool).toBe('claude');
   });
 
   test('attachSession uses remembered tool when no explicit choice', async () => {

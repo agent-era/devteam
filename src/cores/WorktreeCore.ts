@@ -258,7 +258,7 @@ export class WorktreeCore implements CoreBase<State> {
       else if (sessionTool && sessionTool !== 'none') selectedTool = sessionTool;
       else if (remembered) selectedTool = remembered;
       if (selectedTool !== 'none') {
-        if (selectedTool === 'claude') await this.launchClaudeSessionWithFallback(sessionName, worktree.path);
+        if (selectedTool === 'claude') this.launchClaudeSessionWithFallback(sessionName, worktree.path);
         else this.tmux.createSessionWithCommand(sessionName, worktree.path, aiLaunchCommand(selectedTool), true);
         setLastTool(selectedTool, worktree.path);
       } else {
@@ -386,23 +386,9 @@ export class WorktreeCore implements CoreBase<State> {
     for (const name of [s, sh, rn]) { if (active.includes(name)) this.tmux.killSession(name); }
   }
 
-  private async launchClaudeSessionWithFallback(sessionName: string, cwd: string): Promise<void> {
-    this.tmux.createSession(sessionName, cwd, true);
-    this.tmux.sendText(sessionName, aiLaunchCommand('claude'), {executeCommand: true});
-    const started = await this.waitForAIToolStart(sessionName, 'claude');
-    if (!started) {
-      logDebug('Claude resume did not start; retrying with a fresh session', {sessionName, cwd});
-      this.tmux.sendText(sessionName, 'claude', {executeCommand: true});
-    }
-  }
-
-  private async waitForAIToolStart(sessionName: string, tool: AITool, attempts: number = 3, waitMs: number = 150): Promise<boolean> {
-    for (let attempt = 0; attempt < attempts; attempt++) {
-      const status = await this.tmux.getAIStatus(sessionName);
-      if (status.tool === tool) return true;
-      if (attempt < attempts - 1) await new Promise(resolve => setTimeout(resolve, waitMs));
-    }
-    return false;
+  private launchClaudeSessionWithFallback(sessionName: string, cwd: string): void {
+    const continueCmd = aiLaunchCommand('claude');
+    this.tmux.createSessionWithCommand(sessionName, cwd, `${continueCmd} || claude`, true);
   }
 
   private setState(partial: Partial<State>): void {
