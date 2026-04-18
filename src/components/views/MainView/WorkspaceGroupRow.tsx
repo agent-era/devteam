@@ -5,6 +5,7 @@ import type {ColumnWidths} from './hooks/useColumnWidths.js';
 import {stringDisplayWidth} from '../../../shared/utils/formatting.js';
 import StatusChip from '../../common/StatusChip.js';
 import {getStatusMeta} from './highlight.js';
+import {renderSessionCell} from './SessionCell.js';
 
 interface WorkspaceGroupRowProps {
   workspace: WorktreeInfo; // header item with is_workspace_header
@@ -26,9 +27,9 @@ export const WorkspaceGroupRow = memo<WorkspaceGroupRowProps>(({workspace, globa
   const runActive = workspace.session?.run_attached || false;
 
   const cells = [
-    {text: '[a]', width: columnWidths.ai, justify: 'center' as const},
-    {text: '[s]', width: columnWidths.shell, justify: 'center' as const},
-    {text: '[x]', width: columnWidths.run, justify: 'center' as const},
+    {text: 'a', width: columnWidths.ai, justify: 'center' as const},
+    {text: 's', width: columnWidths.shell, justify: 'center' as const},
+    {text: 'x', width: columnWidths.run, justify: 'center' as const},
     {text: truncatedHeader, width: columnWidths.projectFeature, justify: 'flex-start' as const},
     {text: '', width: columnWidths.diff, justify: 'flex-end' as const},
     {text: '', width: columnWidths.changes, justify: 'flex-end' as const},
@@ -50,14 +51,6 @@ export const WorkspaceGroupRow = memo<WorkspaceGroupRowProps>(({workspace, globa
       return ' '.repeat(left) + visible + ' '.repeat(right);
     }
     return visible + ' '.repeat(pad);
-  };
-
-  const renderSessionCell = (text: string, active: boolean, width: number) => {
-    const pad = Math.max(0, width - stringDisplayWidth(text));
-    const left = Math.floor(pad / 2);
-    const right = pad - left;
-    const content = `${' '.repeat(left)}${text}${' '.repeat(right)}`;
-    return active ? <Text bold>{content}</Text> : <Text dimColor>{content}</Text>;
   };
 
   const renderProjectFeatureCell = (text: string, width: number, justify: 'flex-start' | 'center' | 'flex-end') => {
@@ -148,7 +141,7 @@ export const WorkspaceGroupRow = memo<WorkspaceGroupRowProps>(({workspace, globa
     widthsEqual &&
     prevW.feature === nextW.feature &&
     !!prevW.session?.attached === !!nextW.session?.attached &&
-    !!prevW.session?.attached === !!nextW.session?.attached &&
+    (prevW.session?.ai_status || 'not_running') === (nextW.session?.ai_status || 'not_running') &&
     !!prevW.session?.shell_attached === !!nextW.session?.shell_attached &&
     !!prevW.session?.run_attached === !!nextW.session?.run_attached
   );

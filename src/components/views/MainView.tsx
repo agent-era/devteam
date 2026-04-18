@@ -35,6 +35,8 @@ interface Props {
   hasProjects?: boolean;
 }
 
+const HEADER_TEXT = '[a]gent, [s]hell, e[x]ec, [n]ew, [v]archive, [d]iff, [?]help, [q]uit';
+
 export default function MainView({
   worktrees,
   selectedIndex,
@@ -76,11 +78,6 @@ export default function MainView({
     // Clamp to the measured page size to avoid rendering more rows than fit
     return worktrees.slice(start, start + measuredPageSize);
   }, [worktrees, page, measuredPageSize]);
-  
-  const headerText = useMemo(() => {
-    // Standardized shortcut notation; embed keys in words when possible
-    return '[a]gent, [s]hell, e[x]ec, [n]ew, [v]archive, [d]iff, [?]help, [q]uit';
-  }, []);
   
   const getRowKey = useCallback((worktree: WorktreeInfo, index: number) => 
     getWorktreeKey(worktree, index), []
@@ -192,7 +189,7 @@ export default function MainView({
         paginationText={paginationInfo.paginationText}
       />
       <Box marginTop={1}>
-        <AnnotatedText color="magenta" wrap="truncate" text={headerText} />
+        <AnnotatedText color="magenta" wrap="truncate" text={HEADER_TEXT} />
       </Box>
     </Box>
   );

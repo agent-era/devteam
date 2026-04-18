@@ -80,13 +80,13 @@ export function statusLabelFromReason(reason: WorktreeStatusReason | string | nu
 
 export function statusColorsFromReason(reason: WorktreeStatusReason | string | null | undefined): {bg: string; fg: string} {
   switch (reason) {
-    case WorktreeStatusReason.AGENT_WORKING: return {bg: 'cyan', fg: 'black'};
-    case WorktreeStatusReason.AGENT_WAITING: return {bg: 'yellow', fg: 'black'};
+    case WorktreeStatusReason.AGENT_WORKING: return {bg: 'none', fg: 'cyan'};
+    case WorktreeStatusReason.AGENT_WAITING: return {bg: 'none', fg: 'yellow'};
     case WorktreeStatusReason.UNCOMMITTED_CHANGES: return {bg: 'none', fg: 'blue'};
-    case WorktreeStatusReason.UNPUSHED_COMMITS: return {bg: 'cyan', fg: 'white'};
-    case WorktreeStatusReason.PR_CONFLICTS: return {bg: 'red', fg: 'white'};
-    case WorktreeStatusReason.PR_FAILING: return {bg: 'red', fg: 'white'};
-    case WorktreeStatusReason.PR_READY_TO_MERGE: return {bg: 'green', fg: 'white'};
+    case WorktreeStatusReason.UNPUSHED_COMMITS: return {bg: 'none', fg: 'cyan'};
+    case WorktreeStatusReason.PR_CONFLICTS: return {bg: 'none', fg: 'red'};
+    case WorktreeStatusReason.PR_FAILING: return {bg: 'none', fg: 'red'};
+    case WorktreeStatusReason.PR_READY_TO_MERGE: return {bg: 'none', fg: 'green'};
     case WorktreeStatusReason.PR_CHECKING: return {bg: 'none', fg: 'magenta'};
     case WorktreeStatusReason.NO_PR: return {bg: 'none', fg: 'cyan'};
     case WorktreeStatusReason.PR_MERGED: return {bg: 'none', fg: 'gray'};

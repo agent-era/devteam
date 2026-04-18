@@ -9,6 +9,7 @@ import type {ColumnWidths} from './hooks/useColumnWidths.js';
 import StatusChip from '../../common/StatusChip.js';
 import {getStatusMeta, COLUMNS} from './highlight.js';
 import { WorktreeStatusReason as StatusReason } from '../../../cores/WorktreeStatus.js';
+import {renderSessionCell} from './SessionCell.js';
 
 interface WorktreeRowProps {
   worktree: WorktreeInfo;
@@ -53,9 +54,9 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
 
   const cells = [
     {text: data.number, width: columnWidths.number, justify: 'flex-start' as const},
-    {text: '[a]', width: columnWidths.ai, justify: 'center' as const},
-    {text: '[s]', width: columnWidths.shell, justify: 'center' as const},
-    {text: '[x]', width: columnWidths.run, justify: 'center' as const},
+    {text: 'a', width: columnWidths.ai, justify: 'center' as const},
+    {text: 's', width: columnWidths.shell, justify: 'center' as const},
+    {text: 'x', width: columnWidths.run, justify: 'center' as const},
     {text: truncatedProjectFeature, width: columnWidths.projectFeature, justify: 'flex-start' as const},
     {text: data.diff, width: columnWidths.diff, justify: 'flex-end' as const},
     {text: data.changes, width: columnWidths.changes, justify: 'flex-end' as const},
@@ -136,16 +137,6 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
     return visible + ' '.repeat(pad);
   };
   
-  const renderSessionCell = (text: string, active: boolean, width: number) => {
-    const pad = Math.max(0, width - stringDisplayWidth(text));
-    const left = Math.floor(pad / 2);
-    const right = pad - left;
-    const content = `${' '.repeat(left)}${text}${' '.repeat(right)}`;
-    return active
-      ? <Text bold>{content}</Text>
-      : <Text dimColor>{content}</Text>;
-  };
-
   // Render helper for the Project/Feature cell to dim bracketed project
   const renderProjectFeatureCell = (text: string, width: number, justify: 'flex-start' | 'center' | 'flex-end') => {
     const raw = (text ?? '').trim();
