@@ -10,6 +10,7 @@ import {
   PR_TTL_CHECKS_PENDING_MS,
   PR_TTL_PASSING_OPEN_MS,
   PR_TTL_OPEN_MS,
+  PR_TTL_OPEN_NO_CHECKS_MS,
   PR_TTL_CLOSED_MS,
   PR_TTL_UNKNOWN_MS,
   PR_TTL_FALLBACK_MS,
@@ -233,7 +234,10 @@ export class PRStatusCacheService {
 
         if (prStatus.checks === 'passing' && prStatus.state === 'OPEN') return PR_TTL_PASSING_OPEN_MS;
 
-        if (prStatus.state === 'OPEN') return PR_TTL_OPEN_MS;
+        if (prStatus.state === 'OPEN') {
+          // Short TTL when checks are unknown — CI may still be registering after a push
+          return prStatus.checks == null ? PR_TTL_OPEN_NO_CHECKS_MS : PR_TTL_OPEN_MS;
+        }
 
         if (prStatus.state === 'CLOSED') return PR_TTL_CLOSED_MS;
 
