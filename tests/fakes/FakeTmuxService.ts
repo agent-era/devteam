@@ -8,6 +8,7 @@ export class FakeTmuxService extends TmuxService {
   private sentKeys: Array<{session: string, keys: string[]}> = [];
   private sessions = new Map<string, SessionInfo>();
   private failClaudeContinueSessions = new Set<string>();
+  private sessionOptions = new Map<string, Map<string, string>>();
 
   constructor() {
     super(new FakeAIToolService());
@@ -190,13 +191,31 @@ export class FakeTmuxService extends TmuxService {
   }
 
   setSessionOption(session: string, option: string, value: string): void {
-    // Mock implementation - just store for testing if needed
+    const existing = this.sessionOptions.get(session) || new Map<string, string>();
+    existing.set(option, value);
+    this.sessionOptions.set(session, existing);
   }
 
   async listPanes(session: string): Promise<string> {
     const sessionInfo = this.sessions.get(session) || memoryStore.sessions.get(session);
     if (!sessionInfo) return '';
     return '0.0 bash\n1.0 claude'; // Mock pane list
+  }
+
+  configureSessionUI(session: string, metadata?: {project: string; worktree: string; sessionKind: 'agent' | 'execute' | 'shell'}): void {
+    if (!metadata) return;
+    this.setSessionOption(session, '@devteam_project', metadata.project);
+    this.setSessionOption(session, '@devteam_worktree', metadata.worktree);
+    this.setSessionOption(
+      session,
+      '@devteam_session_kind',
+      metadata.sessionKind === 'agent' ? 'Agent' : metadata.sessionKind === 'execute' ? 'Execute' : 'Shell'
+    );
+  }
+
+  attachSessionWithControls(sessionName: string, metadata?: {project: string; worktree: string; sessionKind: 'agent' | 'execute' | 'shell'}): void {
+    this.configureSessionUI(sessionName, metadata);
+    this.attachSessionInteractive(sessionName);
   }
 
   // Test helpers

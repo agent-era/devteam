@@ -267,13 +267,21 @@ export class WorktreeCore implements CoreBase<State> {
         this.tmux.createSession(sessionName, worktree.path, true);
       }
     }
-    this.tmux.attachSessionWithControls(sessionName);
+    this.tmux.attachSessionWithControls(sessionName, {
+      project: worktree.project,
+      worktree: worktree.feature,
+      sessionKind: 'agent',
+    });
   }
   async attachShellSession(worktree: WorktreeInfo): Promise<void> {
     const name = this.tmux.shellSessionName(worktree.project, worktree.feature);
     const sessions = await this.tmux.listSessions();
     if (!sessions.includes(name)) this.tmux.createSession(name, worktree.path, false);
-    this.tmux.attachSessionWithControls(name);
+    this.tmux.attachSessionWithControls(name, {
+      project: worktree.project,
+      worktree: worktree.feature,
+      sessionKind: 'shell',
+    });
   }
   async attachRunSession(worktree: WorktreeInfo): Promise<'success' | 'no_config'> {
     const name = this.tmux.runSessionName(worktree.project, worktree.feature);
@@ -289,7 +297,11 @@ export class WorktreeCore implements CoreBase<State> {
     const detachOnExit: boolean = !!exec.detachOnExit;
     try { this.tmux.setSessionOption(name, 'remain-on-exit', detachOnExit ? 'on' : 'off'); } catch {}
     if (!mainCmd || typeof mainCmd !== 'string' || mainCmd.trim().length === 0) {
-      this.tmux.attachSessionWithControls(name);
+      this.tmux.attachSessionWithControls(name, {
+        project: worktree.project,
+        worktree: worktree.feature,
+        sessionKind: 'execute',
+      });
       return 'no_config';
     }
     for (const [k, v] of Object.entries(env)) {
@@ -298,7 +310,11 @@ export class WorktreeCore implements CoreBase<State> {
     }
     for (const cmd of pre) this.tmux.sendText(name, cmd, { executeCommand: true });
     this.tmux.sendText(name, mainCmd, { executeCommand: true });
-    this.tmux.attachSessionWithControls(name);
+    this.tmux.attachSessionWithControls(name, {
+      project: worktree.project,
+      worktree: worktree.feature,
+      sessionKind: 'execute',
+    });
     return 'success';
   }
 

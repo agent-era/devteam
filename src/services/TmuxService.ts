@@ -5,6 +5,13 @@ import {Timer} from '../shared/utils/timing.js';
 import {AIStatus, AITool} from '../models.js';
 import {AIToolService} from './AIToolService.js';
 
+type SessionKind = 'agent' | 'execute' | 'shell';
+
+type SessionDisplayMetadata = {
+  project: string;
+  worktree: string;
+  sessionKind: SessionKind;
+};
 
 export class TmuxService {
   private aiToolService: AIToolService;
@@ -167,18 +174,23 @@ export class TmuxService {
    * that exposes Detach and Kill actions.
    * Uses tmux status-format ranges (tmux 3.2+) and MouseDown1Status binding.
    */
-  configureSessionUI(session: string): void {
+  configureSessionUI(session: string, metadata?: SessionDisplayMetadata): void {
     try {
+      const sessionMeta = metadata || this.inferSessionDisplayMetadata(session);
+      this.storeSessionDisplayMetadata(session, sessionMeta);
+
       // Ensure mouse is enabled and status is visible
       this.setSessionOption(session, 'mouse', 'on');
       // Ensure status bar is visible
       this.setSessionOption(session, 'status', 'on');
       this.setSessionOption(session, 'status-position', 'bottom');
-      this.setSessionOption(session, 'status-style', 'fg=white,bold,bg=black');
+      this.setSessionOption(session, 'status-style', 'fg=colour255,bg=colour235');
       this.setSessionOption(session, 'status-interval', '5');
+      this.setSessionOption(session, 'status-left-length', '120');
+      this.setSessionOption(session, 'status-right-length', '120');
       runCommand([
         'tmux', 'set-option', '-t', session, 'status-format[0]',
-        ' #[align=right]Click here to return to devteam (or press Ctrl+b, then d) '
+        this.buildStatusFormat()
       ], { env: this.tmuxEnv });
 
       const bind = (key: string, args: string[]) => {
@@ -200,8 +212,8 @@ export class TmuxService {
   /**
    * Attach to a session with clickable status bar controls enabled.
    */
-  attachSessionWithControls(sessionName: string): void {
-    this.configureSessionUI(sessionName);
+  attachSessionWithControls(sessionName: string, metadata?: SessionDisplayMetadata): void {
+    this.configureSessionUI(sessionName, metadata);
     this.attachSessionInteractive(sessionName);
   }
 
@@ -257,5 +269,51 @@ export class TmuxService {
     
     // Check if there's a matching worktree
     return validWorktrees.some((wt) => wt.includes(suffix));
+  }
+
+  private storeSessionDisplayMetadata(session: string, metadata: SessionDisplayMetadata): void {
+    this.setSessionOption(session, '@devteam_project', metadata.project || 'unknown');
+    this.setSessionOption(session, '@devteam_worktree', metadata.worktree || 'unknown');
+    this.setSessionOption(session, '@devteam_session_kind', this.sessionKindLabel(metadata.sessionKind));
+  }
+
+  private inferSessionDisplayMetadata(session: string): SessionDisplayMetadata {
+    let baseName = session.startsWith(SESSION_PREFIX) ? session.slice(SESSION_PREFIX.length) : session;
+    let sessionKind: SessionKind = 'agent';
+
+    if (baseName.endsWith('-shell')) {
+      sessionKind = 'shell';
+      baseName = baseName.slice(0, -'-shell'.length);
+    } else if (baseName.endsWith('-run')) {
+      sessionKind = 'execute';
+      baseName = baseName.slice(0, -'-run'.length);
+    }
+
+    const [project = baseName || 'unknown', ...rest] = baseName.split('-');
+    const worktree = rest.join('-') || project;
+    return {project, worktree, sessionKind};
+  }
+
+  private sessionKindLabel(kind: SessionKind): string {
+    if (kind === 'shell') return 'Shell';
+    if (kind === 'execute') return 'Execute';
+    return 'Agent';
+  }
+
+  private buildStatusFormat(): string {
+    return (
+      ' ' +
+      '#[fg=colour231,bg=colour31,bold] DEVTEAM ' +
+      '#[fg=colour31,bg=colour117] PROJECT ' +
+      '#[fg=colour255,bg=colour24,bold] #{@devteam_project} ' +
+      '#[fg=colour130,bg=colour223] WORKTREE ' +
+      '#[fg=colour255,bg=colour95,bold] #{@devteam_worktree} ' +
+      '#[fg=colour235,bg=colour186] SESSION ' +
+      '#[fg=colour255,bg=colour60,bold] #{@devteam_session_kind} ' +
+      '#[default]' +
+      '#[align=right]' +
+      '#[fg=colour255,bg=colour238] PROC #{pane_current_command} ' +
+      '#[fg=colour232,bg=colour117,bold] Return to devteam: Prefix+d '
+    );
   }
 }
