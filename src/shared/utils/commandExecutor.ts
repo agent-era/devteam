@@ -129,12 +129,14 @@ export function commandExists(command: string): boolean {
  */
 export function detectAvailableAITools(): (keyof typeof AI_TOOLS)[] {
   const available: (keyof typeof AI_TOOLS)[] = [];
-  
+
   for (const [tool, config] of Object.entries(AI_TOOLS)) {
-    if (commandExists(config.command)) {
+    // config.command is a full shell command (e.g. "claude --continue"); probe just the binary.
+    const bin = config.command.split(/\s+/)[0];
+    if (commandExists(bin)) {
       available.push(tool as keyof typeof AI_TOOLS);
     }
   }
-  
+
   return available;
 }
