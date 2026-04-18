@@ -198,6 +198,7 @@ export class TmuxService {
     if (mainPane) {
       runCommand(['tmux', 'select-pane', '-t', mainPane.id, '-T', MAIN_PANE_TITLE], { env: this.tmuxEnv });
       this.setSessionOption(sessionName, '@devteam_main_pane', mainPane.id);
+      this.enforceNavigatorLayout(sessionName);
       return;
     }
 
@@ -219,6 +220,7 @@ export class TmuxService {
     if (created) {
       runCommand(['tmux', 'select-pane', '-t', created, '-T', MAIN_PANE_TITLE], { env: this.tmuxEnv });
       this.setSessionOption(sessionName, '@devteam_main_pane', created);
+      this.enforceNavigatorLayout(sessionName);
     }
   }
 
@@ -269,6 +271,8 @@ export class TmuxService {
     if (mainPane.id) {
       this.setSessionOption(sessionName, '@devteam_main_pane', mainPane.id);
     }
+
+    this.enforceNavigatorLayout(sessionName);
 
     this.setSessionOption(sessionName, 'status', 'off');
     this.setSessionOption(sessionName, 'pane-border-status', 'off');
@@ -584,6 +588,13 @@ export class TmuxService {
         const [id = '', index = '0', title = '', currentCommand = ''] = line.split('\t');
         return {id, index, title, currentCommand};
       });
+  }
+
+  private enforceNavigatorLayout(sessionName: string): void {
+    const navPane = this.getSessionOptionValue(sessionName, '@devteam_nav_pane');
+    if (!navPane) return;
+    runCommand(['tmux', 'select-layout', '-t', `${sessionName}:0`, 'main-horizontal'], { env: this.tmuxEnv });
+    runCommand(['tmux', 'resize-pane', '-t', navPane, '-y', String(NAV_PANE_HEIGHT)], { env: this.tmuxEnv });
   }
 }
 
