@@ -49,11 +49,10 @@ export function computeWorktreeStatus(w: WorktreeInfo, pr?: PRStatus | null): Wo
     return { reason: WorktreeStatusReason.AGENT_WAITING, severity: 'warn', aspect: 'agent' };
   }
 
-  // Local working directory state takes precedence over PR (parity with terminal UI)
   if (w?.git?.has_changes) {
     return { reason: WorktreeStatusReason.UNCOMMITTED_CHANGES, severity: 'info', aspect: 'diff' };
   }
-  if (Number(w?.git?.ahead || 0) > 0) {
+  if (Number(w?.git?.ahead || 0) > 0 && !(pr && pr.is_open && pr.number)) {
     return { reason: WorktreeStatusReason.UNPUSHED_COMMITS, severity: 'info', aspect: 'sync' };
   }
 
@@ -99,7 +98,8 @@ export function computeCodeStatus(w: WorktreeInfo, pr?: PRStatus | null): Worktr
   if (w?.git?.has_changes) {
     return {reason: WorktreeStatusReason.UNCOMMITTED_CHANGES, severity: 'info', aspect: 'diff'};
   }
-  if (Number(w?.git?.ahead || 0) > 0) {
+  const hasOpenPR = !!(pr && pr.is_open && pr.number);
+  if (Number(w?.git?.ahead || 0) > 0 && !hasOpenPR) {
     return {reason: WorktreeStatusReason.UNPUSHED_COMMITS, severity: 'info', aspect: 'sync'};
   }
   if (pr) {
