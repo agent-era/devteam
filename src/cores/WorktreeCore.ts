@@ -260,7 +260,8 @@ export class WorktreeCore implements CoreBase<State> {
         selected = this.availableAITools[0];
       }
       if (selected !== 'none') {
-        this.tmux.createSessionWithCommand(sessionName, worktree.path, aiLaunchCommand(selected), true);
+        if (selected === 'claude') await this.launchClaudeSessionWithFallback(sessionName, worktree.path);
+        else this.tmux.createSessionWithCommand(sessionName, worktree.path, aiLaunchCommand(selected), true);
         setLastTool(selected, worktree.path);
       } else {
         this.tmux.createSession(sessionName, worktree.path, true);
@@ -368,6 +369,25 @@ export class WorktreeCore implements CoreBase<State> {
     const rn = this.tmux.runSessionName(projectName, featureName);
     const active = await this.tmux.listSessions();
     for (const name of [s, sh, rn]) { if (active.includes(name)) this.tmux.killSession(name); }
+  }
+
+  private async launchClaudeSessionWithFallback(sessionName: string, cwd: string): Promise<void> {
+    this.tmux.createSession(sessionName, cwd, true);
+    this.tmux.sendText(sessionName, aiLaunchCommand('claude'), {executeCommand: true});
+    const started = await this.waitForAIToolStart(sessionName, 'claude');
+    if (!started) {
+      logDebug('Claude resume did not start; retrying with a fresh session', {sessionName, cwd});
+      this.tmux.sendText(sessionName, 'claude', {executeCommand: true});
+    }
+  }
+
+  private async waitForAIToolStart(sessionName: string, tool: AITool, attempts: number = 3, waitMs: number = 150): Promise<boolean> {
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      const status = await this.tmux.getAIStatus(sessionName);
+      if (status.tool === tool) return true;
+      if (attempt < attempts - 1) await new Promise(resolve => setTimeout(resolve, waitMs));
+    }
+    return false;
   }
 
   private setState(partial: Partial<State>): void {
