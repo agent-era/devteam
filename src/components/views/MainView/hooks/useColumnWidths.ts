@@ -20,16 +20,15 @@ export function useColumnWidths(
   return useMemo(() => {
     // Fixed column widths as specified
     const fixedWidths = {
-      number: 3,        // # column
-      status: 13,       // STATUS column (already fixed)
-      ai: 5,           // AGENT column (renamed from AI)
-      diff: 11,        // DIFF column (increased by 2)
-      changes: 8,      // CHANGES column
-      pr: 8,           // PR column
+      number: 3,
+      status: 13,
+      ai: 7,
+      diff: 11,
+      changes: 8,
+      pr: 8,
     };
-    
-    // Calculate remaining space for PROJECT/FEATURE column
-    const fixedColumnsWidth = fixedWidths.number + fixedWidths.status + fixedWidths.ai + 
+
+    const fixedColumnsWidth = fixedWidths.number + fixedWidths.status + fixedWidths.ai +
                              fixedWidths.diff + fixedWidths.changes + fixedWidths.pr;
     const marginsWidth = 6; // 6 spaces between 7 columns
     const usedWidth = fixedColumnsWidth + marginsWidth;

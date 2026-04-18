@@ -10,8 +10,8 @@ export interface HighlightInfo {
 
 export const COLUMNS = {
   NUMBER: 0,
-  PROJECT_FEATURE: 1,
-  AI: 2,
+  AI: 1,
+  PROJECT_FEATURE: 2,
   DIFF: 3,
   CHANGES: 4,
   PR: 5,
@@ -87,7 +87,7 @@ export function statusColorsFromReason(reason: WorktreeStatusReason | string | n
     case WorktreeStatusReason.AGENT_WAITING:
       return {bg: 'yellow', fg: 'white'};
     case WorktreeStatusReason.AGENT_WORKING:
-      return {bg: 'none', fg: 'white'};
+      return {bg: 'none', fg: 'cyan'};
     case WorktreeStatusReason.AGENT_READY:
       // Render "ready" as plain text (no background), keep white like before
       return {bg: 'none', fg: 'white'};

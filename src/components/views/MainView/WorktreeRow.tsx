@@ -4,7 +4,7 @@ import type {WorktreeInfo} from '../../../models.js';
 import {stringDisplayWidth} from '../../../shared/utils/formatting.js';
 import {useHighlightPriority} from './hooks/useHighlightPriority.js';
 import type {PRStatus} from '../../../models.js';
-import { formatDiffStats, formatGitChanges, getAISymbol, formatPRStatus, shouldDimRow } from './utils.js';
+import { formatDiffStats, formatGitChanges, getAIToolLabel, getAIStatusColor, formatPRStatus, shouldDimRow } from './utils.js';
 import type {ColumnWidths} from './hooks/useColumnWidths.js';
 import StatusChip from '../../common/StatusChip.js';
 import {getStatusMeta} from './highlight.js';
@@ -32,15 +32,12 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
   const highlightInfo = useHighlightPriority(worktree, pr);
   const isDimmed = shouldDimRow(pr);
   
-  // Format all data for display
   const data = {
-    // Number column: always show index, including for workspace children
     number: String(globalIndex + 1),
-    // Branch name column: show tree glyph + [project] for children; otherwise feature [project]
     projectFeature: worktree.is_workspace_child
       ? `${worktree.is_last_workspace_child ? '└─' : '├─'} [${worktree.project}]`
       : `${worktree.feature} [${worktree.project}]`,
-    ai: getAISymbol(worktree.session?.ai_status || '', worktree.session?.attached || false),
+    ai: getAIToolLabel(worktree.session?.ai_tool || '', worktree.session?.attached || false),
     diff: formatDiffStats(worktree.git?.base_added_lines || 0, worktree.git?.base_deleted_lines || 0),
     changes: formatGitChanges(worktree.git?.ahead || 0, worktree.git?.behind || 0),
     pr: formatPRStatus(pr),
@@ -51,11 +48,10 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
     ? data.projectFeature.slice(0, Math.max(0, columnWidths.projectFeature - 3)) + '...'
     : data.projectFeature;
   
-  // Prepare cell data with colors
   const cells = [
     {text: data.number, width: columnWidths.number, justify: 'flex-start' as const},
-    {text: truncatedProjectFeature, width: columnWidths.projectFeature, justify: 'flex-start' as const},
     {text: data.ai, width: columnWidths.ai, justify: 'center' as const},
+    {text: truncatedProjectFeature, width: columnWidths.projectFeature, justify: 'flex-start' as const},
     {text: data.diff, width: columnWidths.diff, justify: 'flex-end' as const},
     {text: data.changes, width: columnWidths.changes, justify: 'flex-end' as const},
     {text: data.pr, width: columnWidths.pr, justify: 'flex-end' as const},
@@ -161,7 +157,7 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
         <>
           {' '.repeat(pad)}
           {/* Feature keeps the cell's computed color */}
-          <Text color={getCellForeground(1)} dimColor={isDimmed && !selected}>{left}</Text>
+          <Text color={getCellForeground(2)} dimColor={isDimmed && !selected}>{left}</Text>
           {/* Project (with brackets) dimmed */}
           {bracketed ? renderBracket(bracketed) : null}
         </>
@@ -173,9 +169,9 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
       return (
         <>
           {' '.repeat(leftPad)}
-          <Text color={getCellForeground(1)} dimColor={isDimmed && !selected}>{left}</Text>
+          <Text color={getCellForeground(2)} dimColor={isDimmed && !selected}>{left}</Text>
           {bracketed ? (selected && isDimmed
-            ? <Text color={getCellForeground(1)}>{bracketed}</Text>
+            ? <Text color={getCellForeground(2)}>{bracketed}</Text>
             : renderBracket(bracketed))
           : null}
           {' '.repeat(rightPad)}
@@ -185,9 +181,9 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
     // flex-start
     return (
       <>
-        <Text color={getCellForeground(1)} dimColor={isDimmed && !selected}>{left}</Text>
+        <Text color={getCellForeground(2)} dimColor={isDimmed && !selected}>{left}</Text>
         {bracketed ? (selected && isDimmed
-          ? <Text color={getCellForeground(1)}>{bracketed}</Text>
+          ? <Text color={getCellForeground(2)}>{bracketed}</Text>
           : renderBracket(bracketed))
         : null}
         {' '.repeat(pad)}
@@ -221,8 +217,12 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
 
       {/* Remaining columns from cells[1..] */}
       {cells.slice(1).map((cell, offsetIndex, arr) => {
-        const cellIndex = offsetIndex + 1; // original index in cells array
+        const cellIndex = offsetIndex + 1;
         const isLast = offsetIndex === arr.length - 1;
+        // AI column (cellIndex=1): color by status, not by priority highlight
+        const aiColor = isPriorityCell(1)
+          ? getCellForeground(2)
+          : getAIStatusColor(worktree.session?.ai_status || '', worktree.session?.attached || false);
         return (
           <Box
             key={cellIndex}
@@ -232,12 +232,12 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
           >
             <Text
               backgroundColor={getCellBackground(cellIndex)}
-              color={cellIndex === 1 ? undefined : getCellForeground(cellIndex)}
+              color={cellIndex === 1 ? aiColor : cellIndex === 2 ? undefined : getCellForeground(cellIndex)}
               dimColor={isDimmed && !selected}
               bold={selected && !isPriorityCell(cellIndex)}
               inverse={selected && !isPriorityCell(cellIndex) && !isDimmed}
             >
-              {cellIndex === 1
+              {cellIndex === 2
                 ? renderProjectFeatureCell(cell.text, cell.width, cell.justify)
                 : formatCellText(cell.text, cell.width, cell.justify)}
             </Text>
