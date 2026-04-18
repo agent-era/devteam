@@ -170,10 +170,15 @@ export class WorktreeCore implements CoreBase<State> {
     for (const wt of slice) {
       const sessionName = this.tmux.sessionName(wt.project, wt.feature);
       const attached = sessions.includes(sessionName);
-      const [gitStatus, aiResult] = await Promise.all([
-        this.git.getGitStatus(wt.path),
-        attached ? this.tmux.getAIStatus(sessionName) : Promise.resolve({tool: 'none' as const, status: 'not_running' as const})
-      ]);
+      // Fetch AI status first: if agent just finished working, invalidate the git slow-metrics
+      // cache before fetching git status so this tick shows fresh committed stats.
+      const aiResult = attached
+        ? await this.tmux.getAIStatus(sessionName)
+        : {tool: 'none' as const, status: 'not_running' as const};
+      if (wt.session?.ai_status === 'working' && aiResult.status !== 'working') {
+        this.git.invalidateGitSlowCache(wt.path);
+      }
+      const gitStatus = await this.git.getGitStatus(wt.path);
       updated.push(new WorktreeInfo({...wt, git: gitStatus, session: new SessionInfo({session_name: sessionName, attached, ai_status: aiResult.status, ai_tool: aiResult.tool})}));
     }
     const arr = [...this.state.worktrees];
@@ -186,8 +191,9 @@ export class WorktreeCore implements CoreBase<State> {
     await this.refreshVisibleStatus(currentPage, pageSize);
   }
 
-  private async refreshSingleWorktree(worktree: WorktreeInfo): Promise<void> {
+  private async refreshSingleWorktree(worktree: WorktreeInfo, invalidateGitCache = false): Promise<void> {
     try {
+      if (invalidateGitCache) this.git.invalidateGitSlowCache(worktree.path);
       const sessions = await this.tmux.listSessions();
       const sessionName = this.tmux.sessionName(worktree.project, worktree.feature);
       const attached = sessions.includes(sessionName);
@@ -294,14 +300,14 @@ export class WorktreeCore implements CoreBase<State> {
       }
     }
     this.tmux.attachSessionWithControls(sessionName);
-    await this.refreshSingleWorktree(worktree);
+    await this.refreshSingleWorktree(worktree, true); // user may have committed
   }
   async attachShellSession(worktree: WorktreeInfo): Promise<void> {
     const name = this.tmux.shellSessionName(worktree.project, worktree.feature);
     const sessions = await this.tmux.listSessions();
     if (!sessions.includes(name)) this.tmux.createSession(name, worktree.path, false);
     this.tmux.attachSessionWithControls(name);
-    await this.refreshSingleWorktree(worktree);
+    await this.refreshSingleWorktree(worktree, true); // user may have committed
   }
   async attachRunSession(worktree: WorktreeInfo): Promise<'success' | 'no_config'> {
     const name = this.tmux.runSessionName(worktree.project, worktree.feature);
