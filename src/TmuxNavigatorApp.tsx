@@ -16,7 +16,7 @@ import type {AITool} from './models.js';
 import {useTerminalDimensions} from './hooks/useTerminalDimensions.js';
 import StatusChip from './components/common/StatusChip.js';
 import {getStatusMeta} from './components/views/MainView/highlight.js';
-import {formatDiffStats, formatGitChanges, formatPRStatus} from './components/views/MainView/utils.js';
+import {formatDiffStats, formatGitChanges, formatPRStatus, getAISymbol} from './components/views/MainView/utils.js';
 import {stringDisplayWidth} from './shared/utils/formatting.js';
 
 type NavWorktree = {
@@ -316,6 +316,8 @@ export default function TmuxNavigatorApp(props: {sessionName: string}) {
 }
 
 const STATUS_CHIP_WIDTH = 13;
+const AGENT_CELL_WIDTH = 5;
+const STATUS_AGENT_WIDTH = STATUS_CHIP_WIDTH + 1 + AGENT_CELL_WIDTH;
 const MIN_TILE_WIDTH = 30;
 const TILE_LINE_COUNT = 3;
 const SUMMARY_LINE_Y = 1;
@@ -368,19 +370,35 @@ function sessionState(tmux: TmuxService, sessionName: string, sessions: Set<stri
 }
 
 function renderTileHeader(item: NavWorktree, selected: boolean, current: boolean, width: number): JSX.Element {
-  const metaWidth = Math.max(8, width - STATUS_CHIP_WIDTH - 1);
+  const statusDisplay = getTileStatusDisplay(item);
+  const leftWidth = statusDisplay.spanAgent ? STATUS_AGENT_WIDTH : STATUS_CHIP_WIDTH;
+  const metaWidth = Math.max(8, width - leftWidth - 1);
   const metaBg = selected ? 'yellow' : current ? 'cyan' : 'gray';
   const metaFg = selected || current ? 'black' : 'white';
   const right = current ? 'LIVE' : `${item.worktree.session?.attached ? 'ATTN' : 'NAV '}`;
   const left = truncateText(item.project, Math.max(5, metaWidth - right.length - 1));
   return (
     <Box>
-      <StatusChip
-        label={item.statusMeta.label || ''}
-        color={item.statusMeta.bg}
-        fg={item.statusMeta.fg}
-        width={STATUS_CHIP_WIDTH}
-      />
+      {statusDisplay.spanAgent ? (
+        <StatusChip
+          label={statusDisplay.label}
+          color={statusDisplay.bg}
+          fg={statusDisplay.fg}
+          width={STATUS_AGENT_WIDTH}
+        />
+      ) : (
+        <>
+          <StatusChip
+            label={statusDisplay.label}
+            color={statusDisplay.bg}
+            fg={statusDisplay.fg}
+            width={STATUS_CHIP_WIDTH}
+          />
+          <Text color={statusDisplay.agentFg}>
+            {padCell(statusDisplay.agentText, AGENT_CELL_WIDTH)}
+          </Text>
+        </>
+      )}
       <Text color={metaFg} backgroundColor={metaBg}>
         {padTile(left, right, metaWidth)}
       </Text>
@@ -496,12 +514,52 @@ export function modeStatusSummary(item: NavWorktree): string {
   return modeOrder.map((mode) => `${modeLabel(mode)}${compactModeState(mode, item.sessions[mode])}`).join(' ');
 }
 
+type TileStatusDisplay = {
+  spanAgent: boolean;
+  label: string;
+  bg: string;
+  fg: string;
+  agentText: string;
+  agentFg: string;
+};
+
+function getTileStatusDisplay(item: NavWorktree): TileStatusDisplay {
+  const aiText = getAISymbol(item.worktree.session?.ai_status || '', item.worktree.session?.attached || false);
+  const aiStatus = item.worktree.session?.ai_status || 'not_running';
+  if (aiStatus === 'working' || aiStatus === 'waiting') {
+    return {
+      spanAgent: true,
+      label: `${item.statusMeta.label} ${aiText}`.trim(),
+      bg: item.statusMeta.bg,
+      fg: item.statusMeta.fg,
+      agentText: aiText,
+      agentFg: 'white',
+    };
+  }
+  return {
+    spanAgent: false,
+    label: item.statusMeta.label || '',
+    bg: item.statusMeta.bg,
+    fg: item.statusMeta.fg,
+    agentText: aiText,
+    agentFg: aiText === '-' ? 'gray' : 'white',
+  };
+}
+
 function padTile(left: string, right: string, width: number): string {
   const innerWidth = Math.max(4, width);
-  const availableLeft = Math.max(1, innerWidth - right.length - 1);
+  const availableLeft = Math.max(1, innerWidth - stringDisplayWidth(right) - 1);
   const leftText = truncateText(left, availableLeft);
-  const gap = Math.max(1, innerWidth - leftText.length - right.length);
+  const gap = Math.max(1, innerWidth - stringDisplayWidth(leftText) - stringDisplayWidth(right));
   return `${leftText}${' '.repeat(gap)}${right}`;
+}
+
+function padCell(text: string, width: number): string {
+  const visible = truncateText(text, width);
+  const pad = Math.max(0, width - stringDisplayWidth(visible));
+  const left = Math.floor(pad / 2);
+  const right = pad - left;
+  return `${' '.repeat(left)}${visible}${' '.repeat(right)}`;
 }
 
 function thisRunSession(tmux: TmuxService, item: NavWorktree, exists: boolean): boolean {
