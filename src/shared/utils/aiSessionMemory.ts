@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import type {AITool} from '../../models.js';
+import {ensureDirectory} from './fileSystem.js';
 import {logError} from './logger.js';
 
 // Remembers which AI tool the user most recently opened for each worktree, so Enter can
@@ -21,9 +22,7 @@ function fileFor(worktreePath: string): string {
 
 export function getLastTool(worktreePath: string): AITool | null {
   try {
-    const p = fileFor(worktreePath);
-    if (!fs.existsSync(p)) return null;
-    const parsed = JSON.parse(fs.readFileSync(p, 'utf8'));
+    const parsed = JSON.parse(fs.readFileSync(fileFor(worktreePath), 'utf8'));
     const t = parsed?.lastTool;
     return t && t !== 'none' ? (t as AITool) : null;
   } catch {
@@ -34,8 +33,7 @@ export function getLastTool(worktreePath: string): AITool | null {
 export function setLastTool(tool: AITool, worktreePath: string): void {
   if (tool === 'none') return;
   try {
-    const dir = baseDir();
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, {recursive: true});
+    ensureDirectory(baseDir());
     fs.writeFileSync(fileFor(worktreePath), JSON.stringify({lastTool: tool}), 'utf8');
   } catch (err) {
     logError('aiSessionMemory.setLastTool failed', {error: err instanceof Error ? err.message : String(err)});
