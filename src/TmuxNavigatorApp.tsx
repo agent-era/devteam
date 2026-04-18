@@ -1,5 +1,5 @@
 import React, {useEffect, useMemo, useState} from 'react';
-import {Box, Text, useApp, useStdin} from 'ink';
+import {Box, Text, useApp, useStdin, useStdout} from 'ink';
 import path from 'node:path';
 import fs from 'node:fs';
 import FullScreen from './components/common/FullScreen.js';
@@ -26,6 +26,7 @@ export default function TmuxNavigatorApp(props: {sessionName: string}) {
   const {sessionName} = props;
   const {exit} = useApp();
   const {stdin, setRawMode} = useStdin();
+  const {stdout} = useStdout();
   const {rows, columns} = useTerminalDimensions();
 
   const git = useMemo(() => new GitService(getProjectsDirectory()), []);
@@ -77,6 +78,22 @@ export default function TmuxNavigatorApp(props: {sessionName: string}) {
     return () => clearInterval(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!stdout?.isTTY) return;
+    try {
+      stdout.write('\x1b[?1000h');
+      stdout.write('\x1b[?1002h');
+      stdout.write('\x1b[?1006h');
+    } catch {}
+    return () => {
+      try {
+        stdout.write('\x1b[?1000l');
+        stdout.write('\x1b[?1002l');
+        stdout.write('\x1b[?1006l');
+      } catch {}
+    };
+  }, [stdout]);
 
   useEffect(() => {
     setRawMode(true);
