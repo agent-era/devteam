@@ -216,12 +216,8 @@ export default function TmuxNavigatorApp(props: {sessionName: string}) {
     <FullScreen enableAltScreen={false}>
       <Box flexDirection="column" paddingX={1}>
         <Box justifyContent="space-between">
-          <Text color="black" backgroundColor="cyan">{' DEVTEAM NAV '}</Text>
-          <Text color="gray">{truncateText(selectedItem ? `${selectedItem.feature} [${selectedItem.project}]` : 'no selection', Math.max(12, columns - 22))}</Text>
-        </Box>
-        <Box justifyContent="space-between">
           <Text color="magenta">{`recent ${pageStart + 1}-${Math.min(pageStart + visible.length, items.length)} / ${items.length}`}</Text>
-          <Text color={statusTone}>{truncateText(statusMessage, Math.max(16, Math.floor(columns / 2)))} </Text>
+          <Text color={statusTone}>{truncateText(selectedItem ? `${selectedItem.feature} [${selectedItem.project}]` : statusMessage, Math.max(16, Math.floor(columns / 2)))} </Text>
         </Box>
         {tileGroups.map((group, rowIndex) => (
           <Box key={`tile-row-${rowIndex}`} marginTop={rowIndex === 0 ? 0 : 0}>
