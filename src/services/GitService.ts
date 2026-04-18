@@ -500,10 +500,22 @@ export class GitService {
   
   
 
-  archiveWorktree(project: string, sourcePath: string, archivedDest: string): void {
-    // Clean ignored files in the worktree before archiving
+  // Lists untracked, non-ignored files that a `git clean -fdx` would wipe
+  // but `-fdX` would preserve. Used to warn before destructive archive cleans.
+  getUntrackedNonIgnoredFiles(worktreePath: string): string[] {
     try {
-      runCommandQuick(['git', '-C', sourcePath, 'clean', '-fdX']);
+      const out = runCommandQuick(['git', '-C', worktreePath, 'ls-files', '--others', '--exclude-standard']);
+      if (!out) return [];
+      return out.split('\n').map((s) => s.trim()).filter(Boolean);
+    } catch {
+      return [];
+    }
+  }
+
+  archiveWorktree(project: string, sourcePath: string, archivedDest: string): void {
+    // Clean all untracked files (ignored + non-ignored) in the worktree before archiving
+    try {
+      runCommandQuick(['git', '-C', sourcePath, 'clean', '-fdx']);
     } catch {
       // Silent failure; cleaning is best-effort and should not block archiving
     }
