@@ -348,9 +348,6 @@ export class WorktreeCore implements CoreBase<State> {
     const mainCmd = exec.mainCommand;
     const pre = Array.isArray(exec.preRunCommands) ? exec.preRunCommands.filter(Boolean) : [];
     const env = exec.environmentVariables && typeof exec.environmentVariables === 'object' ? exec.environmentVariables : {};
-    // detachOnExit=true means the pane detaches (closes) when the command exits.
-    // detachOnExit=false keeps the pane open so the user can read the output.
-    try { this.tmux.setSessionOption(name, 'remain-on-exit', exec.detachOnExit ? 'off' : 'on'); } catch {}
     if (!mainCmd || typeof mainCmd !== 'string' || mainCmd.trim().length === 0) {
       this.tmux.attachSessionWithControls(name, {
         project: worktree.project,
@@ -364,7 +361,8 @@ export class WorktreeCore implements CoreBase<State> {
       this.tmux.sendText(name, `export ${k}=${JSON.stringify(String(v))}`, { executeCommand: true });
     }
     for (const cmd of pre) this.tmux.sendText(name, cmd, { executeCommand: true });
-    this.tmux.sendText(name, mainCmd, { executeCommand: true });
+    const cmdToRun = exec.keepShellRunning ? mainCmd : `${mainCmd}; exit`;
+    this.tmux.sendText(name, cmdToRun, { executeCommand: true });
     this.tmux.attachSessionWithControls(name, {
       project: worktree.project,
       worktree: worktree.feature,
