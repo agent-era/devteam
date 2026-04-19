@@ -3,6 +3,9 @@ import {AI_TOOLS, aiLaunchCommand} from '../constants.js';
 import {AIStatus, AITool} from '../models.js';
 import {setLastTool} from '../shared/utils/aiSessionMemory.js';
 
+// Matches ❯ immediately followed by a numbered option on the same line (e.g. "❯ 1. Accept")
+const CLAUDE_WAITING_RE = /❯\s+\d+\.\s+\w+/m;
+
 export class AIToolService {
   /**
    * Get tool name for display
@@ -97,17 +100,14 @@ export class AIToolService {
     if (tool === 'none') return 'not_running';
     
     const toolConfig = AI_TOOLS[tool];
-    const patterns = toolConfig.statusPatterns;
-    
-    // Check in priority order: working → waiting → idle (default)
-    
+
     // 1. Check for working state first (most specific)
-    if (this.isWorking(text, patterns.working)) {
+    if (this.isWorking(text, toolConfig.statusPatterns.working)) {
       return 'working';
     }
-    
+
     // 2. Check for waiting states (tool-specific logic)
-    if (this.isWaitingForTool(text, tool, patterns)) {
+    if (this.isWaitingForTool(text, tool)) {
       return 'waiting';
     }
     
@@ -125,36 +125,28 @@ export class AIToolService {
   /**
    * Check if AI tool is waiting for user input (tool-specific logic)
    */
-  private isWaitingForTool(text: string, tool: AITool, patterns: any): boolean {
+  private isWaitingForTool(text: string, tool: AITool): boolean {
     const lower = text.toLowerCase();
     switch (tool) {
       case 'gemini':
         return lower.includes('waiting for user');
-      
+
       case 'codex':
         // Codex uses the block cursor for interactive prompts; idle restores the send hint.
         return text.includes('▌') && !text.includes('⏎ send');
-      
+
       case 'claude':
-        // Observed against current Claude Code permission/question prompts; keep narrow to avoid
-        // matching generic file-permission errors in normal output.
-        return this.isWaiting(text, patterns.waiting_numbered) ||
+        // CLAUDE_WAITING_RE requires ❯ and the numbered option on the same line, preventing
+        // false positives from scrollback ❯ (user prompts) + prior numbered Claude responses.
+        return CLAUDE_WAITING_RE.test(text) ||
           lower.includes('allow execution') ||
           lower.includes('needs permission') ||
           lower.includes('yes, allow') ||
           lower.includes('do you want me to');
-      
+
       default:
         return false;
     }
-  }
-
-  /**
-   * Check if text matches waiting pattern (prompt symbol + regex pattern)
-   */
-  private isWaiting(text: string, patterns: readonly [string, string]): boolean {
-    const [promptSymbol, pattern] = patterns;
-    return text.includes(promptSymbol) && new RegExp(pattern, 'm').test(text);
   }
 
   /**
