@@ -464,10 +464,10 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     const currentLines = viewMode === 'unified' ? lines : sideBySideLines;
     const maxLineIndex = Math.max(0, currentLines.length - 1);
     
-    if (key.upArrow || input === 'k') {
+    if ((key.upArrow || input === 'k') && !key.shift && !key.ctrl) {
       setSelectedLine(prev => Math.max(0, prev - 1));
     }
-    if (key.downArrow || input === 'j') {
+    if ((key.downArrow || input === 'j') && !key.shift && !key.ctrl) {
       setSelectedLine(prev => Math.min(maxLineIndex, prev + 1));
     }
     if (key.pageUp || input === 'b') {
@@ -613,8 +613,8 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       }
     }
     
-    // Previous file: Shift+Up or Ctrl+Up (undocumented)
-    if (key.upArrow && (key.shift || key.ctrl)) {
+    // Previous file: Shift+Up, Ctrl+Up, or p
+    if ((key.upArrow && (key.shift || key.ctrl)) || input === 'p') {
       // First, find the current file header
       let currentFileHeaderIndex = -1;
       for (let i = selectedLine; i >= 0; i--) {
@@ -645,8 +645,8 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       }
     }
     
-    // Next file: Shift+Down or Ctrl+Down (undocumented)
-    if (key.downArrow && (key.shift || key.ctrl)) {
+    // Next file: Shift+Down, Ctrl+Down, or n
+    if ((key.downArrow && (key.shift || key.ctrl)) || input === 'n') {
       const maxIndex = viewMode === 'unified' ? lines.length : sideBySideLines.length;
       for (let i = selectedLine + 1; i < maxIndex; i++) {
         if (isFileHeader(i)) {
@@ -1250,7 +1250,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
         <AnnotatedText
           color="magenta"
           wrap="truncate"
-          text={truncateDisplay(`Shift+↑/↓ prev/next file  [v]iew (${viewMode})  [w]rap (${wrapMode})  [c]omment  [C] show all  [d]elete  [S]end to agent  [q] close`, terminalWidth)}
+          text={truncateDisplay(`Shift+↑/↓ or [p]/[n] prev/next file  [v]iew (${viewMode})  [w]rap (${wrapMode})  [c]omment  [C] show all  [d]elete  [S]end to agent  [q] close`, terminalWidth)}
         />
       )}
       
