@@ -94,25 +94,29 @@ export const WorkspaceGroupRow = memo<WorkspaceGroupRowProps>(({workspace, globa
     );
   };
 
+  const hasBg = statusBg && statusBg !== 'none';
+  const chipColor = selected ? (hasBg ? statusBg : 'white') : statusBg;
+  const chipFg = selected ? (hasBg ? statusFg : (statusFg === 'white' ? 'black' : statusFg)) : statusFg;
+
   return (
     <Box>
       <Box width={columnWidths.number} justifyContent="flex-start" marginRight={1}>
-        <Text bold={selected} inverse={selected}>{formatCellText(numberText, columnWidths.number, 'flex-start')}</Text>
+        <Text bold={selected} backgroundColor={selected ? 'white' : undefined} color={selected ? 'black' : undefined}>{formatCellText(numberText, columnWidths.number, 'flex-start')}</Text>
       </Box>
       <Box width={columnWidths.status} justifyContent="flex-start" marginRight={1}>
-        <StatusChip label={statusLabel} color={statusBg} fg={statusFg} width={columnWidths.status} />
+        <StatusChip label={statusLabel} color={chipColor} fg={chipFg} width={columnWidths.status} />
       </Box>
       {cells.map((cell, idx) => {
         let cellContent: React.ReactNode;
         if (idx === 0) {
-          cellContent = renderSessionCell(cell.text, agentActive, cell.width);
+          cellContent = renderSessionCell(cell.text, agentActive, cell.width, selected);
         } else if (idx === 1) {
-          cellContent = renderSessionCell(cell.text, shellActive, cell.width);
+          cellContent = renderSessionCell(cell.text, shellActive, cell.width, selected);
         } else if (idx === 2) {
-          cellContent = renderSessionCell(cell.text, runActive, cell.width);
+          cellContent = renderSessionCell(cell.text, runActive, cell.width, selected);
         } else {
           cellContent = (
-            <Text bold={selected} inverse={selected}>
+            <Text bold={selected} backgroundColor={selected ? 'white' : undefined} color={selected ? 'black' : undefined}>
               {idx === 3
                 ? renderProjectFeatureCell(cell.text, cell.width, cell.justify)
                 : formatCellText(cell.text, cell.width, cell.justify)}
