@@ -1,8 +1,10 @@
 # Coding Agent Team - Developer Guide
 
+> For a complete and accurate architecture reference, read [`docs/README.md`](docs/README.md) first. The sections below are a quick-start guide; `docs/` is the authoritative source.
+
 ## Project Overview
 
-A CLI-based tmux session manager built with TypeScript, React, and Ink. This tool manages development sessions for feature branches across multiple projects, integrating with git worktrees and Claude AI.
+A CLI tool that coordinates git worktrees, tmux sessions, AI agents (Claude/Gemini), and GitHub PR state across one or more projects. It is more than a worktree manager — it is a workspace coordinator for multi-repo AI-assisted development.
 
 ## Architecture
 
@@ -32,63 +34,48 @@ Each worktree gets associated tmux sessions:
 - Shell session: `dev-{project}-{feature}-shell` (for terminal work)
 - Run session: `dev-{project}-{feature}-run` (for executing commands)
 
-#### 3. **Claude Integration**
-The app monitors Claude AI status in tmux panes:
+#### 3. **AI Tool Integration**
+The app supports multiple AI CLIs (Claude, Gemini) and monitors AI status in tmux panes:
 - Working: Shows "esc to interrupt"
 - Waiting: Shows numbered prompt (e.g., "1. ")
 - Idle: Shows standard prompt
 - Thinking: Shows thinking indicator
+
+Tool preference is stored per-project in `.devteam/config.json`.
 ## Project Structure
+
+See [`docs/reference/code-map.md`](docs/reference/code-map.md) for the full file map. Key layout:
 
 ```
 src/
-├── index.ts                 # Entry point
-├── bootstrap.tsx           # App bootstrap (Ink render)
-├── App.tsx                 # Main React component
-├── bin/                    # CLI binary
-│   └── devteam.ts          # CLI executable
-├── components/             # React/Ink UI components
-│   ├── common/            # Shared components
-│   ├── dialogs/           # Modal dialogs
-│   └── views/             # Main views
-├── contexts/              # React contexts (State + Operations)
-│   ├── WorktreeContext.tsx    # Worktree state and operations
-│   ├── GitHubContext.tsx      # PR status and GitHub operations
-│   └── UIContext.tsx          # UI navigation and dialog state
-├── hooks/                 # React hooks
-│   ├── useKeyboardShortcuts.ts  # Keyboard handling
-│   ├── usePRStatus.ts          # PR status fetching
-│   └── useWorktrees.ts         # Worktree management
-├── screens/               # Full-screen components
-│   ├── WorktreeListScreen.tsx   # Main list view
-│   ├── CreateFeatureScreen.tsx  # Feature creation
-│   ├── ArchiveConfirmScreen.tsx # Archive confirmation
-│   └── ArchivedScreen.tsx       # Archived items view
-├── services/              # Stateless data operations
-│   ├── GitService.ts           # Local git operations
-│   ├── GitHubService.ts        # GitHub API operations
-│   ├── TmuxService.ts          # Tmux session management
-│   └── WorktreeService.ts      # Git + Tmux orchestration
-├── shared/utils/          # Utility functions
-│   ├── commandExecutor.ts      # Process execution
-│   ├── fileSystem.ts           # File operations
-│   ├── formatting.ts           # String formatting
-│   └── gitHelpers.ts           # Git utilities
-├── models.ts              # Data models/classes
-├── constants.ts           # App constants
-└── ops.ts                 # Complex operations
+├── App.tsx                 # Root component; provider nesting
+├── bootstrap.tsx           # Ink render entry
+├── bin/devteam.ts          # CLI executable
+├── cores/                  # Core engine classes (business logic, no React)
+│   ├── WorktreeCore.ts     # Worktree list, sessions, git status
+│   └── GitHubCore.ts       # PR status, cache, GitHub operations
+├── engine/core-types.ts    # CoreBase<T> interface
+├── contexts/               # React wrappers around Core engines
+│   ├── WorktreeContext.tsx
+│   ├── GitHubContext.tsx
+│   ├── UIContext.tsx        # Navigation state machine (no Core behind it)
+│   └── InputFocusContext.tsx
+├── screens/                # Three full-screen components
+│   ├── WorktreeListScreen.tsx
+│   ├── CreateFeatureScreen.tsx
+│   └── ArchiveConfirmScreen.tsx
+├── services/               # Stateless external I/O (git, tmux, gh, disk)
+├── components/             # UI components (dialogs, views, common)
+├── hooks/                  # useKeyboardShortcuts and others
+├── models.ts               # WorktreeInfo, PRStatus, GitStatus, SessionInfo
+└── constants.ts            # AI_TOOLS, refresh intervals
 
 tests/
-├── fakes/                 # Fake service implementations
-│   ├── FakeGitService.ts       # In-memory git
-│   ├── FakeTmuxService.ts      # In-memory tmux
-│   ├── FakeWorktreeService.ts  # In-memory worktree
-│   └── stores.ts               # Memory data stores
-├── utils/                 # Test utilities
-│   ├── renderApp.tsx           # Test app rendering
-│   └── testHelpers.ts          # Setup helpers
-├── unit/                  # Unit tests
-└── e2e/                   # End-to-end tests
+├── fakes/                  # In-memory service implementations
+│   └── stores.ts           # Shared memory data stores
+├── utils/renderApp.tsx     # Test app renderer
+├── unit/                   # Unit tests
+└── e2e/                    # E2E tests (mock-rendered + terminal/)
 ```
 
 ## Coding Conventions
@@ -139,20 +126,14 @@ tests/
    }
    ```
 
-6. **Context Providers**: Use React Context for state + operations
+6. **Context Providers**: Subscribe to a Core engine; re-render on state change
    ```tsx
    export function WorktreeProvider({children}) {
-     const [worktrees, setWorktrees] = useState([]);
-     const gitService = new GitService();
-     const tmuxService = new TmuxService();
-     
-     const createFeature = async (project, name) => {
-       await gitService.createWorktree(project, name);
-       await tmuxService.createSession(project, name);
-       refresh();
-     };
-     
-     const value = { worktrees, createFeature, refresh };
+     const [state, setState] = useState(() => core.getState());
+
+     useEffect(() => core.subscribe(setState), []);
+
+     const value = { ...state, createFeature: core.createFeature.bind(core) };
      return (
        <WorktreeContext.Provider value={value}>
          {children}
@@ -165,27 +146,35 @@ tests/
 
 - **Files**: camelCase for `.ts`, PascalCase for `.tsx`
 - **Components**: PascalCase (e.g., `WorktreeListScreen`)
-- **Hooks**: `use` prefix (e.g., `useWorktrees`)
+- **Hooks**: `use` prefix (e.g., `useKeyboardShortcuts`)
 - **Services**: PascalCase with `Service` suffix
 - **Constants**: UPPER_SNAKE_CASE
 - **Interfaces**: PascalCase, often with `Info` or `State` suffix
 
 ### Architecture Layers
 
-1. **Service Layer** (Stateless Data Operations):
+1. **Service Layer** (Stateless External I/O):
    - **GitService**: Local git operations (worktrees, branches, status, diff)
    - **GitHubService**: GitHub API operations (PRs, checks, issues)
    - **TmuxService**: Tmux session management
-   - **WorktreeService**: Orchestrates git + tmux operations
-   - Services are stateless and only fetch/transform data
+   - **WorkspaceService**: Workspace layout and disk operations
+   - **PRStatusCacheService**: Disk cache for PR data
+   - **AIToolService**: AI tool detection and preference
+   - Services are stateless and only fetch/transform data; no mutable state
 
-2. **Context Layer** (State Management + Operations):
-   - **WorktreeContext**: Manages worktree state and operations
-   - **GitHubContext**: Manages PR status cache and GitHub operations
-   - **UIContext**: Manages UI navigation and dialog state
-   - Contexts combine state management with operation methods
+2. **Core Engine Layer** (Business Logic + State):
+   - **WorktreeCore**: Owns worktree list, git status, session state; runs refresh loops
+   - **GitHubCore**: Owns PR status; manages cache, throttled batch fetching
+   - Cores implement `CoreBase<T>` with `subscribe(fn)` for React observation
+   - No React dependency; fully testable as plain TypeScript
 
-3. **Component Layer**: Thin components that use contexts
+3. **Context Layer** (React Wrappers):
+   - **WorktreeContext**: Subscribes to WorktreeCore; exposes state + operations as hooks
+   - **GitHubContext**: Subscribes to GitHubCore; exposes PR operations
+   - **UIContext**: Pure React state machine for navigation (no Core behind it)
+   - **InputFocusContext**: Tracks which component owns keyboard focus
+
+4. **Component Layer**: Thin components that use contexts; no business logic
 
 ## Testing Approach
 
@@ -284,30 +273,17 @@ export class MyService {
 }
 ```
 
-### 3. New Context (State + Operations)
+### 3. New Context (React wrapper around a Core engine)
 
 Create in `src/contexts/`:
 ```typescript
 export function MyContextProvider({children}) {
-  const [data, setData] = useState([]);
-  const [loading, setLoading] = useState(false);
-  
-  const myService = new MyService();
-  
-  const loadData = async () => {
-    setLoading(true);
-    const result = await myService.fetchData();
-    setData(result);
-    setLoading(false);
-  };
-  
-  const createItem = async (item) => {
-    await myService.createItem(item);
-    loadData(); // Refresh state
-  };
-  
-  const value = { data, loading, loadData, createItem };
-  return h(MyContext.Provider, {value}, children);
+  const [state, setState] = useState(() => myCore.getState());
+
+  useEffect(() => myCore.subscribe(setState), []);
+
+  const value = { ...state, doThing: myCore.doThing.bind(myCore) };
+  return <MyContext.Provider value={value}>{children}</MyContext.Provider>;
 }
 ```
 
@@ -496,9 +472,9 @@ npm link            # Install globally as 'devteam'
 
 ### Architecture
 1. **Services are stateless** - only fetch and transform data
-2. **Contexts manage state** - combine state with operation methods
-3. **Clear separation** - GitService (local) vs GitHubService (API)
-4. **No dependency injection** - services instantiated directly in contexts
+2. **Core engines own state** - business logic and refresh loops live in `src/cores/`
+3. **Contexts are thin wrappers** - subscribe to a Core, expose state + operations via hooks
+4. **Clear separation** - GitService (local git) vs GitHubService (GitHub API)
 
 ### Implementation  
 5. **Always use absolute paths** in file operations
