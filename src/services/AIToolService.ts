@@ -132,10 +132,12 @@ export class AIToolService {
         return lower.includes('waiting for user');
       
       case 'codex':
-        // Interactive Codex prompts keep the cursor visible but hide the send affordance.
+        // Codex uses the block cursor for interactive prompts; idle restores the send hint.
         return text.includes('▌') && !text.includes('⏎ send');
       
       case 'claude':
+        // Observed against current Claude Code permission/question prompts; keep narrow to avoid
+        // matching generic file-permission errors in normal output.
         return this.isWaiting(text, patterns.waiting_numbered) ||
           lower.includes('allow execution') ||
           lower.includes('needs permission') ||
