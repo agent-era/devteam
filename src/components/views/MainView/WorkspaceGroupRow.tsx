@@ -102,24 +102,29 @@ export const WorkspaceGroupRow = memo<WorkspaceGroupRowProps>(({workspace, globa
       <Box width={columnWidths.status} justifyContent="flex-start" marginRight={1}>
         <StatusChip label={statusLabel} color={statusBg} fg={statusFg} width={columnWidths.status} />
       </Box>
-      {cells.map((cell, idx) => (
-        <Box key={idx} width={cell.width} justifyContent={cell.justify} marginRight={idx < cells.length - 1 ? 1 : 0}>
-          {idx === 0
-            ? renderSessionCell(cell.text, agentActive, cell.width)
-            : idx === 1
-              ? renderSessionCell(cell.text, shellActive, cell.width)
-              : idx === 2
-                ? renderSessionCell(cell.text, runActive, cell.width)
-                : (
-                  <Text bold={selected} inverse={selected}>
-                    {idx === 3
-                      ? renderProjectFeatureCell(cell.text, cell.width, cell.justify)
-                      : formatCellText(cell.text, cell.width, cell.justify)}
-                  </Text>
-                )
-          }
-        </Box>
-      ))}
+      {cells.map((cell, idx) => {
+        let cellContent: React.ReactNode;
+        if (idx === 0) {
+          cellContent = renderSessionCell(cell.text, agentActive, cell.width);
+        } else if (idx === 1) {
+          cellContent = renderSessionCell(cell.text, shellActive, cell.width);
+        } else if (idx === 2) {
+          cellContent = renderSessionCell(cell.text, runActive, cell.width);
+        } else {
+          cellContent = (
+            <Text bold={selected} inverse={selected}>
+              {idx === 3
+                ? renderProjectFeatureCell(cell.text, cell.width, cell.justify)
+                : formatCellText(cell.text, cell.width, cell.justify)}
+            </Text>
+          );
+        }
+        return (
+          <Box key={idx} width={cell.width} justifyContent={cell.justify} marginRight={idx < cells.length - 1 ? 1 : 0}>
+            {cellContent}
+          </Box>
+        );
+      })}
     </Box>
   );
 }, (prev, next) => {

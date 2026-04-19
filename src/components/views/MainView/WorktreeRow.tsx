@@ -64,28 +64,19 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
   ];
   const statusMeta = getStatusMeta(worktree, pr);
   
-  // Compute background/foreground colors for cells
   const isPriorityCell = (cellIndex: number): boolean =>
     !!(highlightInfo && cellIndex === highlightInfo.columnIndex);
 
   const getCellBackground = (cellIndex: number): string | undefined => {
-    // Selected merged/archived rows: full-row gray highlight for visibility
     if (selected && isDimmed) return 'gray';
-    // No background highlight for priority cells; emphasize via text color instead
-    // Otherwise no explicit background; selection (non-dimmed) uses inverse
     return undefined;
   };
 
   const getCellForeground = (cellIndex: number): string | undefined => {
-    // Selected merged/archived rows: gray background + white text for contrast
     if (selected && isDimmed) return 'white';
-    // Non-selected merged/archived rows: dimmed text (handled via dimColor), don't force color
     if (isDimmed) return undefined;
-    // For selected non-priority cells (non-dimmed), let inverse handle the color
     if (selected && !isPriorityCell(cellIndex)) return undefined;
-    // Color the applicable column's text
     if (isPriorityCell(cellIndex)) {
-      // Apply explicit text colors per status reason for the applicable column
       switch (highlightInfo?.reason) {
         case StatusReason.AGENT_WAITING:
           return 'yellow';
@@ -121,8 +112,7 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
     // Truncate if needed (simple substring, width-calculated earlier for project/feature)
     let visible = raw;
     if (stringDisplayWidth(visible) > width) {
-      // keep simple truncation at end
-      visible = visible.slice(0, Math.max(0, width));
+        visible = visible.slice(0, Math.max(0, width));
     }
     const pad = Math.max(0, width - stringDisplayWidth(visible));
     if (justify === 'flex-end') {
@@ -137,7 +127,6 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
     return visible + ' '.repeat(pad);
   };
   
-  // Render helper for the Project/Feature cell to dim bracketed project
   const renderProjectFeatureCell = (text: string, width: number, justify: 'flex-start' | 'center' | 'flex-end') => {
     const raw = (text ?? '').trim();
     let visible = raw;
@@ -145,26 +134,21 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
       visible = visible.slice(0, Math.max(0, width));
     }
 
-    // Expected format: feature [project]; dim the bracketed portion
     const bracketIndex = visible.indexOf('[');
     const left = bracketIndex >= 0 ? visible.slice(0, bracketIndex) : visible;
-    // Include brackets if present in "bracketed" segment
     const bracketed = bracketIndex >= 0 ? visible.slice(bracketIndex) : '';
 
     const contentWidth = stringDisplayWidth(visible);
     const pad = Math.max(0, width - contentWidth);
 
-    // Dim the bracketed portion (project/workspace) like other rows
-    // When the whole row is dimmed, avoid double-dimming the bracket
+    // Avoid double-dimming the bracket when the whole row is already dimmed
     const renderBracket = (content: string) => <Text dimColor={!isDimmed || selected}>{content}</Text>;
 
     if (justify === 'flex-end') {
       return (
         <>
           {' '.repeat(pad)}
-          {/* Feature keeps the cell's computed color */}
           <Text color={getCellForeground(COLUMNS.PROJECT_FEATURE)} dimColor={isDimmed && !selected}>{left}</Text>
-          {/* Project (with brackets) dimmed */}
           {bracketed ? renderBracket(bracketed) : null}
         </>
       );
@@ -221,35 +205,34 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
         <StatusChip label={statusMeta.label || ''} color={statusMeta.bg} fg={statusMeta.fg} width={columnWidths.status} />
       </Box>
 
-      {/* Remaining columns from cells[1..] */}
       {cells.slice(1).map((cell, offsetIndex, arr) => {
         const cellIndex = offsetIndex + 1;
         const isLast = offsetIndex === arr.length - 1;
+        let cellContent: React.ReactNode;
+        if (cellIndex === COLUMNS.AI) {
+          cellContent = renderSessionCell(cell.text, agentActive, cell.width);
+        } else if (cellIndex === COLUMNS.SHELL) {
+          cellContent = renderSessionCell(cell.text, shellActive, cell.width);
+        } else if (cellIndex === COLUMNS.RUN) {
+          cellContent = renderSessionCell(cell.text, runActive, cell.width);
+        } else {
+          cellContent = (
+            <Text
+              backgroundColor={getCellBackground(cellIndex)}
+              color={cellIndex === COLUMNS.PROJECT_FEATURE ? undefined : getCellForeground(cellIndex)}
+              dimColor={isDimmed && !selected}
+              bold={selected && !isPriorityCell(cellIndex)}
+              inverse={selected && !isPriorityCell(cellIndex) && !isDimmed}
+            >
+              {cellIndex === COLUMNS.PROJECT_FEATURE
+                ? renderProjectFeatureCell(cell.text, cell.width, cell.justify)
+                : formatCellText(cell.text, cell.width, cell.justify)}
+            </Text>
+          );
+        }
         return (
-          <Box
-            key={cellIndex}
-            width={cell.width}
-            justifyContent={cell.justify}
-            marginRight={isLast ? 0 : 1}
-          >
-            {cellIndex === COLUMNS.AI
-              ? renderSessionCell(cell.text, agentActive, cell.width)
-              : cellIndex === COLUMNS.SHELL
-                ? renderSessionCell(cell.text, shellActive, cell.width)
-                : cellIndex === COLUMNS.RUN
-                  ? renderSessionCell(cell.text, runActive, cell.width)
-                  : <Text
-                      backgroundColor={getCellBackground(cellIndex)}
-                      color={cellIndex === COLUMNS.PROJECT_FEATURE ? undefined : getCellForeground(cellIndex)}
-                      dimColor={isDimmed && !selected}
-                      bold={selected && !isPriorityCell(cellIndex)}
-                      inverse={selected && !isPriorityCell(cellIndex) && !isDimmed}
-                    >
-                      {cellIndex === COLUMNS.PROJECT_FEATURE
-                        ? renderProjectFeatureCell(cell.text, cell.width, cell.justify)
-                        : formatCellText(cell.text, cell.width, cell.justify)}
-                    </Text>
-            }
+          <Box key={cellIndex} width={cell.width} justifyContent={cell.justify} marginRight={isLast ? 0 : 1}>
+            {cellContent}
           </Box>
         );
       })}
