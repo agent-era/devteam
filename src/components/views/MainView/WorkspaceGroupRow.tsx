@@ -99,9 +99,9 @@ export const WorkspaceGroupRow = memo<WorkspaceGroupRowProps>(({workspace, globa
   const chipFg = selected ? (hasBg ? statusFg : (statusFg === 'white' ? 'black' : statusFg)) : statusFg;
 
   return (
-    <Box>
+    <Box flexShrink={0}>
       <Box width={columnWidths.number} justifyContent="flex-start" marginRight={1}>
-        <Text bold={selected} backgroundColor={selected ? 'white' : undefined} color={selected ? 'black' : undefined}>{formatCellText(numberText, columnWidths.number, 'flex-start')}</Text>
+        <Text bold={selected} backgroundColor={selected ? 'white' : undefined} color={selected ? 'black' : undefined} wrap="truncate">{formatCellText(numberText, columnWidths.number, 'flex-start')}</Text>
       </Box>
       <Box width={columnWidths.status} justifyContent="flex-start" marginRight={1}>
         <StatusChip label={statusLabel} color={chipColor} fg={chipFg} width={columnWidths.status} />
@@ -116,7 +116,7 @@ export const WorkspaceGroupRow = memo<WorkspaceGroupRowProps>(({workspace, globa
           cellContent = renderSessionCell(cell.text, runActive, cell.width, selected);
         } else {
           cellContent = (
-            <Text bold={selected} backgroundColor={selected ? 'white' : undefined} color={selected ? 'black' : undefined}>
+            <Text bold={selected} backgroundColor={selected ? 'white' : undefined} color={selected ? 'black' : undefined} wrap="truncate">
               {idx === 3
                 ? renderProjectFeatureCell(cell.text, cell.width, cell.justify)
                 : formatCellText(cell.text, cell.width, cell.justify)}

@@ -29,8 +29,8 @@ export default function StatusChip({label, color, fg = 'white', width}: StatusCh
     };
 
     return (
-      <Box width={width} justifyContent="flex-start">
-        <Text color={fg}>{makePlain()}</Text>
+      <Box width={width} justifyContent="flex-start" overflow="hidden">
+        <Text color={fg} wrap="truncate">{makePlain()}</Text>
       </Box>
     );
   }
@@ -57,8 +57,8 @@ export default function StatusChip({label, color, fg = 'white', width}: StatusCh
 
   const chip = makeChip();
   return (
-    <Box width={width} justifyContent="flex-start">
-      <Text backgroundColor={color} color={fg}>
+    <Box width={width} justifyContent="flex-start" overflow="hidden">
+      <Text backgroundColor={color} color={fg} wrap="truncate">
         {chip}
       </Text>
     </Box>

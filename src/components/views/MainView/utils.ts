@@ -5,9 +5,8 @@ import {
 } from '../../../constants.js';
 
 export function formatNumber(num: number): string {
-  if (num >= 1000) {
-    return (num / 1000).toFixed(1) + 'k';
-  }
+  if (num >= 10000) return `${Math.floor(num / 1000)}k`;
+  if (num >= 1000) return `${Math.floor(num / 100) / 10}k`;
   return num.toString();
 }
 

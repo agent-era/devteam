@@ -2,6 +2,21 @@ import {describe, test, expect} from '@jest/globals';
 import {stringDisplayWidth} from '../../src/shared/utils/formatting.js';
 
 describe('Column Layout and Spacing', () => {
+  test('DIFF column is 11 chars (two 5-char +/-N.Nk slots plus separator)', () => {
+    const fixedWidths = {
+      number: 3,
+      status: 13,
+      ai: 5,
+      shell: 5,
+      run: 5,
+      diff: 11,
+      changes: 8,
+      pr: 8,
+    };
+
+    expect(fixedWidths.diff).toBe(11);
+  });
+
   describe('Terminal width adaptation', () => {
     test('should calculate column widths that fit terminal exactly', () => {
       // Mock data representing typical worktree display

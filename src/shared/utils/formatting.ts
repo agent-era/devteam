@@ -13,13 +13,15 @@ export function truncateText(text: string, maxLength: number, suffix = '...'): s
   return text.slice(0, maxLength - suffix.length) + suffix;
 }
 
-export function formatDiffStats(added: number, deleted: number, maxLength = 10): string {
+function formatStatNumber(num: number): string {
+  if (num >= 10000) return `${Math.floor(num / 1000)}k`;
+  if (num >= 1000) return `${(num / 1000).toFixed(1)}k`;
+  return String(num);
+}
+
+export function formatDiffStats(added: number, deleted: number, maxLength = 11): string {
   if (added === 0 && deleted === 0) return '-';
-  
-  const addedStr = added >= 1000 ? `${Math.floor(added / 1000)}k` : String(added);
-  const deletedStr = deleted >= 1000 ? `${Math.floor(deleted / 1000)}k` : String(deleted);
-  
-  return truncateText(`+${addedStr}/-${deletedStr}`, maxLength, '');
+  return truncateText(`+${formatStatNumber(added)}/-${formatStatNumber(deleted)}`, maxLength, '');
 }
 
 export function formatChangesStats(ahead: number, behind: number, maxLength = 10): string {

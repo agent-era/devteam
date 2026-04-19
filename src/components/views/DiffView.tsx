@@ -1,6 +1,5 @@
-import React, {useEffect, useMemo, useRef, useState} from 'react';
-import {Box, Text, useInput, useStdin, measureElement} from 'ink';
-import SyntaxHighlight from 'ink-syntax-highlight';
+import React, {useEffect, useMemo, useState} from 'react';
+import {Box, Text, useInput} from 'ink';
 import {runCommandAsync, runCommand} from '../../shared/utils/commandExecutor.js';
 import {findBaseBranch} from '../../shared/utils/gitHelpers.js';
 import {useTerminalDimensions} from '../../hooks/useTerminalDimensions.js';
@@ -12,12 +11,12 @@ import CommentInputDialog from '../dialogs/CommentInputDialog.js';
 import SessionWaitingDialog from '../dialogs/SessionWaitingDialog.js';
 import UnsubmittedCommentsDialog from '../dialogs/UnsubmittedCommentsDialog.js';
 import FileTreeOverlay from '../dialogs/FileTreeOverlay.js';
-import {truncateDisplay, padEndDisplay, stringDisplayWidth} from '../../shared/utils/formatting.js';
+import {truncateDisplay, padEndDisplay, fitDisplay} from '../../shared/utils/formatting.js';
 import AnnotatedText from '../common/AnnotatedText.js';
 import {LineWrapper} from '../../shared/utils/lineWrapper.js';
 import {ViewportCalculator} from '../../shared/utils/viewport.js';
 import {computeUnifiedPerFileIndices, computeSideBySidePerFileIndices} from '../../shared/utils/diffLineIndex.js';
-import {getLanguageFromFileName} from '../../shared/utils/languageMapping.js';
+import {calculateDiffViewportRows} from '../../shared/utils/layout.js';
 
 type DiffLine = {
   type: 'added'|'removed'|'context'|'header';
@@ -360,25 +359,14 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     })();
   }, [worktreePath, diffType]);
 
-  // Measure-based page size: measure the scroll container height to avoid off-by-one issues
-  const listRef = useRef<any>(null);
-  const [measuredPageSize, setMeasuredPageSize] = useState<number>(1);
   const overlayAreaHeight = showFileTreeOverlay ? Math.max(6, Math.floor(terminalHeight / 2)) : 0;
-
-  // After render and on resize, measure the diff list container height
-  useEffect(() => {
-    const measureAndUpdate = () => {
-      const h = listRef.current ? measureElement(listRef.current).height : 0;
-      if (h > 0 && h !== measuredPageSize) {
-        setMeasuredPageSize(h);
-      }
-    };
-    // Measure now and on next tick to ensure layout settles
-    measureAndUpdate();
-    const t = setTimeout(measureAndUpdate, 0);
-    return () => clearTimeout(t);
-    // Re-measure on terminal resize and UI elements that affect vertical space
-  }, [terminalHeight, terminalWidth, currentFileHeader, currentHunkHeader, showFileTreeOverlay]);
+  const showCommentSummary = showAllComments && commentStore.count > 0;
+  const viewportRows = useMemo(() => calculateDiffViewportRows(terminalHeight, {
+    hasFileHeader: !!currentFileHeader,
+    hasHunkHeader: !!currentHunkHeader,
+    showCommentSummary,
+    overlayHeight: overlayAreaHeight,
+  }), [terminalHeight, currentFileHeader, currentHunkHeader, showCommentSummary, overlayAreaHeight]);
 
   // Smooth scrolling animation
   useEffect(() => {
@@ -483,10 +471,10 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       setSelectedLine(prev => Math.min(maxLineIndex, prev + 1));
     }
     if (key.pageUp || input === 'b') {
-      setSelectedLine(prev => Math.max(0, prev - Math.floor(measuredPageSize / 2)));
+      setSelectedLine(prev => Math.max(0, prev - Math.floor(viewportRows / 2)));
     }
     if (key.pageDown || input === 'f' || input === ' ') {
-      setSelectedLine(prev => Math.min(maxLineIndex, prev + Math.floor(measuredPageSize / 2)));
+      setSelectedLine(prev => Math.min(maxLineIndex, prev + Math.floor(viewportRows / 2)));
     }
     if (input === 'g') {
       setSelectedLine(0);
@@ -647,36 +635,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
           const fileName = viewMode === 'unified' ? (lines[i]?.fileName || '') : (sideBySideLines[i]?.left?.fileName || sideBySideLines[i]?.right?.fileName || '');
           if (fileName) showFileTree(fileName);
           
-          // Calculate scroll position to show the content line at top of viewport
-          // This naturally makes the file header sticky (just above viewport)
-          let targetRow = 0;
-          if (wrapMode === 'truncate') {
-            // In truncate mode, line index maps directly to scroll row
-            targetRow = Math.max(0, contentLineIndex);
-          } else {
-            // In wrap mode, calculate the visual row position using LineWrapper
-            const currentLines = viewMode === 'unified' ? lines : sideBySideLines;
-            const maxWidth = viewMode === 'unified' ? terminalWidth - 2 : Math.floor((terminalWidth - 1) / 2) - 2;
-            const textLines = currentLines.map(line => {
-              if (viewMode === 'unified') {
-                return (line as DiffLine).text || ' ';
-              } else {
-                const sbsLine = line as SideBySideLine;
-                const leftText = sbsLine.left?.text || '';
-                const rightText = sbsLine.right?.text || '';
-                const leftH = LineWrapper.calculateHeight(leftText, maxWidth);
-                const rightH = LineWrapper.calculateHeight(rightText, maxWidth);
-                return leftH >= rightH ? leftText : rightText;
-              }
-            });
-            
-            // Calculate the visual row for the content line index using LineWrapper
-            let targetRowStart = 0;
-            for (let j = 0; j < Math.min(contentLineIndex, textLines.length); j++) {
-              targetRowStart += LineWrapper.calculateHeight(textLines[j] || ' ', maxWidth);
-            }
-            targetRow = Math.max(0, targetRowStart);
-          }
+          const targetRow = Math.max(0, contentLineIndex);
           
           // Set flag to prevent auto-scroll from overriding our scroll position
           setIsFileNavigation(true);
@@ -698,36 +657,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
           const fileName = viewMode === 'unified' ? (lines[i]?.fileName || '') : (sideBySideLines[i]?.left?.fileName || sideBySideLines[i]?.right?.fileName || '');
           if (fileName) showFileTree(fileName);
           
-          // Calculate scroll position to show the content line at top of viewport
-          // This naturally makes the file header sticky (just above viewport)
-          let targetRow = 0;
-          if (wrapMode === 'truncate') {
-            // In truncate mode, line index maps directly to scroll row
-            targetRow = Math.max(0, contentLineIndex);
-          } else {
-            // In wrap mode, calculate the visual row position using LineWrapper
-            const currentLines = viewMode === 'unified' ? lines : sideBySideLines;
-            const maxWidth = viewMode === 'unified' ? terminalWidth - 2 : Math.floor((terminalWidth - 1) / 2) - 2;
-            const textLines = currentLines.map(line => {
-              if (viewMode === 'unified') {
-                return (line as DiffLine).text || ' ';
-              } else {
-                const sbsLine = line as SideBySideLine;
-                const leftText = sbsLine.left?.text || '';
-                const rightText = sbsLine.right?.text || '';
-                const leftH = LineWrapper.calculateHeight(leftText, maxWidth);
-                const rightH = LineWrapper.calculateHeight(rightText, maxWidth);
-                return leftH >= rightH ? leftText : rightText;
-              }
-            });
-            
-            // Calculate the visual row for the content line index using LineWrapper
-            let targetRowStart = 0;
-            for (let j = 0; j < Math.min(contentLineIndex, textLines.length); j++) {
-              targetRowStart += LineWrapper.calculateHeight(textLines[j] || ' ', maxWidth);
-            }
-            targetRow = Math.max(0, targetRowStart);
-          }
+          const targetRow = Math.max(0, contentLineIndex);
           
           // Set flag to prevent auto-scroll from overriding our scroll position
           setIsFileNavigation(true);
@@ -738,29 +668,31 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     }
   });
 
-  // Auto-scroll to keep selected line visible
-  useEffect(() => {
+  const maxWidth = viewMode === 'unified' ? terminalWidth - 2 : Math.floor((terminalWidth - 1) / 2) - 2;
+
+  const textLines = useMemo(() => {
     const currentLines = viewMode === 'unified' ? lines : sideBySideLines;
-    const maxWidth = viewMode === 'unified' ? terminalWidth - 2 : Math.floor((terminalWidth - 1) / 2) - 2;
-    
-    // Convert diff lines to simple text for viewport calculation
-    const textLines = currentLines.map(line => {
+    return currentLines.map(line => {
       if (viewMode === 'unified') {
         return (line as DiffLine).text || ' ';
       } else {
         const sbsLine = line as SideBySideLine;
-        // For side-by-side, use the longer of left/right text for height calculation
         const leftText = sbsLine.left?.text || '';
         const rightText = sbsLine.right?.text || '';
-        return leftText.length > rightText.length ? leftText : rightText;
+        const leftH = LineWrapper.calculateHeight(leftText, maxWidth);
+        const rightH = LineWrapper.calculateHeight(rightText, maxWidth);
+        return leftH >= rightH ? leftText : rightText;
       }
     });
-    
+  }, [lines, sideBySideLines, viewMode, maxWidth]);
+
+  // Auto-scroll to keep selected line visible
+  useEffect(() => {
     const newScrollRow = ViewportCalculator.calculateScrollToShowLine(
       textLines,
       selectedLine,
       targetScrollRow,
-      measuredPageSize,
+      viewportRows,
       maxWidth,
       wrapMode
     );
@@ -768,10 +700,10 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     // Don't override scroll position during file navigation (Shift+Up/Down)
     // File navigation sets a specific scroll position to make headers sticky
     if (newScrollRow !== targetScrollRow && !isFileNavigation) {
-      const maxScrollRow = ViewportCalculator.getMaxScrollRow(textLines, measuredPageSize, maxWidth, wrapMode);
+      const maxScrollRow = ViewportCalculator.getMaxScrollRow(textLines, viewportRows, maxWidth, wrapMode);
       setTargetScrollRow(Math.max(0, Math.min(maxScrollRow, newScrollRow)));
     }
-  }, [selectedLine, viewMode, wrapMode, terminalWidth, lines, sideBySideLines, measuredPageSize, isFileNavigation]);
+  }, [selectedLine, textLines, viewportRows, maxWidth, targetScrollRow, isFileNavigation, wrapMode]);
 
   
 
@@ -1050,33 +982,9 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
   };
 
 
-  // Update sticky headers - simplified using viewport info
-  const viewport = useMemo(() => {
-    const currentLines = viewMode === 'unified' ? lines : sideBySideLines;
-    const maxWidth = viewMode === 'unified' ? terminalWidth - 2 : Math.floor((terminalWidth - 1) / 2) - 2;
-    
-    const textLines = currentLines.map(line => {
-      if (viewMode === 'unified') {
-        return (line as DiffLine).text || ' ';
-      } else {
-        const sbsLine = line as SideBySideLine;
-        const leftText = sbsLine.left?.text || '';
-        const rightText = sbsLine.right?.text || '';
-        const leftH = LineWrapper.calculateHeight(leftText, maxWidth);
-        const rightH = LineWrapper.calculateHeight(rightText, maxWidth);
-        return leftH >= rightH ? leftText : rightText;
-      }
-    });
-    
-    return ViewportCalculator.calculate(
-      textLines,
-      selectedLine,
-      scrollRow,
-      measuredPageSize,
-      maxWidth,
-      wrapMode
-    );
-  }, [lines, sideBySideLines, selectedLine, scrollRow, measuredPageSize, viewMode, wrapMode, terminalWidth]);
+  const viewport = useMemo(() =>
+    ViewportCalculator.calculate(textLines, selectedLine, scrollRow, viewportRows, maxWidth, wrapMode),
+  [textLines, selectedLine, scrollRow, viewportRows, maxWidth, wrapMode]);
   
   useEffect(() => {
     const currentLines = viewMode === 'unified' ? lines : sideBySideLines;
@@ -1097,7 +1005,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
           fileHeader = line.text;
           break;
         }
-        if (!fileHeader && line.type === 'header' && line.headerType === 'hunk') {
+        if (!hunkHeader && line.type === 'header' && line.headerType === 'hunk') {
           hunkHeader = line.text;
         }
       } else {
@@ -1106,7 +1014,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
           fileHeader = line.left.text;
           break;
         }
-        if (!fileHeader && line.left?.type === 'header' && line.left.headerType === 'hunk') {
+        if (!hunkHeader && line.left?.type === 'header' && line.left.headerType === 'hunk') {
           hunkHeader = line.left.text;
         }
       }
@@ -1121,50 +1029,6 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     const currentLines = viewMode === 'unified' ? lines : sideBySideLines;
     return viewport.visibleLines.map(lineIndex => currentLines[lineIndex]).filter(Boolean);
   }, [viewport, lines, sideBySideLines, viewMode]);
-
-  // Helper function to render syntax highlighted content
-  const renderSyntaxHighlighted = (text: string, fileName: string | undefined, isSelected: boolean, diffColor?: string, lineType?: 'added'|'removed'|'context'|'header') => {
-    const language = getLanguageFromFileName(fileName);
-    
-    // If the line is selected, use regular Text to ensure blue background is visible
-    if (isSelected) {
-      return (
-        <Text 
-          backgroundColor="blue"
-          bold
-          color={diffColor}
-        >
-          {text}
-        </Text>
-      );
-    }
-    
-    // For removed lines in unified view, use plain red text without syntax highlighting
-    if (lineType === 'removed') {
-      return (
-        <Text color="red">
-          {text}
-        </Text>
-      );
-    }
-    
-    // For context lines in unified view, use dimmed text without syntax highlighting
-    if (lineType === 'context') {
-      return (
-        <Text dimColor>
-          {text}
-        </Text>
-      );
-    }
-    
-    // For added lines and side-by-side view, use syntax highlighting
-    return (
-      <SyntaxHighlight
-        code={text}
-        language={language}
-      />
-    );
-  };
 
   // Create unsubmitted comments dialog if needed - render it instead of the main view when active
   if (showUnsubmittedCommentsDialog) {
@@ -1235,15 +1099,16 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
 
   return (
     <Box flexDirection="column" flexGrow={1}>
-      <Text bold>{title}</Text>
+      <Text bold wrap="truncate">{title}</Text>
       {/* Sticky headers - only render when content exists */}
       {currentFileHeader && (
         <Text
           color="white"
           bold
           backgroundColor="gray"
+          wrap="truncate"
         >
-          {currentFileHeader}
+          {' '}{currentFileHeader}
         </Text>
       )}
       {currentHunkHeader && (
@@ -1251,654 +1116,134 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
           color="cyan"
           bold
           backgroundColor="gray"
+          wrap="truncate"
         >
-          {currentHunkHeader}
+          {' '}{currentHunkHeader}
         </Text>
       )}
-      <Box ref={listRef} flexDirection="column" flexGrow={1}>
-      {(() => {
-        const renderedElements: React.ReactNode[] = [];
-        let visibleLineIndex = 0;
-        // Enforce row budget when wrapping
-        let rowsRemaining = measuredPageSize;
-        const unifiedMaxWidth = terminalWidth - 4;
-        const sbsPaneWidth = Math.floor((terminalWidth - 2) / 2);
-        const sbsMaxPaneWidth = sbsPaneWidth - 2;
-        // Calculate the starting visual row of the first visible line
-        let firstVisibleLineStartRow = 0;
-        if (wrapMode === 'wrap') {
-          const currentLinesForHeight = viewMode === 'unified' ? lines : sideBySideLines;
-          const firstIdx = viewport.firstVisibleLine;
-          for (let i = 0; i < firstIdx; i++) {
-            if (viewMode === 'unified') {
-              const t = (currentLinesForHeight[i] as DiffLine).text || ' ';
-              firstVisibleLineStartRow += LineWrapper.calculateHeight(t, unifiedMaxWidth);
-            } else {
-              const sbs = currentLinesForHeight[i] as SideBySideLine;
-              const leftText = sbs.left?.text || '';
-              const rightText = sbs.right?.text || '';
-              const hL = LineWrapper.calculateHeight(leftText, sbsMaxPaneWidth);
-              const hR = LineWrapper.calculateHeight(rightText, sbsMaxPaneWidth);
-              firstVisibleLineStartRow += Math.max(hL, hR);
-            }
-          }
-        }
-
-        for (const l of visibleLines) {
+      <Box flexDirection="column" height={viewportRows}>
+        {visibleLines.flatMap((line, visibleLineIndex) => {
           const actualLineIndex = viewport.visibleLines[visibleLineIndex];
           const isCurrentLine = actualLineIndex === selectedLine;
-        
-        if (viewMode === 'unified') {
-          const unifiedLine = l as DiffLine;
-          const perFileIndex = unifiedPerFileIndex[actualLineIndex];
-          const hasComment = unifiedLine.fileName && perFileIndex !== undefined && commentStore.hasComment(perFileIndex, unifiedLine.fileName);
-          const commentIndicator = hasComment ? '[C] ' : '';
-          
-          // Determine gutter symbol
-          let gutterSymbol = '  '; // default for context and headers
-          if (unifiedLine.type === 'added') gutterSymbol = '+ ';
-          else if (unifiedLine.type === 'removed') gutterSymbol = '- ';
-          
-          const fullText = commentIndicator + (unifiedLine.text || ' ');
-          
-          if (wrapMode === 'truncate') {
-            // Truncate mode with gutter and diff colors
-            if (unifiedLine.type === 'header') {
-              const displayText = truncateDisplay(fullText, terminalWidth - 4); // -4 for gutter
-              const headerColor = unifiedLine.headerType === 'file' ? 'white' : 'cyan';
-              renderedElements.push(
-                <Box
-                  key={`line-${visibleLineIndex}`}
-                  flexDirection="row"
-                >
-                  <Text
-                    color="gray"
-                    backgroundColor={isCurrentLine ? 'blue' : undefined}
-                    bold={isCurrentLine}
-                  >
-                    {gutterSymbol}
+          const rowBackground = isCurrentLine ? 'blue' : undefined;
+          const isWrap = wrapMode === 'wrap';
+
+          if (viewMode === 'unified') {
+            const unifiedLine = line as DiffLine;
+            const perFileIndex = unifiedPerFileIndex[actualLineIndex];
+            const hasComment = !!unifiedLine.fileName && perFileIndex !== undefined && commentStore.hasComment(perFileIndex, unifiedLine.fileName);
+            const gutterSymbol = unifiedLine.type === 'added' ? '+ ' : unifiedLine.type === 'removed' ? '- ' : '  ';
+            const bodyPrefix = hasComment ? '[C] ' : '';
+            const bodyWidth = Math.max(1, terminalWidth - 4);
+            const bodyColor = unifiedLine.type === 'header'
+              ? (unifiedLine.headerType === 'file' ? 'white' : 'cyan')
+              : (unifiedLine.type === 'added' ? 'green' : unifiedLine.type === 'removed' ? 'red' : undefined);
+            const rawBody = `${bodyPrefix}${unifiedLine.text || ' '}`;
+
+            if (isWrap) {
+              const segments = LineWrapper.wrapLine(rawBody, bodyWidth);
+              return segments.map((seg, segIdx) => (
+                <Box key={`line-${actualLineIndex}-${segIdx}`} flexDirection="row" height={1} flexShrink={0}>
+                  <Text color="gray" backgroundColor={rowBackground} bold={isCurrentLine}>
+                    {segIdx === 0 ? gutterSymbol : '  '}
                   </Text>
                   <Text
-                    color={headerColor}
-                    backgroundColor={isCurrentLine ? 'blue' : undefined}
-                    bold
+                    color={bodyColor}
+                    dimColor={unifiedLine.type === 'context'}
+                    backgroundColor={rowBackground}
+                    bold={isCurrentLine || unifiedLine.type === 'header'}
+                    wrap="truncate"
                   >
-                    {displayText}
+                    {padEndDisplay(seg, bodyWidth)}
                   </Text>
                 </Box>
-              );
-            } else {
-              // Create gutter element
-              const gutterElement = (
-                <Text
-                  color={unifiedLine.type === 'added' ? 'green' : unifiedLine.type === 'removed' ? 'red' : 'gray'}
-                  backgroundColor={isCurrentLine ? 'blue' : undefined}
-                  bold={isCurrentLine}
-                >
+              ));
+            }
+
+            const bodyText = fitDisplay(rawBody, bodyWidth);
+            return [(
+              <Box key={`line-${actualLineIndex}`} flexDirection="row" height={1} flexShrink={0}>
+                <Text color="gray" backgroundColor={rowBackground} bold={isCurrentLine}>
                   {gutterSymbol}
                 </Text>
-              );
-              
-              const finalCodeText = truncateDisplay(unifiedLine.text || ' ', terminalWidth - (hasComment ? 8 : 4));
-              
-              if (hasComment) {
-                const commentElement = (
-                  <Text
-                    color={unifiedLine.type === 'added' ? 'green' : unifiedLine.type === 'removed' ? 'red' : undefined}
-                    backgroundColor={isCurrentLine ? 'blue' : undefined}
-                    bold={isCurrentLine}
-                  >
-                    [C] 
-                  </Text>
-                );
-                
-                const codeElement = (
-                  <Text
-                    color={unifiedLine.type === 'added' ? 'green' : unifiedLine.type === 'removed' ? 'red' : undefined}
-                    dimColor={unifiedLine.type === 'context'}
-                    backgroundColor={isCurrentLine ? 'blue' : undefined}
-                    bold={isCurrentLine}
-                  >
-                    {finalCodeText}
-                  </Text>
-                );
-                
-                renderedElements.push(
-                  <Box
-                    key={`line-${visibleLineIndex}`}
-                    flexDirection="row"
-                  >
-                    {gutterElement}
-                    {commentElement}
-                    {codeElement}
-                  </Box>
-                );
-              } else {
-                const codeElement = (
-                  <Text
-                    color={unifiedLine.type === 'added' ? 'green' : unifiedLine.type === 'removed' ? 'red' : undefined}
-                    dimColor={unifiedLine.type === 'context'}
-                    backgroundColor={isCurrentLine ? 'blue' : undefined}
-                    bold={isCurrentLine}
-                  >
-                    {finalCodeText}
-                  </Text>
-                );
-                
-                renderedElements.push(
-                  <Box
-                    key={`line-${visibleLineIndex}`}
-                    flexDirection="row"
-                  >
-                    {gutterElement}
-                    {codeElement}
-                  </Box>
-                );
-              }
-            }
-          } else {
-            // Wrap mode with gutter and diff colors
-            const maxWidth = unifiedMaxWidth; // -4 for gutter
-            const segments = LineWrapper.wrapLine(fullText, maxWidth);
-            let startSeg = 0;
-            if (visibleLineIndex === 0) {
-              const offsetRows = Math.max(0, viewport.viewportStartRow - firstVisibleLineStartRow);
-              startSeg = Math.min(offsetRows, segments.length);
-            }
-            for (let segIdx = startSeg; segIdx < segments.length; segIdx++) {
-              if (rowsRemaining <= 0) break;
-              const segment = segments[segIdx];
-              if (unifiedLine.type === 'header') {
-                const headerColor = unifiedLine.headerType === 'file' ? 'white' : 'cyan';
-                renderedElements.push(
-                  <Box
-                    key={`line-${visibleLineIndex}-seg-${segIdx}`}
-                    flexDirection="row"
-                  >
-                    <Text
-                      color="gray"
-                      backgroundColor={isCurrentLine ? 'blue' : undefined}
-                      bold={isCurrentLine}
-                    >
-                      {segIdx === startSeg ? gutterSymbol : '  '}
-                    </Text>
-                    <Text
-                      color={headerColor}
-                      backgroundColor={isCurrentLine ? 'blue' : undefined}
-                      bold
-                    >
-                      {segment}
-                    </Text>
-                  </Box>
-                );
-              } else {
-                const gutterElement = (
-                  <Text
-                    color={unifiedLine.type === 'added' ? 'green' : unifiedLine.type === 'removed' ? 'red' : 'gray'}
-                    backgroundColor={isCurrentLine ? 'blue' : undefined}
-                    bold={isCurrentLine}
-                  >
-                    {segIdx === startSeg ? gutterSymbol : '  '}
-                  </Text>
-                );
-                
-                // For wrapped segments, extract the actual code text (removing comment indicator from non-first segments)
-                let codeText = segment;
-                if (segIdx === startSeg && hasComment) {
-                  codeText = segment.replace('[C] ', '');
-                  const commentElement = (
-                    <Text
-                      color={unifiedLine.type === 'added' ? 'green' : unifiedLine.type === 'removed' ? 'red' : undefined}
-                      backgroundColor={isCurrentLine ? 'blue' : undefined}
-                      bold={isCurrentLine}
-                    >
-                      [C] 
-                    </Text>
-                  );
-                  
-                  const codeElement = (
-                    <Text
-                      color={unifiedLine.type === 'added' ? 'green' : unifiedLine.type === 'removed' ? 'red' : undefined}
-                      dimColor={unifiedLine.type === 'context'}
-                      backgroundColor={isCurrentLine ? 'blue' : undefined}
-                      bold={isCurrentLine}
-                    >
-                      {codeText}
-                    </Text>
-                  );
-                  
-                  renderedElements.push(
-                    <Box
-                      key={`line-${visibleLineIndex}-seg-${segIdx}`}
-                      flexDirection="row"
-                    >
-                      {gutterElement}
-                      {commentElement}
-                      {codeElement}
-                    </Box>
-                  );
-                } else {
-                  const codeElement = (
-                    <Text
-                      color={unifiedLine.type === 'added' ? 'green' : unifiedLine.type === 'removed' ? 'red' : undefined}
-                      dimColor={unifiedLine.type === 'context'}
-                      backgroundColor={isCurrentLine ? 'blue' : undefined}
-                      bold={isCurrentLine}
-                    >
-                      {codeText}
-                    </Text>
-                  );
-                  
-                  renderedElements.push(
-                    <Box
-                      key={`line-${visibleLineIndex}-seg-${segIdx}`}
-                      flexDirection="row"
-                    >
-                      {gutterElement}
-                      {codeElement}
-                    </Box>
-                  );
-                }
-              rowsRemaining--;
-              }
-            }
+                <Text
+                  color={bodyColor}
+                  dimColor={unifiedLine.type === 'context'}
+                  backgroundColor={rowBackground}
+                  bold={isCurrentLine || unifiedLine.type === 'header'}
+                  wrap="truncate"
+                >
+                  {bodyText}
+                </Text>
+              </Box>
+            )];
           }
-        } else {
-          // Side-by-side diff rendering with syntax highlighting
-          const sideBySideLine = l as SideBySideLine;
-          const paneWidth = sbsPaneWidth; // Leave 2 cols slack to avoid terminal wrap
-          
-          // Get comment info based on the original line index
+
+          const sideBySideLine = line as SideBySideLine;
+          const paneWidth = Math.max(1, Math.floor((terminalWidth - 2) / 2));
           const sbsFileForComment = sideBySideLine.right?.fileName || sideBySideLine.left?.fileName || '';
           const sbsIndexForComment = sideBySidePerFileIndex[actualLineIndex];
           const hasComment = !!sbsFileForComment && sbsIndexForComment !== undefined && commentStore.hasComment(sbsIndexForComment, sbsFileForComment);
-          const commentIndicator = hasComment ? '[C] ' : '';
-          
-          // Prepare left and right content
-          const leftFullText = sideBySideLine.left ? (commentIndicator + (sideBySideLine.left.text || ' ')) : '';
-          const rightFullText = sideBySideLine.right ? (sideBySideLine.right.text || ' ') : '';
-          
-          if (wrapMode === 'truncate') {
-            // Truncate mode with syntax highlighting for side-by-side
-            const leftText = leftFullText ? truncateDisplay(leftFullText, paneWidth - 2) : '';
-            const rightText = rightFullText ? truncateDisplay(rightFullText, paneWidth - 2) : '';
-            
-            // Format left pane with syntax highlighting
-            let leftElement;
-            if (sideBySideLine.left) {
-              if (sideBySideLine.left.type === 'header') {
-                const headerColor = sideBySideLine.left.headerType === 'file' ? 'white' : 'cyan';
-                leftElement = (
-                  <Text
-                    bold
-                    color={headerColor}
-                    backgroundColor={isCurrentLine ? 'blue' : undefined}
-                  >
-                    {padEndDisplay(' ' + leftText, paneWidth)}
-                  </Text>
-                );
-              } else if (sideBySideLine.left.type === 'context' || sideBySideLine.left.type === 'empty') {
-                leftElement = (
-                  <Text
-                    bold={isCurrentLine}
-                    dimColor
-                    backgroundColor={isCurrentLine ? 'blue' : undefined}
-                  >
-                    {padEndDisplay(' ' + leftText, paneWidth)}
-                  </Text>
-                );
-              } else {
-                // For removed lines, apply syntax highlighting
-                const actualLeftText = hasComment ? sideBySideLine.left.text || ' ' : leftText.replace('[C] ', '');
-                const truncatedText = truncateDisplay(actualLeftText, paneWidth - (hasComment ? 5 : 1));
-                const leftSyntaxElement = renderSyntaxHighlighted(
-                  truncatedText, 
-                  sideBySideLine.left.fileName, 
-                  isCurrentLine, 
-                  undefined,
-                  sideBySideLine.left.type
-                );
-                
-                // Create the element with proper padding and comment indicator
-                if (hasComment) {
-                  const commentText = (
-                    <Text
-                      bold={isCurrentLine}
-                      backgroundColor={isCurrentLine ? 'blue' : undefined}
-                    >
-                       [C] 
-                    </Text>
-                  );
-                  leftElement = (
-                    <Box
-                      flexDirection="row"
-                      width={paneWidth}
-                    >
-                      {commentText}
-                      <Box
-                        flexShrink={1}
-                        flexGrow={0}
-                      >
-                        {leftSyntaxElement}
-                      </Box>
-                    </Box>
-                  );
-                } else {
-                  leftElement = (
-                    <Box
-                      flexDirection="row"
-                      width={paneWidth}
-                    >
-                      <Text
-                        bold={isCurrentLine}
-                        backgroundColor={isCurrentLine ? 'blue' : undefined}
-                      >
-                        {' '}
-                      </Text>
-                      <Box
-                        flexShrink={1}
-                        flexGrow={0}
-                      >
-                        {leftSyntaxElement}
-                      </Box>
-                    </Box>
-                  );
-                }
-              }
-            } else {
-              leftElement = (
-                <Text
-                  bold={isCurrentLine}
-                  dimColor
-                  backgroundColor={isCurrentLine ? 'blue' : undefined}
-                >
-                  {padEndDisplay('', paneWidth)}
-                </Text>
-              );
+
+          const formatPaneSegments = (
+            pane: SideBySideLine['left'] | SideBySideLine['right'],
+            prefix: string
+          ): {segments: string[]; color?: string; dimColor?: boolean; bold?: boolean} => {
+            if (!pane) {
+              return {segments: [padEndDisplay('', paneWidth)], dimColor: true};
             }
-            
-            // Format right pane with syntax highlighting
-            let rightElement;
-            if (sideBySideLine.right) {
-              if (sideBySideLine.right.type === 'header') {
-                const headerColor = sideBySideLine.right.headerType === 'file' ? 'white' : 'cyan';
-                rightElement = (
-                  <Text
-                    bold
-                    color={headerColor}
-                    backgroundColor={isCurrentLine ? 'blue' : undefined}
-                  >
-                    {padEndDisplay(' ' + rightText, paneWidth)}
-                  </Text>
-                );
-              } else if (sideBySideLine.right.type === 'context' || sideBySideLine.right.type === 'empty') {
-                rightElement = (
-                  <Text
-                    bold={isCurrentLine}
-                    dimColor
-                    backgroundColor={isCurrentLine ? 'blue' : undefined}
-                  >
-                    {padEndDisplay(' ' + rightText, paneWidth)}
-                  </Text>
-                );
-              } else {
-                // For added lines, apply syntax highlighting using already truncated text
-                const truncatedText = rightText;
-                const rightSyntaxElement = renderSyntaxHighlighted(
-                  truncatedText, 
-                  sideBySideLine.right.fileName, 
-                  isCurrentLine, 
-                  undefined,
-                  sideBySideLine.right.type
-                );
-                
-                // Create the element with syntax highlighting constrained to paneWidth
-                rightElement = (
-                  <Box
-                    flexDirection="row"
-                    width={paneWidth}
-                  >
-                    <Text
-                      bold={isCurrentLine}
-                      backgroundColor={isCurrentLine ? 'blue' : undefined}
-                    >
-                      {' '}
-                    </Text>
-                    <Box
-                      flexShrink={1}
-                      flexGrow={0}
-                    >
-                      {rightSyntaxElement}
-                    </Box>
-                  </Box>
-                );
-              }
-            } else {
-              rightElement = (
-                <Text
-                  bold={isCurrentLine}
-                  dimColor
-                  backgroundColor={isCurrentLine ? 'blue' : undefined}
-                >
-                  {padEndDisplay('', paneWidth)}
-                </Text>
-              );
+
+            const raw = `${prefix}${pane.text || ' '}`;
+            const segs = isWrap
+              ? LineWrapper.wrapLine(raw, paneWidth)
+              : [truncateDisplay(raw, paneWidth)];
+
+            const paddedSegs = segs.map(s => padEndDisplay(s, paneWidth));
+
+            if (pane.type === 'header') {
+              return {segments: paddedSegs, color: pane.headerType === 'file' ? 'white' : 'cyan', bold: true};
             }
-            
-            renderedElements.push(
-              <Box
-                key={`line-${visibleLineIndex}`}
-                flexDirection="row"
+            if (pane.type === 'context' || pane.type === 'empty') {
+              return {segments: paddedSegs, dimColor: true, bold: isCurrentLine};
+            }
+            return {segments: paddedSegs, color: pane.type === 'added' ? 'green' : 'red', bold: isCurrentLine};
+          };
+
+          const leftPane = formatPaneSegments(sideBySideLine.left, hasComment ? '[C] ' : ' ');
+          const rightPane = formatPaneSegments(sideBySideLine.right, ' ');
+          const numRows = Math.max(leftPane.segments.length, rightPane.segments.length);
+          const emptyLeft = padEndDisplay('', paneWidth);
+          const emptyRight = padEndDisplay('', paneWidth);
+
+          return Array.from({length: numRows}, (_, rowIdx) => (
+            <Box key={`line-${actualLineIndex}-${rowIdx}`} flexDirection="row" height={1} flexShrink={0}>
+              <Text
+                color={leftPane.color}
+                dimColor={leftPane.dimColor}
+                backgroundColor={rowBackground}
+                bold={leftPane.bold}
+                wrap="truncate"
               >
-                {leftElement}
-                {rightElement}
-              </Box>
-            );
-          } else {
-            // Wrap mode: handle wrapped side-by-side content with syntax highlighting
-            const maxPaneWidth = sbsMaxPaneWidth;
-            const leftSegments = leftFullText ? LineWrapper.wrapLine(leftFullText, maxPaneWidth) : [''];
-            const rightSegments = rightFullText ? LineWrapper.wrapLine(rightFullText, maxPaneWidth) : [''];
-            const totalSegments = Math.max(leftSegments.length, rightSegments.length);
-            let startSeg = 0;
-            if (visibleLineIndex === 0) {
-              const offsetRows = Math.max(0, viewport.viewportStartRow - firstVisibleLineStartRow);
-              startSeg = Math.min(offsetRows, totalSegments);
-            }
-            for (let segIdx = startSeg; segIdx < totalSegments; segIdx++) {
-              if (rowsRemaining <= 0) break;
-              const leftSegment = leftSegments[segIdx] || '';
-              const rightSegment = rightSegments[segIdx] || '';
-              
-              // Apply syntax highlighting logic for wrapped segments
-              let leftElement, rightElement;
-              
-              if (sideBySideLine.left && leftSegment) {
-                if (sideBySideLine.left.type === 'header') {
-                  const headerColor = sideBySideLine.left.headerType === 'file' ? 'white' : 'cyan';
-                  leftElement = (
-                    <Text
-                      bold
-                      color={headerColor}
-                      backgroundColor={isCurrentLine ? 'blue' : undefined}
-                    >
-                      {padEndDisplay(' ' + leftSegment, paneWidth)}
-                    </Text>
-                  );
-                } else if (sideBySideLine.left.type === 'context' || sideBySideLine.left.type === 'empty') {
-                  leftElement = (
-                    <Text
-                      bold={isCurrentLine}
-                      dimColor
-                      backgroundColor={isCurrentLine ? 'blue' : undefined}
-                    >
-                      {padEndDisplay(' ' + leftSegment, paneWidth)}
-                    </Text>
-                  );
-                } else {
-                  // For wrapped removed lines in side-by-side, apply syntax highlighting
-                  const leftSyntaxElement = renderSyntaxHighlighted(
-                    leftSegment.replace('[C] ', ''), 
-                    sideBySideLine.left.fileName, 
-                    isCurrentLine, 
-                    undefined,
-                    sideBySideLine.left.type
-                  );
-                  
-                  // Handle comment indicator for first segment
-                  if (leftSegment.includes('[C] ') && segIdx === startSeg) {
-                    leftElement = (
-                      <Box
-                        flexDirection="row"
-                        width={paneWidth}
-                      >
-                        <Text
-                          bold={isCurrentLine}
-                          backgroundColor={isCurrentLine ? 'blue' : undefined}
-                        >
-                          {' [C] '}
-                        </Text>
-                        <Box
-                          flexShrink={1}
-                          flexGrow={0}
-                        >
-                          {leftSyntaxElement}
-                        </Box>
-                      </Box>
-                    );
-                  } else {
-                    leftElement = (
-                      <Box
-                        flexDirection="row"
-                        width={paneWidth}
-                      >
-                        <Text
-                          bold={isCurrentLine}
-                          backgroundColor={isCurrentLine ? 'blue' : undefined}
-                        >
-                          {' '}
-                        </Text>
-                        <Box
-                          flexShrink={1}
-                          flexGrow={0}
-                        >
-                          {leftSyntaxElement}
-                        </Box>
-                      </Box>
-                    );
-                  }
-                }
-              } else {
-                leftElement = (
-                  <Text
-                    bold={isCurrentLine}
-                    dimColor
-                    backgroundColor={isCurrentLine ? 'blue' : undefined}
-                  >
-                    {padEndDisplay('', paneWidth)}
-                  </Text>
-                );
-              }
-              
-              if (sideBySideLine.right && rightSegment) {
-                if (sideBySideLine.right.type === 'header') {
-                  const headerColor = sideBySideLine.right.headerType === 'file' ? 'white' : 'cyan';
-                  rightElement = (
-                    <Text
-                      bold
-                      color={headerColor}
-                      backgroundColor={isCurrentLine ? 'blue' : undefined}
-                    >
-                      {padEndDisplay(' ' + rightSegment, paneWidth)}
-                    </Text>
-                  );
-                } else if (sideBySideLine.right.type === 'context' || sideBySideLine.right.type === 'empty') {
-                  rightElement = (
-                    <Text
-                      bold={isCurrentLine}
-                      dimColor
-                      backgroundColor={isCurrentLine ? 'blue' : undefined}
-                    >
-                      {padEndDisplay(' ' + rightSegment, paneWidth)}
-                    </Text>
-                  );
-                } else {
-                  // For wrapped added lines in side-by-side, apply syntax highlighting
-                  const rightSyntaxElement = renderSyntaxHighlighted(
-                    rightSegment, 
-                    sideBySideLine.right.fileName, 
-                    isCurrentLine, 
-                    undefined,
-                    sideBySideLine.right.type
-                  );
-                  
-                  rightElement = (
-                    <Box
-                      flexDirection="row"
-                      width={paneWidth}
-                    >
-                      <Text
-                        bold={isCurrentLine}
-                        backgroundColor={isCurrentLine ? 'blue' : undefined}
-                      >
-                        {' '}
-                      </Text>
-                      <Box
-                        flexShrink={1}
-                        flexGrow={0}
-                      >
-                        {rightSyntaxElement}
-                      </Box>
-                    </Box>
-                  );
-                }
-              } else {
-                rightElement = (
-                  <Text
-                    bold={isCurrentLine}
-                    dimColor
-                    backgroundColor={isCurrentLine ? 'blue' : undefined}
-                  >
-                    {padEndDisplay('', paneWidth)}
-                  </Text>
-                );
-              }
-              
-              renderedElements.push(
-                <Box
-                  key={`line-${visibleLineIndex}-seg-${segIdx}`}
-                  flexDirection="row"
-                >
-                  {leftElement}
-                  {rightElement}
-                </Box>
-              );
-              rowsRemaining--;
-            }
-          }
-        }
-        
-        visibleLineIndex++;
-        if (wrapMode === 'wrap' && rowsRemaining <= 0) {
-          break;
-        }
-      }
-      
-        return renderedElements;
-      })()}
+                {leftPane.segments[rowIdx] ?? emptyLeft}
+              </Text>
+              <Text
+                color={rightPane.color}
+                dimColor={rightPane.dimColor}
+                backgroundColor={rowBackground}
+                bold={rightPane.bold}
+                wrap="truncate"
+              >
+                {rightPane.segments[rowIdx] ?? emptyRight}
+              </Text>
+            </Box>
+          ));
+        })}
       </Box>
       
-      {showAllComments && commentStore.count > 0 && (
-        <Box flexDirection="column" borderStyle="single" borderColor="blue" padding={1} marginTop={1}>
-          <Text bold color="blue">
-            All Comments ({commentStore.count}):
-          </Text>
-          {commentStore.getAllComments().map((comment, idx) => (
-            <Text key={idx} color="gray">
-              {comment.fileName}:{comment.lineIndex} - {comment.commentText}
-            </Text>
-          ))}
-        </Box>
+      {showCommentSummary && (
+        <Text color="blue" wrap="truncate">
+          {truncateDisplay(`Comments (${commentStore.count}): ${commentStore.getAllComments().map(comment => `${comment.fileName}:${comment.lineIndex ?? '-'} ${comment.commentText}`).join(' | ')}`, terminalWidth)}
+        </Text>
       )}
       
       {!showFileTreeOverlay && (

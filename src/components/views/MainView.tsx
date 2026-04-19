@@ -1,5 +1,5 @@
-import React, {useMemo, useCallback, useRef, useEffect, useState} from 'react';
-import {Box, measureElement} from 'ink';
+import React, {useMemo, useCallback, useEffect} from 'react';
+import {Box} from 'ink';
 import AnnotatedText from '../common/AnnotatedText.js';
 import type {WorktreeInfo} from '../../models.js';
 import type {MemoryStatus} from '../../services/MemoryMonitorService.js';
@@ -16,6 +16,7 @@ import {EmptyState} from './MainView/EmptyState.js';
 import {MessageView} from './MainView/MessageView.js';
 import {PromptView} from './MainView/PromptView.js';
 import {getWorktreeKey} from './MainView/utils.js';
+import {calculateMainViewPageSize} from '../../shared/utils/layout.js';
 
 type Prompt = {title?: string; text?: string; hint?: string};
 
@@ -60,24 +61,23 @@ export default function MainView({
     pullRequests = {} as any;
   }
 
-  // Measure-based calculation to ensure we don't render more rows than fit.
-  const listRef = useRef<any>(null);
-  const [measuredPageSize, setMeasuredPageSize] = useState<number>(Math.max(1, worktrees?.length || 1));
+  const pageSize = useMemo(() => calculateMainViewPageSize(terminalRows, terminalWidth, {
+    hasMemoryWarning: !!memoryStatus && memoryStatus.severity !== 'ok',
+    hasUpdateBanner: !!versionInfo?.hasUpdate,
+  }), [terminalRows, terminalWidth, memoryStatus, versionInfo]);
 
-  const columnWidths = useColumnWidths(worktrees, terminalWidth, page, measuredPageSize);
-  
-  // Use measured page size for pagination info to align with what's rendered
-  const paginationInfo = useMemo(() => 
-    calculatePaginationInfo(worktrees.length, page, measuredPageSize),
-    [worktrees.length, page, measuredPageSize]
+  const columnWidths = useColumnWidths(worktrees, terminalWidth, page, pageSize);
+
+  const paginationInfo = useMemo(() =>
+    calculatePaginationInfo(worktrees.length, page, pageSize),
+    [worktrees.length, page, pageSize]
   );
-  
+
   const pageItems = useMemo(() => {
     if (!worktrees || worktrees.length === 0) return [];
-    const start = page * measuredPageSize;
-    // Clamp to the measured page size to avoid rendering more rows than fit
-    return worktrees.slice(start, start + measuredPageSize);
-  }, [worktrees, page, measuredPageSize]);
+    const start = page * pageSize;
+    return worktrees.slice(start, start + pageSize);
+  }, [worktrees, page, pageSize]);
 
   const getRowKey = useCallback((worktree: WorktreeInfo, index: number) => 
     getWorktreeKey(worktree, index), []
@@ -106,36 +106,9 @@ export default function MainView({
     );
   }, [versionInfo]);
 
-  // After render and on resize, measure the list container height to determine how many rows fit
   useEffect(() => {
-    const measureAndUpdate = () => {
-      const h = listRef.current ? measureElement(listRef.current).height : 0;
-      // Always ensure parent knows the measured size at least once.
-      // If h equals our initial optimistic value, we still want to propagate it
-      // so parent pagination logic (WorktreeListScreen) doesn't use a stale pageSize.
-      if (h > 0) {
-        if (h !== measuredPageSize) {
-          setMeasuredPageSize(h);
-          onMeasuredPageSize?.(h);
-        } else {
-          // Propagate unchanged measurement on first tick to sync parent
-          onMeasuredPageSize?.(h);
-        }
-      }
-    };
-    // Measure now and on next tick to ensure Yoga layout has settled
-    measureAndUpdate();
-    const t = setTimeout(measureAndUpdate, 0);
-    return () => clearTimeout(t);
-    // Re-measure when terminal size changes or item count might affect footer visibility
-  }, [terminalRows, terminalWidth, onMeasuredPageSize]);
-
-  // Also propagate when our internal measuredPageSize changes due to any reason
-  useEffect(() => {
-    if (measuredPageSize > 0) {
-      onMeasuredPageSize?.(measuredPageSize);
-    }
-  }, [measuredPageSize, onMeasuredPageSize]);
+    if (pageSize > 0) onMeasuredPageSize?.(pageSize);
+  }, [pageSize, onMeasuredPageSize]);
 
   if (mode === 'message') {
     return <MessageView message={message} />;
@@ -154,11 +127,11 @@ export default function MainView({
       {renderUpdateBanner}
       {renderMemoryWarning}
       <TableHeader columnWidths={columnWidths} />
-      <Box ref={listRef} flexDirection="column" flexGrow={1}>
+      <Box flexDirection="column">
         {pageItems.map((worktree, index) => {
-          const globalIndex = page * measuredPageSize + index;
+          const globalIndex = page * pageSize + index;
           const isSelected = globalIndex === selectedIndex;
-          
+
           if ((worktree as any).is_workspace_header) {
             return (
               <WorkspaceGroupRow

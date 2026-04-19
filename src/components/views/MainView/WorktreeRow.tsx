@@ -185,7 +185,7 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
   };
 
   return (
-    <Box key={`worktree-${globalIndex}`}>
+    <Box key={`worktree-${globalIndex}`} flexShrink={0}>
       {/* First column: # */}
       <Box
         width={cells[0].width}
@@ -197,6 +197,7 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
           color={getCellForeground(0)}
           dimColor={isDimmed && !selected}
           bold={selected && !isPriorityCell(0)}
+          wrap="truncate"
         >
           {formatCellText(cells[0].text, cells[0].width, cells[0].justify)}
         </Text>
@@ -224,6 +225,7 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
               color={cellIndex === COLUMNS.PROJECT_FEATURE ? undefined : getCellForeground(cellIndex)}
               dimColor={isDimmed && !selected}
               bold={selected && !isPriorityCell(cellIndex)}
+              wrap="truncate"
             >
               {cellIndex === COLUMNS.PROJECT_FEATURE
                 ? renderProjectFeatureCell(cell.text, cell.width, cell.justify)
