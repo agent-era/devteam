@@ -91,7 +91,6 @@ function AppContent() {
     requestExit
   } = useUIContext();
 
-
   // Exit immediately if raw mode isn't supported (unless overridden in E2E)
   useEffect(() => {
     if (!isRawModeSupported && process.env.E2E_IGNORE_RAWMODE !== '1') {

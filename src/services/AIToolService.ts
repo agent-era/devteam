@@ -138,7 +138,7 @@ export class AIToolService {
       case 'claude':
         return this.isWaiting(text, patterns.waiting_numbered) ||
           lower.includes('allow execution') ||
-          lower.includes('permission') ||
+          lower.includes('needs permission') ||
           lower.includes('yes, allow') ||
           lower.includes('do you want me to');
       
