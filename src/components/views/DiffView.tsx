@@ -93,7 +93,7 @@ async function loadDiff(worktreePath: string, diffType: 'full' | 'uncommitted' =
           newLineCounter = Math.max(1, newStart);
         }
         const ctx = line.replace(/^@@.*@@ ?/, '');
-        if (ctx) currentFileLines.push({type: 'header', text: `  ▼ ${ctx}`, fileName: currentFileName, headerType: 'hunk'});
+        if (ctx) currentFileLines.push({type: 'header', text: `▼ ${ctx}`, fileName: currentFileName, headerType: 'hunk'});
       } else if (line.startsWith('+') && !line.startsWith('+++')) {
         currentFileLines.push({type: 'added', text: line.slice(1), fileName: currentFileName, newLineIndex: newLineCounter});
         newLineCounter++;
@@ -1124,7 +1124,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
           dimColor
           wrap="truncate"
         >
-          {fitDisplay(` ${currentHunkHeader}`, terminalWidth)}
+          {fitDisplay(currentHunkHeader, terminalWidth)}
         </Text>
       )}
       <Box flexDirection="column" height={viewportRows}>
@@ -1140,7 +1140,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
             const hasComment = !!unifiedLine.fileName && perFileIndex !== undefined && commentStore.hasComment(perFileIndex, unifiedLine.fileName);
             const gutterSymbol = unifiedLine.type === 'added' ? '+ ' : unifiedLine.type === 'removed' ? '- ' : '  ';
             const gutterColor = unifiedLine.type === 'added' || unifiedLine.type === 'removed' ? 'white' : 'gray';
-            const bodyPrefix = hasComment ? '[C] ' : '';
+            const bodyPrefix = unifiedLine.type === 'header' ? '' : (hasComment ? '  [C] ' : '  ');
             const bodyWidth = Math.max(1, terminalWidth - 4);
             const isFileHeader = unifiedLine.type === 'header' && unifiedLine.headerType === 'file';
             const isHunkHeader = unifiedLine.type === 'header' && unifiedLine.headerType === 'hunk';
