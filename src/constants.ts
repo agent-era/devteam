@@ -1,5 +1,4 @@
 import path from 'node:path';
-import os from 'node:os';
 
 export const SESSION_PREFIX = 'dev-';
 export const DIR_BRANCHES_SUFFIX = '-branches';
@@ -30,18 +29,6 @@ export const CLAUDE_SETTINGS_FILE = path.join('.claude', 'settings.local.json');
 export const CLAUDE_CONFIG_PATTERNS = ['CLAUDE.md', '.claude*', 'claude.config*'];
 // Run config now stored in project-local .devteam/config.json
 export const RUN_CONFIG_FILE = path.join('.devteam', 'config.json');
-
-// Hook-based AI status paths
-export const DEVTEAM_USER_DIR = path.join(os.homedir(), '.devteam');
-export const HOOK_STATUS_DIR = path.join(DEVTEAM_USER_DIR, 'status');
-export const HOOK_INSTALL_SKIP_FILE = path.join(DEVTEAM_USER_DIR, 'hooks-install-skipped');
-export const MARKER_FILE = '.devteam-session';
-export const HOOK_IDENTIFIER = 'devteam-status-hook';
-
-export const CLAUDE_USER_SETTINGS = path.join(os.homedir(), '.claude', 'settings.json');
-export const GEMINI_USER_SETTINGS = path.join(os.homedir(), '.gemini', 'settings.json');
-export const CODEX_USER_HOOKS = path.join(os.homedir(), '.codex', 'hooks.json');
-export const CODEX_USER_CONFIG_TOML = path.join(os.homedir(), '.codex', 'config.toml');
 
 // UI constants (kept for parity; Ink layout differs)
 export const UI_MIN_WIDTH = 50;
