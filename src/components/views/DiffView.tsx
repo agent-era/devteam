@@ -1116,17 +1116,15 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
           backgroundColor="gray"
           wrap="truncate"
         >
-          {' '}{currentFileHeader}
+          {fitDisplay(` ${currentFileHeader}`, terminalWidth)}
         </Text>
       )}
       {currentHunkHeader && (
         <Text
-          color="cyan"
-          bold
-          backgroundColor="gray"
+          dimColor
           wrap="truncate"
         >
-          {' '}{currentHunkHeader}
+          {fitDisplay(` ${currentHunkHeader}`, terminalWidth)}
         </Text>
       )}
       <Box flexDirection="column" height={viewportRows}>
@@ -1144,18 +1142,19 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
             const gutterColor = unifiedLine.type === 'added' || unifiedLine.type === 'removed' ? 'white' : 'gray';
             const bodyPrefix = hasComment ? '[C] ' : '';
             const bodyWidth = Math.max(1, terminalWidth - 4);
-            const bodyColor = unifiedLine.type === 'header'
-              ? (unifiedLine.headerType === 'file' ? 'white' : 'cyan')
-              : undefined;
+            const isFileHeader = unifiedLine.type === 'header' && unifiedLine.headerType === 'file';
+            const isHunkHeader = unifiedLine.type === 'header' && unifiedLine.headerType === 'hunk';
+            const bodyColor = isFileHeader ? 'white' : undefined;
             const useSyntax = (unifiedLine.type === 'added' || unifiedLine.type === 'removed') && !isCurrentLine;
             const lineTint = useSyntax ? (unifiedLine.type === 'added' ? 'green' : 'red') : undefined;
+            const lineBackground = isFileHeader ? (rowBackground ?? 'gray') : (rowBackground ?? lineTint);
             const rawBody = `${bodyPrefix}${unifiedLine.text || ' '}`;
 
             if (isWrap) {
               const segments = LineWrapper.wrapLine(rawBody, bodyWidth);
               return segments.map((seg, segIdx) => (
                 <Box key={`line-${actualLineIndex}-${segIdx}`} flexDirection="row" height={1} flexShrink={0}>
-                  <Text color={gutterColor} backgroundColor={rowBackground ?? lineTint} bold={isCurrentLine}>
+                  <Text color={gutterColor} backgroundColor={lineBackground} bold={isCurrentLine}>
                     {segIdx === 0 ? gutterSymbol : '  '}
                   </Text>
                   {useSyntax ? (
@@ -1163,9 +1162,9 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                   ) : (
                     <Text
                       color={bodyColor}
-                      dimColor={unifiedLine.type === 'context'}
-                      backgroundColor={rowBackground ?? lineTint}
-                      bold={isCurrentLine || unifiedLine.type === 'header'}
+                      dimColor={unifiedLine.type === 'context' || isHunkHeader}
+                      backgroundColor={lineBackground}
+                      bold={isCurrentLine || isFileHeader}
                       wrap="truncate"
                     >
                       {padEndDisplay(seg, bodyWidth)}
@@ -1178,7 +1177,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
             const bodyText = fitDisplay(rawBody, bodyWidth);
             return [(
               <Box key={`line-${actualLineIndex}`} flexDirection="row" height={1} flexShrink={0}>
-                <Text color={gutterColor} backgroundColor={rowBackground ?? lineTint} bold={isCurrentLine}>
+                <Text color={gutterColor} backgroundColor={lineBackground} bold={isCurrentLine}>
                   {gutterSymbol}
                 </Text>
                 {useSyntax ? (
@@ -1187,7 +1186,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                   <Text
                     color={bodyColor}
                     dimColor={unifiedLine.type === 'context'}
-                    backgroundColor={rowBackground ?? lineTint}
+                    backgroundColor={lineBackground}
                     bold={isCurrentLine || unifiedLine.type === 'header'}
                     wrap="truncate"
                   >
@@ -1207,7 +1206,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
           const formatPaneSegments = (
             pane: SideBySideLine['left'] | SideBySideLine['right'],
             prefix: string
-          ): {segments: string[]; color?: string; dimColor?: boolean; bold?: boolean; useSyntax?: boolean; language?: string} => {
+          ): {segments: string[]; color?: string; dimColor?: boolean; bold?: boolean; useSyntax?: boolean; language?: string; backgroundColor?: string} => {
             if (!pane) {
               return {segments: [padEndDisplay('', paneWidth)], dimColor: true};
             }
@@ -1220,7 +1219,9 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
             const paddedSegs = segs.map(s => padEndDisplay(s, paneWidth));
 
             if (pane.type === 'header') {
-              return {segments: paddedSegs, color: pane.headerType === 'file' ? 'white' : 'cyan', bold: true};
+              return pane.headerType === 'file'
+                ? {segments: paddedSegs, color: 'white', bold: true, backgroundColor: 'gray'}
+                : {segments: paddedSegs, dimColor: true};
             }
             if (pane.type === 'context' || pane.type === 'empty') {
               return {segments: paddedSegs, dimColor: true, bold: isCurrentLine};
@@ -1242,7 +1243,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                 <Text
                   color={leftPane.color}
                   dimColor={leftPane.dimColor}
-                  backgroundColor={rowBackground}
+                  backgroundColor={rowBackground ?? leftPane.backgroundColor}
                   bold={leftPane.bold}
                   wrap="truncate"
                 >
@@ -1255,7 +1256,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                 <Text
                   color={rightPane.color}
                   dimColor={rightPane.dimColor}
-                  backgroundColor={rowBackground}
+                  backgroundColor={rowBackground ?? rightPane.backgroundColor}
                   bold={rightPane.bold}
                   wrap="truncate"
                 >
