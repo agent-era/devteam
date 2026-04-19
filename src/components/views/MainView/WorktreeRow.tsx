@@ -106,13 +106,11 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
     return undefined;
   };
 
-  // Fit and align cell content to fill full cell width so background covers entire cell
   const formatCellText = (text: string, width: number, justify: 'flex-start' | 'center' | 'flex-end'): string => {
     const raw = (text ?? '').trim();
-    // Truncate if needed (simple substring, width-calculated earlier for project/feature)
     let visible = raw;
     if (stringDisplayWidth(visible) > width) {
-        visible = visible.slice(0, Math.max(0, width));
+      visible = visible.slice(0, Math.max(0, width));
     }
     const pad = Math.max(0, width - stringDisplayWidth(visible));
     if (justify === 'flex-end') {
@@ -123,10 +121,9 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
       const right = pad - left;
       return ' '.repeat(left) + visible + ' '.repeat(right);
     }
-    // flex-start
     return visible + ' '.repeat(pad);
   };
-  
+
   const renderProjectFeatureCell = (text: string, width: number, justify: 'flex-start' | 'center' | 'flex-end') => {
     const raw = (text ?? '').trim();
     let visible = raw;
