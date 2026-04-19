@@ -98,33 +98,38 @@ export default function WorktreeListScreen({
     }
   };
 
-  const handleSelect = async () => {
-    const selectedWorktree = worktrees[selectedIndex];
-    if (!selectedWorktree) return;
-
+  const activateWorktree = async (worktree: typeof worktrees[0]) => {
     try {
-      // If a workspace child is selected, inform and attach/create the parent workspace session
-      if ((selectedWorktree as any).is_workspace_child) {
-        const feature = (selectedWorktree as any).parent_feature || selectedWorktree.feature;
+      if ((worktree as any).is_workspace_child) {
+        const feature = (worktree as any).parent_feature || worktree.feature;
         showInfo(`Opening workspace session for '${feature}'.\nChild sessions are handled in the workspace.`, {
           title: 'Workspace Session',
           onClose: () => runWithLoading(() => attachWorkspaceSession(feature))
         });
         return;
       }
-      // Check if tool selection is needed
-      const needsSelection = await needsToolSelection(selectedWorktree);
-
+      const needsSelection = await needsToolSelection(worktree);
       if (needsSelection) {
-        // Show AI tool selection dialog
-        showAIToolSelection(selectedWorktree);
+        showAIToolSelection(worktree);
       } else {
-        // Proceed with session attachment immediately (no tmux hint)
-        runWithLoading(() => attachSession(selectedWorktree));
+        runWithLoading(() => attachSession(worktree));
       }
     } catch (error) {
       console.error('Failed to handle selection:', error);
     }
+  };
+
+  const handleSelectAtIndex = (index: number) => {
+    const worktree = worktrees[index];
+    if (!worktree) return;
+    selectWorktree(index);
+    void activateWorktree(worktree);
+  };
+
+  const handleSelect = async () => {
+    const selectedWorktree = worktrees[selectedIndex];
+    if (!selectedWorktree) return;
+    await activateWorktree(selectedWorktree);
   };
 
   // Force the AI tool picker even when a tool is already remembered for this worktree.
@@ -278,6 +283,7 @@ export default function WorktreeListScreen({
       selectedIndex={selectedIndex}
       onMove={handleMove}
       onSelect={handleSelect}
+      onSelectAt={handleSelectAtIndex}
       onQuit={onQuit}
       page={currentPage}
       onMeasuredPageSize={setPageSize}
