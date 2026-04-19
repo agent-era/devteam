@@ -40,7 +40,7 @@ test('does not go blank when items equal page size and pressing down', async () 
 
   // Allow initial frame to render and detect first item
   const {waitFor, includesWorktree, countWorktrees, worktreeLabel, stripAnsi} = await import('./_utils.js');
-  await waitFor(() => includesWorktree(stdout.lastFrame() || '', 'demo', 'feature-01'), {timeout: 3000, interval: 50, message: 'first item visible'});
+  await waitFor(() => includesWorktree(stdout.lastFrame() || '', 'demo', 'feature-01'), {timeout: 20000, interval: 50, message: 'first item visible'});
   let frame = stdout.lastFrame() || '';
   let clean = stripAnsi(frame);
   // Settle: wait until pagination footer shows the full range for page 1

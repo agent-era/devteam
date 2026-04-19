@@ -31,6 +31,18 @@ export const CLAUDE_CONFIG_PATTERNS = ['CLAUDE.md', '.claude*', 'claude.config*'
 // Run config now stored in project-local .devteam/config.json
 export const RUN_CONFIG_FILE = path.join('.devteam', 'config.json');
 
+// Hook-based AI status paths
+export const DEVTEAM_USER_DIR = path.join(os.homedir(), '.devteam');
+export const HOOK_STATUS_DIR = path.join(DEVTEAM_USER_DIR, 'status');
+export const HOOK_INSTALL_SKIP_FILE = path.join(DEVTEAM_USER_DIR, 'hooks-install-skipped');
+export const MARKER_FILE = '.devteam-session';
+export const HOOK_IDENTIFIER = 'devteam-status-hook';
+
+export const CLAUDE_USER_SETTINGS = path.join(os.homedir(), '.claude', 'settings.json');
+export const GEMINI_USER_SETTINGS = path.join(os.homedir(), '.gemini', 'settings.json');
+export const CODEX_USER_HOOKS = path.join(os.homedir(), '.codex', 'hooks.json');
+export const CODEX_USER_CONFIG_TOML = path.join(os.homedir(), '.codex', 'config.toml');
+
 // UI constants (kept for parity; Ink layout differs)
 export const UI_MIN_WIDTH = 50;
 export const UI_MAX_WIDTH = 100;
@@ -146,7 +158,8 @@ export const PR_TTL_ERROR_MS = 60 * SECOND_MS;
 export const PR_TTL_CHECKS_FAIL_MS = 2 * MINUTE_MS;
 export const PR_TTL_CHECKS_PENDING_MS = 5 * SECOND_MS;
 export const PR_TTL_PASSING_OPEN_MS = 30 * SECOND_MS;
-export const PR_TTL_OPEN_MS = 5 * MINUTE_MS;
+export const PR_TTL_OPEN_MS = 5 * MINUTE_MS; // open PR, checks have run and are stable
+export const PR_TTL_OPEN_NO_CHECKS_MS = 20 * SECOND_MS; // open PR, no check data yet — CI may have just started
 export const PR_TTL_CLOSED_MS = HOUR_MS;
 export const PR_TTL_UNKNOWN_MS = 10 * MINUTE_MS;
 export const PR_TTL_FALLBACK_MS = 5 * MINUTE_MS;
@@ -162,16 +175,17 @@ export function generateHelpSections(projectsDir: string): string[] {
     '  [PgUp]/[PgDn]     scroll half screen',
     '  [<]/[>]           previous/next page',
     '  [1]–[9]           select item on current page',
-    '  [enter]           open/create session',
+    '  [enter] or [a]    open/create agent session',
     '',
     'ACTIVE VIEW:',
-    '  [n]ew         feature and activate',
-    '  create from existing [b]ranch',
-    '  [a]rchive     selected feature',
-    '  open [s]hell in worktree',
-    '  e[x]ec        program in worktree',
-    '  [c]onfigure   project settings (AI-assisted)',
-    '  [T]           open agent with a different AI tool (also: Shift+Enter)',
+    '  [n]ew             feature and activate',
+    '  [b]ranch          create from existing branch',
+    '  [a]gent           open/create agent session',
+    '  [s]hell           open shell in worktree',
+    '  e[x]ec            run program in worktree',
+    '  [c]onfigure       project settings (AI-assisted)',
+    '  [T]               open agent with a different AI tool (also: Shift+Enter)',
+    '  [v]archive        archive selected feature',
     '',
   'NEW FEATURE DIALOG:',
     '  Type        filter projects',

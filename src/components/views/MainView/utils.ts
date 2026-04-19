@@ -2,11 +2,6 @@ import type {WorktreeInfo} from '../../../models.js';
 import {
   GIT_AHEAD,
   GIT_BEHIND,
-  SYMBOL_NO_SESSION,
-  SYMBOL_IDLE,
-  SYMBOL_WORKING,
-  SYMBOL_WAITING,
-  SYMBOL_FAILED,
 } from '../../../constants.js';
 
 export function formatNumber(num: number): string {
@@ -37,20 +32,6 @@ export function formatPushStatus(worktree: WorktreeInfo): string {
   return 'x';
 }
 
-export function getAISymbol(aiStatus: string, hasSession: boolean): string {
-  if (!hasSession) return SYMBOL_NO_SESSION;
-
-  const status = aiStatus.toLowerCase();
-  if (status.includes('waiting')) return SYMBOL_WAITING;
-  if (status.includes('working')) return SYMBOL_WORKING;
-  if (status.includes('idle') || status.includes('active')) return SYMBOL_IDLE;
-  return SYMBOL_FAILED;
-}
-
-// Backward compatibility function
-export function getClaudeSymbol(claudeStatus: string, hasSession: boolean): string {
-  return getAISymbol(claudeStatus, hasSession);
-}
 
 export function formatPRStatus(pr: WorktreeInfo['pr']): string {
   if (!pr || pr.isNotChecked) return '';

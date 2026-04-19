@@ -37,10 +37,12 @@ test('MainView renders workspace header with child rows (terminal)', async () =>
   const tree = React.createElement(TestableApp, {gitService, gitHubService, tmuxService});
   const inst = Ink.render(tree, {stdout, stdin, debug: true, exitOnCtrlC: false, patchConsole: false});
 
-  // Allow time for providers to refresh and render
-  await new Promise(r => setTimeout(r, 300));
+  const {waitFor, stripAnsi} = await import('./_utils.js');
+  await waitFor(() => {
+    const c = stripAnsi(stdout.lastFrame() || '');
+    return c.includes('feature-x [workspace]');
+  }, {timeout: 3000, interval: 50, message: 'workspace header visible'});
   const frame = stdout.lastFrame() || '';
-  const {stripAnsi} = await import('./_utils.js');
   const clean = stripAnsi(frame);
 
   // Assertions: header and both children are rendered

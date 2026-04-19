@@ -91,6 +91,8 @@ export class SessionInfo {
   attached: boolean;
   ai_status: AIStatus;
   ai_tool: AITool;
+  shell_attached: boolean;
+  run_attached: boolean;
   // Backward compatibility
   get claude_status(): string {
     return this.ai_status;
@@ -103,6 +105,8 @@ export class SessionInfo {
     this.attached = false;
     this.ai_status = 'not_running';
     this.ai_tool = 'none';
+    this.shell_attached = false;
+    this.run_attached = false;
     Object.assign(this, init);
     
     // Handle backward compatibility during construction

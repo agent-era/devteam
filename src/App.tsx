@@ -24,11 +24,14 @@ import {UIProvider, useUIContext} from './contexts/UIContext.js';
 import {InputFocusProvider} from './contexts/InputFocusContext.js';
 import {WorktreeCore} from './cores/WorktreeCore.js';
 import {GitHubCore} from './cores/GitHubCore.js';
+import {HooksService} from './services/HooksService.js';
+import InstallHooksDialog from './components/dialogs/InstallHooksDialog.js';
 
 
 function AppContent() {
   const {exit} = useApp();
   const {isRawModeSupported} = useStdin();
+  const installHooksService = React.useRef(new HooksService());
   
   // Use our new contexts
   const {
@@ -79,6 +82,7 @@ function AppContent() {
     showDiffView,
     showAIToolSelection,
     showNoProjectsDialog,
+    showInstallHooks,
     showInfo,
     showSettings,
     beginSettingsAI,
@@ -105,11 +109,15 @@ function AppContent() {
       const projects = discoverProjects();
       if (!projects || projects.length === 0) {
         showNoProjectsDialog();
+        return;
       }
     } catch {
-      // If discovery throws, still show the dialog
       showNoProjectsDialog();
+      return;
     }
+    try {
+      if (!installHooksService.current.isInstalled() && !installHooksService.current.isInstallSkipped()) showInstallHooks();
+    } catch {}
     // Run once on mount
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -406,6 +414,19 @@ function AppContent() {
     content = (
       <Box flexGrow={1} alignItems="center" justifyContent="center">
         <NoProjectsDialog onExit={requestExit} />
+      </Box>
+    );
+  }
+
+  if (!content && mode === 'installHooks') {
+    const hooks = installHooksService.current;
+    content = (
+      <Box flexGrow={1} alignItems="center" justifyContent="center">
+        <InstallHooksDialog
+          onInstall={() => { hooks.installAll(); showList(); }}
+          onSkip={showList}
+          onNever={() => { try { hooks.skipInstall(); } catch {} showList(); }}
+        />
       </Box>
     );
   }

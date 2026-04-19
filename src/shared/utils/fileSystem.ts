@@ -38,6 +38,24 @@ export function readFileOrNull(filePath: string): string | null {
   }
 }
 
+export function readJSONFile<T>(filePath: string): T | null {
+  try {
+    return JSON.parse(fs.readFileSync(filePath, 'utf8')) as T;
+  } catch {
+    return null;
+  }
+}
+
+export function writeJSONAtomic(filePath: string, data: unknown): void {
+  const tmp = `${filePath}.${process.pid}.tmp`;
+  try {
+    fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
+    fs.renameSync(tmp, filePath);
+  } catch {
+    try { fs.unlinkSync(tmp); } catch {}
+  }
+}
+
 // Extract a JSON object from arbitrary text, tolerating code fences or surrounding prose.
 // Returns a pretty-printed string, or null if no valid object is found.
 export function extractJsonObject(raw: string): string | null {

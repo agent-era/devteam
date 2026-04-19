@@ -3,9 +3,9 @@ import {Box, Text} from 'ink';
 import type {WorktreeInfo} from '../../../models.js';
 import type {ColumnWidths} from './hooks/useColumnWidths.js';
 import {stringDisplayWidth} from '../../../shared/utils/formatting.js';
-import {getAISymbol} from './utils.js';
 import StatusChip from '../../common/StatusChip.js';
-import {getAIStatusMeta} from './highlight.js';
+import {getStatusMeta} from './highlight.js';
+import {renderSessionCell} from './SessionCell.js';
 
 interface WorkspaceGroupRowProps {
   workspace: WorktreeInfo; // header item with is_workspace_header
@@ -17,23 +17,26 @@ interface WorkspaceGroupRowProps {
 
 export const WorkspaceGroupRow = memo<WorkspaceGroupRowProps>(({workspace, globalIndex, selected, columnWidths}) => {
   const numberText = String(globalIndex + 1);
-  const ai = getAISymbol(workspace.session?.ai_status || '', workspace.session?.attached || false);
-  // Render like simple rows: feature [workspace]
   const headerText = `${workspace.feature} [workspace]`;
   const truncatedHeader = stringDisplayWidth(headerText) > columnWidths.projectFeature
     ? headerText.slice(0, Math.max(0, columnWidths.projectFeature - 3)) + '...'
     : headerText;
 
+  const agentActive = workspace.session?.attached || false;
+  const shellActive = workspace.session?.shell_attached || false;
+  const runActive = workspace.session?.run_attached || false;
+
   const cells = [
+    {text: 'a', width: columnWidths.ai, justify: 'center' as const},
+    {text: 's', width: columnWidths.shell, justify: 'center' as const},
+    {text: 'x', width: columnWidths.run, justify: 'center' as const},
     {text: truncatedHeader, width: columnWidths.projectFeature, justify: 'flex-start' as const},
-    {text: ai, width: columnWidths.ai, justify: 'center' as const},
     {text: '', width: columnWidths.diff, justify: 'flex-end' as const},
     {text: '', width: columnWidths.changes, justify: 'flex-end' as const},
     {text: '', width: columnWidths.pr, justify: 'flex-end' as const},
   ];
 
-  // Determine STATUS for workspace header based solely on AI agent tool status (centralized mapping)
-  const {label: statusLabel, bg: statusBg, fg: statusFg} = getAIStatusMeta(workspace);
+  const {label: statusLabel, bg: statusBg, fg: statusFg} = getStatusMeta(workspace, undefined);
 
   const formatCellText = (text: string, width: number, justify: 'flex-start' | 'center' | 'flex-end'): string => {
     const raw = (text ?? '').trim();
@@ -50,7 +53,6 @@ export const WorkspaceGroupRow = memo<WorkspaceGroupRowProps>(({workspace, globa
     return visible + ' '.repeat(pad);
   };
 
-  // Custom render for the project/feature cell to dim bracketed [workspace]
   const renderProjectFeatureCell = (text: string, width: number, justify: 'flex-start' | 'center' | 'flex-end') => {
     const raw = (text ?? '').trim();
     let visible = raw;
@@ -94,34 +96,46 @@ export const WorkspaceGroupRow = memo<WorkspaceGroupRowProps>(({workspace, globa
 
   return (
     <Box>
-      {/* First column: # */}
       <Box width={columnWidths.number} justifyContent="flex-start" marginRight={1}>
         <Text bold={selected} inverse={selected}>{formatCellText(numberText, columnWidths.number, 'flex-start')}</Text>
       </Box>
-      {/* Second column: STATUS (AI tool status for workspace rows) */}
       <Box width={columnWidths.status} justifyContent="flex-start" marginRight={1}>
         <StatusChip label={statusLabel} color={statusBg} fg={statusFg} width={columnWidths.status} />
       </Box>
-      {/* Remaining columns: PROJECT/FEATURE, AI, DIFF, CHANGES, PR */}
-      {cells.map((cell, idx) => (
-        <Box key={idx} width={cell.width} justifyContent={cell.justify} marginRight={idx < cells.length - 1 ? 1 : 0}>
-          <Text bold={selected} inverse={selected}>
-            {idx === 0
-              ? renderProjectFeatureCell(cell.text, cell.width, cell.justify)
-              : formatCellText(cell.text, cell.width, cell.justify)}
-          </Text>
-        </Box>
-      ))}
+      {cells.map((cell, idx) => {
+        let cellContent: React.ReactNode;
+        if (idx === 0) {
+          cellContent = renderSessionCell(cell.text, agentActive, cell.width);
+        } else if (idx === 1) {
+          cellContent = renderSessionCell(cell.text, shellActive, cell.width);
+        } else if (idx === 2) {
+          cellContent = renderSessionCell(cell.text, runActive, cell.width);
+        } else {
+          cellContent = (
+            <Text bold={selected} inverse={selected}>
+              {idx === 3
+                ? renderProjectFeatureCell(cell.text, cell.width, cell.justify)
+                : formatCellText(cell.text, cell.width, cell.justify)}
+            </Text>
+          );
+        }
+        return (
+          <Box key={idx} width={cell.width} justifyContent={cell.justify} marginRight={idx < cells.length - 1 ? 1 : 0}>
+            {cellContent}
+          </Box>
+        );
+      })}
     </Box>
   );
 }, (prev, next) => {
-  // Custom comparison to minimize re-renders
   const prevW = prev.workspace;
   const nextW = next.workspace;
   const widthsEqual = prev.columnWidths.number === next.columnWidths.number &&
     prev.columnWidths.status === next.columnWidths.status &&
     prev.columnWidths.projectFeature === next.columnWidths.projectFeature &&
     prev.columnWidths.ai === next.columnWidths.ai &&
+    prev.columnWidths.shell === next.columnWidths.shell &&
+    prev.columnWidths.run === next.columnWidths.run &&
     prev.columnWidths.diff === next.columnWidths.diff &&
     prev.columnWidths.changes === next.columnWidths.changes &&
     prev.columnWidths.pr === next.columnWidths.pr;
@@ -133,7 +147,8 @@ export const WorkspaceGroupRow = memo<WorkspaceGroupRowProps>(({workspace, globa
     prevW.feature === nextW.feature &&
     !!prevW.session?.attached === !!nextW.session?.attached &&
     (prevW.session?.ai_status || 'not_running') === (nextW.session?.ai_status || 'not_running') &&
-    (prevW.session?.ai_tool || 'none') === (nextW.session?.ai_tool || 'none')
+    !!prevW.session?.shell_attached === !!nextW.session?.shell_attached &&
+    !!prevW.session?.run_attached === !!nextW.session?.run_attached
   );
 });
 
