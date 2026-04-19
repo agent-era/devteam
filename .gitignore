@@ -145,5 +145,4 @@ vite.config.ts.timestamp-*
 
 # Devteam local cache
 .devteam
-.devteam-session
 .cpuprofile

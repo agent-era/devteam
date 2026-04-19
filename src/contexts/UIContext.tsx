@@ -5,7 +5,7 @@ import type {AITool} from '../models.js';
 
 type UIMode = 'list' | 'create' | 'confirmArchive' | 'help' |
              'pickProjectForBranch' | 'pickBranch' | 'diff' | 'selectAITool' |
-             'tmuxAttachLoading' | 'noProjects' | 'info' | 'settings' | 'installHooks';
+             'tmuxAttachLoading' | 'noProjects' | 'info' | 'settings';
 
 export type SettingsAIResult = {
   project: string;
@@ -40,7 +40,6 @@ interface UIContextType {
   showDiffView: (worktreePath: string, type: 'full' | 'uncommitted') => void;
   showAIToolSelection: (worktree: WorktreeInfo) => void;
   showNoProjectsDialog: () => void;
-  showInstallHooks: () => void;
   showInfo: (message: string, options?: {title?: string; onClose?: () => void}) => void;
   showSettings: (project: string) => void;
   beginSettingsAI: (project: string) => void;
@@ -163,10 +162,6 @@ export function UIProvider({children}: UIProviderProps) {
     setMode('noProjects');
   };
 
-  const showInstallHooks = () => {
-    setMode('installHooks');
-  };
-
   const showInfo = (message: string, options?: {title?: string; onClose?: () => void}) => {
     setInfo({title: options?.title, message, onClose: options?.onClose});
     setMode('info');
@@ -228,7 +223,6 @@ export function UIProvider({children}: UIProviderProps) {
     clearSettingsAIResult,
     runWithLoading,
     showNoProjectsDialog,
-    showInstallHooks,
     
     // Branch management
     setBranchList,

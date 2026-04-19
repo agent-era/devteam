@@ -126,16 +126,21 @@ export class AIToolService {
    * Check if AI tool is waiting for user input (tool-specific logic)
    */
   private isWaitingForTool(text: string, tool: AITool, patterns: any): boolean {
+    const lower = text.toLowerCase();
     switch (tool) {
       case 'gemini':
-        return text.toLowerCase().includes('waiting for user');
+        return lower.includes('waiting for user');
       
       case 'codex':
-        // Codex is waiting if it does NOT have "⏎ send" (when not working)
-        return !text.includes('⏎ send');
+        // Interactive Codex prompts keep the cursor visible but hide the send affordance.
+        return text.includes('▌') && !text.includes('⏎ send');
       
       case 'claude':
-        return this.isWaiting(text, patterns.waiting_numbered);
+        return this.isWaiting(text, patterns.waiting_numbered) ||
+          lower.includes('allow execution') ||
+          lower.includes('permission') ||
+          lower.includes('yes, allow') ||
+          lower.includes('do you want me to');
       
       default:
         return false;

@@ -101,6 +101,11 @@ random-session:33333`);
         expect(aiToolService.getStatusForTool(waitingText, 'claude')).toBe('waiting');
       });
 
+      test('detects waiting permission prompt', () => {
+        const waitingText = "Claude needs permission.\nAllow execution of: 'npm test'?\nYes, allow once";
+        expect(aiToolService.getStatusForTool(waitingText, 'claude')).toBe('waiting');
+      });
+
       test('detects idle state as default', () => {
         const idleText = '│ >\n│ Type your message';
         expect(aiToolService.getStatusForTool(idleText, 'claude')).toBe('idle');
@@ -116,6 +121,11 @@ random-session:33333`);
       test('detects waiting state (no send button)', () => {
         const waitingText = '▌ What would you like me to help with?';
         expect(aiToolService.getStatusForTool(waitingText, 'codex')).toBe('waiting');
+      });
+
+      test('does not report waiting without an interactive cursor', () => {
+        const idleLikeText = 'Session output without prompt affordances';
+        expect(aiToolService.getStatusForTool(idleLikeText, 'codex')).toBe('idle');
       });
 
       test('detects idle state (has send button)', () => {
