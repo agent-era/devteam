@@ -162,33 +162,37 @@ export class WorktreeCore implements CoreBase<State> {
   async refreshVisibleStatus(currentPage: number, pageSize: number): Promise<void> {
     if (this.isRefreshingVisible) return;
     this.isRefreshingVisible = true;
-    // Compute slice and refresh git/tmux status for visible rows
-    const start = currentPage * pageSize;
-    const end = Math.min(start + pageSize, this.state.worktrees.length);
-    const slice = this.state.worktrees.slice(start, end);
-    const sessions = await this.tmux.listSessions();
-    const updated: WorktreeInfo[] = [];
-    for (const wt of slice) {
-      const sessionName = this.tmux.sessionName(wt.project, wt.feature);
-      const attached = sessions.includes(sessionName);
-      // Fetch AI status first: if agent just finished working, invalidate the git slow-metrics
-      // cache before fetching git status so this tick shows fresh committed stats.
-      const aiResult = attached
-        ? await this.tmux.getAIStatus(sessionName)
-        : {tool: 'none' as const, status: 'not_running' as const};
-      if (wt.session?.ai_status === 'working' && aiResult.status !== 'working') {
-        this.git.invalidateGitSlowCache(wt.path);
+    try {
+      // Compute slice and refresh git/tmux status for visible rows
+      const start = currentPage * pageSize;
+      const end = Math.min(start + pageSize, this.state.worktrees.length);
+      const slice = this.state.worktrees.slice(start, end);
+      const sessions = await this.tmux.listSessions();
+      const updated: WorktreeInfo[] = [];
+      for (const wt of slice) {
+        const sessionName = this.tmux.sessionName(wt.project, wt.feature);
+        const attached = sessions.includes(sessionName);
+        // Fetch AI status first: if agent just finished working, invalidate the git slow-metrics
+        // cache before fetching git status so this tick shows fresh committed stats.
+        const aiResult = attached
+          ? await this.tmux.getAIStatus(sessionName)
+          : {tool: 'none' as const, status: 'not_running' as const};
+        if (wt.session?.ai_status === 'working' && aiResult.status !== 'working') {
+          this.git.invalidateGitSlowCache(wt.path);
+        }
+        const gitStatus = await this.git.getGitStatus(wt.path);
+        updated.push(new WorktreeInfo({...wt, git: gitStatus, session: new SessionInfo({session_name: sessionName, attached, ai_status: aiResult.status, ai_tool: aiResult.tool})}));
       }
-      const gitStatus = await this.git.getGitStatus(wt.path);
-      updated.push(new WorktreeInfo({...wt, git: gitStatus, session: new SessionInfo({session_name: sessionName, attached, ai_status: aiResult.status, ai_tool: aiResult.tool})}));
+      const arr = [...this.state.worktrees];
+      for (let i = 0; i < updated.length; i++) arr[start + i] = updated[i];
+      this.setState({worktrees: arr, lastRefreshed: Date.now()});
+    } finally {
+      this.isRefreshingVisible = false;
     }
-    const arr = [...this.state.worktrees];
-    for (let i = 0; i < updated.length; i++) arr[start + i] = updated[i];
-    this.setState({worktrees: arr, lastRefreshed: Date.now()});
-    this.isRefreshingVisible = false;
   }
 
   async forceRefreshVisible(currentPage: number, pageSize: number): Promise<void> {
+    this.isRefreshingVisible = false; // preempt any in-flight poll
     await this.refreshVisibleStatus(currentPage, pageSize);
   }
 
