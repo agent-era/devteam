@@ -18,35 +18,30 @@ export class CapturingStdout extends EventEmitter {
 }
 
 export class StdinStub extends EventEmitter {
-  constructor(){ super(); this.isTTY=true; }
+  constructor(){ super(); this.isTTY=true; this._readQueue=[]; }
   setEncoding(){}
   setRawMode(){}
   resume(){}
   pause(){}
   ref(){}
   unref(){}
-  read(){ return null; }
+  // Ink reads via readable + read(), not 'data' events.
+  // Queue chunks here so handleReadable can dequeue them.
+  read(){ return this._readQueue.length > 0 ? this._readQueue.shift() : null; }
   write(data){
-    const s = typeof data === 'string' ? data : String(data);
-    this.emit('data', Buffer.from(s, 'utf8'));
+    const buf = Buffer.isBuffer(data) ? data : Buffer.from(typeof data === 'string' ? data : String(data), 'utf8');
+    this._push(buf);
     return true;
   }
+  _push(buf){
+    this._readQueue.push(buf);
+    super.emit('readable');
+  }
   emit(event, ...args){
-    // Also emit a keypress event for Ink's useInput parsing
     if (event === 'data') {
-      try {
-        const chunk = args[0];
-        const str = typeof chunk === 'string' ? chunk : String(chunk);
-        const key = {
-          name: str,
-          ctrl: false,
-          meta: false,
-          shift: false,
-          escape: str === '\u001b',
-          return: str === '\r'
-        };
-        super.emit('keypress', str, key);
-      } catch {}
+      const chunk = args[0];
+      const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(typeof chunk === 'string' ? chunk : String(chunk), 'utf8');
+      this._push(buf);
     }
     return super.emit(event, ...args);
   }
