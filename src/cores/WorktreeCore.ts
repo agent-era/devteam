@@ -411,6 +411,14 @@ export class WorktreeCore implements CoreBase<State> {
     return this.runConfigPrompt(project, prompt);
   }
 
+  reapplyFiles(project: string): {count: number} {
+    const worktrees = this.state.worktrees.filter(wt => wt.project === project && !wt.is_archived);
+    for (const wt of worktrees) {
+      this.setupWorktreeEnvironment(project, wt.path);
+    }
+    return {count: worktrees.length};
+  }
+
   applyConfig(project: string, content: string): {success: boolean; error?: string} {
     try { JSON.parse(content); } catch (e) {
       return {success: false, error: `Invalid JSON: ${e instanceof Error ? e.message : String(e)}`};

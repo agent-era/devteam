@@ -54,6 +54,7 @@ interface WorktreeContextType {
   generateConfigWithAI: (project: string) => Promise<{success: boolean; content?: string; path: string; error?: string}>;
   editConfigWithAI: (project: string, userPrompt: string) => Promise<{success: boolean; content?: string; path: string; error?: string}>;
   applyConfig: (project: string, content: string) => {success: boolean; error?: string};
+  reapplyFiles: (project: string) => {count: number};
 }
 
 const WorktreeContext = createContext<WorktreeContextType | null>(null);
@@ -111,6 +112,7 @@ export function WorktreeProvider({children, core: coreOverride}: WorktreeProvide
   const generateConfigWithAI = useCallback(async (project: string) => core.generateConfigWithAI(project), [core]);
   const editConfigWithAI = useCallback(async (project: string, userPrompt: string) => core.editConfigWithAI(project, userPrompt), [core]);
   const applyConfig = useCallback((project: string, content: string) => core.applyConfig(project, content), [core]);
+  const reapplyFiles = useCallback((project: string) => core.reapplyFiles(project), [core]);
 
   const contextValue: WorktreeContextType = {
     // State
@@ -160,7 +162,8 @@ export function WorktreeProvider({children, core: coreOverride}: WorktreeProvide
     readConfigContent,
     generateConfigWithAI,
     editConfigWithAI,
-    applyConfig
+    applyConfig,
+    reapplyFiles
   };
 
   return (

@@ -15,6 +15,7 @@ type Props = {
   onGenerate: () => void;
   onEdit: (userPrompt: string) => void;
   onApply: (content: string) => void;
+  onReapplyFiles: () => {count: number};
   onDiscardResult: () => void;
   onCancel: () => void;
 };
@@ -46,11 +47,14 @@ export default function SettingsDialog({
   onGenerate,
   onEdit,
   onApply,
+  onReapplyFiles,
   onDiscardResult,
   onCancel,
 }: Props) {
   // TextInput from @inkjs/ui is uncontrolled; bump key to remount-and-clear after submit.
   const [inputKey, setInputKey] = useState(0);
+  const [showReapplyPrompt, setShowReapplyPrompt] = useState(false);
+  const [reapplyStatus, setReapplyStatus] = useState<string | null>(null);
   const {requestFocus, releaseFocus} = useInputFocus();
   const {columns} = useTerminalDimensions();
   const layout = useMemo(() => computeLayout(columns), [columns]);
@@ -72,11 +76,27 @@ export default function SettingsDialog({
   }, [requestFocus, releaseFocus]);
 
   useInput((input, key) => {
+    if (showReapplyPrompt) {
+      if (input === 'y' || input === 'Y') {
+        const {count} = onReapplyFiles();
+        setReapplyStatus(`Re-applied files to ${count} worktree${count === 1 ? '' : 's'}`);
+      }
+      setShowReapplyPrompt(false);
+      return;
+    }
     if (key.escape) { onCancel(); return; }
     if (!inPreview || !result) return;
     if (result.success && result.content) {
-      if (input === 'a' || input === 'A') onApply(result.content);
-      else if (input === 'd' || input === 'D') onDiscardResult();
+      if (input === 'a' || input === 'A') {
+        const worktreeSetupChanged = !sameValue(
+          resolveValue(currentParsed, 'worktreeSetup'),
+          resolveValue(proposedParsed, 'worktreeSetup')
+        );
+        onApply(result.content);
+        if (worktreeSetupChanged) setShowReapplyPrompt(true);
+      } else if (input === 'd' || input === 'D') {
+        onDiscardResult();
+      }
     } else if (input === 'd' || input === 'D' || key.return) {
       onDiscardResult();
     }
@@ -116,7 +136,19 @@ export default function SettingsDialog({
         </Box>
       ) : null}
 
-      {!inPreview ? (
+      {reapplyStatus ? (
+        <Box marginTop={1}>
+          <Text color="green">{reapplyStatus}</Text>
+        </Box>
+      ) : null}
+
+      {showReapplyPrompt ? (
+        <Box marginTop={1} flexDirection="column" borderStyle="single" borderColor="yellow" paddingX={1}>
+          <Text color="yellow">File setup changed. Re-apply files to existing worktrees?</Text>
+        </Box>
+      ) : null}
+
+      {!inPreview && !showReapplyPrompt ? (
         <Box marginTop={1} flexDirection="column">
           <Text>Ask Claude to update the config (empty prompt = regenerate from scratch):</Text>
           <Box borderStyle="single" borderColor="gray" paddingX={1}>
@@ -132,11 +164,13 @@ export default function SettingsDialog({
 
       <Box marginTop={1}>
         <Text color="magenta">
-          {inPreview
-            ? (result?.success ? '[a] apply  [d] discard  [esc] back' : '[d] dismiss  [esc] back')
-            : loading
-              ? '[esc] back (AI keeps running)'
-              : '[enter] send prompt (empty = regenerate)  [esc] back'}
+          {showReapplyPrompt
+            ? '[y] re-apply files  [any other key] skip'
+            : inPreview
+              ? (result?.success ? '[a] apply  [d] discard  [esc] back' : '[d] dismiss  [esc] back')
+              : loading
+                ? '[esc] back (AI keeps running)'
+                : '[enter] send prompt (empty = regenerate)  [esc] back'}
         </Text>
       </Box>
     </Box>
