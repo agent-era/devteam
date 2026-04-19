@@ -143,15 +143,18 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
 
     const contentWidth = stringDisplayWidth(visible);
     const pad = Math.max(0, width - contentWidth);
+    const fg = getCellForeground(COLUMNS.PROJECT_FEATURE);
 
-    // Avoid double-dimming the bracket when the whole row is already dimmed
-    const renderBracket = (content: string) => <Text dimColor={!isDimmed || selected}>{content}</Text>;
+    // Skip self-dim when the row wrapper already dims (avoids double-dim).
+    const renderBracket = (content: string) => (
+      <Text color={fg} dimColor={!isDimmed || selected}>{content}</Text>
+    );
 
     if (justify === 'flex-end') {
       return (
         <>
           {' '.repeat(pad)}
-          <Text color={getCellForeground(COLUMNS.PROJECT_FEATURE)} dimColor={isDimmed && !selected}>{left}</Text>
+          <Text color={fg} dimColor={isDimmed && !selected}>{left}</Text>
           {bracketed ? renderBracket(bracketed) : null}
         </>
       );
@@ -162,9 +165,9 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
       return (
         <>
           {' '.repeat(leftPad)}
-          <Text color={getCellForeground(COLUMNS.PROJECT_FEATURE)} dimColor={isDimmed && !selected}>{left}</Text>
+          <Text color={fg} dimColor={isDimmed && !selected}>{left}</Text>
           {bracketed ? (selected && isDimmed
-            ? <Text color={getCellForeground(COLUMNS.PROJECT_FEATURE)}>{bracketed}</Text>
+            ? <Text color={fg}>{bracketed}</Text>
             : renderBracket(bracketed))
           : null}
           {' '.repeat(rightPad)}
@@ -174,9 +177,9 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
     // flex-start
     return (
       <>
-        <Text color={getCellForeground(COLUMNS.PROJECT_FEATURE)} dimColor={isDimmed && !selected}>{left}</Text>
+        <Text color={fg} dimColor={isDimmed && !selected}>{left}</Text>
         {bracketed ? (selected && isDimmed
-          ? <Text color={getCellForeground(COLUMNS.PROJECT_FEATURE)}>{bracketed}</Text>
+          ? <Text color={fg}>{bracketed}</Text>
           : renderBracket(bracketed))
         : null}
         {' '.repeat(pad)}
