@@ -317,7 +317,7 @@ export class WorktreeCore implements CoreBase<State> {
       if (selectedTool !== 'none') {
         const flags = this.getAIToolFlags(worktree.project, selectedTool);
         const flagStr = flags.length > 0 ? ' ' + flags.map(shellQuote).join(' ') : '';
-        if (selectedTool === 'claude') this.launchClaudeSessionWithFallback(sessionName, worktree.path, flagStr);
+        if (selectedTool === 'claude') this.launchClaudeSessionWithFallback(sessionName, worktree.path, flagStr, `${worktree.feature} - ${worktree.project}`);
         else this.tmux.createSessionWithCommand(sessionName, worktree.path, aiLaunchCommand(selectedTool) + flagStr, true);
         setLastTool(selectedTool, worktree.path);
       } else {
@@ -499,9 +499,10 @@ export class WorktreeCore implements CoreBase<State> {
     for (const name of [s, sh, rn]) { if (active.includes(name)) this.tmux.killSession(name); }
   }
 
-  private launchClaudeSessionWithFallback(sessionName: string, cwd: string, flagStr: string = ''): void {
-    const continueCmd = aiLaunchCommand('claude') + flagStr;
-    const fallbackCmd = 'claude' + flagStr;
+  private launchClaudeSessionWithFallback(sessionName: string, cwd: string, flagStr: string = '', displayName?: string): void {
+    const nameFlag = displayName ? ` -n ${shellQuote(displayName)}` : '';
+    const continueCmd = aiLaunchCommand('claude') + nameFlag + flagStr;
+    const fallbackCmd = 'claude' + nameFlag + flagStr;
     this.tmux.createSessionWithCommand(sessionName, cwd, `${continueCmd} || ${fallbackCmd}`, true);
   }
 

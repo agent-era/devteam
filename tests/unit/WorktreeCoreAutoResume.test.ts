@@ -53,7 +53,7 @@ describe('WorktreeCore auto-resume', () => {
     await core.attachSession(wt, 'claude');
 
     const sessionName = tmux.sessionName('proj', 'feat');
-    expect(getExecutedCommands(tmux, sessionName)).toEqual(['claude --continue || claude']);
+    expect(getExecutedCommands(tmux, sessionName)).toEqual([`claude --continue -n 'feat - proj' || claude -n 'feat - proj'`]);
     expect(getLastTool(wt.path)).toBe('claude');
   });
 
