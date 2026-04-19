@@ -1,6 +1,5 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import {fileURLToPath} from 'node:url';
 import {PACKAGE_NAME} from '../constants.js';
 import {logDebug, logError} from '../shared/utils/logger.js';
 import type {VersionInfo} from './versionTypes.js';
@@ -45,28 +44,26 @@ export class VersionCheckService {
     // Prefer env-provided version (present in many npm-run contexts)
     const envVersion = process.env.npm_package_version || process.env.DEVTEAM_VERSION;
     if (envVersion) return envVersion;
-    // Try reading from the installed package's package.json (global/local install)
-    try {
-      // Avoid static import.meta syntax so Jest CJS parsing doesn't choke
-      const metaUrl = (Function('return import.meta.url') as () => string)();
-      const thisFilePath = fileURLToPath(metaUrl);
-      // Walk a fixed offset to find the nearest package.json
-      let dir = path.dirname(thisFilePath);
-      // Fast path: some install layouts place package.json three levels up
-      try {
-        const candidate3 = path.join(dir, '..', '..', '..', 'package.json');
-        if (fs.existsSync(candidate3)) {
-          const content = await fs.promises.readFile(candidate3, 'utf-8');
-          const pkg = JSON.parse(content);
-          if (pkg?.name && typeof pkg.name === 'string') {
-            this.packageName = pkg.name;
+    // Try reading from the installed package's package.json by walking up
+    // from the entry script (process.argv[1] is the bin script in global installs).
+    const entry = process.argv[1];
+    if (entry) {
+      let dir = path.dirname(entry);
+      for (let i = 0; i < 6; i++) {
+        try {
+          const candidate = path.join(dir, 'package.json');
+          if (fs.existsSync(candidate)) {
+            const content = await fs.promises.readFile(candidate, 'utf-8');
+            const pkg = JSON.parse(content);
+            if (pkg?.name === PACKAGE_NAME && pkg?.version) {
+              return String(pkg.version);
+            }
           }
-          if (pkg?.version) return String(pkg.version);
-        }
-      } catch {}
-      // No additional walk-up beyond the fixed 3-level check.
-    } catch {
-      // ignore and fall back
+        } catch {}
+        const parent = path.dirname(dir);
+        if (parent === dir) break;
+        dir = parent;
+      }
     }
     // Fallback: read package.json from current working directory (if present)
     try {
