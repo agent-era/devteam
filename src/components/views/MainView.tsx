@@ -1,5 +1,5 @@
-import React, {useMemo, useCallback, useRef, useEffect, useState} from 'react';
-import {Box, measureElement} from 'ink';
+import React, {useMemo, useCallback, useEffect, useState} from 'react';
+import {Box} from 'ink';
 import AnnotatedText from '../common/AnnotatedText.js';
 import type {WorktreeInfo} from '../../models.js';
 import type {MemoryStatus} from '../../services/MemoryMonitorService.js';
@@ -16,6 +16,7 @@ import {EmptyState} from './MainView/EmptyState.js';
 import {MessageView} from './MainView/MessageView.js';
 import {PromptView} from './MainView/PromptView.js';
 import {getWorktreeKey} from './MainView/utils.js';
+import {calculateMainViewPageSize} from '../../shared/utils/layout.js';
 
 type Prompt = {title?: string; text?: string; hint?: string};
 
@@ -60,9 +61,11 @@ export default function MainView({
     pullRequests = {} as any;
   }
 
-  // Measure-based calculation to ensure we don't render more rows than fit.
-  const listRef = useRef<any>(null);
-  const [measuredPageSize, setMeasuredPageSize] = useState<number>(Math.max(1, worktrees?.length || 1));
+  const computedPageSize = useMemo(() => calculateMainViewPageSize(terminalRows, terminalWidth, {
+    hasMemoryWarning: !!memoryStatus && memoryStatus.severity !== 'ok',
+    hasUpdateBanner: !!versionInfo?.hasUpdate,
+  }), [terminalRows, terminalWidth, memoryStatus, versionInfo]);
+  const [measuredPageSize, setMeasuredPageSize] = useState<number>(computedPageSize);
 
   const columnWidths = useColumnWidths(worktrees, terminalWidth, page, measuredPageSize);
   
@@ -106,29 +109,12 @@ export default function MainView({
     );
   }, [versionInfo]);
 
-  // After render and on resize, measure the list container height to determine how many rows fit
   useEffect(() => {
-    const measureAndUpdate = () => {
-      const h = listRef.current ? measureElement(listRef.current).height : 0;
-      // Always ensure parent knows the measured size at least once.
-      // If h equals our initial optimistic value, we still want to propagate it
-      // so parent pagination logic (WorktreeListScreen) doesn't use a stale pageSize.
-      if (h > 0) {
-        if (h !== measuredPageSize) {
-          setMeasuredPageSize(h);
-          onMeasuredPageSize?.(h);
-        } else {
-          // Propagate unchanged measurement on first tick to sync parent
-          onMeasuredPageSize?.(h);
-        }
-      }
-    };
-    // Measure now and on next tick to ensure Yoga layout has settled
-    measureAndUpdate();
-    const t = setTimeout(measureAndUpdate, 0);
-    return () => clearTimeout(t);
-    // Re-measure when terminal size changes or item count might affect footer visibility
-  }, [terminalRows, terminalWidth, onMeasuredPageSize]);
+    if (computedPageSize !== measuredPageSize) {
+      setMeasuredPageSize(computedPageSize);
+    }
+    onMeasuredPageSize?.(computedPageSize);
+  }, [computedPageSize, measuredPageSize, onMeasuredPageSize]);
 
   // Also propagate when our internal measuredPageSize changes due to any reason
   useEffect(() => {
@@ -154,7 +140,7 @@ export default function MainView({
       {renderUpdateBanner}
       {renderMemoryWarning}
       <TableHeader columnWidths={columnWidths} />
-      <Box ref={listRef} flexDirection="column" flexGrow={1}>
+      <Box flexDirection="column" height={measuredPageSize}>
         {pageItems.map((worktree, index) => {
           const globalIndex = page * measuredPageSize + index;
           const isSelected = globalIndex === selectedIndex;

@@ -1,3 +1,5 @@
+import {calculateMainViewPageSize} from '../shared/utils/layout.js';
+
 /**
  * Calculate optimal page size based on terminal dimensions and UI requirements
  */
@@ -5,37 +7,7 @@ export function calculatePageSize(
   terminalRows = process.stdout.rows || 24,
   terminalCols = process.stdout.columns || 80
 ): number {
-  // Compact header text using single-letter shortcuts (64 chars)
-  const headerText = 'Enter/a agent, n new, v archive, x exec, d diff, s shell, q quit';
-  
-  // Calculate how many lines the header will take
-  const estimatedHeaderLines = Math.ceil(headerText.length / terminalCols);
-  
-  // Calculate reserved lines more accurately
-  let reservedLines;
-  if (terminalRows <= 8) {
-    // Very short terminal - minimal UI overhead
-    // Header + column header + minimal margin
-    reservedLines = Math.min(estimatedHeaderLines + 2, terminalRows - 1); // At least 1 row for content
-  } else {
-    // Normal terminal - full UI
-    // Reserve space for UI elements:
-    // - Header: estimatedHeaderLines (usually 1 with 64 char header)
-    // - Header margin: 1 line (marginBottom: 1)
-    // - Column header: 1 line  
-    // - Footer (pagination): 1 line when multiple pages exist
-    // - Footer margin: 1 line (marginTop: 1 when footer exists)
-    reservedLines = estimatedHeaderLines + 4; // Account for all margins and footer
-  }
-  
-  // Calculate available space for worktree rows
-  const availableRows = terminalRows - reservedLines;
-  
-  // Ensure minimum of 1 item per page with safety bounds
-  // Never return 0 or negative values that could break rendering
-  const pageSize = Math.max(1, Math.min(availableRows, 100)); // Cap at 100 for sanity
-  
-  return pageSize;
+  return Math.min(100, calculateMainViewPageSize(terminalRows, terminalCols));
 }
 
 /**
