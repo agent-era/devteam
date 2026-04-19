@@ -11,7 +11,7 @@ export const CACHE_DURATION = 30_000; // 30s full refresh
 export const AI_STATUS_REFRESH_DURATION = 2_000; // 2s AI status refresh
 export const DIFF_STATUS_REFRESH_DURATION = 2_000; // 2s diff status refresh
 export const GIT_REFRESH_DURATION = 5_000; // 5s git refresh
-export const PR_REFRESH_DURATION = 5_000; // 5s PR status refresh (visible + stale only)
+export const PR_REFRESH_DURATION = 5 * 60_000; // 5min PR status refresh (visible + stale only)
 export const VISIBLE_STATUS_REFRESH_DURATION = 2_000; // 2s visible rows git+AI refresh
 export const MEMORY_REFRESH_DURATION = 20_000; // 20s memory status refresh (RAM warning)
 // Version check
@@ -139,17 +139,19 @@ export const SUBPROCESS_SHORT_TIMEOUT = 5_000;
 export const TMUX_DISPLAY_TIME = 0;
 
 // PR cache TTLs (ms)
+// Kept long to minimize GitHub API rate limit usage. Commit-hash-based invalidation
+// handles freshness on push; create/merge events trigger immediate targeted refreshes.
 export const PR_TTL_MERGED_MS = 365 * DAY_MS;
-export const PR_TTL_NO_PR_MS = 30 * SECOND_MS;
-export const PR_TTL_ERROR_MS = 60 * SECOND_MS;
-export const PR_TTL_CHECKS_FAIL_MS = 2 * MINUTE_MS;
-export const PR_TTL_CHECKS_PENDING_MS = 5 * SECOND_MS;
-export const PR_TTL_PASSING_OPEN_MS = 30 * SECOND_MS;
-export const PR_TTL_OPEN_MS = 5 * MINUTE_MS; // open PR, checks have run and are stable
-export const PR_TTL_OPEN_NO_CHECKS_MS = 20 * SECOND_MS; // open PR, no check data yet — CI may have just started
+export const PR_TTL_NO_PR_MS = 7 * DAY_MS;
+export const PR_TTL_ERROR_MS = 10 * MINUTE_MS;
+export const PR_TTL_CHECKS_FAIL_MS = 30 * MINUTE_MS;
+export const PR_TTL_CHECKS_PENDING_MS = 5 * MINUTE_MS; // matches PR_REFRESH_DURATION — no benefit going shorter
+export const PR_TTL_PASSING_OPEN_MS = 30 * MINUTE_MS;
+export const PR_TTL_OPEN_MS = HOUR_MS;
+export const PR_TTL_OPEN_NO_CHECKS_MS = 5 * MINUTE_MS;
 export const PR_TTL_CLOSED_MS = HOUR_MS;
-export const PR_TTL_UNKNOWN_MS = 10 * MINUTE_MS;
-export const PR_TTL_FALLBACK_MS = 5 * MINUTE_MS;
+export const PR_TTL_UNKNOWN_MS = 30 * MINUTE_MS;
+export const PR_TTL_FALLBACK_MS = 15 * MINUTE_MS;
 
 /**
  * Generate help sections with dynamic projects directory path

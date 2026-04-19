@@ -149,7 +149,7 @@ describe('PRStatusCacheService', () => {
 
     // Manually expire the entry by modifying timestamp
     const cache = (cacheService as any).cache;
-    cache[worktreePath].timestamp = Date.now() - 1000000; // Very old timestamp
+    cache[worktreePath].timestamp = 0; // Epoch — exceeds any non-merged TTL
 
     expect(cacheService.isValid(worktreePath)).toBe(false);
     
