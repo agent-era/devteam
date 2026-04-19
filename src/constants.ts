@@ -273,9 +273,9 @@ export const CONFIG_SCHEMA: Record<string, SchemaNode> = {
         description: 'Env vars exported before the command runs',
         example: {},
       },
-      detachOnExit: {
+      keepShellRunning: {
         type: 'boolean',
-        description: 'When the program being run exits: true closes the pane; false keeps it open so you can see the output.',
+        description: 'When the program being run exits: true keeps the shell open so you can see the output; false (default) closes the pane.',
         example: false,
       },
     },
@@ -342,7 +342,7 @@ export type ProjectConfig = {
     mainCommand?: string;
     preRunCommands?: string[];
     environmentVariables?: Record<string, string>;
-    detachOnExit?: boolean;
+    keepShellRunning?: boolean;
   };
   worktreeSetup?: {
     copyFiles?: string[];
