@@ -1229,8 +1229,9 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
             return {segments: paddedSegs, useSyntax: !isCurrentLine, language: languageCache(pane.fileName), bold: isCurrentLine};
           };
 
-          const leftPane = formatPaneSegments(sideBySideLine.left, hasComment ? '[C] ' : ' ');
-          const rightPane = formatPaneSegments(sideBySideLine.right, ' ');
+          const isHeaderLine = sideBySideLine.left?.type === 'header' || sideBySideLine.right?.type === 'header';
+          const leftPane = formatPaneSegments(sideBySideLine.left, isHeaderLine ? ' ' : (hasComment ? '  [C] ' : '  '));
+          const rightPane = formatPaneSegments(sideBySideLine.right, isHeaderLine ? ' ' : '  ');
           const numRows = Math.max(leftPane.segments.length, rightPane.segments.length);
           const emptyLeft = padEndDisplay('', paneWidth);
           const emptyRight = padEndDisplay('', paneWidth);
