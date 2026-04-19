@@ -1,7 +1,10 @@
-import React, {useMemo, useState} from 'react';
-import {Box, Text, useInput, useStdin} from 'ink';
+import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import {Box, Text, measureElement, useInput, useStdin} from 'ink';
 import AnnotatedText from '../common/AnnotatedText.js';
 import type {ProjectInfo} from '../../models.js';
+import {useMouseRegion} from '../../contexts/MouseContext.js';
+import {useListMouseHandler} from '../../hooks/useListMouseHandler.js';
+import {useTerminalDimensions} from '../../hooks/useTerminalDimensions.js';
 
 type Props = {
   projects: ProjectInfo[];
@@ -16,12 +19,47 @@ export default function ProjectPickerDialog({projects, defaultProject, onSubmit,
     if (!projects || projects.length === 0) return 0;
     return Math.max(0, projects.findIndex(p => p.name === defaultProject));
   });
+  const {rows, columns} = useTerminalDimensions();
   const filtered = useMemo(() => {
     if (!projects || projects.length === 0) return [];
     const f = filter.toLowerCase();
     return projects.filter(p => p.name.toLowerCase().includes(f));
   }, [projects, filter]);
   const showFilter = (projects?.length || 0) > 3;
+  const visibleItems = filtered.slice(0, 20);
+
+  // Mouse coordinate tracking
+  const dialogRef = useRef<any>(null);
+  const headerRef = useRef<any>(null);
+  const [dialogHeight, setDialogHeight] = useState(0);
+  const [headerHeight, setHeaderHeight] = useState(0);
+
+  useEffect(() => {
+    const measure = () => {
+      if (dialogRef.current) setDialogHeight(measureElement(dialogRef.current).height);
+      if (headerRef.current) setHeaderHeight(measureElement(headerRef.current).height);
+    };
+    measure();
+    const t = setTimeout(measure, 0);
+    return () => clearTimeout(t);
+  }, [rows, columns, visibleItems.length, showFilter]);
+
+  const dialogTopY = 1 + Math.floor(Math.max(0, (rows - 1 - dialogHeight) / 2));
+  const itemsStartY = dialogTopY + headerHeight;
+
+  const handleItemMouseDown = useListMouseHandler({
+    length: visibleItems.length,
+    onSelect: (idx) => setSelected(idx),
+    onActivate: (idx) => { const proj = visibleItems[idx]?.name; if (proj) onSubmit(proj); },
+  });
+
+  const handleScroll = useCallback((direction: 'up' | 'down') => {
+    setSelected(s => direction === 'up'
+      ? Math.max(0, s - 1)
+      : Math.min(visibleItems.length - 1, s + 1));
+  }, [visibleItems.length]);
+
+  useMouseRegion('project-picker', itemsStartY, visibleItems.length, handleItemMouseDown, handleScroll);
 
   useInput((input, key) => {
     if (key.escape) return onCancel();
@@ -66,17 +104,17 @@ export default function ProjectPickerDialog({projects, defaultProject, onSubmit,
   });
 
   return (
-    <Box flexDirection="column">
-      <Text color="cyan">Select Project</Text>
-      {showFilter && (
-        <>
+    <Box ref={dialogRef} flexDirection="column">
+      <Box ref={headerRef} flexDirection="column">
+        <Text color="cyan">Select Project</Text>
+        {showFilter && (
           <Box flexDirection="row">
             <Text color="gray">Filter: </Text>
             <Text>{filter || ' '}</Text>
           </Box>
-        </>
-      )}
-      {filtered.slice(0, 20).map((p, i) => 
+        )}
+      </Box>
+      {visibleItems.map((p, i) =>
         <Text key={p.name} color={i === selected ? 'green' : undefined}>
           {`${i === selected ? '› ' : '  '}${p.name}`}
         </Text>
