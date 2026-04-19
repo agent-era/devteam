@@ -33,7 +33,8 @@ export function calculateDiffViewportRows(
     overlayHeight?: number;
   }
 ): number {
-  let reservedRows = 2;
+  // +1 for FullScreen's bottom-row reservation (prevents terminal scroll on newline)
+  let reservedRows = 3;
 
   if (options?.hasFileHeader) {
     reservedRows += 1;
@@ -61,10 +62,11 @@ function calculateBasePageSize(terminalRows: number, terminalCols: number): numb
   const estimatedHeaderLines = Math.ceil(headerText.length / cols);
 
   let reservedLines: number;
+  // +1 throughout for FullScreen's bottom-row reservation (prevents terminal scroll on newline)
   if (rows <= 8) {
-    reservedLines = Math.min(estimatedHeaderLines + 2, rows - 1);
+    reservedLines = Math.min(estimatedHeaderLines + 3, rows - 1);
   } else {
-    reservedLines = estimatedHeaderLines + 4;
+    reservedLines = estimatedHeaderLines + 5;
   }
 
   return clampRowBudget(rows - reservedLines);

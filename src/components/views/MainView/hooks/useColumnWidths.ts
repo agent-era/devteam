@@ -37,7 +37,7 @@ export function useColumnWidths(
     const marginsWidth = 8; // 8 spaces between 9 columns
     const usedWidth = fixedColumnsWidth + marginsWidth;
 
-    const availableWidth = Math.max(15, terminalWidth - usedWidth);
+    const availableWidth = Math.max(5, terminalWidth - usedWidth);
 
     return {
       number: fixedWidths.number,

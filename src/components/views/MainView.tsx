@@ -1,4 +1,4 @@
-import React, {useMemo, useCallback, useEffect, useState} from 'react';
+import React, {useMemo, useCallback, useEffect} from 'react';
 import {Box} from 'ink';
 import AnnotatedText from '../common/AnnotatedText.js';
 import type {WorktreeInfo} from '../../models.js';
@@ -61,26 +61,23 @@ export default function MainView({
     pullRequests = {} as any;
   }
 
-  const computedPageSize = useMemo(() => calculateMainViewPageSize(terminalRows, terminalWidth, {
+  const pageSize = useMemo(() => calculateMainViewPageSize(terminalRows, terminalWidth, {
     hasMemoryWarning: !!memoryStatus && memoryStatus.severity !== 'ok',
     hasUpdateBanner: !!versionInfo?.hasUpdate,
   }), [terminalRows, terminalWidth, memoryStatus, versionInfo]);
-  const [measuredPageSize, setMeasuredPageSize] = useState<number>(computedPageSize);
 
-  const columnWidths = useColumnWidths(worktrees, terminalWidth, page, measuredPageSize);
-  
-  // Use measured page size for pagination info to align with what's rendered
-  const paginationInfo = useMemo(() => 
-    calculatePaginationInfo(worktrees.length, page, measuredPageSize),
-    [worktrees.length, page, measuredPageSize]
+  const columnWidths = useColumnWidths(worktrees, terminalWidth, page, pageSize);
+
+  const paginationInfo = useMemo(() =>
+    calculatePaginationInfo(worktrees.length, page, pageSize),
+    [worktrees.length, page, pageSize]
   );
-  
+
   const pageItems = useMemo(() => {
     if (!worktrees || worktrees.length === 0) return [];
-    const start = page * measuredPageSize;
-    // Clamp to the measured page size to avoid rendering more rows than fit
-    return worktrees.slice(start, start + measuredPageSize);
-  }, [worktrees, page, measuredPageSize]);
+    const start = page * pageSize;
+    return worktrees.slice(start, start + pageSize);
+  }, [worktrees, page, pageSize]);
 
   const getRowKey = useCallback((worktree: WorktreeInfo, index: number) => 
     getWorktreeKey(worktree, index), []
@@ -110,18 +107,8 @@ export default function MainView({
   }, [versionInfo]);
 
   useEffect(() => {
-    if (computedPageSize !== measuredPageSize) {
-      setMeasuredPageSize(computedPageSize);
-    }
-    onMeasuredPageSize?.(computedPageSize);
-  }, [computedPageSize, measuredPageSize, onMeasuredPageSize]);
-
-  // Also propagate when our internal measuredPageSize changes due to any reason
-  useEffect(() => {
-    if (measuredPageSize > 0) {
-      onMeasuredPageSize?.(measuredPageSize);
-    }
-  }, [measuredPageSize, onMeasuredPageSize]);
+    if (pageSize > 0) onMeasuredPageSize?.(pageSize);
+  }, [pageSize, onMeasuredPageSize]);
 
   if (mode === 'message') {
     return <MessageView message={message} />;
@@ -140,11 +127,11 @@ export default function MainView({
       {renderUpdateBanner}
       {renderMemoryWarning}
       <TableHeader columnWidths={columnWidths} />
-      <Box flexDirection="column" height={measuredPageSize}>
+      <Box flexDirection="column">
         {pageItems.map((worktree, index) => {
-          const globalIndex = page * measuredPageSize + index;
+          const globalIndex = page * pageSize + index;
           const isSelected = globalIndex === selectedIndex;
-          
+
           if ((worktree as any).is_workspace_header) {
             return (
               <WorkspaceGroupRow

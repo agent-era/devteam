@@ -5,10 +5,10 @@ describe('Pagination Utilities', () => {
   describe('calculatePageSize', () => {
     test('should calculate page size correctly for various terminal sizes', () => {
       const testCases = [
-        {rows: 24, cols: 80, expected: 19, desc: 'Standard terminal'},
-        {rows: 30, cols: 120, expected: 25, desc: 'Wide terminal'}, 
-        {rows: 20, cols: 60, expected: 14, desc: 'Narrow terminal'},
-        {rows: 8, cols: 40, expected: 4, desc: 'Short terminal with adaptive UI'}
+        {rows: 24, cols: 80, expected: 18, desc: 'Standard terminal'},
+        {rows: 30, cols: 120, expected: 24, desc: 'Wide terminal'},
+        {rows: 20, cols: 60, expected: 13, desc: 'Narrow terminal'},
+        {rows: 8, cols: 40, expected: 3, desc: 'Short terminal with adaptive UI'}
       ];
 
       for (const {rows, cols, expected, desc} of testCases) {

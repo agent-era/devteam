@@ -35,14 +35,14 @@ describe('Half-screen navigation', () => {
       output = lastFrame();
       expect(output).toContain('test-project/feature-10');
 
-      // Page Down - should move by half a screen (around 9 items for pageSize ~19)
+      // Page Down - should move by half a screen (around 9 items for pageSize ~18)
       // The selection should move but might still be on the same visual page
       stdin.write('\u001b[6~'); // Page Down key
       await simulateTimeDelay(50);
-      
+
       output = lastFrame();
-      // Should have moved forward significantly (around item 19)
-      expect(output).toContain('test-project/feature-19');
+      // Should have moved forward significantly (last item on page 1)
+      expect(output).toContain('test-project/feature-18');
 
       // Page Up - should move back by half screen
       stdin.write('\u001b[5~'); // Page Up key  

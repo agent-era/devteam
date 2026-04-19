@@ -448,8 +448,8 @@ index 1234567..abcdefg 100644
       // Step 2: Verify worktrees are loaded with pagination
       const output = lastFrame();
       expect(output).toContain('performance-test/feature-1');
-      expect(output).toContain('[Page 1/2: 1-19/25]'); // Pagination info
-      expect(output).toContain('performance-test/feature-19'); // Last item on first page
+      expect(output).toContain('[Page 1/2: 1-18/25]'); // Pagination info
+      expect(output).toContain('performance-test/feature-18'); // Last item on first page
       
       // Step 3: Add new feature to large project
       const {services} = renderTestApp();

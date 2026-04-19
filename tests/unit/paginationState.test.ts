@@ -29,12 +29,7 @@ describe('Pagination Integration Tests', () => {
     test('should calculate page size for standard terminal', () => {
       const pageSize = calculatePageSize(24, 80);
       
-      // With 24 rows, should account for:
-      // - Header (1 line + 1 margin)
-      // - Column header (1 line) 
-      // - Footer + margin (2 lines)
-      // = 19 available rows for content
-      expect(pageSize).toBe(19);
+      expect(pageSize).toBe(18);
     });
 
     test('should handle very small terminal', () => {
@@ -110,10 +105,10 @@ describe('Pagination Integration Tests', () => {
       const {result} = renderHook(() => usePagination(100, 2));
       
       // Should use mocked terminal dimensions (24x80)
-      expect(result.current.pageSize).toBe(19); // From calculatePageSize
-      expect(result.current.totalPages).toBe(6); // 100 items / 19 per page = 6 pages
-      expect(result.current.currentPageStart).toBe(39); // Page 2 (0-indexed) * 19 + 1
-      expect(result.current.currentPageEnd).toBe(57); // Page 2 end
+      expect(result.current.pageSize).toBe(18); // From calculatePageSize
+      expect(result.current.totalPages).toBe(6); // 100 items / 18 per page = 6 pages
+      expect(result.current.currentPageStart).toBe(37); // Page 2 (0-indexed) * 18 + 1
+      expect(result.current.currentPageEnd).toBe(54); // Page 2 end
       expect(result.current.paginationText).toContain('Page 3/6'); // Human readable page numbers
     });
 
@@ -127,7 +122,7 @@ describe('Pagination Integration Tests', () => {
       const {result} = renderHook(() => usePagination(50, 0));
       
       // Should have smaller page size for smaller terminal
-      expect(result.current.pageSize).toBeLessThan(19);
+      expect(result.current.pageSize).toBeLessThan(18);
       expect(result.current.totalPages).toBeGreaterThan(6); // More pages due to smaller page size
     });
 
@@ -162,13 +157,13 @@ describe('Pagination Integration Tests', () => {
     test('should return current page size based on terminal dimensions', () => {
       const {result} = renderHook(() => usePageSize());
       
-      expect(result.current).toBe(19); // Based on 24x80 terminal
+      expect(result.current).toBe(18); // Based on 24x80 terminal
     });
 
     test('should update when terminal dimensions change', () => {
       const {result, rerender} = renderHook(() => usePageSize());
-      
-      expect(result.current).toBe(19);
+
+      expect(result.current).toBe(18);
       
       // Simulate terminal resize
       mockUseTerminalDimensions.mockReturnValue({
@@ -178,7 +173,7 @@ describe('Pagination Integration Tests', () => {
       
       rerender();
       
-      expect(result.current).toBeLessThan(19); // Should be smaller for smaller terminal
+      expect(result.current).toBeLessThan(18); // Should be smaller for smaller terminal
       expect(result.current).toBeGreaterThanOrEqual(1); // But at least 1
     });
   });
@@ -187,8 +182,8 @@ describe('Pagination Integration Tests', () => {
     test('should handle typical worktree list scenarios', () => {
       const scenarios = [
         {items: 5, expectedPages: 1, description: 'few items'},
-        {items: 19, expectedPages: 1, description: 'exactly one page'},
-        {items: 20, expectedPages: 2, description: 'just over one page'},
+        {items: 18, expectedPages: 1, description: 'exactly one page'},
+        {items: 19, expectedPages: 2, description: 'just over one page'},
         {items: 50, expectedPages: 3, description: 'multiple pages'},
         {items: 100, expectedPages: 6, description: 'many pages'}
       ];
@@ -218,9 +213,9 @@ describe('Pagination Integration Tests', () => {
       for (let page = 0; page < 3; page++) {
         const {result} = renderHook(() => usePagination(totalItems, page));
         
-        expect(result.current.currentPageStart).toBe(page * 19 + 1);
+        expect(result.current.currentPageStart).toBe(page * 18 + 1);
         expect(result.current.currentPageEnd).toBe(
-          Math.min((page + 1) * 19, totalItems)
+          Math.min((page + 1) * 18, totalItems)
         );
         
         // Verify page numbering (1-based for display)

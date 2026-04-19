@@ -1,9 +1,18 @@
 import {EventEmitter} from 'node:events';
 
 export class CapturingStdout extends EventEmitter {
-  constructor(){ super(); this.frames=[]; this._last=''; this.isTTY=true; this.columns=100; this.rows=30; }
-  write(chunk){ const s = typeof chunk === 'string'? chunk: String(chunk); this.frames.push(s); this._last=s; return true; }
-  lastFrame(){ return this._last; }
+  constructor(){ super(); this.frames=[]; this._last=''; this._bestContent=''; this.isTTY=true; this.columns=100; this.rows=30; }
+  write(chunk){
+    const s = typeof chunk === 'string'? chunk: String(chunk);
+    this.frames.push(s);
+    this._last=s;
+    // Track the last frame with substantial printable content (not just cursor codes)
+    const printable = s.replace(/\u001b\[[^a-zA-Z]*[a-zA-Z]/g, '').trim();
+    if (printable.length > 10) this._bestContent = s;
+    return true;
+  }
+  // Returns the most recent frame that had actual content (not just cursor escape codes)
+  lastFrame(){ return this._bestContent || this._last; }
   on(){ return super.on(...arguments); }
   off(){ return super.off(...arguments); }
 }

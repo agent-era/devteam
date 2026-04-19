@@ -11,7 +11,7 @@ import CommentInputDialog from '../dialogs/CommentInputDialog.js';
 import SessionWaitingDialog from '../dialogs/SessionWaitingDialog.js';
 import UnsubmittedCommentsDialog from '../dialogs/UnsubmittedCommentsDialog.js';
 import FileTreeOverlay from '../dialogs/FileTreeOverlay.js';
-import {truncateDisplay, padEndDisplay} from '../../shared/utils/formatting.js';
+import {truncateDisplay, padEndDisplay, fitDisplay} from '../../shared/utils/formatting.js';
 import AnnotatedText from '../common/AnnotatedText.js';
 import {LineWrapper} from '../../shared/utils/lineWrapper.js';
 import {ViewportCalculator} from '../../shared/utils/viewport.js';
@@ -361,13 +361,12 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
 
   const overlayAreaHeight = showFileTreeOverlay ? Math.max(6, Math.floor(terminalHeight / 2)) : 0;
   const showCommentSummary = showAllComments && commentStore.count > 0;
-  const effectiveWrapMode: WrapMode = 'truncate';
   const viewportRows = useMemo(() => calculateDiffViewportRows(terminalHeight, {
     hasFileHeader: !!currentFileHeader,
     hasHunkHeader: !!currentHunkHeader,
     showCommentSummary,
-    overlayHeight: showFileTreeOverlay ? overlayAreaHeight : 0,
-  }), [terminalHeight, currentFileHeader, currentHunkHeader, showCommentSummary, showFileTreeOverlay, overlayAreaHeight]);
+    overlayHeight: overlayAreaHeight,
+  }), [terminalHeight, currentFileHeader, currentHunkHeader, showCommentSummary, overlayAreaHeight]);
 
   // Smooth scrolling animation
   useEffect(() => {
@@ -669,40 +668,42 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
     }
   });
 
-  // Auto-scroll to keep selected line visible
-  useEffect(() => {
+  const maxWidth = viewMode === 'unified' ? terminalWidth - 2 : Math.floor((terminalWidth - 1) / 2) - 2;
+
+  const textLines = useMemo(() => {
     const currentLines = viewMode === 'unified' ? lines : sideBySideLines;
-    const maxWidth = viewMode === 'unified' ? terminalWidth - 2 : Math.floor((terminalWidth - 1) / 2) - 2;
-    
-    // Convert diff lines to simple text for viewport calculation
-    const textLines = currentLines.map(line => {
+    return currentLines.map(line => {
       if (viewMode === 'unified') {
         return (line as DiffLine).text || ' ';
       } else {
         const sbsLine = line as SideBySideLine;
-        // For side-by-side, use the longer of left/right text for height calculation
         const leftText = sbsLine.left?.text || '';
         const rightText = sbsLine.right?.text || '';
-        return leftText.length > rightText.length ? leftText : rightText;
+        const leftH = LineWrapper.calculateHeight(leftText, maxWidth);
+        const rightH = LineWrapper.calculateHeight(rightText, maxWidth);
+        return leftH >= rightH ? leftText : rightText;
       }
     });
-    
+  }, [lines, sideBySideLines, viewMode, maxWidth]);
+
+  // Auto-scroll to keep selected line visible
+  useEffect(() => {
     const newScrollRow = ViewportCalculator.calculateScrollToShowLine(
       textLines,
       selectedLine,
       targetScrollRow,
       viewportRows,
       maxWidth,
-      effectiveWrapMode
+      wrapMode
     );
     
     // Don't override scroll position during file navigation (Shift+Up/Down)
     // File navigation sets a specific scroll position to make headers sticky
     if (newScrollRow !== targetScrollRow && !isFileNavigation) {
-      const maxScrollRow = ViewportCalculator.getMaxScrollRow(textLines, viewportRows, maxWidth, effectiveWrapMode);
+      const maxScrollRow = ViewportCalculator.getMaxScrollRow(textLines, viewportRows, maxWidth, wrapMode);
       setTargetScrollRow(Math.max(0, Math.min(maxScrollRow, newScrollRow)));
     }
-  }, [selectedLine, viewMode, terminalWidth, lines, sideBySideLines, viewportRows, targetScrollRow, isFileNavigation, effectiveWrapMode]);
+  }, [selectedLine, textLines, viewportRows, maxWidth, targetScrollRow, isFileNavigation, wrapMode]);
 
   
 
@@ -981,33 +982,9 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
   };
 
 
-  // Update sticky headers - simplified using viewport info
-  const viewport = useMemo(() => {
-    const currentLines = viewMode === 'unified' ? lines : sideBySideLines;
-    const maxWidth = viewMode === 'unified' ? terminalWidth - 2 : Math.floor((terminalWidth - 1) / 2) - 2;
-    
-    const textLines = currentLines.map(line => {
-      if (viewMode === 'unified') {
-        return (line as DiffLine).text || ' ';
-      } else {
-        const sbsLine = line as SideBySideLine;
-        const leftText = sbsLine.left?.text || '';
-        const rightText = sbsLine.right?.text || '';
-        const leftH = LineWrapper.calculateHeight(leftText, maxWidth);
-        const rightH = LineWrapper.calculateHeight(rightText, maxWidth);
-        return leftH >= rightH ? leftText : rightText;
-      }
-    });
-    
-    return ViewportCalculator.calculate(
-      textLines,
-      selectedLine,
-      scrollRow,
-      viewportRows,
-      maxWidth,
-      effectiveWrapMode
-    );
-  }, [lines, sideBySideLines, selectedLine, scrollRow, viewportRows, viewMode, terminalWidth, effectiveWrapMode]);
+  const viewport = useMemo(() =>
+    ViewportCalculator.calculate(textLines, selectedLine, scrollRow, viewportRows, maxWidth, wrapMode),
+  [textLines, selectedLine, scrollRow, viewportRows, maxWidth, wrapMode]);
   
   useEffect(() => {
     const currentLines = viewMode === 'unified' ? lines : sideBySideLines;
@@ -1028,7 +1005,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
           fileHeader = line.text;
           break;
         }
-        if (!fileHeader && line.type === 'header' && line.headerType === 'hunk') {
+        if (!hunkHeader && line.type === 'header' && line.headerType === 'hunk') {
           hunkHeader = line.text;
         }
       } else {
@@ -1037,7 +1014,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
           fileHeader = line.left.text;
           break;
         }
-        if (!fileHeader && line.left?.type === 'header' && line.left.headerType === 'hunk') {
+        if (!hunkHeader && line.left?.type === 'header' && line.left.headerType === 'hunk') {
           hunkHeader = line.left.text;
         }
       }
@@ -1122,15 +1099,16 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
 
   return (
     <Box flexDirection="column" flexGrow={1}>
-      <Text bold>{title}</Text>
+      <Text bold wrap="truncate">{title}</Text>
       {/* Sticky headers - only render when content exists */}
       {currentFileHeader && (
         <Text
           color="white"
           bold
           backgroundColor="gray"
+          wrap="truncate"
         >
-          {currentFileHeader}
+          {' '}{currentFileHeader}
         </Text>
       )}
       {currentHunkHeader && (
@@ -1138,15 +1116,17 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
           color="cyan"
           bold
           backgroundColor="gray"
+          wrap="truncate"
         >
-          {currentHunkHeader}
+          {' '}{currentHunkHeader}
         </Text>
       )}
       <Box flexDirection="column" height={viewportRows}>
-        {visibleLines.map((line, visibleLineIndex) => {
+        {visibleLines.flatMap((line, visibleLineIndex) => {
           const actualLineIndex = viewport.visibleLines[visibleLineIndex];
           const isCurrentLine = actualLineIndex === selectedLine;
           const rowBackground = isCurrentLine ? 'blue' : undefined;
+          const isWrap = wrapMode === 'wrap';
 
           if (viewMode === 'unified') {
             const unifiedLine = line as DiffLine;
@@ -1155,13 +1135,34 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
             const gutterSymbol = unifiedLine.type === 'added' ? '+ ' : unifiedLine.type === 'removed' ? '- ' : '  ';
             const bodyPrefix = hasComment ? '[C] ' : '';
             const bodyWidth = Math.max(1, terminalWidth - 4);
-            const bodyText = padEndDisplay(truncateDisplay(`${bodyPrefix}${unifiedLine.text || ' '}`, bodyWidth), bodyWidth);
             const bodyColor = unifiedLine.type === 'header'
               ? (unifiedLine.headerType === 'file' ? 'white' : 'cyan')
               : (unifiedLine.type === 'added' ? 'green' : unifiedLine.type === 'removed' ? 'red' : undefined);
+            const rawBody = `${bodyPrefix}${unifiedLine.text || ' '}`;
 
-            return (
-              <Box key={`line-${actualLineIndex}`} flexDirection="row" height={1}>
+            if (isWrap) {
+              const segments = LineWrapper.wrapLine(rawBody, bodyWidth);
+              return segments.map((seg, segIdx) => (
+                <Box key={`line-${actualLineIndex}-${segIdx}`} flexDirection="row" height={1} flexShrink={0}>
+                  <Text color="gray" backgroundColor={rowBackground} bold={isCurrentLine}>
+                    {segIdx === 0 ? gutterSymbol : '  '}
+                  </Text>
+                  <Text
+                    color={bodyColor}
+                    dimColor={unifiedLine.type === 'context'}
+                    backgroundColor={rowBackground}
+                    bold={isCurrentLine || unifiedLine.type === 'header'}
+                    wrap="truncate"
+                  >
+                    {padEndDisplay(seg, bodyWidth)}
+                  </Text>
+                </Box>
+              ));
+            }
+
+            const bodyText = fitDisplay(rawBody, bodyWidth);
+            return [(
+              <Box key={`line-${actualLineIndex}`} flexDirection="row" height={1} flexShrink={0}>
                 <Text color="gray" backgroundColor={rowBackground} bold={isCurrentLine}>
                   {gutterSymbol}
                 </Text>
@@ -1175,7 +1176,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                   {bodyText}
                 </Text>
               </Box>
-            );
+            )];
           }
 
           const sideBySideLine = line as SideBySideLine;
@@ -1184,43 +1185,38 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
           const sbsIndexForComment = sideBySidePerFileIndex[actualLineIndex];
           const hasComment = !!sbsFileForComment && sbsIndexForComment !== undefined && commentStore.hasComment(sbsIndexForComment, sbsFileForComment);
 
-          const formatPane = (
+          const formatPaneSegments = (
             pane: SideBySideLine['left'] | SideBySideLine['right'],
             prefix: string
-          ): {text: string; color?: string; dimColor?: boolean; bold?: boolean} => {
+          ): {segments: string[]; color?: string; dimColor?: boolean; bold?: boolean} => {
             if (!pane) {
-              return {text: padEndDisplay('', paneWidth), dimColor: true};
+              return {segments: [padEndDisplay('', paneWidth)], dimColor: true};
             }
 
-            const text = padEndDisplay(
-              truncateDisplay(`${prefix}${pane.text || ' '}`, Math.max(1, paneWidth)),
-              paneWidth
-            );
+            const raw = `${prefix}${pane.text || ' '}`;
+            const segs = isWrap
+              ? LineWrapper.wrapLine(raw, paneWidth)
+              : [truncateDisplay(raw, paneWidth)];
+
+            const paddedSegs = segs.map(s => padEndDisplay(s, paneWidth));
 
             if (pane.type === 'header') {
-              return {
-                text,
-                color: pane.headerType === 'file' ? 'white' : 'cyan',
-                bold: true,
-              };
+              return {segments: paddedSegs, color: pane.headerType === 'file' ? 'white' : 'cyan', bold: true};
             }
-
             if (pane.type === 'context' || pane.type === 'empty') {
-              return {text, dimColor: true, bold: isCurrentLine};
+              return {segments: paddedSegs, dimColor: true, bold: isCurrentLine};
             }
-
-            return {
-              text,
-              color: pane.type === 'added' ? 'green' : 'red',
-              bold: isCurrentLine,
-            };
+            return {segments: paddedSegs, color: pane.type === 'added' ? 'green' : 'red', bold: isCurrentLine};
           };
 
-          const leftPane = formatPane(sideBySideLine.left, hasComment ? '[C] ' : ' ');
-          const rightPane = formatPane(sideBySideLine.right, ' ');
+          const leftPane = formatPaneSegments(sideBySideLine.left, hasComment ? '[C] ' : ' ');
+          const rightPane = formatPaneSegments(sideBySideLine.right, ' ');
+          const numRows = Math.max(leftPane.segments.length, rightPane.segments.length);
+          const emptyLeft = padEndDisplay('', paneWidth);
+          const emptyRight = padEndDisplay('', paneWidth);
 
-          return (
-            <Box key={`line-${actualLineIndex}`} flexDirection="row" height={1}>
+          return Array.from({length: numRows}, (_, rowIdx) => (
+            <Box key={`line-${actualLineIndex}-${rowIdx}`} flexDirection="row" height={1} flexShrink={0}>
               <Text
                 color={leftPane.color}
                 dimColor={leftPane.dimColor}
@@ -1228,7 +1224,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                 bold={leftPane.bold}
                 wrap="truncate"
               >
-                {leftPane.text}
+                {leftPane.segments[rowIdx] ?? emptyLeft}
               </Text>
               <Text
                 color={rightPane.color}
@@ -1237,10 +1233,10 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                 bold={rightPane.bold}
                 wrap="truncate"
               >
-                {rightPane.text}
+                {rightPane.segments[rowIdx] ?? emptyRight}
               </Text>
             </Box>
-          );
+          ));
         })}
       </Box>
       

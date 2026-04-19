@@ -172,8 +172,8 @@ describe('Main view half-screen navigation', () => {
       
       output = lastFrame();
       // Should have moved significantly forward (item 10 may still be visible but selection moved)
-      // With pageSize ~19, half is ~9, so from item 10 should go to item 19
-      expect(output).toContain('multi-project/multi-19'); // Should have moved to around item 19
+      // With pageSize ~18, half is ~9, so from item 10 should go to item 19; but page shows 1-18
+      expect(output).toContain('multi-project/multi-18'); // Should have moved to last item on page 1
 
       // Page Up - should move back by half screen
       stdin.write('\u001b[5~');
