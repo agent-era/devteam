@@ -236,12 +236,17 @@ export class WorktreeCore implements CoreBase<State> {
 
   // Worktree operations
   async createFeature(projectName: string, featureName: string): Promise<WorktreeInfo | null> {
-    const created = this.git.createWorktree(projectName, featureName);
+    let uniqueName = featureName;
+    let counter = 2;
+    while (counter <= 99 && this.git.branchExists(projectName, uniqueName)) {
+      uniqueName = `${featureName}-${counter++}`;
+    }
+    const created = this.git.createWorktree(projectName, uniqueName);
     if (!created) return null;
-    const worktreePath = path.join(this.git.basePath, `${projectName}${DIR_BRANCHES_SUFFIX}`, featureName);
+    const worktreePath = path.join(this.git.basePath, `${projectName}${DIR_BRANCHES_SUFFIX}`, uniqueName);
     this.setupWorktreeEnvironment(projectName, worktreePath);
     await this.refresh();
-    return new WorktreeInfo({project: projectName, feature: featureName, path: worktreePath, branch: featureName});
+    return new WorktreeInfo({project: projectName, feature: uniqueName, path: worktreePath, branch: uniqueName});
   }
 
   async createFromBranch(project: string, remoteBranch: string, localName: string): Promise<boolean> {

@@ -145,7 +145,34 @@ describe('GitService worktree creation', () => {
     expect(mockFileSystem.ensureDirectory).toHaveBeenCalled();
     expect(mockCommandExecutor.runCommand).not.toHaveBeenCalled();
     expect(mockGitHelpers.findBaseBranch).not.toHaveBeenCalled();
-    
+
+    expect(result).toBe(false);
+  });
+
+  test('branchExists returns true when git rev-parse succeeds', () => {
+    mockCommandExecutor.runCommandQuick.mockReturnValue('abc123');
+
+    const result = gitService.branchExists('test-project', 'my-branch');
+
+    expect(mockCommandExecutor.runCommandQuick).toHaveBeenCalledWith(
+      ['git', '-C', '/test/base/path/test-project', 'rev-parse', '--verify', 'my-branch']
+    );
+    expect(result).toBe(true);
+  });
+
+  test('branchExists returns false when git rev-parse outputs fatal error', () => {
+    mockCommandExecutor.runCommandQuick.mockReturnValue('fatal: not a valid object name');
+
+    const result = gitService.branchExists('test-project', 'nonexistent-branch');
+
+    expect(result).toBe(false);
+  });
+
+  test('branchExists returns false when git rev-parse returns empty string', () => {
+    mockCommandExecutor.runCommandQuick.mockReturnValue('');
+
+    const result = gitService.branchExists('test-project', 'nonexistent-branch');
+
     expect(result).toBe(false);
   });
 });
