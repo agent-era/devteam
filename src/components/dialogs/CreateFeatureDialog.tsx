@@ -1,8 +1,5 @@
-import React, {useCallback, useEffect, useMemo, useState, useRef} from 'react';
-import {Box, Text, measureElement, useInput, useStdin} from 'ink';
-import {useMouseRegion} from '../../contexts/MouseContext.js';
-import {useListMouseHandler} from '../../hooks/useListMouseHandler.js';
-import {useTerminalDimensions} from '../../hooks/useTerminalDimensions.js';
+import React, {useEffect, useMemo, useState, useRef} from 'react';
+import {Box, Text, useInput, useStdin} from 'ink';
 import AnnotatedText from '../common/AnnotatedText.js';
 import type {ProjectInfo} from '../../models.js';
 import {kebabCase, truncateText} from '../../shared/utils/formatting.js';
@@ -31,13 +28,6 @@ const CreateFeatureDialog = React.memo(function CreateFeatureDialog({projects, d
   const [featureName, setFeatureName] = useState('');
   const featureInputRef = useRef(null);
   const {requestFocus, releaseFocus} = useInputFocus();
-  const {rows, columns} = useTerminalDimensions();
-
-  // Mouse coordinate tracking for the select-mode project list
-  const dialogRef = useRef<any>(null);
-  const headerRef = useRef<any>(null);
-  const [dialogHeight, setDialogHeight] = useState(0);
-  const [headerHeight, setHeaderHeight] = useState(0);
 
   useEffect(() => {
     requestFocus('create-feature-dialog');
@@ -49,44 +39,6 @@ const CreateFeatureDialog = React.memo(function CreateFeatureDialog({projects, d
     return projects.filter(p => p.name.toLowerCase().includes(f));
   }, [projects, filter]);
   const showFilter = (projects?.length || 0) > 3;
-  const visibleFiltered = filtered.slice(0, 20);
-
-  useEffect(() => {
-    if (mode !== 'select') return;
-    const measure = () => {
-      if (dialogRef.current) setDialogHeight(measureElement(dialogRef.current).height);
-      if (headerRef.current) setHeaderHeight(measureElement(headerRef.current).height);
-    };
-    measure();
-    const t = setTimeout(measure, 0);
-    return () => clearTimeout(t);
-  }, [mode, rows, columns, visibleFiltered.length, showFilter]);
-
-  const dialogTopY = 1 + Math.floor(Math.max(0, (rows - 1 - dialogHeight) / 2));
-  const itemsStartY = dialogTopY + headerHeight;
-
-  const handleItemMouseDown = useListMouseHandler({
-    length: visibleFiltered.length,
-    onSelect: (idx) => { if (mode === 'select') setCursor(idx); },
-    onActivate: (idx) => {
-      if (mode !== 'select') return;
-      const projectName = visibleFiltered[idx]?.name;
-      if (!projectName) return;
-      const globalIdx = Math.max(0, projects.findIndex(p => p.name === projectName));
-      setSelectedIndices(new Set([globalIdx]));
-      setCursor(idx);
-      setMode('input');
-    },
-  });
-
-  const handleScrollInList = useCallback((direction: 'up' | 'down') => {
-    if (mode !== 'select') return;
-    setCursor(s => direction === 'up'
-      ? Math.max(0, s - 1)
-      : Math.min(visibleFiltered.length - 1, s + 1));
-  }, [mode, visibleFiltered.length]);
-
-  useMouseRegion('create-feature', itemsStartY, visibleFiltered.length, handleItemMouseDown, handleScrollInList);
 
   useInput((input, key) => {
     if (mode === 'creating') return; // Disable input during creation
@@ -196,18 +148,18 @@ const CreateFeatureDialog = React.memo(function CreateFeatureDialog({projects, d
 
   if (mode === 'select') {
     return (
-      <Box ref={dialogRef} flexDirection="column">
-        <Box ref={headerRef} flexDirection="column">
-          <Text color="cyan">Create Feature — Select Projects</Text>
-          <Text color="gray">[space] select multiple, [enter] continue</Text>
-          {showFilter && (
+      <Box flexDirection="column">
+        <Text color="cyan">Create Feature — Select Projects</Text>
+        <Text color="gray">[space] select multiple, [enter] continue</Text>
+        {showFilter && (
+          <>
             <Box flexDirection="row">
               <Text color="gray">Filter: </Text>
               <Text>{filter || ' '}</Text>
             </Box>
-          )}
-        </Box>
-        {visibleFiltered.map((p, i) => {
+          </>
+        )}
+        {filtered.slice(0, 20).map((p, i) => {
           const projectIsSelected = selectedIndices.has(Math.max(0, projects.findIndex(pp => pp.name === p.name)));
           const isCursor = i === cursor;
           const prefix = isCursor ? '› ' : '  ';

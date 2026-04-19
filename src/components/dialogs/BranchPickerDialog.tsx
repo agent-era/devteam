@@ -1,7 +1,5 @@
-import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
-import {Box, Text, measureElement, useInput, useStdin} from 'ink';
-import {useMouseRegion} from '../../contexts/MouseContext.js';
-import {useListMouseHandler} from '../../hooks/useListMouseHandler.js';
+import React, {useEffect, useMemo, useState} from 'react';
+import {Box, Text, useInput, useStdin} from 'ink';
 import AnnotatedText from '../common/AnnotatedText.js';
 import {fitDisplay, padStartDisplay, stringDisplayWidth} from '../../shared/utils/formatting.js';
 import {useTerminalDimensions} from '../../hooks/useTerminalDimensions.js';
@@ -97,40 +95,6 @@ export default function BranchPickerDialog({branches, onSubmit, onCancel, onRefr
 
   const start = Math.floor(selected / pageSize) * pageSize;
   const pageItems = filtered.slice(start, start + pageSize);
-
-  const dialogRef = useRef<any>(null);
-  const headerRef = useRef<any>(null);
-  const [dialogHeight, setDialogHeight] = useState(0);
-  const [headerHeight, setHeaderHeight] = useState(0);
-
-  useEffect(() => {
-    const measure = () => {
-      if (dialogRef.current) setDialogHeight(measureElement(dialogRef.current).height);
-      if (headerRef.current) setHeaderHeight(measureElement(headerRef.current).height);
-    };
-    measure();
-    const t = setTimeout(measure, 0);
-    return () => clearTimeout(t);
-  }, [rows, columns, pageItems.length]);
-
-  // FullScreen uses usableRows = termRows - 1; dialog is centered within that
-  const dialogTopY = 1 + Math.floor(Math.max(0, (rows - 1 - dialogHeight) / 2));
-  const itemsStartY = dialogTopY + headerHeight;
-
-  const handleItemMouseDown = useListMouseHandler({
-    indexOffset: start,
-    length: filtered.length,
-    onSelect: (idx) => setSelected(idx),
-    onActivate: (idx) => { const b = filtered[idx]; if (b) onSubmit(b.name, b.local_name); },
-  });
-
-  const handleScroll = useCallback((direction: 'up' | 'down') => {
-    setSelected(s => direction === 'up'
-      ? Math.max(0, s - 1)
-      : Math.min(filtered.length - 1, s + 1));
-  }, [filtered.length]);
-
-  useMouseRegion('branch-picker', itemsStartY, pageItems.length, handleItemMouseDown, handleScroll);
   
   // Dynamic column widths based on terminal size and content (like MainView)
   const columnWidths = useMemo(() => {
@@ -214,15 +178,13 @@ export default function BranchPickerDialog({branches, onSubmit, onCancel, onRefr
   );
 
   return (
-    <Box ref={dialogRef} flexDirection="column">
-      <Box ref={headerRef} flexDirection="column">
-        <Text color="cyan">Create from Remote Branch</Text>
-        <Box flexDirection="row">
-          <Text color="gray">Filter: </Text>
-          <Text>{filter || ' '}</Text>
-        </Box>
-        {header}
+    <Box flexDirection="column">
+      <Text color="cyan">Create from Remote Branch</Text>
+      <Box flexDirection="row">
+        <Text color="gray">Filter: </Text>
+        <Text>{filter || ' '}</Text>
       </Box>
+      {header}
       {pageItems.map((b, i) => {
         const idx = start + i;
         const sel = idx === selected;

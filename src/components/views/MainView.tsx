@@ -1,7 +1,5 @@
 import React, {useMemo, useCallback, useRef, useEffect, useState} from 'react';
 import {Box, measureElement} from 'ink';
-import {useMouseRegion} from '../../contexts/MouseContext.js';
-import {useListMouseHandler} from '../../hooks/useListMouseHandler.js';
 import AnnotatedText from '../common/AnnotatedText.js';
 import type {WorktreeInfo} from '../../models.js';
 import type {MemoryStatus} from '../../services/MemoryMonitorService.js';
@@ -26,7 +24,6 @@ interface Props {
   selectedIndex: number;
   onMove?: (delta: number) => void;
   onSelect?: (index: number) => void;
-  onSelectAt?: (index: number) => void;
   onQuit?: () => void;
   mode?: 'message' | 'prompt';
   prompt?: Prompt;
@@ -48,9 +45,6 @@ export default function MainView({
   message,
   page = 0,
   onMeasuredPageSize,
-  onMove,
-  onSelect,
-  onSelectAt,
   memoryStatus,
   versionInfo,
   hasProjects,
@@ -68,9 +62,7 @@ export default function MainView({
 
   // Measure-based calculation to ensure we don't render more rows than fit.
   const listRef = useRef<any>(null);
-  const aboveListRef = useRef<any>(null);
   const [measuredPageSize, setMeasuredPageSize] = useState<number>(Math.max(1, worktrees?.length || 1));
-  const [aboveListHeight, setAboveListHeight] = useState(0);
 
   const columnWidths = useColumnWidths(worktrees, terminalWidth, page, measuredPageSize);
   
@@ -145,36 +137,6 @@ export default function MainView({
     }
   }, [measuredPageSize, onMeasuredPageSize]);
 
-  // Use a ref for comparison to avoid including aboveListHeight in its own deps
-  const aboveListHeightRef = useRef(0);
-  useEffect(() => {
-    const measure = () => {
-      const h = aboveListRef.current ? measureElement(aboveListRef.current).height : 0;
-      if (h !== aboveListHeightRef.current) {
-        aboveListHeightRef.current = h;
-        setAboveListHeight(h);
-      }
-    };
-    measure();
-    const t = setTimeout(measure, 0);
-    return () => clearTimeout(t);
-  }, [terminalRows, terminalWidth, !!renderUpdateBanner, !!renderMemoryWarning]);
-
-  const handleListMouseDown = useListMouseHandler({
-    indexOffset: page * measuredPageSize,
-    length: worktrees.length,
-    onSelect: (idx) => onMove?.(idx - selectedIndex),
-    onActivate: (idx) => { onMove?.(idx - selectedIndex); onSelectAt?.(idx); },
-  });
-
-  const handleListScroll = useCallback((direction: 'up' | 'down') => {
-    onMove?.(direction === 'up' ? -3 : 3);
-  }, [onMove]);
-
-  const isListVisible = mode !== 'message' && mode !== 'prompt' && worktrees.length > 0;
-  const listStartY = 1 + aboveListHeight;
-  useMouseRegion('main-list', listStartY, isListVisible ? pageItems.length : 0, handleListMouseDown, handleListScroll);
-
   if (mode === 'message') {
     return <MessageView message={message} />;
   }
@@ -189,11 +151,9 @@ export default function MainView({
 
   return (
     <Box flexDirection="column" flexGrow={1}>
-      <Box ref={aboveListRef} flexDirection="column">
-        {renderUpdateBanner}
-        {renderMemoryWarning}
-        <TableHeader columnWidths={columnWidths} />
-      </Box>
+      {renderUpdateBanner}
+      {renderMemoryWarning}
+      <TableHeader columnWidths={columnWidths} />
       <Box ref={listRef} flexDirection="column" flexGrow={1}>
         {pageItems.map((worktree, index) => {
           const globalIndex = page * measuredPageSize + index;

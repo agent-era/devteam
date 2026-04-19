@@ -22,7 +22,6 @@ import {WorktreeProvider, useWorktreeContext} from './contexts/WorktreeContext.j
 import {GitHubProvider, useGitHubContext} from './contexts/GitHubContext.js';
 import {UIProvider, useUIContext} from './contexts/UIContext.js';
 import {InputFocusProvider} from './contexts/InputFocusContext.js';
-import {MouseProvider} from './contexts/MouseContext.js';
 import {WorktreeCore} from './cores/WorktreeCore.js';
 import {GitHubCore} from './cores/GitHubCore.js';
 
@@ -438,13 +437,11 @@ function AppContent() {
 
 export default function App() {
   return (
-    <MouseProvider>
-      <InputFocusProvider>
-        <GitHubProvider>
-          <AppWithGitHub />
-        </GitHubProvider>
-      </InputFocusProvider>
-    </MouseProvider>
+    <InputFocusProvider>
+      <GitHubProvider>
+        <AppWithGitHub />
+      </GitHubProvider>
+    </InputFocusProvider>
   );
 }
 
