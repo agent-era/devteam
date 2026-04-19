@@ -93,7 +93,7 @@ async function loadDiff(worktreePath: string, diffType: 'full' | 'uncommitted' =
           newLineCounter = Math.max(1, newStart);
         }
         const ctx = line.replace(/^@@.*@@ ?/, '');
-        if (ctx) currentFileLines.push({type: 'header', text: `▼ ${ctx}`, fileName: currentFileName, headerType: 'hunk'});
+        if (ctx) currentFileLines.push({type: 'header', text: ` ▼ ${ctx}`, fileName: currentFileName, headerType: 'hunk'});
       } else if (line.startsWith('+') && !line.startsWith('+++')) {
         currentFileLines.push({type: 'added', text: line.slice(1), fileName: currentFileName, newLineIndex: newLineCounter});
         newLineCounter++;
