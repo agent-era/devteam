@@ -227,6 +227,12 @@ export class GitService {
   }
 
 
+  branchExists(project: string, branchName: string): boolean {
+    const mainRepo = path.join(this.basePath, project);
+    const result = runCommandQuick(['git', '-C', mainRepo, 'rev-parse', '--verify', branchName]);
+    return !!result && !/fatal/i.test(result);
+  }
+
   createWorktree(project: string, featureName: string, branchName?: string): boolean {
     const mainRepo = path.join(this.basePath, project);
     const branchesDir = path.join(this.basePath, `${project}${DIR_BRANCHES_SUFFIX}`);
@@ -259,9 +265,7 @@ export class GitService {
     if (fs.existsSync(worktreePath)) return false;
     
     const localBranch = remoteBranch.startsWith('origin/') ? remoteBranch.slice(7) : remoteBranch;
-    const exists = runCommandQuick(['git', '-C', mainRepo, 'rev-parse', '--verify', localBranch]);
-    
-    if (exists && !/fatal/i.test(exists)) {
+    if (this.branchExists(project, localBranch)) {
       runCommand(['git', '-C', mainRepo, 'worktree', 'add', worktreePath, localBranch]);
     } else {
       runCommand(['git', '-C', mainRepo, 'worktree', 'add', '--track', '-b', localBranch, worktreePath, remoteBranch]);

@@ -50,11 +50,21 @@ export default function CreateFeatureScreen({
           onSuccess();
           // Small delay to ensure UI state updates and worktree appears
           await new Promise(resolve => setTimeout(resolve, 100));
-          const needsSelection = await needsToolSelection(created);
-          if (needsSelection) {
-            showAIToolSelection(created);
+          const proceedWithSession = async () => {
+            const needsSelection = await needsToolSelection(created);
+            if (needsSelection) {
+              showAIToolSelection(created);
+            } else {
+              await attachSession(created);
+            }
+          };
+          if (created.feature !== safeFeature) {
+            showInfo(`'${feature}' was already taken — created as '${created.feature}' instead.`, {
+              title: 'Name Already Exists',
+              onClose: proceedWithSession,
+            });
           } else {
-            await attachSession(created);
+            await proceedWithSession();
           }
         } else {
           onCancel();
