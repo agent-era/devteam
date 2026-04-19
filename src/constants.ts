@@ -81,8 +81,7 @@ export const AI_TOOLS = {
     resumeArgs: '--continue',
     processPatterns: ['claude'],
     statusPatterns: {
-      working: 'esc to interrupt',
-      waiting_numbered: ['❯', String.raw`\d+\.\s+\w+`],
+      working: '… (',
       idle_prompt: ['│ >', '│']
     }
   },
@@ -93,7 +92,6 @@ export const AI_TOOLS = {
     processPatterns: ['node'],
     statusPatterns: {
       working: 'Esc to interrupt',
-      waiting_numbered: ['▌', '[A-Za-z]'],  // Check for prompt with text content after it
       idle_prompt: ['▌', '⏎ send']
     }
   },
@@ -104,8 +102,7 @@ export const AI_TOOLS = {
     processPatterns: ['node'],
     statusPatterns: {
       working: 'esc to cancel',
-      waiting_numbered: ['Waiting for user', String.raw`\d+\.`],
-      idle_prompt: ['│ >', '']  // Just check for prompt, idle is default state
+      idle_prompt: ['│ >', '']
     }
   }
 } as const;
@@ -114,13 +111,6 @@ export function aiLaunchCommand(tool: keyof typeof AI_TOOLS): string {
   const cfg = AI_TOOLS[tool];
   return `${cfg.command} ${cfg.resumeArgs}`;
 }
-
-// Claude status patterns (Python parity) - kept for backward compatibility
-export const CLAUDE_PATTERNS = {
-  working: 'esc to interrupt',
-  waiting_numbered: ['❯', String.raw`\d+\.\s+\w+`],
-  idle_prompt: ['│ >', '│']
-} as const;
 
 // Additional idle markers for other CLIs (e.g., GPT Codex)
 export const ALT_IDLE_MARKERS: RegExp[] = [

@@ -92,7 +92,7 @@ random-session:33333`);
   describe('getStatusForTool', () => {
     describe('Claude status detection', () => {
       test('detects working state', () => {
-        const workingText = 'I am processing your request... esc to interrupt';
+        const workingText = '· Calculating… (12s · ↓ 512 tokens)';
         expect(aiToolService.getStatusForTool(workingText, 'claude')).toBe('working');
       });
 
@@ -109,6 +109,16 @@ random-session:33333`);
       test('detects idle state as default', () => {
         const idleText = '│ >\n│ Type your message';
         expect(aiToolService.getStatusForTool(idleText, 'claude')).toBe('idle');
+      });
+
+      test('idle with ❯ prompt in scrollback alongside numbered list is not waiting', () => {
+        const idleWithScrollback = '1. Fix the bug\n2. Add tests\n3. Update docs\n❯ ';
+        expect(aiToolService.getStatusForTool(idleWithScrollback, 'claude')).toBe('idle');
+      });
+
+      test('idle during active work with numbered plan in scrollback is not waiting', () => {
+        const workingWithPlan = '1. Step one\n2. Step two\n❯ run the plan\n● Bash(npm test)';
+        expect(aiToolService.getStatusForTool(workingWithPlan, 'claude')).toBe('idle');
       });
     });
 

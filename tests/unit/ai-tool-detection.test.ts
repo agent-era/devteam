@@ -23,26 +23,11 @@ describe('AI Tool Detection', () => {
   describe('Claude Detection', () => {
     const claudeScreens = {
       working: `
-Human: Write a function to calculate factorial
+● Bash(npm test)
+  ⎿  Running…
 
-I'll help you write a factorial function. Here's a simple implementation:
-
-\`\`\`python
-def factorial(n):
-    if n < 0:
-        raise ValueError("Factorial is not defined for negative numbers")
-    elif n == 0 or n == 1:
-        return 1
-    else:
-        result = 1
-        for i in range(2, n + 1):
-            result *= i
-        return result
-\`\`\`
-
-This function calculates the factorial of a non-negative integer n.
-
-esc to interrupt`,
+· Calculating… (12s · ↓ 512 tokens)
+  ⎿  Tip: Use /btw to ask a side question`,
       waiting: `
 Human: What would you like me to help you with?
 
