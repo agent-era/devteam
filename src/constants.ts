@@ -134,6 +134,7 @@ export const ALT_IDLE_MARKERS: RegExp[] = [
 // Process timeouts (ms)
 export const SUBPROCESS_TIMEOUT = 30_000;
 export const SUBPROCESS_SHORT_TIMEOUT = 5_000;
+export const CLAUDE_TIMEOUT = 300_000; // 5 minutes
 // How long tmux shows messages (like "detached") in ms
 // 0 disables message display entirely in supported tmux versions
 export const TMUX_DISPLAY_TIME = 0;

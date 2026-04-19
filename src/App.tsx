@@ -51,6 +51,7 @@ function AppContent() {
     generateConfigWithAI,
     editConfigWithAI,
     applyConfig,
+    reapplyFiles,
     getAvailableAITools,
     needsToolSelection
   } = useWorktreeContext();
@@ -373,6 +374,7 @@ function AppContent() {
           onGenerate={() => runSettingsAI(settingsProject, () => generateConfigWithAI(settingsProject))}
           onEdit={(userPrompt: string) => runSettingsAI(settingsProject, () => editConfigWithAI(settingsProject, userPrompt))}
           onApply={(proposed: string) => applyProposedConfig(settingsProject, proposed)}
+          onReapplyFiles={() => reapplyFiles(settingsProject)}
           onDiscardResult={() => clearSettingsAIResult()}
           onCancel={showList}
         />

@@ -1,5 +1,5 @@
 import {execFileSync, spawnSync, execFile, spawn} from 'child_process';
-import {SUBPROCESS_SHORT_TIMEOUT, SUBPROCESS_TIMEOUT, AI_TOOLS} from '../../constants.js';
+import {SUBPROCESS_SHORT_TIMEOUT, SUBPROCESS_TIMEOUT, CLAUDE_TIMEOUT, AI_TOOLS} from '../../constants.js';
 
 // Consolidated command executors (sync + async) with options
 export function runCommand(
@@ -85,7 +85,7 @@ export function runClaudeAsync(
   opts: { cwd?: string; timeoutMs?: number } = {}
 ): Promise<{success: boolean; output: string; error?: string}> {
   return new Promise((resolve) => {
-    const timeoutMs = opts.timeoutMs ?? SUBPROCESS_TIMEOUT;
+    const timeoutMs = opts.timeoutMs ?? CLAUDE_TIMEOUT;
     let stdout = '';
     let stderr = '';
     let settled = false;
