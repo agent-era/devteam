@@ -15,11 +15,36 @@ import { formatTimeAgo } from '../shared/utils/formatting.js';
 import {logDebug} from '../shared/utils/logger.js';
 import {Timer} from '../shared/utils/timing.js';
 
+interface GitSlowMetrics {
+  timestamp: number;
+  committedAdded: number;
+  committedDeleted: number;
+  ahead: number;
+  behind: number;
+  hasRemote: boolean;
+  upstreamAhead: number; // -1 when no upstream
+}
+
 export class GitService {
   basePath: string;
+  private baseBranchCache = new Map<string, string>();
+  private gitSlowCache = new Map<string, GitSlowMetrics>();
+  private static readonly GIT_SLOW_TTL_MS = 30_000;
 
   constructor(basePath: string) {
     this.basePath = basePath;
+  }
+
+  invalidateGitSlowCache(worktreePath: string): void {
+    this.gitSlowCache.delete(worktreePath);
+  }
+
+  private getBaseBranch(repoPath: string): string {
+    const cached = this.baseBranchCache.get(repoPath);
+    if (cached !== undefined) return cached;
+    const result = findBaseBranch(repoPath, BASE_BRANCH_CANDIDATES);
+    this.baseBranchCache.set(repoPath, result);
+    return result;
   }
 
   discoverProjects(): ProjectInfo[] {
@@ -125,50 +150,80 @@ export class GitService {
     const timer = new Timer();
     const status = new GitStatus();
     const worktreeName = path.basename(worktreePath);
-    // Validate the repo root being queried for status; helpful to diagnose workspace child paths
-    try {
-      const repoRoot = await runCommandQuickAsync(['git', '-C', worktreePath, 'rev-parse', '--show-toplevel']);
-      const root = (repoRoot || '').trim();
-      if (!root) {
-        logDebug(`[Git.Status] No repo at path`, {path: worktreePath});
-      } else {
-        const resolvedRoot = path.resolve(root);
-        const resolvedPath = path.resolve(worktreePath);
-        if (process.env.DEVTEAM_DEBUG_GIT || resolvedRoot !== resolvedPath) {
-          // Always log when mismatch; or when debug flag is set
-          logDebug(`[Git.Status] Repo root`, {path: resolvedPath, repoRoot: resolvedRoot, name: worktreeName});
-        }
-      }
-    } catch {}
-    
+
     const porcelainStatus = await runCommandQuickAsync(['git', '-C', worktreePath, 'status', '--porcelain']);
     if (porcelainStatus) {
       status.modified_files = porcelainStatus.split('\n').filter(Boolean).length;
       status.has_changes = true;
     }
-    
+
     const diffStats = await runCommandQuickAsync(['git', '-C', worktreePath, 'diff', '--shortstat', 'HEAD']);
     if (diffStats) {
       const [added, deleted] = parseGitShortstat(diffStats);
       status.added_lines = added;
       status.deleted_lines = deleted;
     }
-    
+
     if (porcelainStatus) {
       status.untracked_lines = await this.countUntrackedLines(worktreePath, porcelainStatus);
     }
-    
-    await this.addBaseBranchComparison(worktreePath, status);
-    await this.addRemoteTrackingInfo(worktreePath, status);
-    
-    // Only log if there are significant changes
+
+    const base = this.getBaseBranch(worktreePath);
+    const cached = this.gitSlowCache.get(worktreePath);
+    const slow = (cached && Date.now() - cached.timestamp < GitService.GIT_SLOW_TTL_MS)
+      ? cached
+      : await this.computeAndCacheSlowMetrics(worktreePath, base);
+
+    status.base_added_lines = slow.committedAdded + status.added_lines + status.untracked_lines;
+    status.base_deleted_lines = slow.committedDeleted + status.deleted_lines;
+    status.ahead = slow.ahead;
+    status.behind = slow.behind;
+    status.has_remote = slow.hasRemote;
+    status.is_pushed = slow.hasRemote && slow.upstreamAhead === 0 && !status.has_changes;
+
     if (status.modified_files > 5 || status.added_lines + status.deleted_lines > 50) {
       const timing = timer.elapsed();
-      const changesDesc = `${status.modified_files} modified files, +${status.added_lines}/-${status.deleted_lines} lines`;
-      logDebug(`[Git.Status] ${worktreeName}: ${changesDesc} in ${timing.formatted}`);
+      logDebug(`[Git.Status] ${worktreeName}: ${status.modified_files} modified, +${status.added_lines}/-${status.deleted_lines} in ${timing.formatted}`);
     }
-    
+
     return status;
+  }
+
+  private async computeAndCacheSlowMetrics(worktreePath: string, base: string): Promise<GitSlowMetrics> {
+    let committedAdded = 0, committedDeleted = 0;
+    if (base) {
+      const mergeBase = await runCommandQuickAsync(['git', '-C', worktreePath, 'merge-base', 'HEAD', base]);
+      if (mergeBase) {
+        const committed = await runCommandQuickAsync(['git', '-C', worktreePath, 'diff', '--shortstat', mergeBase.trim(), 'HEAD']);
+        [committedAdded, committedDeleted] = committed ? parseGitShortstat(committed) : [0, 0];
+      }
+    }
+
+    let ahead = 0, behind = 0;
+    if (base) {
+      try {
+        const revList = await runCommandQuickAsync(['git', '-C', worktreePath, 'rev-list', '--left-right', '--count', `HEAD...${base}`]);
+        if (revList) {
+          const parts = revList.split('\t').map(x => Number(x.trim()));
+          ahead = parts[0] || 0;
+          behind = parts[1] || 0;
+        }
+      } catch {}
+    }
+
+    let hasRemote = false, upstreamAhead = -1;
+    try {
+      const upstream = await runCommandQuickAsync(['git', '-C', worktreePath, 'rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']);
+      if (upstream && !/fatal|no upstream/i.test(upstream)) {
+        hasRemote = true;
+        const revListUp = await runCommandQuickAsync(['git', '-C', worktreePath, 'rev-list', '--left-right', '--count', 'HEAD...@{u}']);
+        if (revListUp) upstreamAhead = Number(revListUp.split('\t')[0].trim()) || 0;
+      }
+    } catch {}
+
+    const slow: GitSlowMetrics = {timestamp: Date.now(), committedAdded, committedDeleted, ahead, behind, hasRemote, upstreamAhead};
+    this.gitSlowCache.set(worktreePath, slow);
+    return slow;
   }
 
 
@@ -184,7 +239,7 @@ export class GitService {
     runCommand(['git', '-C', mainRepo, 'fetch', 'origin'], {timeout: 30000});
     
     // Find the base branch (main or master)
-    const baseBranch = findBaseBranch(mainRepo, BASE_BRANCH_CANDIDATES);
+    const baseBranch = this.getBaseBranch(mainRepo);
     if (!baseBranch) return false;
     
     // Ensure we use the origin version of the base branch
@@ -223,7 +278,7 @@ export class GitService {
 
     const worktrees = await this.getWorktreesForProject(new ProjectInfo({name: project, path: mainRepo}));
     const existing = worktrees.map((wt) => wt.branch.replace('refs/heads/', ''));
-    const base = findBaseBranch(mainRepo, BASE_BRANCH_CANDIDATES);
+    const base = this.getBaseBranch(mainRepo);
     if (!base) return branches;
 
     const candidateBranches = this.parseBranchCandidates(output, existing, base);
@@ -260,53 +315,6 @@ export class GitService {
     return untracked;
   }
 
-  private async addBaseBranchComparison(worktreePath: string, status: GitStatus): Promise<void> {
-    const base = findBaseBranch(worktreePath);
-    if (base) {
-      const mergeBase = await runCommandQuickAsync(['git', '-C', worktreePath, 'merge-base', 'HEAD', base]);
-      if (mergeBase) {
-        const committed = await runCommandQuickAsync(['git', '-C', worktreePath, 'diff', '--shortstat', mergeBase.trim(), 'HEAD']);
-        const [committedAdded, committedDeleted] = committed ? parseGitShortstat(committed) : [0, 0];
-        status.base_added_lines = committedAdded + status.added_lines + status.untracked_lines;
-        status.base_deleted_lines = committedDeleted + status.deleted_lines;
-      }
-    }
-  }
-
-  private async addRemoteTrackingInfo(worktreePath: string, status: GitStatus): Promise<void> {
-    // First, compute ahead/behind relative to the base branch (consistent display semantics)
-    const base = findBaseBranch(worktreePath);
-    if (base) {
-      try {
-        const revListBase = await runCommandQuickAsync(['git', '-C', worktreePath, 'rev-list', '--left-right', '--count', `HEAD...${base}`]);
-        if (revListBase) {
-          const [aheadBase, behindBase] = revListBase.split('\t').map((x) => Number(x.trim()));
-          status.ahead = aheadBase || 0;
-          status.behind = behindBase || 0;
-        }
-      } catch {}
-    }
-
-    // Independently, check upstream info for push/sync state without altering display counts
-    try {
-      const upstream = await runCommandQuickAsync(['git', '-C', worktreePath, 'rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']);
-      if (upstream && !/fatal|no upstream/i.test(upstream)) {
-        status.has_remote = true;
-        const revListUp = await runCommandQuickAsync(['git', '-C', worktreePath, 'rev-list', '--left-right', '--count', 'HEAD...@{u}']);
-        if (revListUp) {
-          const [aheadUp, _behindUp] = revListUp.split('\t').map((x) => Number(x.trim()));
-          status.is_pushed = (aheadUp || 0) === 0 && !status.has_changes;
-        } else {
-          status.is_pushed = !status.has_changes;
-        }
-      } else if (base) {
-        // No upstream; can't be considered pushed
-        status.is_pushed = false;
-      }
-    } catch {
-      // Silent: upstream may not exist
-    }
-  }
 
 
   private parseBranchCandidates(output: string, existing: string[], base: string): Array<[string, string]> {

@@ -33,6 +33,7 @@ export class WorktreeCore implements CoreBase<State> {
   private memory: MemoryMonitorService;
   private versionService: any | null = null;
   private timers: Array<() => void> = [];
+  private isRefreshingVisible = false;
   private availableAITools: (keyof typeof import('../constants.js').AI_TOOLS)[];
 
   constructor(opts?: {git?: GitService; tmux?: TmuxService; workspace?: WorkspaceService; memory?: MemoryMonitorService; versionService?: any}) {
@@ -159,6 +160,8 @@ export class WorktreeCore implements CoreBase<State> {
   }
 
   async refreshVisibleStatus(currentPage: number, pageSize: number): Promise<void> {
+    if (this.isRefreshingVisible) return;
+    this.isRefreshingVisible = true;
     // Compute slice and refresh git/tmux status for visible rows
     const start = currentPage * pageSize;
     const end = Math.min(start + pageSize, this.state.worktrees.length);
@@ -168,19 +171,49 @@ export class WorktreeCore implements CoreBase<State> {
     for (const wt of slice) {
       const sessionName = this.tmux.sessionName(wt.project, wt.feature);
       const attached = sessions.includes(sessionName);
-      const [gitStatus, aiResult] = await Promise.all([
-        this.git.getGitStatus(wt.path),
-        attached ? this.tmux.getAIStatus(sessionName) : Promise.resolve({tool: 'none' as const, status: 'not_running' as const})
-      ]);
+      // Fetch AI status first: if agent just finished working, invalidate the git slow-metrics
+      // cache before fetching git status so this tick shows fresh committed stats.
+      const aiResult = attached
+        ? await this.tmux.getAIStatus(sessionName)
+        : {tool: 'none' as const, status: 'not_running' as const};
+      if (wt.session?.ai_status === 'working' && aiResult.status !== 'working') {
+        this.git.invalidateGitSlowCache(wt.path);
+      }
+      const gitStatus = await this.git.getGitStatus(wt.path);
       updated.push(new WorktreeInfo({...wt, git: gitStatus, session: new SessionInfo({session_name: sessionName, attached, ai_status: aiResult.status, ai_tool: aiResult.tool})}));
     }
     const arr = [...this.state.worktrees];
     for (let i = 0; i < updated.length; i++) arr[start + i] = updated[i];
     this.setState({worktrees: arr, lastRefreshed: Date.now()});
+    this.isRefreshingVisible = false;
   }
 
   async forceRefreshVisible(currentPage: number, pageSize: number): Promise<void> {
     await this.refreshVisibleStatus(currentPage, pageSize);
+  }
+
+  private async refreshSingleWorktree(worktree: WorktreeInfo, invalidateGitCache = false): Promise<void> {
+    try {
+      if (invalidateGitCache) this.git.invalidateGitSlowCache(worktree.path);
+      const sessions = await this.tmux.listSessions();
+      const sessionName = this.tmux.sessionName(worktree.project, worktree.feature);
+      const attached = sessions.includes(sessionName);
+      const [gitStatus, aiResult] = await Promise.all([
+        this.git.getGitStatus(worktree.path),
+        attached
+          ? this.tmux.getAIStatus(sessionName)
+          : Promise.resolve({tool: 'none' as const, status: 'not_running' as const}),
+      ]);
+      const updated = new WorktreeInfo({
+        ...worktree,
+        git: gitStatus,
+        session: new SessionInfo({session_name: sessionName, attached, ai_status: aiResult.status, ai_tool: aiResult.tool}),
+      });
+      const arr = [...this.state.worktrees];
+      const idx = arr.findIndex(w => w.path === worktree.path);
+      if (idx >= 0) arr[idx] = updated;
+      this.setState({worktrees: arr, lastRefreshed: Date.now()});
+    } catch {}
   }
 
   // Worktree operations
@@ -274,6 +307,7 @@ export class WorktreeCore implements CoreBase<State> {
       sessionKind: 'agent',
       aiTool: selectedTool,
     });
+    await this.refreshSingleWorktree(worktree); // working→idle transition handles cache invalidation
   }
   async attachShellSession(worktree: WorktreeInfo): Promise<void> {
     const name = this.tmux.shellSessionName(worktree.project, worktree.feature);
@@ -284,6 +318,7 @@ export class WorktreeCore implements CoreBase<State> {
       worktree: worktree.feature,
       sessionKind: 'shell',
     });
+    await this.refreshSingleWorktree(worktree, true); // user may have committed
   }
   async attachRunSession(worktree: WorktreeInfo): Promise<'success' | 'no_config'> {
     const name = this.tmux.runSessionName(worktree.project, worktree.feature);
@@ -304,6 +339,7 @@ export class WorktreeCore implements CoreBase<State> {
         worktree: worktree.feature,
         sessionKind: 'execute',
       });
+      await this.refreshSingleWorktree(worktree);
       return 'no_config';
     }
     for (const [k, v] of Object.entries(env)) {
@@ -316,6 +352,7 @@ export class WorktreeCore implements CoreBase<State> {
       worktree: worktree.feature,
       sessionKind: 'execute',
     });
+    await this.refreshSingleWorktree(worktree);
     return 'success';
   }
 
