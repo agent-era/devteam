@@ -1,5 +1,4 @@
 import React, {createContext, useCallback, useContext, useEffect, useRef} from 'react';
-import {useStdin, useStdout} from 'ink';
 import {parseMouseEvents, enableMouse, disableMouse, type MouseButton} from '../services/MouseService.js';
 
 interface MouseRegion {
@@ -48,21 +47,14 @@ export function useMouseRegion(
 }
 
 export function MouseProvider({children}: {children: React.ReactNode}) {
-  const {stdin} = useStdin();
-  const {stdout} = useStdout();
   // Map preserves insertion order; later-inserted region wins when Y ranges overlap
   const regions = useRef<Map<string, MouseRegion>>(new Map());
 
   useEffect(() => {
-    if (!stdout?.isTTY) return;
-    enableMouse(stdout as NodeJS.WriteStream);
-    return () => {
-      try { disableMouse(stdout as NodeJS.WriteStream); } catch {}
-    };
-  }, [stdout]);
+    // Use process.stdout/stdin directly — Ink's useStdout() wrapper may not expose isTTY
+    if (!process.stdout.isTTY) return;
 
-  useEffect(() => {
-    if (!stdout?.isTTY) return;
+    enableMouse(process.stdout);
 
     const handler = (data: Buffer) => {
       const str = data.toString('utf8');
@@ -84,9 +76,12 @@ export function MouseProvider({children}: {children: React.ReactNode}) {
       }
     };
 
-    stdin.on('data', handler);
-    return () => { stdin.off('data', handler); };
-  }, [stdin, stdout]);
+    process.stdin.on('data', handler);
+    return () => {
+      process.stdin.off('data', handler);
+      try { disableMouse(process.stdout); } catch {}
+    };
+  }, []);
 
   const registerRegion = useCallback((region: MouseRegion): (() => void) => {
     regions.current.set(region.id, region);
