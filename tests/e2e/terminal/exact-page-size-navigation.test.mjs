@@ -47,7 +47,7 @@ test('does not go blank when items equal page size and pressing down', async () 
   await waitFor(() => {
     const s = stripAnsi(stdout.lastFrame() || '');
     return new RegExp(`\\[Page 1/\\d+: 1-\\d+/${PAGE_SIZE}\\]`).test(s);
-  }, {timeout: 20000, interval: 50, message: 'pagination settled for single page'});
+  }, {timeout: 3000, interval: 50, message: 'pagination settled for single page'});
   // Derive the end of the visible range from the pagination footer (e.g., "Page 1/X: 1-25/25")
   const footerMatch = clean.match(/Page\s+1\/\d+:\s+1-(\d+)\/(\d+)/);
   if (footerMatch) {

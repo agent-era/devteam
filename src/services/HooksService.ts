@@ -12,7 +12,7 @@ import {
   DEVTEAM_USER_DIR,
 } from '../constants.js';
 import type {AIStatus} from '../models.js';
-import {ensureDirectory, readJSONFile, writeJSONAtomic} from '../shared/utils/fileSystem.js';
+import {ensureDirectory, readFileOrNull, readJSONFile, writeJSONAtomic} from '../shared/utils/fileSystem.js';
 
 export interface SessionMarker {
   v: number;
@@ -77,7 +77,7 @@ export class HooksService {
 
   writeMarker(worktreePath: string, session: string, project: string, feature: string, kind: 'worktree' | 'workspace'): void {
     const marker: SessionMarker = {v: 1, session, project, feature, kind};
-    try { fs.writeFileSync(path.join(worktreePath, MARKER_FILE), JSON.stringify(marker, null, 2)); } catch {}
+    try { writeJSONAtomic(path.join(worktreePath, MARKER_FILE), marker); } catch {}
   }
 
   readMarker(worktreePath: string): SessionMarker | null {
@@ -91,7 +91,7 @@ export class HooksService {
   }
 
   isStale(status: HookStatus): boolean {
-    return Date.now() - status.ts > STATUS_STALE_MS;
+    return Math.abs(Date.now() - status.ts) > STATUS_STALE_MS;
   }
 
   clearStatus(sessionName: string): void {
@@ -207,6 +207,7 @@ export class HooksService {
   }
 
   private hasDevteamHook(configPath: string): boolean {
-    try { return fs.readFileSync(configPath, 'utf8').includes(HOOK_IDENTIFIER); } catch { return false; }
+    const content = readFileOrNull(configPath);
+    return content !== null && content.includes(HOOK_IDENTIFIER);
   }
 }

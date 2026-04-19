@@ -423,7 +423,7 @@ function AppContent() {
     content = (
       <Box flexGrow={1} alignItems="center" justifyContent="center">
         <InstallHooksDialog
-          onInstall={() => { try { hooks.installAll(); } catch {} showList(); }}
+          onInstall={() => { hooks.installAll(); showList(); }}
           onSkip={showList}
           onNever={() => { try { hooks.skipInstall(); } catch {} showList(); }}
         />

@@ -28,10 +28,8 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
   columnWidths,
   prStatus,
 }) => {
-  // Use PR status passed as prop
-  const pr = prStatus;
-  const highlightInfo = useHighlightPriority(worktree, pr);
-  const isDimmed = shouldDimRow(pr);
+  const highlightInfo = useHighlightPriority(worktree, prStatus);
+  const isDimmed = shouldDimRow(prStatus);
   
   const data = {
     number: String(globalIndex + 1),
@@ -40,7 +38,7 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
       : `${worktree.feature} [${worktree.project}]`,
     diff: formatDiffStats(worktree.git?.base_added_lines || 0, worktree.git?.base_deleted_lines || 0),
     changes: formatGitChanges(worktree.git?.ahead || 0, worktree.git?.behind || 0),
-    pr: formatPRStatus(pr),
+    pr: formatPRStatus(prStatus),
   };
 
   const agentActive = worktree.session?.attached || false;
@@ -62,7 +60,7 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
     {text: data.changes, width: columnWidths.changes, justify: 'flex-end' as const},
     {text: data.pr, width: columnWidths.pr, justify: 'flex-end' as const},
   ];
-  const statusMeta = getStatusMeta(worktree, pr);
+  const statusMeta = getStatusMeta(worktree, prStatus);
   
   const isPriorityCell = (cellIndex: number): boolean =>
     !!(highlightInfo && cellIndex === highlightInfo.columnIndex);

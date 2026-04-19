@@ -54,7 +54,7 @@ function mapStatus(tool, event, payload) {
   if (event === 'SessionEnd') return '__delete__';
 
   // Turn-complete / idle
-  if (event === 'Stop' || event === 'AfterAgent' || event === 'agent-turn-complete') return 'idle';
+  if (event === 'Stop' || event === 'AfterAgent') return 'idle';
 
   // Actively working
   if (

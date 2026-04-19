@@ -68,6 +68,7 @@ export class WorktreeCore implements CoreBase<State> {
     this.hookWatcher = null;
     for (const t of this.hookWatchDebounces.values()) clearTimeout(t);
     this.hookWatchDebounces.clear();
+    this.markerCheckedPaths.clear();
   }
 
   private hookWatcher: fs.FSWatcher | null = null;
@@ -111,7 +112,7 @@ export class WorktreeCore implements CoreBase<State> {
       if (wt.session?.ai_status === aiStatus && wt.session?.ai_tool === aiTool) continue;
       worktrees[i] = new WorktreeInfo({
         ...wt,
-        session: new SessionInfo({...wt.session, ai_status: aiStatus, ai_tool: aiTool, attached: !!hookStatus}),
+        session: new SessionInfo({...wt.session, ai_status: aiStatus, ai_tool: aiTool}),
       });
       changed = true;
     }
@@ -182,7 +183,14 @@ export class WorktreeCore implements CoreBase<State> {
             feature,
             path: wsPath,
             branch: feature,
-            session: new SessionInfo({session_name: wsSession, attached: wsAttached, ai_status: aiResult.status, ai_tool: aiResult.tool}),
+            session: new SessionInfo({
+            session_name: wsSession,
+            attached: wsAttached,
+            ai_status: aiResult.status,
+            ai_tool: aiResult.tool,
+            shell_attached: sessions.includes(this.tmux.shellSessionName('workspace', feature)),
+            run_attached: sessions.includes(this.tmux.runSessionName('workspace', feature)),
+          }),
           });
           (header as any).is_workspace = true;
           (header as any).is_workspace_header = true;

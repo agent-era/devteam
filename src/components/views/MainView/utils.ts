@@ -32,15 +32,6 @@ export function formatPushStatus(worktree: WorktreeInfo): string {
   return 'x';
 }
 
-export function getAIToolLabel(aiTool: string | undefined, attached: boolean): string {
-  if (!attached || !aiTool) return '';
-  switch (aiTool.toLowerCase()) {
-    case 'claude': return 'Claude';
-    case 'codex': return 'Codex';
-    case 'gemini': return 'Gemini';
-    default: return '';
-  }
-}
 
 export function formatPRStatus(pr: WorktreeInfo['pr']): string {
   if (!pr || pr.isNotChecked) return '';

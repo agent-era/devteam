@@ -30,7 +30,7 @@ test('App renders EmptyState when projects exist but no worktrees', async () => 
     await waitFor(() => {
       const f = stripAnsi(stdout.lastFrame() || '');
       return f.includes('Welcome to DevTeam');
-    }, {timeout: 20000, interval: 50, message: 'EmptyState visible'});
+    }, {timeout: 3000, interval: 50, message: 'EmptyState visible'});
     const frame = stripAnsi(stdout.lastFrame() || '');
     assert.ok(frame.includes('Welcome to DevTeam'), 'Expected EmptyState welcome text');
     assert.ok(frame.includes('Press [n] to create a new branch'), 'Expected create-branch hint');
