@@ -1,6 +1,6 @@
 {
   "name": "@agent-era/devteam",
-  "version": "1.0.7",
+  "version": "1.1.2",
   "description": "DevTeam: Git/Tmux development workflow TUI (Node + Ink)",
   "bin": {
     "devteam": "dist/bin/devteam.js"
@@ -10,7 +10,7 @@
     "node": ">=18"
   },
   "scripts": {
-    "build": "rm -rf dist && tsc -p .",
+    "build": "rm -rf dist && tsc -p . && chmod +x dist/bin/devteam.js",
     "typecheck": "npm install && tsc -p tsconfig.test.json",
     "start": "node dist/cli.js",
     "cli": "node dist/bin/devteam.js",
@@ -47,7 +47,8 @@
     "dist-tests",
     "scripts",
     "README.md",
-    "CLAUDE.md"
+    "CLAUDE.md",
+    "CHANGELOG.md"
   ],
   "dependencies": {
     "@inkjs/ui": "^2.0.0",
