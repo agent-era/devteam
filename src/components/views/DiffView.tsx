@@ -1036,7 +1036,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       if (!cache.has(fileName)) cache.set(fileName, getLanguageFromFileName(fileName));
       return cache.get(fileName)!;
     };
-  }, [lines, sideBySideLines]);
+  }, []);
 
   // Create unsubmitted comments dialog if needed - render it instead of the main view when active
   if (showUnsubmittedCommentsDialog) {
@@ -1185,9 +1185,9 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                 ) : (
                   <Text
                     color={bodyColor}
-                    dimColor={unifiedLine.type === 'context'}
+                    dimColor={unifiedLine.type === 'context' || isHunkHeader}
                     backgroundColor={lineBackground}
-                    bold={isCurrentLine || unifiedLine.type === 'header'}
+                    bold={isCurrentLine || isFileHeader}
                     wrap="truncate"
                   >
                     {bodyText}
