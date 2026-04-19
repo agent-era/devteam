@@ -79,7 +79,7 @@ export class TmuxService {
   async getAIStatus(session: string): Promise<{tool: AITool, status: AIStatus}> {
     // Prefer hook-based status when fresh
     const hookStatus = this.hooksService.readStatus(session);
-    if (hookStatus) {
+    if (hookStatus && !this.hooksService.isStale(hookStatus)) {
       const tool = hookStatus.tool as AITool;
       const status = hookStatus.status as AIStatus;
       return {tool, status};

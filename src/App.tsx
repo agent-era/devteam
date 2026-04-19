@@ -116,8 +116,7 @@ function AppContent() {
       return;
     }
     try {
-      const hooks = new HooksService();
-      if (!hooks.isInstalled() && !hooks.isInstallSkipped()) showInstallHooks();
+      if (!installHooksService.current.isInstalled() && !installHooksService.current.isInstallSkipped()) showInstallHooks();
     } catch {}
     // Run once on mount
     // eslint-disable-next-line react-hooks/exhaustive-deps
