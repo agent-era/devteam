@@ -93,7 +93,7 @@ async function loadDiff(worktreePath: string, diffType: 'full' | 'uncommitted' =
           newLineCounter = Math.max(1, newStart);
         }
         const ctx = line.replace(/^@@.*@@ ?/, '');
-        if (ctx) currentFileLines.push({type: 'header', text: `  ▼ ${ctx}`, fileName: currentFileName, headerType: 'hunk'});
+        if (ctx) currentFileLines.push({type: 'header', text: ` ▼ ${ctx}`, fileName: currentFileName, headerType: 'hunk'});
       } else if (line.startsWith('+') && !line.startsWith('+++')) {
         currentFileLines.push({type: 'added', text: line.slice(1), fileName: currentFileName, newLineIndex: newLineCounter});
         newLineCounter++;
@@ -1036,7 +1036,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       if (!cache.has(fileName)) cache.set(fileName, getLanguageFromFileName(fileName));
       return cache.get(fileName)!;
     };
-  }, [lines, sideBySideLines]);
+  }, []);
 
   // Create unsubmitted comments dialog if needed - render it instead of the main view when active
   if (showUnsubmittedCommentsDialog) {
@@ -1116,17 +1116,15 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
           backgroundColor="gray"
           wrap="truncate"
         >
-          {' '}{currentFileHeader}
+          {fitDisplay(` ${currentFileHeader}`, terminalWidth)}
         </Text>
       )}
       {currentHunkHeader && (
         <Text
-          color="cyan"
-          bold
-          backgroundColor="gray"
+          dimColor
           wrap="truncate"
         >
-          {' '}{currentHunkHeader}
+          {fitDisplay(currentHunkHeader, terminalWidth)}
         </Text>
       )}
       <Box flexDirection="column" height={viewportRows}>
@@ -1142,20 +1140,21 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
             const hasComment = !!unifiedLine.fileName && perFileIndex !== undefined && commentStore.hasComment(perFileIndex, unifiedLine.fileName);
             const gutterSymbol = unifiedLine.type === 'added' ? '+ ' : unifiedLine.type === 'removed' ? '- ' : '  ';
             const gutterColor = unifiedLine.type === 'added' || unifiedLine.type === 'removed' ? 'white' : 'gray';
-            const bodyPrefix = hasComment ? '[C] ' : '';
+            const bodyPrefix = unifiedLine.type === 'header' ? '' : (hasComment ? '  [C] ' : '  ');
             const bodyWidth = Math.max(1, terminalWidth - 4);
-            const bodyColor = unifiedLine.type === 'header'
-              ? (unifiedLine.headerType === 'file' ? 'white' : 'cyan')
-              : undefined;
+            const isFileHeader = unifiedLine.type === 'header' && unifiedLine.headerType === 'file';
+            const isHunkHeader = unifiedLine.type === 'header' && unifiedLine.headerType === 'hunk';
+            const bodyColor = isFileHeader ? 'white' : undefined;
             const useSyntax = (unifiedLine.type === 'added' || unifiedLine.type === 'removed') && !isCurrentLine;
             const lineTint = useSyntax ? (unifiedLine.type === 'added' ? 'green' : 'red') : undefined;
+            const lineBackground = isFileHeader ? (rowBackground ?? 'gray') : (rowBackground ?? lineTint);
             const rawBody = `${bodyPrefix}${unifiedLine.text || ' '}`;
 
             if (isWrap) {
               const segments = LineWrapper.wrapLine(rawBody, bodyWidth);
               return segments.map((seg, segIdx) => (
                 <Box key={`line-${actualLineIndex}-${segIdx}`} flexDirection="row" height={1} flexShrink={0}>
-                  <Text color={gutterColor} backgroundColor={rowBackground ?? lineTint} bold={isCurrentLine}>
+                  <Text color={gutterColor} backgroundColor={lineBackground} bold={isCurrentLine}>
                     {segIdx === 0 ? gutterSymbol : '  '}
                   </Text>
                   {useSyntax ? (
@@ -1163,9 +1162,9 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                   ) : (
                     <Text
                       color={bodyColor}
-                      dimColor={unifiedLine.type === 'context'}
-                      backgroundColor={rowBackground ?? lineTint}
-                      bold={isCurrentLine || unifiedLine.type === 'header'}
+                      dimColor={unifiedLine.type === 'context' || isHunkHeader}
+                      backgroundColor={lineBackground}
+                      bold={isCurrentLine || isFileHeader}
                       wrap="truncate"
                     >
                       {padEndDisplay(seg, bodyWidth)}
@@ -1178,7 +1177,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
             const bodyText = fitDisplay(rawBody, bodyWidth);
             return [(
               <Box key={`line-${actualLineIndex}`} flexDirection="row" height={1} flexShrink={0}>
-                <Text color={gutterColor} backgroundColor={rowBackground ?? lineTint} bold={isCurrentLine}>
+                <Text color={gutterColor} backgroundColor={lineBackground} bold={isCurrentLine}>
                   {gutterSymbol}
                 </Text>
                 {useSyntax ? (
@@ -1186,9 +1185,9 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                 ) : (
                   <Text
                     color={bodyColor}
-                    dimColor={unifiedLine.type === 'context'}
-                    backgroundColor={rowBackground ?? lineTint}
-                    bold={isCurrentLine || unifiedLine.type === 'header'}
+                    dimColor={unifiedLine.type === 'context' || isHunkHeader}
+                    backgroundColor={lineBackground}
+                    bold={isCurrentLine || isFileHeader}
                     wrap="truncate"
                   >
                     {bodyText}
@@ -1207,7 +1206,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
           const formatPaneSegments = (
             pane: SideBySideLine['left'] | SideBySideLine['right'],
             prefix: string
-          ): {segments: string[]; color?: string; dimColor?: boolean; bold?: boolean; useSyntax?: boolean; language?: string} => {
+          ): {segments: string[]; color?: string; dimColor?: boolean; bold?: boolean; useSyntax?: boolean; language?: string; backgroundColor?: string} => {
             if (!pane) {
               return {segments: [padEndDisplay('', paneWidth)], dimColor: true};
             }
@@ -1220,7 +1219,9 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
             const paddedSegs = segs.map(s => padEndDisplay(s, paneWidth));
 
             if (pane.type === 'header') {
-              return {segments: paddedSegs, color: pane.headerType === 'file' ? 'white' : 'cyan', bold: true};
+              return pane.headerType === 'file'
+                ? {segments: paddedSegs, color: 'white', bold: true, backgroundColor: 'gray'}
+                : {segments: paddedSegs, dimColor: true};
             }
             if (pane.type === 'context' || pane.type === 'empty') {
               return {segments: paddedSegs, dimColor: true, bold: isCurrentLine};
@@ -1228,8 +1229,9 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
             return {segments: paddedSegs, useSyntax: !isCurrentLine, language: languageCache(pane.fileName), bold: isCurrentLine};
           };
 
-          const leftPane = formatPaneSegments(sideBySideLine.left, hasComment ? '[C] ' : ' ');
-          const rightPane = formatPaneSegments(sideBySideLine.right, ' ');
+          const isHeaderLine = sideBySideLine.left?.type === 'header' || sideBySideLine.right?.type === 'header';
+          const leftPane = formatPaneSegments(sideBySideLine.left, isHeaderLine ? ' ' : (hasComment ? '  [C] ' : '  '));
+          const rightPane = formatPaneSegments(sideBySideLine.right, isHeaderLine ? ' ' : '  ');
           const numRows = Math.max(leftPane.segments.length, rightPane.segments.length);
           const emptyLeft = padEndDisplay('', paneWidth);
           const emptyRight = padEndDisplay('', paneWidth);
@@ -1242,7 +1244,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                 <Text
                   color={leftPane.color}
                   dimColor={leftPane.dimColor}
-                  backgroundColor={rowBackground}
+                  backgroundColor={rowBackground ?? leftPane.backgroundColor}
                   bold={leftPane.bold}
                   wrap="truncate"
                 >
@@ -1255,7 +1257,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
                 <Text
                   color={rightPane.color}
                   dimColor={rightPane.dimColor}
-                  backgroundColor={rowBackground}
+                  backgroundColor={rowBackground ?? rightPane.backgroundColor}
                   bold={rightPane.bold}
                   wrap="truncate"
                 >
