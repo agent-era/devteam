@@ -1,0 +1,40 @@
+# Settings and AI Editing
+
+## Goal
+
+Let users generate or modify the per-project `.devteam/config.json` using an AI agent, without leaving the CLI.
+
+## User path
+
+1. Press `S` (capital) on a worktree row, or access settings from the info dialog.
+2. UIContext transitions to `settings` mode with `settingsProject` set.
+3. `SettingsDialog` shows current config content (read via `WorktreeCore.readConfigContent()`).
+4. User chooses:
+   - **Generate** — AI creates a new config from scratch
+   - **Edit** — User types instructions; AI edits the existing config
+5. `WorktreeCore.generateConfigWithAI()` or `editConfigWithAI()` is called:
+   - Opens a temporary tmux session
+   - Sends a prompt to the AI agent
+   - Waits for the agent to write the file and exit
+   - Closes the session
+6. UIContext stores the result in `settingsAIResult` (`{ project, success, content, error }`).
+7. The result is shown in the settings dialog or as a notification.
+
+## Re-apply files
+
+After the AI edits config, the user can press **Re-apply** to copy the updated files from the main worktree into all feature worktrees. This is useful when `CLAUDE.md` or other shared files were also updated.
+
+## settingsAIResult persistence
+
+`settingsAIResult` is not cleared by `resetUIState()`. This allows the AI to finish its work even if the user navigates away from the settings dialog. The result is surfaced the next time the settings dialog is opened.
+
+## Timeout
+
+AI editing has a 5-minute timeout. If the agent session does not complete within that window, the operation is marked as failed and the result reflects the error.
+
+## Modules
+
+- `src/components/dialogs/SettingsDialog.tsx` — UI
+- `src/cores/WorktreeCore.ts` — `readConfigContent()`, `generateConfigWithAI()`, `editConfigWithAI()`, `applyConfig()`
+- `src/services/AIToolService.ts` — tool detection
+- `src/contexts/UIContext.tsx` — `beginSettingsAI()`, `finishSettingsAI()`, `clearSettingsAIResult()`
