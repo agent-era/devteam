@@ -78,7 +78,7 @@ export default function MainView({
     // Clamp to the measured page size to avoid rendering more rows than fit
     return worktrees.slice(start, start + measuredPageSize);
   }, [worktrees, page, measuredPageSize]);
-  
+
   const getRowKey = useCallback((worktree: WorktreeInfo, index: number) => 
     getWorktreeKey(worktree, index), []
   );
