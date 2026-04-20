@@ -1,8 +1,7 @@
-import React, {createContext, useContext, useState, ReactNode} from 'react';
+import React, {createContext, useContext, useState, useCallback, ReactNode} from 'react';
 import {WorktreeInfo} from '../models.js';
 import type {AITool} from '../models.js';
 import type {ProposalCandidate} from '../services/TrackerService.js';
-import {setLastTrackerProject} from '../shared/utils/lastTrackerProject.js';
 
 
 type UIMode = 'list' | 'create' | 'confirmArchive' | 'help' |
@@ -57,6 +56,8 @@ interface UIContextType {
   showTracker: (project: {name: string; path: string}) => void;
   showTrackerItem: (slug: string) => void;
   showTrackerStages: () => void;
+  getTrackerSelection: (projectName: string) => string | undefined;
+  setTrackerSelection: (projectName: string, slug: string) => void;
   showProposals: () => void;
   startProposalGeneration: () => void;
   finishProposalGeneration: (items: ProposalCandidate[] | null, error?: string) => void;
@@ -98,6 +99,7 @@ export function UIProvider({children}: UIProviderProps) {
   const [settingsAILoadingProject, setSettingsAILoadingProject] = useState<string | null>(null);
   const [trackerProject, setTrackerProject] = useState<{name: string; path: string} | null>(null);
   const [trackerItemSlug, setTrackerItemSlug] = useState<string | null>(null);
+  const [trackerSelectionByProject, setTrackerSelectionBySlug] = useState<Record<string, string>>({});
   const [proposalItems, setProposalItems] = useState<ProposalCandidate[] | null>(null);
   const [proposalGenerating, setProposalGenerating] = useState(false);
   const [proposalError, setProposalError] = useState<string | null>(null);
@@ -118,7 +120,9 @@ export function UIProvider({children}: UIProviderProps) {
     setPendingWorktree(null);
     setInfo(null);
     setSettingsProject(null);
-    setTrackerProject(null);
+    // trackerProject intentionally preserved so `t` → list → `t` returns to the
+    // same kanban the user was on. All tracker screens also gate on mode, so a
+    // non-null trackerProject while mode='list' is harmless.
     setTrackerItemSlug(null);
     setArchiveReturn(null);
     setDiffReturn(null);
@@ -228,9 +232,19 @@ export function UIProvider({children}: UIProviderProps) {
     }
     setMode('tracker');
     setTrackerProject(project);
-    setLastTrackerProject(project.name);
+    // Persisting the "last project" only happens at app launch — see App.tsx. Writing
+    // here would overwrite it on every mid-session switch.
     setTrackerItemSlug(null);
   };
+
+  const getTrackerSelection = useCallback(
+    (projectName: string): string | undefined => trackerSelectionByProject[projectName],
+    [trackerSelectionByProject],
+  );
+
+  const setTrackerSelection = useCallback((projectName: string, slug: string) => {
+    setTrackerSelectionBySlug(prev => (prev[projectName] === slug ? prev : {...prev, [projectName]: slug}));
+  }, []);
 
   const showTrackerItem = (slug: string) => {
     setMode('trackerItem');
@@ -315,6 +329,8 @@ export function UIProvider({children}: UIProviderProps) {
     showTracker,
     showTrackerItem,
     showTrackerStages,
+    getTrackerSelection,
+    setTrackerSelection,
     showProposals,
     startProposalGeneration,
     finishProposalGeneration,

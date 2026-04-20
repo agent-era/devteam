@@ -14,7 +14,7 @@ import ProgressDialog from './components/dialogs/ProgressDialog.js';
 import AIToolDialog from './components/dialogs/AIToolDialog.js';
 import NoProjectsDialog from './components/dialogs/NoProjectsDialog.js';
 import LoadingScreen from './components/common/LoadingScreen.js';
-import {getLastTrackerProject} from './shared/utils/lastTrackerProject.js';
+import {getLastTrackerProject, setLastTrackerProject} from './shared/utils/lastTrackerProject.js';
 
 import WorktreeListScreen from './screens/WorktreeListScreen.js';
 import CreateFeatureScreen from './screens/CreateFeatureScreen.js';
@@ -131,6 +131,9 @@ function AppContent() {
       }
       const lastName = getLastTrackerProject();
       const project = (lastName && projects.find(p => p.name === lastName)) || projects[0];
+      // Writing the "last project" is intentionally confined to the launch path.
+      // Mid-session project switches must not overwrite it.
+      setLastTrackerProject(project.name);
       showTracker(project);
     } catch {
       showNoProjectsDialog();
@@ -201,6 +204,12 @@ function AppContent() {
   };
 
   const handleTracker = () => {
+    // Navigating to the tracker must not silently change the active project. If we
+    // already have one, just reopen that board so kanban selection survives.
+    if (trackerProject) {
+      showTracker(trackerProject);
+      return;
+    }
     const projects = discoverProjects();
     if (!projects.length) {
       showNoProjectsDialog();
