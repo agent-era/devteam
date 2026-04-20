@@ -1,7 +1,7 @@
 ---
 title: Split DiffView.tsx (1302 lines) into focused subcomponents
 slug: split-diffview-tsx-1
-updated: 2026-04-19
+updated: 2026-04-20
 ---
 
 ## What
@@ -20,7 +20,6 @@ Split it into focused subcomponents and modules so each has a single responsibil
 ## User stories
 
 - As a maintainer of devteam, I want `DiffView.tsx` split into smaller modules so that I can find and change diff behaviour without scanning a 1300-line file.
-- As a maintainer adding diff features (syntax highlighting, gutter colours, etc.), I want clear extension points so that new features land in the right place instead of growing the monolith.
 - As a contributor writing tests, I want pure diff utilities to live in their own modules so that I can unit-test them without importing a React component and its dependency tree.
 
 ## Summary

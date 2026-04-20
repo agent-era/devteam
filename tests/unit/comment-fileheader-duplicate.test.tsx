@@ -1,5 +1,5 @@
 import {describe, test, expect} from '@jest/globals';
-import {formatCommentsAsPrompt} from '../../src/components/views/DiffView.js';
+import {formatCommentsAsPrompt} from '../../src/shared/utils/diff/formatCommentsAsPrompt.js';
 
 describe('File-level comment formatting', () => {
   test('does not include redundant filename line content for file header comments', () => {
