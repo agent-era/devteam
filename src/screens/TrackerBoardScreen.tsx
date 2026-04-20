@@ -36,9 +36,35 @@ const MIN_COLUMN_WIDTH = 20;
 const MAX_COLUMN_WIDTH = 50;
 const PLAN_COLOR = 'blue';
 const IMPL_COLOR = 'magenta';
-// Each item renders as 3 rows (slug + secondary + marginBottom). Used for per-column
-// scroll math so the column box stays within colHeight regardless of item count.
-const ROWS_PER_ITEM = 3;
+// Each item renders as up to 4 rows: slug + 2 secondary lines + marginBottom.
+// Reserved as a fixed slot so mixed short/long descriptions don't overlap
+// during scroll. Short descriptions just leave the second line blank.
+const ROWS_PER_ITEM = 4;
+const SECONDARY_MAX_LINES = 2;
+
+// Word-wrap `text` onto at most `maxLines` of width `width`. Breaks on spaces
+// when possible, falls back to character boundaries. Appends '…' to the last
+// line when content was truncated. Returns an array of 0–maxLines strings.
+function wrapToLines(text: string, width: number, maxLines: number): string[] {
+  if (!text || width <= 0 || maxLines <= 0) return [];
+  const out: string[] = [];
+  let remaining = text.trim();
+  while (remaining && out.length < maxLines) {
+    if (remaining.length <= width) { out.push(remaining); break; }
+    let breakAt = remaining.lastIndexOf(' ', width);
+    if (breakAt <= 0) breakAt = width;
+    out.push(remaining.slice(0, breakAt).trimEnd());
+    remaining = remaining.slice(breakAt).trimStart();
+  }
+  if (remaining && out.length > 0) {
+    const last = out[out.length - 1];
+    const fitsEllipsis = last.length + 1 <= width;
+    out[out.length - 1] = fitsEllipsis
+      ? last + '…'
+      : last.slice(0, Math.max(0, width - 1)) + '…';
+  }
+  return out;
+}
 // 2 borders + 1 header. Items area starts on the row directly below the title — no
 // inter-row gap so we get one extra item per column.
 const COLUMN_CHROME_ROWS = 3;
@@ -642,16 +668,30 @@ export default function TrackerBoardScreen({
                     {slug}
                   </Text>
                 </Box>
-                {/* Status / secondary text */}
-                {isWaiting ? (
-                  <Text color="yellow" bold wrap="truncate">{`    ${truncateDisplay(waitingLabel, secMax)}`}</Text>
-                ) : isWorking ? (
-                  <Text color="cyan" wrap="truncate">{`    ${truncateDisplay(itemStatus?.brief_description || 'running', secMax)}`}</Text>
-                ) : hasSession ? (
-                  <Text dimColor wrap="truncate">{`    ${truncateDisplay(itemStatus?.brief_description || 'session idle', secMax)}`}</Text>
-                ) : secondary ? (
-                  <Text dimColor wrap="truncate">{`    ${truncateDisplay(secondary, secMax)}`}</Text>
-                ) : null}
+                {/* Status / secondary text — wraps to SECONDARY_MAX_LINES so
+                    long brief_descriptions from the agent stay readable. */}
+                {(() => {
+                  const text =
+                    isWaiting ? waitingLabel
+                    : isWorking ? (itemStatus?.brief_description || 'running')
+                    : hasSession ? (itemStatus?.brief_description || 'session idle')
+                    : secondary || '';
+                  if (!text) return null;
+                  const lines = wrapToLines(text, secMax, SECONDARY_MAX_LINES);
+                  const color = isWaiting ? 'yellow' : isWorking ? 'cyan' : undefined;
+                  const dim = !isWaiting && !isWorking;
+                  return lines.map((line, lineIdx) => (
+                    <Text
+                      key={lineIdx}
+                      color={color}
+                      bold={isWaiting}
+                      dimColor={dim}
+                      wrap="truncate"
+                    >
+                      {`    ${line}`}
+                    </Text>
+                  ));
+                })()}
               </Box>
             );
           })}
