@@ -319,7 +319,7 @@ export default function TrackerBoardScreen({
     // `t` toggles between tracker and worktree list. Symmetric with `t` on the
     // worktree list which routes to the tracker.
     onTracker: showList,
-    onSettings: () => showSettings(project),
+    onSettings: () => showSettings(project, {onReturn: backToTracker}),
     onQuit: onBack,
   }, {enabled: !inputActive});
 

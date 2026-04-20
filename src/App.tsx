@@ -80,6 +80,8 @@ function AppContent() {
     pendingWorktreeReturn,
     archiveReturn,
     diffReturn,
+    settingsReturn,
+    infoReturn,
     info,
 
     showList,
@@ -421,13 +423,14 @@ function AppContent() {
   }
 
   if (!content && mode === 'info' && info) {
+    const infoBack = infoReturn ?? showList;
     content = (
       <Box flexGrow={1} alignItems="center" justifyContent="center">
         <InfoDialog
           title={info.title}
           message={info.message}
           onClose={() => {
-            try { info.onClose && info.onClose(); } finally { showList(); }
+            try { info.onClose && info.onClose(); } finally { infoBack(); }
           }}
         />
       </Box>
@@ -487,7 +490,7 @@ function AppContent() {
           onApply={(proposed: string) => applyProposedConfig(settingsProject, proposed)}
           onReapplyFiles={() => reapplyFiles(settingsProject)}
           onDiscardResult={() => clearSettingsAIResult()}
-          onCancel={showList}
+          onCancel={settingsReturn ?? showList}
         />
       </Box>
     );
