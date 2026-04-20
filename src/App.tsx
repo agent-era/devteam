@@ -235,16 +235,25 @@ function AppContent() {
     return tracker.buildPlanningPrompt(item, stageConf, itemDirOverride);
   };
 
+  const ensureItemWorktree = async (
+    project: {name: string; path: string},
+    item: TrackerItem,
+  ) => {
+    let worktree = worktrees.find(wt => wt.project === project.name && wt.feature === item.slug) || null;
+    if (!worktree) worktree = await recreateImplementWorktree(project.name, item.slug);
+    if (!worktree) return null;
+    tracker.ensureItemFiles(project.path, item.slug, worktree.path, item);
+    return worktree;
+  };
+
   const prepareItemSession = async (
     project: {name: string; path: string},
     item: TrackerItem,
     stage: TrackerStage,
   ) => {
-    let worktree = worktrees.find(wt => wt.project === project.name && wt.feature === item.slug) || null;
-    if (!worktree) worktree = await recreateImplementWorktree(project.name, item.slug);
+    const worktree = await ensureItemWorktree(project, item);
     if (!worktree) return null;
     const worktreeItemDir = path.join(worktree.path, 'tracker', 'items', item.slug);
-    tracker.ensureItemFiles(project.path, item.slug, worktree.path, item);
     return {worktree, prompt: buildPromptForItem(item, stage, worktreeItemDir)};
   };
 
@@ -275,10 +284,20 @@ function AppContent() {
     await launchSessionBackground(prepared.worktree, aiTool, prepared.prompt);
   };
 
-  const handleCurrentStageWork = (item: TrackerItem) => {
+  const handleAttachSession = (item: TrackerItem) => {
     if (!trackerProject) return;
     const project = trackerProject;
-    runWithLoading(async () => { await launchSessionForItem(project, item, item.stage); }, {returnToList: false});
+    runWithLoading(async () => {
+      const worktree = await ensureItemWorktree(project, item);
+      if (!worktree) { showTracker(project); return; }
+      const needsSelection = await needsToolSelection(worktree);
+      if (needsSelection) {
+        showAIToolSelection(worktree, {onReturn: () => showTracker(project)});
+      } else {
+        await attachSession(worktree);
+        showTracker(project);
+      }
+    }, {returnToList: false});
   };
 
   const handleStageAction = (item: TrackerItem) => {
@@ -582,7 +601,7 @@ function AppContent() {
         <TrackerItemScreen
           item={trackerItem}
           onBack={() => showTracker(trackerProject)}
-          onCurrentStageWork={() => handleCurrentStageWork(trackerItem)}
+          onAttachSession={() => handleAttachSession(trackerItem)}
           onStageAction={() => handleStageAction(trackerItem)}
         />
       );
