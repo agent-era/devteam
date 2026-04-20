@@ -15,6 +15,7 @@ interface TrackerBoardScreenProps {
   projectPath: string;
   onBack: () => void;
   onOpenItem: (item: TrackerItem) => void;
+  onLaunchItem?: (item: TrackerItem) => void;
   onCustomizeStages?: () => void;
 }
 
@@ -43,6 +44,7 @@ export default function TrackerBoardScreen({
   projectPath,
   onBack,
   onOpenItem,
+  onLaunchItem,
   onCustomizeStages,
 }: TrackerBoardScreenProps) {
   const service = React.useMemo(() => new TrackerService(), []);
@@ -267,11 +269,17 @@ export default function TrackerBoardScreen({
 
     const existingSlugs = board.columns.flatMap(col => col.items.map(it => it.slug));
     void service.deriveSlug(title, existingSlugs).then(finalSlug => {
-      const renamed = finalSlug !== tempSlug && service.renameItem(projectPath, tempSlug, finalSlug, title);
+      const effectiveSlug = (finalSlug !== tempSlug && service.renameItem(projectPath, tempSlug, finalSlug, title))
+        ? finalSlug : tempSlug;
       setPendingCreations(prev => { const next = new Set(prev); next.delete(tempSlug); return next; });
-      if (renamed) reloadBoard();
+      const freshBoard = service.loadBoard(project, projectPath);
+      setBoard(freshBoard);
+      if (onLaunchItem) {
+        const item = freshBoard.columns.flatMap(c => c.items).find(i => i.slug === effectiveSlug);
+        if (item) onLaunchItem(item);
+      }
     });
-  }, [createTitle, service, projectPath, currentColumn, reloadBoard, board]);
+  }, [createTitle, service, projectPath, project, currentColumn, reloadBoard, board, onLaunchItem]);
 
   const handleProposalSubmit = React.useCallback(() => {
     if (proposalGenerating) return;

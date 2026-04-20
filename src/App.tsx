@@ -530,6 +530,7 @@ function AppContent() {
         projectPath={trackerProject.path}
         onBack={requestExit}
         onOpenItem={(item) => showTrackerItem(item.slug)}
+        onLaunchItem={handleCurrentStageWork}
         onCustomizeStages={showTrackerStages}
       />
     );
