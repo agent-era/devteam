@@ -393,7 +393,7 @@ export class TrackerService {
     return STAGE_ORDER[idx - 1];
   }
 
-  createItem(projectPath: string, title: string, stage: TrackerStage = 'discovery', explicitSlug?: string): void {
+  createItem(projectPath: string, title: string, stage: TrackerStage = 'discovery', explicitSlug?: string, body?: string): void {
     const slug = explicitSlug || this.slugify(title);
     // Reject anything that isn't a plain slug — slugs are interpolated into file
     // paths, so a stray '.' or '/' would let a crafted title escape the tracker dir.
@@ -417,11 +417,14 @@ export class TrackerService {
     // before a worktree session is launched. ensureItemFiles will migrate this later.
     const mainItemDir = path.join(projectPath, 'tracker', 'items', slug);
     ensureDirectory(mainItemDir);
-    const reqPath = path.join(mainItemDir, 'requirements.md');
-    if (!fs.existsSync(reqPath)) {
-      const today = new Date().toISOString().slice(0, 10);
-      fs.writeFileSync(reqPath, `---\ntitle: ${title}\nslug: ${slug}\nupdated: ${today}\n---\n\n${title}\n`);
-    }
+    this.writeRequirementsStub(path.join(mainItemDir, 'requirements.md'), title, slug, body || title);
+  }
+
+  private writeRequirementsStub(reqPath: string, title: string, slug: string, body: string): boolean {
+    if (fs.existsSync(reqPath)) return false;
+    const today = new Date().toISOString().slice(0, 10);
+    fs.writeFileSync(reqPath, `---\ntitle: ${title}\nslug: ${slug}\nupdated: ${today}\n---\n\n${body}\n`);
+    return true;
   }
 
   async deriveSlug(title: string, existingSlugs: string[]): Promise<string> {
@@ -537,10 +540,8 @@ export class TrackerService {
     }
 
     // 2) If we still have no requirements.md, write a fresh stub.
-    if (!fs.existsSync(reqPath)) {
-      const title = item?.title || slug;
-      const today = new Date().toISOString().slice(0, 10);
-      fs.writeFileSync(reqPath, `---\ntitle: ${title}\nslug: ${slug}\nupdated: ${today}\n---\n\n${title}\n`);
+    const stubTitle = item?.title || slug;
+    if (this.writeRequirementsStub(reqPath, stubTitle, slug, stubTitle)) {
       wroteAnything = true;
     }
 

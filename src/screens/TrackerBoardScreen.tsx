@@ -6,18 +6,27 @@ import {useTerminalDimensions} from '../hooks/useTerminalDimensions.js';
 import {useUIContext} from '../contexts/UIContext.js';
 import {useWorktreeContext} from '../contexts/WorktreeContext.js';
 import {WorktreeInfo} from '../models.js';
-import type {AIStatus} from '../models.js';
+import type {AIStatus, AITool} from '../models.js';
 import {truncateDisplay} from '../shared/utils/formatting.js';
+import {startIntervalIfEnabled} from '../shared/utils/intervals.js';
+import {VISIBLE_STATUS_REFRESH_DURATION} from '../constants.js';
 import TrackerProjectPickerDialog from '../components/dialogs/TrackerProjectPickerDialog.js';
+import AIToolDialog from '../components/dialogs/AIToolDialog.js';
 
 interface TrackerBoardScreenProps {
   project: string;
   projectPath: string;
   onBack: () => void;
   onOpenItem: (item: TrackerItem) => void;
-  onLaunchItem?: (item: TrackerItem) => void;
+  onLaunchItemBackground?: (item: TrackerItem, tool: AITool) => Promise<void>;
   onCustomizeStages?: () => void;
 }
+
+type PendingNew = {
+  title: string;
+  stage: TrackerStage;
+  columnIndex: number;
+};
 
 const SPINNER_CHARS = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 
@@ -44,7 +53,7 @@ export default function TrackerBoardScreen({
   projectPath,
   onBack,
   onOpenItem,
-  onLaunchItem,
+  onLaunchItemBackground,
   onCustomizeStages,
 }: TrackerBoardScreenProps) {
   const service = React.useMemo(() => new TrackerService(), []);
@@ -53,8 +62,9 @@ export default function TrackerBoardScreen({
   const [selectedRowByColumn, setSelectedRowByColumn] = React.useState<Record<number, number>>({});
   const [createMode, setCreateMode] = React.useState(false);
   const [createTitle, setCreateTitle] = React.useState('');
-  const [pendingCreations, setPendingCreations] = React.useState<Set<string>>(new Set());
+  const [pendingNew, setPendingNew] = React.useState<PendingNew | null>(null);
   const [spinnerFrame, setSpinnerFrame] = React.useState(0);
+  const [toolPickPending, setToolPickPending] = React.useState<PendingNew | null>(null);
   const [proposalInputMode, setProposalInputMode] = React.useState(false);
   const [proposalPrompt, setProposalPrompt] = React.useState('');
   const [pickerMode, setPickerMode] = React.useState(false);
@@ -80,7 +90,10 @@ export default function TrackerBoardScreen({
     attachShellSession,
     attachRunSession,
     discoverProjects,
+    getAvailableAITools,
+    refreshProjectWorktrees,
   } = useWorktreeContext();
+  const availableTools = React.useMemo(() => getAvailableAITools(), [getAvailableAITools]);
   const {columns: termCols, rows: termRows} = useTerminalDimensions();
 
   // Chrome per row: outer paddingX (2) + group separator (2) + n marginRights.
@@ -166,11 +179,20 @@ export default function TrackerBoardScreen({
     }
   }, [project, projectPath, service]);
 
+  const hasPendingNew = pendingNew !== null;
   React.useEffect(() => {
-    if (pendingCreations.size === 0) return;
+    if (!hasPendingNew) return;
     const id = setInterval(() => setSpinnerFrame(f => (f + 1) % SPINNER_CHARS.length), 80);
     return () => clearInterval(id);
-  }, [pendingCreations.size]);
+  }, [hasPendingNew]);
+
+  // The top-level 60s refresh is too slow to pick up ai_status transitions after
+  // a new item's session boots. Poll just this project's worktrees every 2s.
+  React.useEffect(() => {
+    return startIntervalIfEnabled(() => {
+      refreshProjectWorktrees(project).catch(() => {});
+    }, VISIBLE_STATUS_REFRESH_DURATION);
+  }, [project, refreshProjectWorktrees]);
 
   const reloadBoard = React.useCallback(() => {
     setBoard(service.loadBoard(project, projectPath));
@@ -253,33 +275,48 @@ export default function TrackerBoardScreen({
     });
   }, [currentItem, getWorktreeForItem, showArchiveConfirmation, backToTracker]);
 
+  const startDerivation = React.useCallback((pending: PendingNew, tool: AITool | null) => {
+    setPendingNew(pending);
+    const existingSlugs = board.columns.flatMap(col => col.items.map(it => it.slug));
+    void service.deriveSlug(pending.title, existingSlugs).then(slug => {
+      setPendingNew(null);
+      service.createItem(projectPath, pending.title, pending.stage, slug);
+      const freshBoard = service.loadBoard(project, projectPath);
+      setBoard(freshBoard);
+      if (!onLaunchItemBackground || !tool) return;
+      const item = freshBoard.columns.flatMap(c => c.items).find(i => i.slug === slug);
+      if (!item) return;
+      void onLaunchItemBackground(item, tool);
+    });
+  }, [board, service, projectPath, project, onLaunchItemBackground]);
+
   const handleCreateSubmit = React.useCallback(() => {
     const title = createTitle.trim();
     setCreateMode(false);
     setCreateTitle('');
-    if (!title) return;
+    if (!title || !service.slugify(title)) return;
 
     const stage = (currentColumn?.id || 'backlog') as TrackerStage;
-    const tempSlug = service.slugify(title);
-    if (!tempSlug) return;
+    const pending: PendingNew = {title, stage, columnIndex: selectedColumn};
 
-    service.createItem(projectPath, title, stage, tempSlug);
-    reloadBoard();
-    setPendingCreations(prev => new Set(prev).add(tempSlug));
+    if (onLaunchItemBackground && availableTools.length > 1) {
+      setToolPickPending(pending);
+    } else {
+      const defaultTool: AITool | null = availableTools[0] ?? null;
+      startDerivation(pending, onLaunchItemBackground ? defaultTool : null);
+    }
+  }, [createTitle, service, currentColumn, selectedColumn, availableTools, onLaunchItemBackground, startDerivation]);
 
-    const existingSlugs = board.columns.flatMap(col => col.items.map(it => it.slug));
-    void service.deriveSlug(title, existingSlugs).then(finalSlug => {
-      const effectiveSlug = (finalSlug !== tempSlug && service.renameItem(projectPath, tempSlug, finalSlug, title))
-        ? finalSlug : tempSlug;
-      setPendingCreations(prev => { const next = new Set(prev); next.delete(tempSlug); return next; });
-      const freshBoard = service.loadBoard(project, projectPath);
-      setBoard(freshBoard);
-      if (onLaunchItem) {
-        const item = freshBoard.columns.flatMap(c => c.items).find(i => i.slug === effectiveSlug);
-        if (item) onLaunchItem(item);
-      }
-    });
-  }, [createTitle, service, projectPath, project, currentColumn, reloadBoard, board, onLaunchItem]);
+  const handleToolSelect = React.useCallback((tool: AITool) => {
+    if (!toolPickPending) return;
+    const pending = toolPickPending;
+    setToolPickPending(null);
+    startDerivation(pending, tool);
+  }, [toolPickPending, startDerivation]);
+
+  const handleToolCancel = React.useCallback(() => {
+    setToolPickPending(null);
+  }, []);
 
   const handleProposalSubmit = React.useCallback(() => {
     if (proposalGenerating) return;
@@ -316,7 +353,7 @@ export default function TrackerBoardScreen({
     else if (!key.ctrl && !key.meta && input && input.length === 1) { setProposalPrompt(prev => prev + input); }
   });
 
-  const inputActive = createMode || proposalInputMode || pickerMode;
+  const inputActive = createMode || proposalInputMode || pickerMode || !!toolPickPending;
   const currentItemSession = currentItem ? getSessionForItem(currentItem) : null;
   const currentItemWorktree = currentItem ? getWorktreeForItem(currentItem) : null;
   const hasWorktree = !!currentItemWorktree;
@@ -373,6 +410,18 @@ export default function TrackerBoardScreen({
           currentProjectName={project}
           onCancel={() => setPickerMode(false)}
           onSelect={(p) => { setPickerMode(false); showTracker(p); }}
+        />
+      </Box>
+    );
+  }
+
+  if (toolPickPending) {
+    return (
+      <Box flexDirection="column" flexGrow={1} alignItems="center" justifyContent="center">
+        <AIToolDialog
+          availableTools={availableTools}
+          onSelect={handleToolSelect}
+          onCancel={handleToolCancel}
         />
       </Box>
     );
@@ -483,9 +532,8 @@ export default function TrackerBoardScreen({
             const isWorking = aiStatus === 'working' || aiStatus === 'active';
             const hasSession = !!sessWt;
 
-            const isPending = pendingCreations.has(item.slug);
-            const statusGlyph = isPending ? SPINNER_CHARS[spinnerFrame] : isWaiting ? '!' : isWorking ? '⟳' : hasSession ? '◆' : ' ';
-            const statusColor = isPending ? 'yellow' : isWaiting ? 'yellow' : isWorking ? 'cyan' : hasSession ? 'gray' : undefined;
+            const statusGlyph = isWaiting ? '!' : isWorking ? '⟳' : hasSession ? '◆' : ' ';
+            const statusColor = isWaiting ? 'yellow' : isWorking ? 'cyan' : hasSession ? 'gray' : undefined;
 
             // Slug row eats: 2 (border) + 2 (paddingX) + 2 (cursor) + 2 (status glyph) = 8 chars
             const slug = truncateDisplay(item.slug, Math.max(4, colWidth - 8));
@@ -509,9 +557,7 @@ export default function TrackerBoardScreen({
                   </Text>
                 </Box>
                 {/* Status / secondary text */}
-                {isPending ? (
-                  <Text color="yellow" wrap="truncate">{`    ${truncateDisplay('deriving slug…', secMax)}`}</Text>
-                ) : isWaiting ? (
+                {isWaiting ? (
                   <Text color="yellow" bold wrap="truncate">{`    ${truncateDisplay('waiting for you', secMax)}`}</Text>
                 ) : isWorking ? (
                   <Text color="cyan" wrap="truncate">{`    ${truncateDisplay('running', secMax)}`}</Text>
@@ -528,7 +574,18 @@ export default function TrackerBoardScreen({
             <Text dimColor>{`  ↓ ${moreBelow} more`}</Text>
           )}
 
-          {total === 0 && !(inputActive && isActiveColumn) && (
+          {pendingNew?.columnIndex === columnIndex && (
+            <Box flexDirection="column" marginBottom={1} flexShrink={0}>
+              <Box>
+                <Text color={accent} bold>{'  '}</Text>
+                <Text color="yellow" bold>{SPINNER_CHARS[spinnerFrame]} </Text>
+                <Text color="yellow" wrap="truncate">{truncateDisplay(pendingNew.title, Math.max(4, colWidth - 8))}</Text>
+              </Box>
+              <Text color="yellow" wrap="truncate">{`    ${truncateDisplay('deriving slug…', Math.max(4, colWidth - 8))}`}</Text>
+            </Box>
+          )}
+
+          {total === 0 && !pendingNew && !(inputActive && isActiveColumn) && (
             <Text dimColor>  (empty)</Text>
           )}
 

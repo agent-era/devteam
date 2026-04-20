@@ -143,6 +143,30 @@ describe('createItem', () => {
     const index = JSON.parse(fs.readFileSync(path.join(tmpDir, 'tracker', 'index.json'), 'utf8'));
     expect(index.implementation.implement).toContain('build-api');
   });
+
+  test('writes provided body to requirements.md instead of title', () => {
+    service.createItem(tmpDir, 'Add auth', 'discovery', undefined, 'Implement OAuth2 login with Google and GitHub providers.');
+    const reqPath = path.join(tmpDir, 'tracker', 'items', 'add-auth', 'requirements.md');
+    const content = fs.readFileSync(reqPath, 'utf8');
+    expect(content).toContain('Implement OAuth2 login with Google and GitHub providers.');
+    expect(content).not.toMatch(/\nAdd auth\n/);
+  });
+
+  test('uses title as body when body param is omitted', () => {
+    service.createItem(tmpDir, 'My Feature', 'discovery');
+    const reqPath = path.join(tmpDir, 'tracker', 'items', 'my-feature', 'requirements.md');
+    const content = fs.readFileSync(reqPath, 'utf8');
+    expect(content).toMatch(/\nMy Feature\n/);
+  });
+
+  test('uses explicit slug when provided alongside body', () => {
+    service.createItem(tmpDir, 'Proposal Title', 'backlog', 'ai-derived-slug', 'Detailed description from proposal.');
+    const reqPath = path.join(tmpDir, 'tracker', 'items', 'ai-derived-slug', 'requirements.md');
+    expect(fs.existsSync(reqPath)).toBe(true);
+    const content = fs.readFileSync(reqPath, 'utf8');
+    expect(content).toContain('Detailed description from proposal.');
+    expect(content).toMatch(/^slug: ai-derived-slug$/m);
+  });
 });
 
 // ─── moveItem ───────────────────────────────────────────────────────────────
