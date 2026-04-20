@@ -56,6 +56,10 @@ Split `src/components/views/DiffView.tsx` from 1302 lines into a focused orchest
 - `npm run build` — succeeds.
 - `npx jest` — **500 tests passed across 63 test suites** (existing 480 + 20 new).
 
+## Cleanup-stage fix
+
+Caught during cleanup review: the first refactor passed `comments.baseCommitHash` into `loadDiff`'s effect dependency list, so the effect fired twice — once with the initial empty string, once with the resolved hash — which triggered two git invocations and two React state updates. Fixed by adding `baseHashReady: boolean` from `useDiffComments`; the diff-loading effect now short-circuits until the hash resolution completes, matching the pre-refactor single-load behaviour.
+
 ## Notes for cleanup
 
 - `getLanguageFromFileName` is still called every render through `languageCache` in the orchestrator; the memoized Map cache is reset only on component mount. If later profiling shows diff file-name hashing is hot, consider hoisting the cache.
