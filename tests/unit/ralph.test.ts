@@ -350,3 +350,75 @@ describe('RalphCore detection + cap + resets', () => {
     expect(entry.slug).toBe('my-slug');
   });
 });
+
+// ─── full end-to-end flow (ac §38) ──────────────────────────────────────────
+
+describe('RalphCore full fake-agent flow', () => {
+  test('waiting → clear → nudge → cap → advance → reset', () => {
+    enableRalph({idleThresholdMs: 60_000, maxNudgesPerStage: 2});
+
+    // Fake agent begins the stage and marks itself waiting on the user.
+    writeStatus('my-slug', {
+      stage: 'requirements',
+      is_waiting_for_user: true,
+      brief_description: 'awaiting approval',
+    });
+
+    const t0 = Date.now();
+    let now = t0;
+    const wt = makeWorktree({ai_status: 'idle'});
+    const {core, tmux} = buildCore({worktrees: [wt], now: () => now});
+
+    // Sample while fresh-waiting — no nudge regardless of how long we wait.
+    core.sampleOnce();
+    now = t0 + 10 * 60_000;
+    core.sampleOnce();
+    expect(tmux.sent.length).toBe(0);
+
+    // User responds; agent clears the waiting flag and keeps working.
+    writeStatus('my-slug', {
+      stage: 'requirements',
+      is_waiting_for_user: false,
+      brief_description: 'drafting section 2',
+    });
+
+    // Idle clock starts now. Advance just past the threshold; nudge fires.
+    now = t0 + 11 * 60_000;
+    core.sampleOnce(); // starts the idle window
+    now = t0 + 13 * 60_000;
+    core.sampleOnce();
+    expect(tmux.sent.length).toBe(1);
+
+    // Another idle window elapses; second nudge fires and hits the cap.
+    now = t0 + 15 * 60_000;
+    core.sampleOnce();
+    now = t0 + 17 * 60_000;
+    core.sampleOnce();
+    expect(tmux.sent.length).toBe(2);
+    let state = core.get().worktrees['proj::my-slug'];
+    expect(state.capped).toBe(true);
+
+    // Further idle time while capped produces no more nudges.
+    now = t0 + 30 * 60_000;
+    core.sampleOnce();
+    expect(tmux.sent.length).toBe(2);
+
+    // Agent advances the stage (or a human does via moveItem, same effect).
+    writeStatus('my-slug', {
+      stage: 'implement',
+      is_waiting_for_user: false,
+      brief_description: 'writing RalphCore',
+    });
+    now = t0 + 31 * 60_000;
+    core.sampleOnce(); // observes stage change, resets cap + counter
+    state = core.get().worktrees['proj::my-slug'];
+    expect(state.capped).toBe(false);
+    expect(state.nudgesThisStage).toBe(0);
+
+    // New idle window; nudge fires cleanly on the new stage.
+    now = t0 + 34 * 60_000;
+    core.sampleOnce();
+    expect(tmux.sent.length).toBe(3);
+    expect(tmux.sent[2].text).toContain('implement');
+  });
+});
