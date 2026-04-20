@@ -324,10 +324,42 @@ describe('defaultStageFileContent renders status + gate protocol', () => {
     expect(content).toContain('is_waiting_for_user');
   });
 
-  test.each(STAGES)('every stage renders Input mode + Gate on advance sections', (stage) => {
+  test.each(STAGES)('every stage renders the Input mode section', (stage) => {
     const content = service.defaultStageFileContent(stage, {}, DEFAULT_WORK_STYLE);
     expect(content).toContain('Input mode:');
-    expect(content).toContain('Gate on advance:');
+  });
+
+  test('non-discovery stages render the generic Gate on advance section', () => {
+    for (const stage of ['requirements', 'implement', 'cleanup'] as const) {
+      const content = service.defaultStageFileContent(stage, {}, DEFAULT_WORK_STYLE);
+      expect(content).toContain('Gate on advance:');
+    }
+  });
+
+  test('discovery does NOT render the generic Gate on advance section (report supersedes)', () => {
+    const content = service.defaultStageFileContent('discovery', {}, DEFAULT_WORK_STYLE);
+    expect(content).not.toContain('Gate on advance:');
+    // Points the reader at the Report setting instead.
+    expect(content).toMatch(/Report/);
+  });
+
+  test('discovery effort + report render the matching body', () => {
+    const skim = service.defaultStageFileContent('discovery', {effort: 'skim'});
+    expect(skim).toMatch(/Skim/);
+    const deep = service.defaultStageFileContent('discovery', {effort: 'deep'});
+    expect(deep).toMatch(/thorough/i);
+    const silent = service.defaultStageFileContent('discovery', {report: 'just_advance'});
+    expect(silent).toMatch(/advance silently/i);
+    const notable = service.defaultStageFileContent('discovery', {report: 'confirm_if_notable'});
+    expect(notable).toMatch(/notable/i);
+    const always = service.defaultStageFileContent('discovery', {report: 'always_confirm'});
+    expect(always).toMatch(/wait for approval/i);
+  });
+
+  test('discovery guide bakes in the trivial-skip + narrow-questions defaults', () => {
+    const content = service.defaultStageFileContent('discovery', {}, DEFAULT_WORK_STYLE);
+    expect(content).toMatch(/Trivial items/i);
+    expect(content).toMatch(/Clarifying questions/i);
   });
 
   test.each([
@@ -350,15 +382,17 @@ describe('defaultStageFileContent renders status + gate protocol', () => {
   });
 
   test('auto_advance also tells the agent to skip review for trivial stages', () => {
-    const content = service.defaultStageFileContent('discovery', {gate_on_advance: 'auto_advance'});
+    // implement (not discovery) — discovery has its own Report setting that
+    // supersedes the common gate_on_advance.
+    const content = service.defaultStageFileContent('implement', {gate_on_advance: 'auto_advance'});
     expect(content).toMatch(/skip the review/i);
   });
 
-  test('legacy gate values are mapped to the new shape', () => {
+  test('legacy gate values are mapped to the new shape (non-discovery stages)', () => {
     // Old configs saying 'none' or 'review_and_advance' both mean auto_advance.
-    const fromNone = service.defaultStageFileContent('discovery', {gate_on_advance: 'none'});
-    const fromReview = service.defaultStageFileContent('discovery', {gate_on_advance: 'review_and_advance'});
-    const fromWait = service.defaultStageFileContent('discovery', {gate_on_advance: 'wait_for_approval'});
+    const fromNone = service.defaultStageFileContent('implement', {gate_on_advance: 'none'});
+    const fromReview = service.defaultStageFileContent('implement', {gate_on_advance: 'review_and_advance'});
+    const fromWait = service.defaultStageFileContent('implement', {gate_on_advance: 'wait_for_approval'});
     expect(fromNone).toMatch(/auto_advance/);
     expect(fromReview).toMatch(/auto_advance/);
     expect(fromWait).toMatch(/require_approval/);
@@ -376,18 +410,15 @@ describe('defaultStageFileContent renders status + gate protocol', () => {
     expect(content).toMatch(/automatically/i);
   });
 
-  test('auto_advance gate references the stage\'s output file for the review', () => {
-    const disc = service.defaultStageFileContent('discovery', {gate_on_advance: 'auto_advance'});
-    expect(disc).toContain('notes.md');
+  test('auto_advance gate references the stage\'s output file for the review (non-discovery)', () => {
     const req = service.defaultStageFileContent('requirements', {gate_on_advance: 'auto_advance'});
     expect(req).toContain('requirements.md');
     const impl = service.defaultStageFileContent('implement', {gate_on_advance: 'auto_advance'});
     expect(impl).toContain('implementation.md');
   });
 
-  test('gate defaults: requirements and cleanup require approval, discovery and implement auto-advance', () => {
-    const disc = service.defaultStageFileContent('discovery', {});
-    expect(disc).toMatch(/Gate on advance: `auto_advance`/);
+  test('gate defaults: requirements + cleanup require approval, implement auto-advances', () => {
+    // Discovery has its own Report setting (no common gate), so not asserted here.
     const req = service.defaultStageFileContent('requirements', {});
     expect(req).toMatch(/Gate on advance: `require_approval`/);
     const impl = service.defaultStageFileContent('implement', {});
@@ -637,25 +668,25 @@ describe('loadStagesConfig / saveStageSettings', () => {
   });
 
   test('saveStageSettings persists and merges', () => {
-    service.saveStageSettings(tmpDir, 'discovery', {depth: 'thorough', skip: 'always_run'});
+    service.saveStageSettings(tmpDir, 'discovery', {effort: 'deep', report: 'always_confirm'});
     const config = service.loadStagesConfig(tmpDir);
-    expect(config.discovery.settings?.depth).toBe('thorough');
-    expect(config.discovery.settings?.skip).toBe('always_run');
+    expect(config.discovery.settings?.effort).toBe('deep');
+    expect(config.discovery.settings?.report).toBe('always_confirm');
   });
 
   test('saveStageSettings merges without overwriting other keys', () => {
-    service.saveStageSettings(tmpDir, 'discovery', {depth: 'quick'});
-    service.saveStageSettings(tmpDir, 'discovery', {skip: 'if_obvious'});
+    service.saveStageSettings(tmpDir, 'discovery', {effort: 'skim'});
+    service.saveStageSettings(tmpDir, 'discovery', {report: 'just_advance'});
     const config = service.loadStagesConfig(tmpDir);
-    expect(config.discovery.settings?.depth).toBe('quick');
-    expect(config.discovery.settings?.skip).toBe('if_obvious');
+    expect(config.discovery.settings?.effort).toBe('skim');
+    expect(config.discovery.settings?.report).toBe('just_advance');
   });
 
   test('settings for different stages are independent', () => {
-    service.saveStageSettings(tmpDir, 'discovery', {depth: 'quick'});
+    service.saveStageSettings(tmpDir, 'discovery', {effort: 'skim'});
     service.saveStageSettings(tmpDir, 'implement', {tdd: 'required'});
     const config = service.loadStagesConfig(tmpDir);
-    expect(config.discovery.settings?.depth).toBe('quick');
+    expect(config.discovery.settings?.effort).toBe('skim');
     expect(config.implement.settings?.tdd).toBe('required');
     expect(config.discovery.settings?.tdd).toBeUndefined();
   });
@@ -689,46 +720,29 @@ describe('defaultStageFileContent', () => {
     expect(content).toContain('Stop here');
   });
 
-  test('discovery: always_skip produces minimal short instructions', () => {
-    // The protocol suffix intentionally mentions ask_questions as the default
-    // input mode; scope the "must not appear" assertions to the body only.
-    const body = service.defaultStageFileContent('discovery', {skip: 'always_skip'}).split('## Agent status protocol')[0];
-    expect(body).toContain('always skip');
-    expect(body).not.toContain('codebase scan');
-    expect(body).not.toContain('ask_questions');
+  test('discovery: effort=skim stays minimal (no codebase-scan or web-search prose)', () => {
+    const body = service.defaultStageFileContent('discovery', {effort: 'skim'}).split('## Agent status protocol')[0];
+    expect(body).toContain('Skim codebase');
+    expect(body).not.toContain('Thorough codebase scan');
+    expect(body).not.toContain('Web research');
   });
 
-  test('discovery: depth=quick omits codebase scan', () => {
-    const content = service.defaultStageFileContent('discovery', {depth: 'quick', skip: 'always_run'});
-    expect(content).not.toContain('codebase scan');
+  test('discovery: effort=deep includes thorough codebase + web research prose', () => {
+    const content = service.defaultStageFileContent('discovery', {effort: 'deep'});
+    expect(content).toContain('Thorough codebase scan');
+    expect(content).toContain('Web research');
   });
 
-  test('discovery: depth=thorough includes codebase scan and web search', () => {
-    const content = service.defaultStageFileContent('discovery', {depth: 'thorough', skip: 'always_run', web_search: 'if_needed'});
-    expect(content).toContain('Scan the codebase');
-    expect(content).toContain('web search');
+  test('discovery: output fields vary by effort', () => {
+    const skim = service.defaultStageFileContent('discovery', {effort: 'skim'});
+    const deep = service.defaultStageFileContent('discovery', {effort: 'deep'});
+    expect(skim).not.toContain('Options');
+    expect(deep).toContain('Options');
   });
 
-  test('discovery: questions=none skips ask_questions step', () => {
-    const body = service.defaultStageFileContent('discovery', {depth: 'normal', skip: 'always_run', questions: 'none'}).split('## Agent status protocol')[0];
-    expect(body).not.toContain('ask_questions');
-  });
-
-  test('discovery: questions=standard includes ask_questions step', () => {
-    const content = service.defaultStageFileContent('discovery', {depth: 'normal', skip: 'always_run', questions: 'standard'});
-    expect(content).toContain('ask_questions');
-  });
-
-  test('discovery: output fields vary by depth', () => {
-    const quick = service.defaultStageFileContent('discovery', {depth: 'quick', skip: 'always_run'});
-    const thorough = service.defaultStageFileContent('discovery', {depth: 'thorough', skip: 'always_run'});
-    expect(quick).not.toContain('Options considered');
-    expect(thorough).toContain('Options considered');
-  });
-
-  test('discovery: skip=if_obvious adds a skip notice', () => {
-    const content = service.defaultStageFileContent('discovery', {skip: 'if_obvious'});
-    expect(content).toContain('obvious');
+  test('discovery: the trivial-item skip rule is always surfaced', () => {
+    const content = service.defaultStageFileContent('discovery', {});
+    expect(content).toMatch(/Trivial items/i);
   });
 
   test('requirements: style=interview asks questions before drafting', () => {

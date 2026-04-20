@@ -141,7 +141,7 @@ Write your findings to tracker/items/<slug>/notes.md. Keep it short: user proble
     exitCriteria: [
       {id: 'has-notes', description: 'Discovery notes written to notes.md', check: 'has_notes'},
     ],
-    settings: {skip: 'always_run', depth: 'normal'},
+    settings: {effort: 'standard', report: 'confirm_if_notable'},
   },
   requirements: {
     actionLabel: 'Start implement',
@@ -1295,11 +1295,9 @@ Update \`status.json\` at every meaningful transition:
 ### Input mode: \`${inputMode}\`
 
 ${inputInstruction}
-
-### Gate on advance: \`${gate}\`
-
-${gateInstruction}
-${submitBlock}`;
+${stage === 'discovery'
+  ? '\n(Advance behaviour for discovery is governed by the `Report` setting in the stage body above — the generic gate_on_advance does not apply here.)\n'
+  : `\n### Gate on advance: \`${gate}\`\n\n${gateInstruction}\n`}${submitBlock}`;
   }
 
   // Original per-stage content generator — the body that the user edits via
@@ -1354,91 +1352,53 @@ When the user confirms pursuit: update the `+"`"+`tracker/index.json`+"`"+` (pat
       }
 
       case 'discovery': {
-        const depth = s['depth'] ?? 'normal';
-        const skip = s['skip'] ?? 'if_obvious';
-        const webSearch = s['web_search'] ?? 'if_needed';
-        const questions = s['questions'] ?? 'standard';
+        // Effort = research scope (code + web). Asking the user is a
+        // narrow, baked-in behaviour — not a tunable — because most
+        // clarification belongs in requirements.
+        const effort = s['effort'] ?? 'standard';
+        const report = s['report'] ?? 'confirm_if_notable';
 
-        if (skip === 'always_skip') {
-          return `# Stage ${n}: Discovery
+        const researchStep =
+          effort === 'skim'
+            ? 'Skim codebase for duplicates. No web search.'
+            : effort === 'deep'
+            ? 'Thorough codebase scan: patterns, conflicts, tests. Web research: domain, external APIs, prior art, alternatives.'
+            : 'Scan codebase for related patterns. Web search if the domain is unfamiliar.';
 
-**Mode: always skip** — Write a minimal `+"`"+`notes.md`+"`"+` and advance immediately. No investigation needed.
-
-## Steps
-
-${numbered([
-  'Infer the user problem from the item title and `requirements.md`.',
-  'Write a brief `notes.md` (3–5 sentences: problem, assumption, recommendation).',
-  'Advance: update the `tracker/index.json` (path is in the prompt, relative to cwd) slug to `backlog.requirements`. Read `tracker/stages/3-requirements.md` and continue.',
-])}
-`;
-        }
-
-        const skipClause = skip === 'if_obvious'
-          ? '\n> **If obvious**: if the problem and approach are already clear from the title and context, write a minimal `notes.md` and advance without full investigation.\n'
-          : '';
-
-        const steps: (string | null)[] = [];
-        steps.push('Read the item title and `requirements.md` stub. What is the actual user problem?');
-
-        if (depth === 'quick') {
-          if (webSearch === 'always') steps.push('Do a quick web search for relevant context or prior art.');
-          if (questions === 'standard') steps.push('Use the ask_questions tool to ask **1 focused question** if anything is ambiguous.');
-          else if (questions === 'minimal') steps.push('Use the ask_questions tool if anything critical is unclear — one question max.');
-          steps.push('Write findings to `notes.md` (user problem + recommendation). Keep it brief.');
-        } else if (depth === 'thorough') {
-          steps.push('Scan the codebase: relevant patterns, existing solutions, potential conflicts, test coverage.');
-          if (webSearch !== 'never') steps.push('Do a web search: domain knowledge, external APIs/libraries, prior art, competing approaches.');
-          if (questions === 'none') {
-            steps.push('Write comprehensive findings to `notes.md` based on research alone — no Q&A.');
-          } else {
-            const qCount = questions === 'minimal' ? '2–3' : '3–5';
-            steps.push(`Use the ask_questions tool to ask **${qCount} focused questions** about the problem and approach before concluding.`);
-            steps.push('Write comprehensive findings to `notes.md`.');
+        const reportStep = (() => {
+          switch (report) {
+            case 'just_advance':
+              return 'Advance silently.';
+            case 'always_confirm':
+              return 'Summarise findings and wait for approval (set `is_waiting_for_user: true` + `awaiting_advance_approval: true`).';
+            case 'confirm_if_notable':
+            default:
+              return 'If findings are notable (surprise, risk, pivot, conflict, viable alternative), summarise and wait for approval (`is_waiting_for_user: true` + `awaiting_advance_approval: true`). Otherwise advance silently.';
           }
-        } else { // normal
-          steps.push('Quick codebase scan: existing patterns, related code, similar solutions.');
-          if (webSearch === 'never') {
-            // no web search step
-          } else if (webSearch === 'always') {
-            steps.push('Do a web search to understand the domain and any relevant tools or APIs.');
-          } else {
-            steps.push('If the domain is unfamiliar or involves external APIs, do a brief web search.');
-          }
-          if (questions === 'none') {
-            steps.push('Write findings to `notes.md` based on research — no Q&A.');
-          } else {
-            const qCount = questions === 'minimal' ? '1 focused question' : '1–3 focused questions';
-            steps.push(`Use the ask_questions tool to ask **${qCount}** — focus on "why" and "what to build", not "how".`);
-            steps.push('Write findings to `notes.md`.');
-          }
-        }
+        })();
 
         const outputFields =
-          depth === 'quick'
-            ? '- **User problem**: who has this problem and what is the pain\n- **Recommendation**: proposed approach'
-            : depth === 'thorough'
-            ? '- **User problem**: who has this problem and what is the pain\n- **Context**: codebase findings and research\n- **Options considered**: 2+ approaches with tradeoffs\n- **Recommendation**: proposed approach with reasoning and known risks'
-            : '- **User problem**: who has this problem and what is the pain\n- **Findings**: relevant codebase or research findings\n- **Recommendation**: proposed approach with brief reasoning';
+          effort === 'skim'
+            ? '- Problem\n- Recommendation'
+            : effort === 'deep'
+            ? '- Problem\n- Context (code findings + research)\n- Options (2+ with tradeoffs)\n- Recommendation (reasoning + risks)'
+            : '- Problem\n- Findings\n- Recommendation';
 
         return `# Stage ${n}: Discovery
-${skipClause}
-**Goal**: Clarify what user problem this item solves and whether the approach makes sense.
 
-## Steps
+Understand the user problem. Research the code and domain — don't interrogate the user.
 
-${numbered(steps)}
+**Skip rules.** Trivial items (typo, rename, doc tweak): write one-line \`notes.md\` and advance. Clarifying questions: only if the problem statement itself is too vague to interpret. "X or Y?" questions belong in requirements.
 
-## Output
+## Do
 
-Write to `+"`"+`notes.md`+"`"+`:
-${outputFields}
+${numbered([
+  researchStep,
+  `Write \`notes.md\`:\n${outputFields}`,
+  reportStep,
+])}
 
-Keep the body of `+"`"+`requirements.md`+"`"+` untouched during discovery — that belongs to stage 3.
-
-## Advancing
-
-When `+"`"+`notes.md`+"`"+` is written, append a single line like \`## Requirements (stub)\` to `+"`"+`requirements.md`+"`"+` as the "discovery done" signal. The board auto-detects this heading and advances the item to the requirements stage. Then read `+"`"+`tracker/stages/3-requirements.md`+"`"+` and continue.
+Advance by setting \`status.json.stage\` to \`requirements\`.
 `;
       }
 

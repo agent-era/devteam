@@ -28,27 +28,23 @@ const COMMON_STAGE_OPTIONS: OptionDef[] = [
 // Per-stage structured options (different per stage)
 const STAGE_OPTION_DEFS: Partial<Record<Exclude<TrackerStage, 'archive'>, OptionDef[]>> = {
   discovery: [
-    {key: 'skip', label: 'When to run', choices: [
-      {value: 'always_run', label: 'Always'},
-      {value: 'if_obvious', label: 'Skip if obvious'},
-      {value: 'always_skip', label: 'Always skip'},
+    // Research scope only — code + web. Not about asking the user; those
+    // questions belong to requirements. Clarifying questions in discovery
+    // are a baked-in behaviour (only when the problem statement itself is
+    // incomprehensible), not a tunable.
+    {key: 'effort', label: 'Effort', choices: [
+      {value: 'skim', label: 'Skim'},
+      {value: 'standard', label: 'Standard'},
+      {value: 'deep', label: 'Deep'},
     ]},
-    {key: 'depth', label: 'Depth', choices: [
-      {value: 'quick', label: 'Quick'},
-      {value: 'normal', label: 'Normal'},
-      {value: 'thorough', label: 'Thorough'},
+    // How discovery closes out. Replaces the common gate_on_advance for
+    // this stage — `confirm_if_notable` (the middle value) is what the
+    // two-value gate can't express.
+    {key: 'report', label: 'Report', choices: [
+      {value: 'just_advance', label: 'Just advance'},
+      {value: 'confirm_if_notable', label: 'Confirm if notable'},
+      {value: 'always_confirm', label: 'Always confirm'},
     ]},
-    {key: 'web_search', label: 'Web search', choices: [
-      {value: 'never', label: 'Never'},
-      {value: 'if_needed', label: 'If needed'},
-      {value: 'always', label: 'Always'},
-    ]},
-    {key: 'questions', label: 'Questions', choices: [
-      {value: 'none', label: 'None'},
-      {value: 'minimal', label: 'Minimal (1)'},
-      {value: 'standard', label: 'Standard (1–3)'},
-    ]},
-    ...COMMON_STAGE_OPTIONS,
   ],
   requirements: [
     {key: 'style', label: 'Style', choices: [
