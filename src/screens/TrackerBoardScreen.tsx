@@ -285,7 +285,7 @@ export default function TrackerBoardScreen({
     // stale-read race when the user queues two items back-to-back within the
     // ~5s slug-derivation window.
     const slugsAtStart = new Set(service.loadBoard(project, projectPath).columns.flatMap(c => c.items.map(it => it.slug)));
-    void service.deriveSlug(pending.title, [...slugsAtStart]).then(slug => {
+    service.deriveSlug(pending.title, [...slugsAtStart]).then(slug => {
       if (unmountedRef.current) return;
       setPendingNew(null);
       // Re-check uniqueness right before creating in case a concurrent
@@ -302,6 +302,10 @@ export default function TrackerBoardScreen({
       onLaunchItemBackground(item, tool).catch(err => {
         logError('launchSessionForItemBackground failed', {error: err instanceof Error ? err.message : String(err)});
       });
+    }).catch(err => {
+      if (unmountedRef.current) return;
+      setPendingNew(null);
+      logError('deriveSlug failed', {error: err instanceof Error ? err.message : String(err)});
     });
   }, [service, projectPath, project, onLaunchItemBackground]);
 

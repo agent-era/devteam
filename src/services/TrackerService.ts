@@ -378,7 +378,8 @@ export class TrackerService {
   }
 
   private isValidSlug(slug: string): boolean {
-    return /^[a-z0-9][a-z0-9-]*$/.test(slug);
+    // Must start and end with alphanumeric; hyphens only in the middle.
+    return /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(slug);
   }
 
   nextStage(stage: TrackerStage): TrackerStage | null {

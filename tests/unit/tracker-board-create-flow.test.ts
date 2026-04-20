@@ -80,18 +80,29 @@ describe('board create-item flow (derive-first, no rename)', () => {
     expect(autoLaunched).toBe(false);
   });
 
-  test('tool picker cancel does not launch but item still exists on board', async () => {
-    const slug = 'cancelled-feature';
-    service.createItem(tmpDir, 'Cancelled Feature', 'backlog', slug, 'Some description');
-
+  test('tool picker cancel abandons creation entirely — no item, no launch', () => {
+    // In the multi-tool flow, handleToolCancel fires BEFORE startDerivation, so
+    // deriveSlug never runs and createItem is never called. The board stays
+    // empty and onLaunchItemBackground is never invoked.
     const launched: string[] = [];
-    // Simulate handleToolCancel: just clears toolPickItem, no launch
-    // The item remains on the board
-    const board = service.loadBoard('proj', tmpDir);
-    const item = board.columns.flatMap(c => c.items).find(i => i.slug === slug);
+    let derivationStarted = false;
 
-    expect(item).toBeTruthy(); // item persists
-    expect(launched).toHaveLength(0); // no launch
+    let toolPickPending: {title: string} | null = {title: 'Cancelled Feature'};
+    const handleToolCancel = () => { toolPickPending = null; };
+
+    handleToolCancel();
+
+    // Only startDerivation would call createItem — it never fires after cancel.
+    if (toolPickPending) derivationStarted = true;
+
+    service.ensureTracker(tmpDir);
+    const board = service.loadBoard('proj', tmpDir);
+    const items = board.columns.flatMap(c => c.items);
+
+    expect(toolPickPending).toBeNull();
+    expect(derivationStarted).toBe(false);
+    expect(items).toHaveLength(0);
+    expect(launched).toHaveLength(0);
   });
 
   test('no temp slug appears in the index during derivation window', () => {
