@@ -2,10 +2,11 @@ import React from 'react';
 import fs from 'fs';
 import {Box, Text, useInput} from 'ink';
 import {TrackerService, StagesConfig, TrackerStage, WorkStyle, STAGE_LABELS} from '../services/TrackerService.js';
+import {RalphConfig, loadRalphConfig, saveRalphConfig} from '../cores/RalphCore.js';
 import {useTerminalDimensions} from '../hooks/useTerminalDimensions.js';
 
 const STAGE_KEYS: Exclude<TrackerStage, 'archive'>[] = ['discovery', 'requirements', 'implement', 'cleanup'];
-const ALL_TABS = [...STAGE_KEYS, 'style'] as const;
+const ALL_TABS = [...STAGE_KEYS, 'style', 'ralph'] as const;
 
 interface OptionDef {
   key: string;
@@ -185,6 +186,38 @@ const STYLE_OPTIONS: StyleOptionDef[] = [
 
 const STYLE_CUSTOM_ROW = STYLE_OPTIONS.length;
 
+// Discrete choices for the two numeric ralph fields. The set is deliberately
+// small — most users just want "aggressive / default / conservative" without
+// fiddling with exact millisecond values.
+const RALPH_IDLE_CHOICES: {value: string; label: string; ms: number}[] = [
+  {value: '60000', label: '1 min (aggressive)', ms: 60_000},
+  {value: '180000', label: '3 min (default)', ms: 180_000},
+  {value: '600000', label: '10 min (conservative)', ms: 600_000},
+  {value: '1800000', label: '30 min (rarely)', ms: 1_800_000},
+];
+
+const RALPH_CAP_CHOICES: {value: string; label: string; n: number}[] = [
+  {value: '1', label: '1', n: 1},
+  {value: '3', label: '3 (default)', n: 3},
+  {value: '5', label: '5', n: 5},
+  {value: '10', label: '10', n: 10},
+];
+
+interface RalphOptionDef {
+  key: keyof RalphConfig;
+  label: string;
+  choices: {value: string; label: string}[];
+}
+
+const RALPH_OPTIONS: RalphOptionDef[] = [
+  {key: 'enabled', label: 'Enabled', choices: [
+    {value: 'false', label: 'Off'},
+    {value: 'true', label: 'On'},
+  ]},
+  {key: 'idleThresholdMs', label: 'Idle threshold', choices: RALPH_IDLE_CHOICES.map(c => ({value: c.value, label: c.label}))},
+  {key: 'maxNudgesPerStage', label: 'Max nudges/stage', choices: RALPH_CAP_CHOICES.map(c => ({value: c.value, label: c.label}))},
+];
+
 interface ContentLine {
   key: string;
   text: string;
@@ -208,6 +241,7 @@ export default function TrackerStagesScreen({projectPath, onBack}: TrackerStages
   const service = React.useMemo(() => new TrackerService(), []);
   const [config, setConfig] = React.useState<Required<StagesConfig>>(() => service.loadStagesConfig(projectPath));
   const [workStyle, setWorkStyle] = React.useState<WorkStyle>(() => service.loadWorkStyle(projectPath));
+  const [ralphConfig, setRalphConfig] = React.useState<RalphConfig>(() => loadRalphConfig(projectPath));
   const [selectedTab, setSelectedTab] = React.useState<number>(0);
   const [scrollTop, setScrollTop] = React.useState(0);
   const [selectedRow, setSelectedRow] = React.useState(0);
@@ -218,7 +252,8 @@ export default function TrackerStagesScreen({projectPath, onBack}: TrackerStages
 
   const currentTab = ALL_TABS[selectedTab];
   const isStyleTab = currentTab === 'style';
-  const currentStage = isStyleTab ? null : currentTab as Exclude<TrackerStage, 'archive'>;
+  const isRalphTab = currentTab === 'ralph';
+  const currentStage = isStyleTab || isRalphTab ? null : currentTab as Exclude<TrackerStage, 'archive'>;
   const stageOpts = currentStage ? (STAGE_OPTION_DEFS[currentStage] || []) : [];
   const stageSettings = currentStage ? (config[currentStage].settings || {}) : {};
 
@@ -272,6 +307,26 @@ export default function TrackerStagesScreen({projectPath, onBack}: TrackerStages
     setWorkStyle(updated);
     service.saveWorkStyle(projectPath, updated);
   }, [selectedRow, workStyle, service, projectPath]);
+
+  const cycleRalphOption = React.useCallback((delta: number) => {
+    const opt = RALPH_OPTIONS[selectedRow];
+    if (!opt) return;
+    const curStr =
+      opt.key === 'enabled' ? String(ralphConfig.enabled)
+      : opt.key === 'idleThresholdMs' ? String(ralphConfig.idleThresholdMs)
+      : String(ralphConfig.maxNudgesPerStage);
+    const idx = opt.choices.findIndex(c => c.value === curStr);
+    const startIdx = idx < 0 ? 0 : idx;
+    const nextStr = opt.choices[(startIdx + delta + opt.choices.length) % opt.choices.length].value;
+    const updated: RalphConfig = {
+      ...ralphConfig,
+      [opt.key]:
+        opt.key === 'enabled' ? nextStr === 'true'
+        : Number(nextStr),
+    } as RalphConfig;
+    setRalphConfig(updated);
+    saveRalphConfig(projectPath, updated);
+  }, [selectedRow, ralphConfig, projectPath]);
 
   const handleEditSubmit = React.useCallback(() => {
     const prompt = editPrompt.trim();
@@ -330,6 +385,16 @@ export default function TrackerStagesScreen({projectPath, onBack}: TrackerStages
       else if (goRight) cycleStyleOption(1);
       else if (input === 'e') { setEditMode(true); setError(null); }
       else if (input === 'q' || key.escape) onBack();
+    } else if (isRalphTab) {
+      const maxRow = RALPH_OPTIONS.length - 1;
+      if (goDown) setSelectedRow(r => Math.min(maxRow, r + 1));
+      else if (goUp) {
+        if (selectedRow === 0) setSelectedRow(-1);
+        else setSelectedRow(r => r - 1);
+      }
+      else if (goLeft) cycleRalphOption(-1);
+      else if (goRight) cycleRalphOption(1);
+      else if (input === 'q' || key.escape) onBack();
     } else {
       // Stage tab content
       if (goDown) {
@@ -347,7 +412,10 @@ export default function TrackerStagesScreen({projectPath, onBack}: TrackerStages
   });
 
   const stageFilePath = currentStage ? service.getStageFilePath(projectPath, currentStage) : '';
-  const tabLabel = isStyleTab ? 'Style' : STAGE_LABELS[currentTab as Exclude<TrackerStage, 'archive'>];
+  const tabLabel =
+    isStyleTab ? 'Style'
+    : isRalphTab ? 'Ralph'
+    : STAGE_LABELS[currentTab as Exclude<TrackerStage, 'archive'>];
   const scrollIndicator = maxScroll > 0 ? ` ↑↓` : '';
 
   return (
@@ -357,7 +425,10 @@ export default function TrackerStagesScreen({projectPath, onBack}: TrackerStages
 
       <Box marginTop={1}>
         {ALL_TABS.map((tab, index) => {
-          const label = tab === 'style' ? 'Style' : STAGE_LABELS[tab as Exclude<TrackerStage, 'archive'>];
+          const label =
+            tab === 'style' ? 'Style'
+            : tab === 'ralph' ? 'Ralph'
+            : STAGE_LABELS[tab as Exclude<TrackerStage, 'archive'>];
           const active = index === selectedTab;
           const focusedHere = tabRowFocused && active;
           return (
@@ -378,7 +449,46 @@ export default function TrackerStagesScreen({projectPath, onBack}: TrackerStages
       <Box flexDirection="column" borderStyle="round" borderColor="green" paddingX={1} height={contentViewHeight + 2}>
         <Text bold color="green">{tabLabel}</Text>
 
-        {isStyleTab ? (
+        {isRalphTab ? (
+          <Box flexDirection="column">
+            <Text dimColor>
+              Ralph watches idle agents and nudges them to keep advancing
+              (unless they've flagged `is_waiting_for_user` in status.json).
+            </Text>
+            <Box marginTop={1} flexDirection="column">
+              {RALPH_OPTIONS.map((opt, rowIdx) => {
+                const curStr =
+                  opt.key === 'enabled' ? String(ralphConfig.enabled)
+                  : opt.key === 'idleThresholdMs' ? String(ralphConfig.idleThresholdMs)
+                  : String(ralphConfig.maxNudgesPerStage);
+                const isRowSelected = selectedRow === rowIdx;
+                return (
+                  <Box key={opt.key} flexDirection="row" marginBottom={0}>
+                    <Box width={20}>
+                      <Text bold={isRowSelected}>{opt.label}</Text>
+                    </Box>
+                    {opt.choices.map(choice => (
+                      <Box key={choice.value} marginRight={1}>
+                        <Text
+                          inverse={curStr === choice.value}
+                          color={isRowSelected && curStr === choice.value ? 'green' : undefined}
+                        >
+                          {` ${choice.label} `}
+                        </Text>
+                      </Box>
+                    ))}
+                  </Box>
+                );
+              })}
+            </Box>
+            <Box marginTop={1}>
+              <Text dimColor>
+                Config persists to tracker/ralph.json. Per-item status lives at
+                tracker/items/&lt;slug&gt;/status.json.
+              </Text>
+            </Box>
+          </Box>
+        ) : isStyleTab ? (
           <Box flexDirection="column">
             {STYLE_OPTIONS.map((opt, rowIdx) => {
               const cur = workStyle[opt.key] as string;

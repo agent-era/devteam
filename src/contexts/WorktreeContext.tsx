@@ -4,6 +4,11 @@ import type {AITool} from '../models.js';
 import {MemoryStatus} from '../services/MemoryMonitorService.js';
 import type {VersionInfo} from '../services/versionTypes.js';
 import {WorktreeCore} from '../cores/WorktreeCore.js';
+import {RalphCore, loadRalphConfig} from '../cores/RalphCore.js';
+import {TrackerService} from '../services/TrackerService.js';
+import {TmuxService} from '../services/TmuxService.js';
+import {GitService} from '../services/GitService.js';
+import {getProjectsDirectory} from '../config.js';
 
 interface WorktreeContextType {
   // State
@@ -70,8 +75,34 @@ interface WorktreeProviderProps {
 export function WorktreeProvider({children, core: coreOverride}: WorktreeProviderProps) {
   const coreRef = React.useRef(coreOverride || new WorktreeCore());
   const core = coreRef.current;
+
+  // Ralph runs alongside the worktree core. It samples on its own schedule
+  // and only fires nudges when enabled per-project via tracker/ralph.json.
+  // We build it lazily so tests that don't care about ralph aren't forced to
+  // instantiate it (they won't hit the code path because there are no
+  // projects with ralph enabled).
+  const trackerRef = React.useRef(new TrackerService());
+  const tmuxRef = React.useRef(new TmuxService());
+  const gitRef = React.useRef(new GitService(getProjectsDirectory()));
+  const ralphRef = React.useRef<RalphCore | null>(null);
+  if (!ralphRef.current) {
+    ralphRef.current = new RalphCore({
+      tracker: trackerRef.current,
+      tmux: tmuxRef.current,
+      getWorktrees: () => coreRef.current.get().worktrees,
+      getProjectPath: (project) => {
+        const projects = gitRef.current.discoverProjects();
+        const match = projects.find(p => p.name === project);
+        return match?.path ?? '';
+      },
+    });
+  }
+  const ralph = ralphRef.current!;
+
   React.useEffect(() => { core.start(); return () => core.stop(); }, [core]);
+  React.useEffect(() => { ralph.start(); return () => ralph.stop(); }, [ralph]);
   const state = React.useSyncExternalStore(core.subscribe.bind(core), core.get.bind(core), core.get.bind(core));
+  const ralphState = React.useSyncExternalStore(ralph.subscribe.bind(ralph), ralph.get.bind(ralph), ralph.get.bind(ralph));
 
   // Navigation
   const selectWorktree = useCallback((index: number) => core.selectWorktree(index), [core]);
@@ -120,9 +151,36 @@ export function WorktreeProvider({children, core: coreOverride}: WorktreeProvide
   const applyConfig = useCallback((project: string, content: string) => core.applyConfig(project, content), [core]);
   const reapplyFiles = useCallback((project: string) => core.reapplyFiles(project), [core]);
 
+  // Decorate worktrees with ralph + agent status info so the list row can
+  // render a compact chip. Lookup is O(projects × worktrees) but only on
+  // state changes, and the maps are small in practice.
+  const worktreesWithRalph = React.useMemo(() => {
+    const projects = gitRef.current.discoverProjects();
+    const projectPathByName = new Map(projects.map(p => [p.name, p.path]));
+    return state.worktrees.map(wt => {
+      const projectPath = projectPathByName.get(wt.project);
+      if (!projectPath) return wt;
+      const status = trackerRef.current.getItemStatus(projectPath, wt.feature);
+      const ralphWt = ralphState.worktrees[`${wt.project}::${wt.feature}`];
+      const cfg = loadRalphConfig(projectPath);
+      if (!status && !ralphWt) return wt;
+      const freshWaiting =
+        !!status && status.is_waiting_for_user && !trackerRef.current.isItemStatusStale(status);
+      const decorated = new WorktreeInfo({...wt});
+      decorated.ralph = {
+        is_waiting_for_user: freshWaiting,
+        brief_description: status?.brief_description,
+        nudges_this_stage: ralphWt?.nudgesThisStage ?? 0,
+        max_nudges_per_stage: cfg.maxNudgesPerStage,
+        capped: ralphWt?.capped ?? false,
+      };
+      return decorated;
+    });
+  }, [state.worktrees, ralphState]);
+
   const contextValue: WorktreeContextType = {
     // State
-    worktrees: state.worktrees,
+    worktrees: worktreesWithRalph,
     loading: state.loading,
     lastRefreshed: state.lastRefreshed,
     selectedIndex: state.selectedIndex,
