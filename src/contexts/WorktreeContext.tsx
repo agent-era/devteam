@@ -21,6 +21,7 @@ interface WorktreeContextType {
   // Data operations
   refresh: (refreshPRs?: 'all' | 'visible' | 'none') => Promise<void>;
   refreshVisibleStatus: (currentPage: number, pageSize: number) => Promise<void>;
+  refreshProjectWorktrees: (projectName: string) => Promise<void>;
   forceRefreshVisible: (currentPage: number, pageSize: number) => Promise<void>;
   
   // Worktree operations
@@ -37,6 +38,7 @@ interface WorktreeContextType {
   
   // Session operations
   attachSession: (worktree: WorktreeInfo, aiTool?: AITool, initialPrompt?: string) => Promise<void>;
+  launchSessionBackground: (worktree: WorktreeInfo, aiTool?: AITool, initialPrompt?: string) => Promise<void>;
   attachShellSession: (worktree: WorktreeInfo) => Promise<void>;
   attachRunSession: (worktree: WorktreeInfo) => Promise<'success' | 'no_config'>;
   
@@ -78,6 +80,7 @@ export function WorktreeProvider({children, core: coreOverride}: WorktreeProvide
   // Data operations
   const refresh = useCallback(async () => core.refresh(), [core]);
   const refreshVisibleStatus = useCallback(async (currentPage: number, pageSize: number) => core.refreshVisibleStatus(currentPage, pageSize), [core]);
+  const refreshProjectWorktrees = useCallback(async (projectName: string) => core.refreshProjectWorktrees(projectName), [core]);
   const forceRefreshVisible = useCallback(async (currentPage: number, pageSize: number) => core.forceRefreshVisible(currentPage, pageSize), [core]);
 
   // Worktree operations
@@ -97,6 +100,7 @@ export function WorktreeProvider({children, core: coreOverride}: WorktreeProvide
 
   // Sessions
   const attachSession = useCallback(async (worktree: WorktreeInfo, aiTool?: AITool, initialPrompt?: string) => core.attachSession(worktree, aiTool, initialPrompt), [core]);
+  const launchSessionBackground = useCallback(async (worktree: WorktreeInfo, aiTool?: AITool, initialPrompt?: string) => core.launchSessionBackground(worktree, aiTool, initialPrompt), [core]);
   const attachShellSession = useCallback(async (worktree: WorktreeInfo) => core.attachShellSession(worktree), [core]);
   const attachRunSession = useCallback(async (worktree: WorktreeInfo) => core.attachRunSession(worktree), [core]);
 
@@ -132,6 +136,7 @@ export function WorktreeProvider({children, core: coreOverride}: WorktreeProvide
     // Data operations
     refresh,
     refreshVisibleStatus,
+    refreshProjectWorktrees,
     forceRefreshVisible,
     
     // Worktree operations
@@ -148,6 +153,7 @@ export function WorktreeProvider({children, core: coreOverride}: WorktreeProvide
     
     // Session operations
     attachSession,
+    launchSessionBackground,
     attachShellSession,
     attachRunSession,
 

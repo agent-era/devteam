@@ -37,7 +37,7 @@ export default function TrackerProposalScreen({
     for (const index of accepted) {
       const item = proposals[index];
       if (item) {
-        tracker.createItem(projectPath, item.title, 'backlog');
+        tracker.createItem(projectPath, item.title, 'backlog', item.slug, item.description);
       }
     }
     tracker.clearPendingProposals(projectPath);

@@ -79,9 +79,14 @@ describe('slugify', () => {
     expect(service.slugify('  --hello--  ')).toBe('hello');
   });
 
-  test('truncates long titles', () => {
+  test('truncates long titles to default 20 chars', () => {
     const long = 'a'.repeat(80);
-    expect(service.slugify(long).length).toBeLessThanOrEqual(60);
+    expect(service.slugify(long).length).toBe(20);
+  });
+
+  test('respects custom maxLength', () => {
+    const long = 'a'.repeat(80);
+    expect(service.slugify(long, 40).length).toBe(40);
   });
 });
 
@@ -113,15 +118,16 @@ describe('nextStage / previousStage', () => {
 // ─── createItem ─────────────────────────────────────────────────────────────
 
 describe('createItem', () => {
-  test('adds slug to index.json with title metadata; does not write item files', () => {
+  test('adds slug to index.json and writes requirements stub to main project', () => {
     service.createItem(tmpDir, 'Add user auth', 'discovery');
 
     const indexPath = path.join(tmpDir, 'tracker', 'index.json');
     const index = JSON.parse(fs.readFileSync(indexPath, 'utf8'));
     expect(index.backlog.discovery).toContain('add-user-auth');
     expect(index.sessions['add-user-auth'].title).toBe('Add user auth');
-    // Item content lives in the worktree — main project bucket dirs stay empty.
-    expect(fs.existsSync(path.join(tmpDir, 'tracker', 'backlog', 'add-user-auth'))).toBe(false);
+    const reqPath = path.join(tmpDir, 'tracker', 'items', 'add-user-auth', 'requirements.md');
+    expect(fs.existsSync(reqPath)).toBe(true);
+    expect(fs.readFileSync(reqPath, 'utf8')).toContain('Add user auth');
   });
 
   test('adds slug to index.json in correct stage', () => {
@@ -136,6 +142,32 @@ describe('createItem', () => {
     service.createItem(tmpDir, 'Build API', 'implement');
     const index = JSON.parse(fs.readFileSync(path.join(tmpDir, 'tracker', 'index.json'), 'utf8'));
     expect(index.implementation.implement).toContain('build-api');
+  });
+
+  test('writes provided body to notes.md (discovery output), keeping requirements.md as a title stub', () => {
+    service.createItem(tmpDir, 'Add auth', 'discovery', undefined, 'Implement OAuth2 login with Google and GitHub providers.');
+    const notesPath = path.join(tmpDir, 'tracker', 'items', 'add-auth', 'notes.md');
+    expect(fs.readFileSync(notesPath, 'utf8')).toContain('Implement OAuth2 login with Google and GitHub providers.');
+    const reqContent = fs.readFileSync(path.join(tmpDir, 'tracker', 'items', 'add-auth', 'requirements.md'), 'utf8');
+    expect(reqContent).not.toContain('Implement OAuth2 login with Google and GitHub providers.');
+  });
+
+  test('does not create notes.md when body is omitted', () => {
+    service.createItem(tmpDir, 'My Feature', 'discovery');
+    const notesPath = path.join(tmpDir, 'tracker', 'items', 'my-feature', 'notes.md');
+    expect(fs.existsSync(notesPath)).toBe(false);
+    const reqContent = fs.readFileSync(path.join(tmpDir, 'tracker', 'items', 'my-feature', 'requirements.md'), 'utf8');
+    expect(reqContent).toMatch(/\nMy Feature\n/);
+  });
+
+  test('uses explicit slug when provided alongside body', () => {
+    service.createItem(tmpDir, 'Proposal Title', 'backlog', 'ai-derived-slug', 'Detailed description from proposal.');
+    const reqPath = path.join(tmpDir, 'tracker', 'items', 'ai-derived-slug', 'requirements.md');
+    expect(fs.existsSync(reqPath)).toBe(true);
+    const notesPath = path.join(tmpDir, 'tracker', 'items', 'ai-derived-slug', 'notes.md');
+    expect(fs.readFileSync(notesPath, 'utf8')).toContain('Detailed description from proposal.');
+    const reqContent = fs.readFileSync(reqPath, 'utf8');
+    expect(reqContent).toMatch(/^slug: ai-derived-slug$/m);
   });
 });
 
@@ -688,7 +720,7 @@ describe('ensureItemFiles', () => {
     expect(fs.existsSync(destDir)).toBe(true);
     const reqPath = path.join(destDir, 'requirements.md');
     expect(fs.existsSync(reqPath)).toBe(true);
-    expect(fs.readFileSync(reqPath, 'utf8')).toContain('title: My Feature');
+    expect(fs.readFileSync(reqPath, 'utf8')).toContain('title: "My Feature"');
   });
 
   test('does NOT create tracker/index.json in the worktree', () => {

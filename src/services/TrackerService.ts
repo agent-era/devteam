@@ -280,6 +280,9 @@ export class TrackerService {
     // Legacy worktree path (pre-`items/` rename).
     const legacyWtDir = path.join(this.getWorktreePathForSlug(projectPath, slug), 'tracker', slug);
     if (fs.existsSync(legacyWtDir)) return legacyWtDir;
+    // Stub written by createItem before a worktree exists.
+    const mainItemDir = path.join(projectPath, 'tracker', 'items', slug);
+    if (fs.existsSync(mainItemDir)) return mainItemDir;
     // Archive lives in the main project regardless of worktree existence.
     const archiveDir = this.getArchiveItemDir(projectPath, slug);
     if (fs.existsSync(archiveDir)) return archiveDir;
@@ -366,12 +369,17 @@ export class TrackerService {
     };
   }
 
-  slugify(title: string): string {
+  slugify(title: string, maxLength = 20): string {
     return title
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, '')
-      .slice(0, 20);
+      .slice(0, maxLength);
+  }
+
+  private isValidSlug(slug: string): boolean {
+    // Must start and end with alphanumeric; hyphens only in the middle.
+    return /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(slug);
   }
 
   nextStage(stage: TrackerStage): TrackerStage | null {
@@ -386,11 +394,11 @@ export class TrackerService {
     return STAGE_ORDER[idx - 1];
   }
 
-  createItem(projectPath: string, title: string, stage: TrackerStage = 'discovery', explicitSlug?: string): void {
+  createItem(projectPath: string, title: string, stage: TrackerStage = 'discovery', explicitSlug?: string, body?: string): void {
     const slug = explicitSlug || this.slugify(title);
     // Reject anything that isn't a plain slug — slugs are interpolated into file
     // paths, so a stray '.' or '/' would let a crafted title escape the tracker dir.
-    if (!slug || !/^[a-z0-9][a-z0-9-]*$/.test(slug)) return;
+    if (!slug || !this.isValidSlug(slug)) return;
     // Idempotent: if the slug is already in the index at the requested stage, do
     // nothing. Avoids double-create when the orphan-materialise handler races a
     // re-render that triggers Enter twice.
@@ -399,9 +407,6 @@ export class TrackerService {
       if (stageBySlug.get(slug) === stage) return;
     }
     this.ensureTracker(projectPath);
-    // Files are materialised on demand by ensureItemFiles() when a session is launched.
-    // Persist the title under sessions[slug] so we can show a meaningful title on the
-    // board before the worktree exists; frontmatter wins once files are written.
     const index = this.readIndex(projectPath);
     this.removeSlugFromIndexObj(index, slug);
     this.addSlugToIndexObj(index, slug, stage);
@@ -409,6 +414,42 @@ export class TrackerService {
     sessions[slug] = {...sessions[slug], title};
     index.sessions = sessions;
     writeJSONAtomic(this.getIndexPath(projectPath), index);
+    const mainItemDir = path.join(projectPath, 'tracker', 'items', slug);
+    ensureDirectory(mainItemDir);
+    // Requirements is just a stub with the title — it's written for real during
+    // the requirements stage. The user's initial description (the "what / why"
+    // they had in mind when they created the item) goes into notes.md, which is
+    // the discovery stage's output file.
+    this.writeRequirementsStub(path.join(mainItemDir, 'requirements.md'), title, slug, title);
+    if (body && body !== title) {
+      const notesPath = path.join(mainItemDir, 'notes.md');
+      if (!fs.existsSync(notesPath)) fs.writeFileSync(notesPath, `${body}\n`);
+    }
+  }
+
+  private writeRequirementsStub(reqPath: string, title: string, slug: string, body: string): boolean {
+    if (fs.existsSync(reqPath)) return false;
+    const today = new Date().toISOString().slice(0, 10);
+    // Strip newlines and quote the title so YAML-significant characters (":",
+    // "'", "[", "!") in user-typed titles can't forge frontmatter keys.
+    const yamlTitle = JSON.stringify(title.replace(/[\r\n]+/g, ' ').trim());
+    fs.writeFileSync(reqPath, `---\ntitle: ${yamlTitle}\nslug: ${slug}\nupdated: ${today}\n---\n\n${body}\n`);
+    return true;
+  }
+
+  async deriveSlug(title: string, existingSlugs: string[]): Promise<string> {
+    const maxLen = 30;
+    const prompt = `Generate a concise kebab-case slug (2-4 words, max ${maxLen} chars) for this tracker item. Reply with ONLY the slug, nothing else.\n\nTitle: ${title}`;
+    const result = await runClaudeAsync(prompt, {timeoutMs: 8000});
+    let derived = this.slugify(title);
+    if (result.success && result.output) {
+      const candidate = this.slugify(result.output.trim(), maxLen);
+      if (candidate && this.isValidSlug(candidate)) derived = candidate;
+    }
+    if (!existingSlugs.includes(derived)) return derived;
+    let i = 2;
+    while (existingSlugs.includes(`${derived}-${i}`)) i++;
+    return `${derived}-${i}`;
   }
 
   moveItem(projectPath: string, slug: string, toStage: TrackerStage): boolean {
@@ -466,10 +507,12 @@ export class TrackerService {
 
     let wroteAnything = false;
 
-    // 1) Migrate from any legacy location: previous worktree path or main-project buckets.
+    // 1) Migrate from legacy locations (highest priority first), then the main-project
+    // stub written by createItem as a last resort.
     const legacySources = [
       path.join(worktreePath, 'tracker', slug),
       ...this.findLegacyMainProjectDirs(mainProjectPath, slug),
+      path.join(mainProjectPath, 'tracker', 'items', slug),
     ].filter(p => fs.existsSync(p));
     for (const src of legacySources) {
       for (const file of fs.readdirSync(src)) {
@@ -481,10 +524,8 @@ export class TrackerService {
     }
 
     // 2) If we still have no requirements.md, write a fresh stub.
-    if (!fs.existsSync(reqPath)) {
-      const title = item?.title || slug;
-      const today = new Date().toISOString().slice(0, 10);
-      fs.writeFileSync(reqPath, `---\ntitle: ${title}\nslug: ${slug}\nupdated: ${today}\n---\n\n${title}\n`);
+    const stubTitle = item?.title || slug;
+    if (this.writeRequirementsStub(reqPath, stubTitle, slug, stubTitle)) {
       wroteAnything = true;
     }
 

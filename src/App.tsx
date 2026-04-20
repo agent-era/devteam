@@ -31,6 +31,7 @@ import {InputFocusProvider} from './contexts/InputFocusContext.js';
 import {WorktreeCore} from './cores/WorktreeCore.js';
 import {GitHubCore} from './cores/GitHubCore.js';
 import {TrackerService, type TrackerItem, type TrackerStage} from './services/TrackerService.js';
+import type {AITool} from './models.js';
 
 
 function AppContent() {
@@ -62,6 +63,7 @@ function AppContent() {
     reapplyFiles,
     getAvailableAITools,
     needsToolSelection,
+    launchSessionBackground,
   } = useWorktreeContext();
   
   const {refreshPRStatus, getPRStatus} = useGitHubContext();
@@ -233,29 +235,44 @@ function AppContent() {
     return tracker.buildPlanningPrompt(item, stageConf, itemDirOverride);
   };
 
-  // Reuse the existing worktree if present, recover one from the branch if it was
-  // obliterated, or create a fresh one. Item tracker files are seeded into the
-  // worktree so the agent works entirely with paths relative to its repo root.
-  const launchSessionForItem = async (
+  const prepareItemSession = async (
     project: {name: string; path: string},
     item: TrackerItem,
     stage: TrackerStage,
   ) => {
     let worktree = worktrees.find(wt => wt.project === project.name && wt.feature === item.slug) || null;
     if (!worktree) worktree = await recreateImplementWorktree(project.name, item.slug);
-    if (!worktree) { showTracker(project); return; }
-
+    if (!worktree) return null;
     const worktreeItemDir = path.join(worktree.path, 'tracker', 'items', item.slug);
     tracker.ensureItemFiles(project.path, item.slug, worktree.path, item);
-    const fullPrompt = buildPromptForItem(item, stage, worktreeItemDir);
+    return {worktree, prompt: buildPromptForItem(item, stage, worktreeItemDir)};
+  };
 
-    const needsSelection = await needsToolSelection(worktree);
+  const launchSessionForItem = async (
+    project: {name: string; path: string},
+    item: TrackerItem,
+    stage: TrackerStage,
+  ) => {
+    const prepared = await prepareItemSession(project, item, stage);
+    if (!prepared) { showTracker(project); return; }
+    const needsSelection = await needsToolSelection(prepared.worktree);
     if (needsSelection) {
-      showAIToolSelection(worktree, {initialPrompt: fullPrompt, onReturn: () => showTracker(project)});
+      showAIToolSelection(prepared.worktree, {initialPrompt: prepared.prompt, onReturn: () => showTracker(project)});
     } else {
-      await attachSession(worktree, undefined, fullPrompt);
+      await attachSession(prepared.worktree, undefined, prepared.prompt);
       showTracker(project);
     }
+  };
+
+  const launchSessionForItemBackground = async (
+    project: {name: string; path: string},
+    item: TrackerItem,
+    stage: TrackerStage,
+    aiTool?: AITool,
+  ) => {
+    const prepared = await prepareItemSession(project, item, stage);
+    if (!prepared) return;
+    await launchSessionBackground(prepared.worktree, aiTool, prepared.prompt);
   };
 
   const handleCurrentStageWork = (item: TrackerItem) => {
@@ -530,6 +547,9 @@ function AppContent() {
         projectPath={trackerProject.path}
         onBack={requestExit}
         onOpenItem={(item) => showTrackerItem(item.slug)}
+        onLaunchItemBackground={(item, tool) =>
+          launchSessionForItemBackground(trackerProject!, item, item.stage, tool)
+        }
         onCustomizeStages={showTrackerStages}
       />
     );
