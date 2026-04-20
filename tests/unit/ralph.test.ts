@@ -147,8 +147,29 @@ describe('buildNudgeText', () => {
   });
 
   test('points the agent at status.json for advancement', () => {
-    const text = buildNudgeText({slug: 'abc', stage: 'implement', inputMode: 'ask_questions', gateOnAdvance: 'review_and_advance'});
+    const text = buildNudgeText({slug: 'abc', stage: 'implement', inputMode: 'ask_questions', gateOnAdvance: 'auto_advance'});
     expect(text).toContain('status.json');
+  });
+
+  test('does not use the word "ralph" in the message to the agent', () => {
+    // We want the reminder to read like a polite human check-in, not a
+    // system notification. The agent should not be told about the machinery.
+    const text = buildNudgeText({slug: 'abc', stage: 'discovery', inputMode: 'inline', gateOnAdvance: 'auto_advance'});
+    expect(text.toLowerCase()).not.toContain('ralph');
+  });
+
+  test('reminds the agent to flip is_waiting_for_user when they need input', () => {
+    const text = buildNudgeText({slug: 'abc', stage: 'requirements', inputMode: 'inline', gateOnAdvance: 'require_approval'});
+    expect(text).toContain('is_waiting_for_user');
+    expect(text).toMatch(/brief_description/);
+  });
+
+  test('reads as a polite check-in, not a directive', () => {
+    const text = buildNudgeText({slug: 'abc', stage: 'discovery', inputMode: 'ask_questions', gateOnAdvance: 'auto_advance'});
+    // Soft signals: contains "please" or "check-in" phrasing and doesn't
+    // open with a system-labelled bracket like "[ralph]".
+    expect(text).not.toMatch(/^\[/);
+    expect(text.toLowerCase()).toMatch(/please|check-in/);
   });
 });
 

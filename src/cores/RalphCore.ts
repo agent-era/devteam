@@ -89,9 +89,13 @@ export function saveRalphConfig(projectPath: string, config: RalphConfig): void 
   fs.writeFileSync(ralphConfigPath(projectPath), JSON.stringify(config, null, 2));
 }
 
-// Build the stage-specific nudge text. The agent pastes this back into its
-// own context, so it's written in the second person, names the stage guide
-// path, and references the status.json protocol it should be maintaining.
+// Build the stage-specific reminder text. The agent pastes this back into
+// its own context, so it's written in the second person and phrased as a
+// polite check-in rather than a system-labelled nudge — we want the agent
+// to read it as conversation, not metadata. It reminds the agent to report
+// its current stage and whether it needs user input via status.json; that
+// report is what suppresses future check-ins when the agent is legitimately
+// paused on a human.
 export function buildNudgeText(opts: {
   slug: string;
   stage: TrackerStage;
@@ -105,11 +109,14 @@ export function buildNudgeText(opts: {
     : opts.stage === 'cleanup' ? 'implementation.md'
     : '—';
   const stageFile = `tracker/stages/${stageFileNumber(opts.stage)}-${opts.stage}.md`;
+  const statusPath = `tracker/items/${opts.slug}/status.json`;
   return [
-    `[ralph] You're still in stage "${opts.stage}" for ${opts.slug} and appear idle.`,
-    `Re-read ${stageFile} (gate: ${opts.gateOnAdvance}; input_mode: ${opts.inputMode}).`,
-    `Expected output: ${outputFile}. When work is done, advance by updating tracker/items/${opts.slug}/status.json (canonical) then the index.`,
-    `If you're blocked, set is_waiting_for_user: true in status.json with a brief_description — or use ask_questions if that's your input_mode. Otherwise keep going.`,
+    `Quick check-in — this session has been idle for a while, so I wanted to make sure you're not stuck.`,
+    `Current stage is \`${opts.stage}\` (guide: ${stageFile}, gate: ${opts.gateOnAdvance}, input_mode: ${opts.inputMode}). The expected output for this stage is \`${outputFile}\`.`,
+    `Please update \`${statusPath}\` to reflect where you are right now:`,
+    `set \`stage\` to your current stage, then either set \`is_waiting_for_user: true\` with a short \`brief_description\` if you need my input before you can continue, or \`is_waiting_for_user: false\` with a note of what you're actively working on.`,
+    `If you're waiting on me, flipping that flag in status.json (or using ask_questions if that's your input_mode) will stop these check-ins from firing.`,
+    `Otherwise, please keep making progress on \`${outputFile}\` and advance the stage when ready.`,
   ].join(' ');
 }
 
