@@ -30,7 +30,7 @@ import {UIProvider, useUIContext} from './contexts/UIContext.js';
 import {InputFocusProvider} from './contexts/InputFocusContext.js';
 import {WorktreeCore} from './cores/WorktreeCore.js';
 import {GitHubCore} from './cores/GitHubCore.js';
-import {TrackerService} from './services/TrackerService.js';
+import {TrackerService, type TrackerItem, type TrackerStage} from './services/TrackerService.js';
 
 
 function AppContent() {
@@ -225,10 +225,10 @@ function AppContent() {
     return board.columns.flatMap(c => c.items).find(c => c.slug === trackerItemSlug) ?? null;
   }, [mode, trackerProject, trackerItemSlug, tracker]);
 
-  const buildPromptForItem = (item: import('./services/TrackerService.js').TrackerItem, stageOverride?: import('./services/TrackerService.js').TrackerStage, itemDirOverride?: string) => {
+  const buildPromptForItem = (item: TrackerItem, stageOverride?: TrackerStage, itemDirOverride?: string) => {
     const stagesConfig = tracker.loadStagesConfig(item.projectPath);
     const stage = stageOverride ?? item.stage;
-    const stageConf = stage !== 'archive' ? stagesConfig[stage as Exclude<import('./services/TrackerService.js').TrackerStage, 'archive'>] : null;
+    const stageConf = stage !== 'archive' ? stagesConfig[stage as Exclude<TrackerStage, 'archive'>] : null;
     if (!stageConf) return '';
     return tracker.buildPlanningPrompt(item, stageConf, itemDirOverride);
   };
@@ -238,8 +238,8 @@ function AppContent() {
   // worktree so the agent works entirely with paths relative to its repo root.
   const launchSessionForItem = async (
     project: {name: string; path: string},
-    item: import('./services/TrackerService.js').TrackerItem,
-    stage: import('./services/TrackerService.js').TrackerStage,
+    item: TrackerItem,
+    stage: TrackerStage,
   ) => {
     let worktree = worktrees.find(wt => wt.project === project.name && wt.feature === item.slug) || null;
     if (!worktree) worktree = await recreateImplementWorktree(project.name, item.slug);
@@ -258,24 +258,31 @@ function AppContent() {
     }
   };
 
-  const handleCurrentStageWork = (item: import('./services/TrackerService.js').TrackerItem) => {
+  const handleCurrentStageWork = (item: TrackerItem) => {
     if (!trackerProject) return;
     const project = trackerProject;
     runWithLoading(async () => { await launchSessionForItem(project, item, item.stage); }, {returnToList: false});
   };
 
-  const handleStageAction = (item: import('./services/TrackerService.js').TrackerItem) => {
+  const handleStageAction = (item: TrackerItem) => {
     if (!trackerProject) return;
     const project = trackerProject;
-
-    // Advance to the next stage (if any), then launch a session for the new stage.
     const nextStage = tracker.nextStage(item.stage);
-    if (nextStage && nextStage !== 'archive') {
-      tracker.moveItem(project.path, item.slug, nextStage);
-    }
     const targetStage = nextStage && nextStage !== 'archive' ? nextStage : item.stage;
     const updatedItem = {...item, stage: targetStage};
-    runWithLoading(async () => { await launchSessionForItem(project, updatedItem, targetStage); }, {returnToList: false});
+    runWithLoading(async () => {
+      try {
+        // Only advance the on-disk stage once the worktree exists and the prompt is
+        // built — if launchSessionForItem throws or the worktree can't be created,
+        // we don't want the item left half-advanced with no session.
+        await launchSessionForItem(project, updatedItem, targetStage);
+        if (nextStage && nextStage !== 'archive') {
+          tracker.moveItem(project.path, item.slug, nextStage);
+        }
+      } catch {
+        // launchSessionForItem already routes back to the tracker on failure.
+      }
+    }, {returnToList: false});
   };
 
   // Router content node (wrapped by a single FullScreen below)
@@ -497,8 +504,7 @@ function AppContent() {
           onSelect={async (tool) => {
             const wt = pendingWorktree;
             try {
-              runWithLoading(() => attachSession(wt, tool, prompt), {returnToList: false});
-              returnFn();
+              runWithLoading(() => attachSession(wt, tool, prompt), {onReturn: returnFn});
             } catch (error) {
               console.error('Failed to attach session with selected tool:', error);
             }

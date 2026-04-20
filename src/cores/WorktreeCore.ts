@@ -514,14 +514,10 @@ export class WorktreeCore implements CoreBase<State> {
     for (const name of [s, sh, rn]) { if (active.includes(name)) this.tmux.killSession(name); }
   }
 
-  private launchClaudeSessionWithFallback(sessionName: string, cwd: string, flagStr: string = '', displayName?: string, initialPrompt?: string, fresh?: boolean): void {
+  private launchClaudeSessionWithFallback(sessionName: string, cwd: string, flagStr: string = '', displayName?: string, initialPrompt?: string): void {
     const nameFlag = displayName ? ` -n ${shellQuote(displayName)}` : '';
     const promptArg = initialPrompt ? ` ${shellQuote(initialPrompt)}` : '';
     const fallbackCmd = 'claude' + nameFlag + flagStr + promptArg;
-    if (fresh) {
-      this.tmux.createSessionWithCommand(sessionName, cwd, fallbackCmd, true);
-      return;
-    }
     const continueCmd = aiLaunchCommand('claude') + nameFlag + flagStr + promptArg;
     this.tmux.createSessionWithCommand(sessionName, cwd, `${continueCmd} || ${fallbackCmd}`, true);
   }

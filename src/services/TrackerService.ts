@@ -388,7 +388,16 @@ export class TrackerService {
 
   createItem(projectPath: string, title: string, stage: TrackerStage = 'discovery', explicitSlug?: string): void {
     const slug = explicitSlug || this.slugify(title);
-    if (!slug) return;
+    // Reject anything that isn't a plain slug — slugs are interpolated into file
+    // paths, so a stray '.' or '/' would let a crafted title escape the tracker dir.
+    if (!slug || !/^[a-z0-9][a-z0-9-]*$/.test(slug)) return;
+    // Idempotent: if the slug is already in the index at the requested stage, do
+    // nothing. Avoids double-create when the orphan-materialise handler races a
+    // re-render that triggers Enter twice.
+    if (this.hasTracker(projectPath)) {
+      const stageBySlug = this.createStageBySlug(this.readIndex(projectPath));
+      if (stageBySlug.get(slug) === stage) return;
+    }
     this.ensureTracker(projectPath);
     // Files are materialised on demand by ensureItemFiles() when a session is launched.
     // Persist the title under sessions[slug] so we can show a meaningful title on the

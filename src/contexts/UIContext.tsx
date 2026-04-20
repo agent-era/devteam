@@ -218,6 +218,13 @@ export function UIProvider({children}: UIProviderProps) {
   };
 
   const showTracker = (project: {name: string; path: string}) => {
+    // Switching projects must clear the previous project's proposal state, otherwise
+    // the new board shows leftover proposals from the old one.
+    if (trackerProject?.name !== project.name) {
+      setProposalItems(null);
+      setProposalGenerating(false);
+      setProposalError(null);
+    }
     setMode('tracker');
     setTrackerProject(project);
     setLastTrackerProject(project.name);

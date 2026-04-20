@@ -325,11 +325,13 @@ export default function TrackerBoardScreen({
 
   // When the picker is open, render it full-screen instead of the board. The board
   // fills terminal height with its columns, so anything rendered below gets clipped.
+  // discoverProjects does sync filesystem work; cache it across re-renders.
+  const pickerProjects = React.useMemo(() => pickerMode ? discoverProjects() : [], [pickerMode, discoverProjects]);
   if (pickerMode) {
     return (
       <Box flexDirection="column" flexGrow={1} paddingX={1} paddingY={1}>
         <TrackerProjectPickerDialog
-          projects={discoverProjects()}
+          projects={pickerProjects}
           worktrees={worktrees}
           currentProjectName={project}
           onCancel={() => setPickerMode(false)}

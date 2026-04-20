@@ -1,17 +1,10 @@
 import React from 'react';
 import fs from 'fs';
 import {Box, Text, useInput} from 'ink';
-import {TrackerService, StagesConfig, TrackerStage, WorkStyle} from '../services/TrackerService.js';
+import {TrackerService, StagesConfig, TrackerStage, WorkStyle, STAGE_LABELS} from '../services/TrackerService.js';
 import {useTerminalDimensions} from '../hooks/useTerminalDimensions.js';
 
 const STAGE_KEYS: Exclude<TrackerStage, 'archive'>[] = ['discovery', 'requirements', 'implement', 'cleanup'];
-const STAGE_LABELS: Record<Exclude<TrackerStage, 'archive'>, string> = {
-  backlog: 'Discovery',
-  discovery: 'Discovery',
-  requirements: 'Requirements',
-  implement: 'Implement',
-  cleanup: 'Cleanup',
-};
 const ALL_TABS = [...STAGE_KEYS, 'style'] as const;
 
 interface OptionDef {
