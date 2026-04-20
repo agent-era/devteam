@@ -123,8 +123,8 @@ for (const [height, width] of SIZE_COMBOS) {
       const text = frame();
       const lines = text.split('\n');
       // Column borders use ╭ / ╰. The first ╭ marks the top of the column boxes;
-      // the last ╰ marks the bottom. Their span is the visible board height. We
-      // want minimal chrome — at least 80% of the terminal should be column boxes.
+      // the last ╰ marks the bottom. Their span is the visible board height.
+      // colHeight = max(5, termRows - 4): 1 title + 1 footer + 1 FullScreen-reserved + 1 margin.
       const top = lines.findIndex(l => l.includes('╭'));
       let bottom = -1;
       for (let i = lines.length - 1; i >= 0; i--) {
@@ -132,7 +132,7 @@ for (const [height, width] of SIZE_COMBOS) {
       }
       assert.ok(top !== -1 && bottom > top, `Column boxes not found at ${height}x${width}`);
       const boardSpan = bottom - top + 1;
-      const minSpan = Math.max(6, Math.floor(height * 0.8));
+      const minSpan = Math.max(5, height - 4);
       assert.ok(
         boardSpan >= minSpan,
         `Board only ${boardSpan} of ${height} rows at ${height}x${width} ` +
