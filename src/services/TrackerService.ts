@@ -423,10 +423,10 @@ export class TrackerService {
   private writeRequirementsStub(reqPath: string, title: string, slug: string, body: string): boolean {
     if (fs.existsSync(reqPath)) return false;
     const today = new Date().toISOString().slice(0, 10);
-    // Strip newlines in the title so they can't break out of the frontmatter
-    // into forged keys like "slug: injected".
-    const safeTitle = title.replace(/[\r\n]+/g, ' ').trim();
-    fs.writeFileSync(reqPath, `---\ntitle: ${safeTitle}\nslug: ${slug}\nupdated: ${today}\n---\n\n${body}\n`);
+    // Strip newlines and quote the title so YAML-significant characters (":",
+    // "'", "[", "!") in user-typed titles can't forge frontmatter keys.
+    const yamlTitle = JSON.stringify(title.replace(/[\r\n]+/g, ' ').trim());
+    fs.writeFileSync(reqPath, `---\ntitle: ${yamlTitle}\nslug: ${slug}\nupdated: ${today}\n---\n\n${body}\n`);
     return true;
   }
 

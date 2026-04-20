@@ -46,7 +46,7 @@ describe('proposal acceptance: slug and description', () => {
     expect(fs.existsSync(reqPath)).toBe(true);
     const content = fs.readFileSync(reqPath, 'utf8');
     expect(content).toContain('Implement Google and GitHub OAuth2 sign-in flows.');
-    expect(content).toMatch(/^title: OAuth Login$/m);
+    expect(content).toMatch(/^title: "OAuth Login"$/m);
     expect(content).toMatch(/^slug: oauth-login$/m);
   });
 

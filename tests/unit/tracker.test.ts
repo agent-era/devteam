@@ -718,7 +718,7 @@ describe('ensureItemFiles', () => {
     expect(fs.existsSync(destDir)).toBe(true);
     const reqPath = path.join(destDir, 'requirements.md');
     expect(fs.existsSync(reqPath)).toBe(true);
-    expect(fs.readFileSync(reqPath, 'utf8')).toContain('title: My Feature');
+    expect(fs.readFileSync(reqPath, 'utf8')).toContain('title: "My Feature"');
   });
 
   test('does NOT create tracker/index.json in the worktree', () => {
