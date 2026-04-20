@@ -1,5 +1,8 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import React from 'react';
 
 // Prevent TTY raw mode errors in test environment
@@ -27,9 +30,12 @@ for (const [height, width] of COMBOS) {
     const {calculateMainViewPageSize} = await import('../../../dist/shared/utils/layout.js');
     const {CapturingStdout, StdinStub, waitFor, includesWorktree, stripAnsi} = await import('./_utils.js');
 
-    // Reset store and seed 1 project with 15 worktrees
+    // Reset store and seed 1 project with 15 worktrees. The project path must be
+    // writable because the tracker (default startup view) creates tracker/index.json
+    // under it before we navigate to the MainView.
     memoryStore.reset();
-    setupTestProject('demo');
+    const tmpProject = fs.mkdtempSync(path.join(os.tmpdir(), 'devteam-mv-'));
+    setupTestProject('demo', tmpProject);
     for (let i = 1; i <= TOTAL_WORKTREES; i++) {
       setupTestWorktree('demo', `feat-${i.toString().padStart(2, '0')}`);
     }
@@ -47,10 +53,27 @@ for (const [height, width] of COMBOS) {
     const inst = Ink.render(tree, {stdout, stdin, debug: true, exitOnCtrlC: false, patchConsole: false});
 
     try {
-      // Wait for the app to load and render at least the first item
+      // Startup routes to the tracker board. The tracker surfaces worktrees without
+      // a tracker item as orphans in the Implement column, so once feat-01 appears on
+      // the tracker we know WorktreeCore's initial refresh has completed. Then send
+      // `t` to toggle over to the MainView; retry the keystroke until the list view
+      // renders, since the raw-mode stdin handler attaches asynchronously and a
+      // lone keystroke can race with the effect.
       await waitFor(
-        () => includesWorktree(stdout.lastFrame() || '', 'demo', 'feat-01'),
-        {timeout: 3000, interval: 20, message: `feat-01 visible at ${height}x${width}`}
+        () => {
+          const f = stripAnsi(stdout.lastFrame() || '');
+          return f.includes('Discovery') && f.includes('feat-01');
+        },
+        {timeout: 3000, interval: 20, message: `tracker + worktrees visible at ${height}x${width}`}
+      );
+
+      await waitFor(
+        () => {
+          stdin.emit('data', Buffer.from('t'));
+          return includesWorktree(stdout.lastFrame() || '', 'demo', 'feat-01')
+            && !stripAnsi(stdout.lastFrame() || '').includes('Discovery');
+        },
+        {timeout: 3000, interval: 50, message: `main view visible at ${height}x${width}`}
       );
 
       const expectedPageSize = calculateMainViewPageSize(height, width);
@@ -78,6 +101,7 @@ for (const [height, width] of COMBOS) {
       }
     } finally {
       try { inst.unmount?.(); } catch {}
+      try { fs.rmSync(tmpProject, {recursive: true, force: true}); } catch {}
       // Brief delay to allow cleanup before next combo
       await new Promise(r => setTimeout(r, 20));
     }

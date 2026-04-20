@@ -1,8 +1,12 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import React from 'react';
 
 test('pressing a then ESC with one worktree returns to list (not blank)', async () => {
+  process.env.E2E_IGNORE_RAWMODE = '1';
   const Ink = await import('../../../node_modules/ink/build/index.js');
   const {TestableApp} = await import('../../../dist/App.js');
   const {FakeGitService} = await import('../../../dist-tests/tests/fakes/FakeGitService.js');
@@ -10,9 +14,12 @@ test('pressing a then ESC with one worktree returns to list (not blank)', async 
   const {FakeGitHubService} = await import('../../../dist-tests/tests/fakes/FakeGitHubService.js');
   const {memoryStore, setupTestProject, setupTestWorktree} = await import('../../../dist-tests/tests/fakes/stores.js');
 
+  // Real tmp path so the tracker (default startup view) can materialise its index.
+  const tmpProject = fs.mkdtempSync(path.join(os.tmpdir(), 'devteam-arch-'));
+
   // Seed exactly one worktree
   memoryStore.reset();
-  setupTestProject('demo');
+  setupTestProject('demo', tmpProject);
   const wt = setupTestWorktree('demo', 'feature-1');
 
   // Custom stdout/stdin to satisfy Ink raw-mode and capture frames
@@ -28,21 +35,32 @@ test('pressing a then ESC with one worktree returns to list (not blank)', async 
 
   const inst = Ink.render(tree, {stdout, stdin, debug: true, exitOnCtrlC: false, patchConsole: false});
 
-  // Let initial frame render
   const {waitFor, waitForText, stripAnsi, includesWorktree} = await import('./_utils.js');
-  await waitFor(() => includesWorktree(stdout.lastFrame() || '', 'demo', 'feature-1'), {timeout: 20000, interval: 50, message: 'initial feature-1 [demo] visible'});
+
+  // Startup routes to the tracker board; press `t` once to toggle to MainView.
+  await waitFor(() => stripAnsi(stdout.lastFrame() || '').includes('Discovery'),
+    {timeout: 3000, interval: 50, message: 'tracker visible on startup'});
+  stdin.emit('data', Buffer.from('t'));
+  await waitFor(
+    () => includesWorktree(stdout.lastFrame() || '', 'demo', 'feature-1')
+      && !stripAnsi(stdout.lastFrame() || '').includes('Discovery'),
+    {timeout: 3000, interval: 50, message: 'initial feature-1 [demo] visible'}
+  );
   let frame = stdout.lastFrame() || '';
 
   // Press 'v' to open archive confirmation
   stdin.emit('data', Buffer.from('v'));
-  await waitForText(() => stripAnsi(stdout.lastFrame() || ''), 'Archive Feature', {timeout: 20000}).catch(async () => {
-    await waitForText(() => stripAnsi(stdout.lastFrame() || ''), 'Press y to confirm', {timeout: 5000});
+  await waitForText(() => stripAnsi(stdout.lastFrame() || ''), 'Archive Feature', {timeout: 3000}).catch(async () => {
+    await waitForText(() => stripAnsi(stdout.lastFrame() || ''), 'Press y to confirm', {timeout: 3000});
   });
+  // Let ArchiveConfirmScreen install its useInput handler before sending the next key.
+  await new Promise(r => setTimeout(r, 50));
   frame = stdout.lastFrame() || '';
 
   // Press ESC to cancel and return to list
   stdin.emit('data', Buffer.from('\u001b'));
-  await waitFor(() => includesWorktree(stdout.lastFrame() || '', 'demo', 'feature-1'), {timeout: 20000, interval: 50, message: 'worktree visible after ESC'});
+  await waitFor(() => includesWorktree(stdout.lastFrame() || '', 'demo', 'feature-1'),
+    {timeout: 3000, interval: 50, message: 'worktree visible after ESC'});
   frame = stdout.lastFrame() || '';
 
   // Must not be blank; should show the list again with the worktree row visible
@@ -50,4 +68,5 @@ test('pressing a then ESC with one worktree returns to list (not blank)', async 
   assert.ok(includesWorktree(frame, 'demo', 'feature-1'), 'Expected to return to main list after ESC');
 
   try { inst.unmount?.(); } catch {}
+  try { fs.rmSync(tmpProject, {recursive: true, force: true}); } catch {}
 });

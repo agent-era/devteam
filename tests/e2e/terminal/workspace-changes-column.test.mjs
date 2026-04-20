@@ -7,21 +7,28 @@ import React from 'react';
 
 test('CHANGES column shows ahead/behind for workspace children (base branch)', async () => {
   process.env.NO_APP_INTERVALS = '1';
+  process.env.E2E_IGNORE_RAWMODE = '1';
   const Ink = await import('../../../node_modules/ink/build/index.js');
   const {TestableApp} = await import('../../../dist/App.js');
   const {FakeGitService} = await import('../../../dist-tests/tests/fakes/FakeGitService.js');
   const {FakeTmuxService} = await import('../../../dist-tests/tests/fakes/FakeTmuxService.js');
   const {FakeGitHubService} = await import('../../../dist-tests/tests/fakes/FakeGitHubService.js');
 
-  // Create a real workspace directory so WorkspaceService detects it
+  // Create a real workspace directory so WorkspaceService detects it. Project paths
+  // must also be writable since the tracker (default startup view) creates its
+  // tracker/index.json under the project path before we navigate to MainView.
   const tmpBase = fs.mkdtempSync(path.join(os.tmpdir(), 'devteam-ws-'));
   const wsDir = path.join(tmpBase, 'workspaces', 'feature-y');
   fs.mkdirSync(wsDir, {recursive: true});
+  const projAPath = path.join(tmpBase, 'projA');
+  const projBPath = path.join(tmpBase, 'projB');
+  fs.mkdirSync(projAPath, {recursive: true});
+  fs.mkdirSync(projBPath, {recursive: true});
 
   // Seed projects and per-project worktrees for the same feature
   const gitService = new FakeGitService(tmpBase);
-  gitService.addProject('projA');
-  gitService.addProject('projB');
+  gitService.addProject('projA', projAPath);
+  gitService.addProject('projB', projBPath);
   const wtA = gitService.addWorktree('projA', 'feature-y');
   const wtB = gitService.addWorktree('projB', 'feature-y');
   // Set ahead/behind for projA child to verify CHANGES column
@@ -39,10 +46,17 @@ test('CHANGES column shows ahead/behind for workspace children (base branch)', a
   const inst = Ink.render(tree, {stdout, stdin, debug: true, exitOnCtrlC: false, patchConsole: false});
 
   try {
+    // Startup routes to the tracker board; press `t` to toggle over to MainView.
+    // Retry the keystroke until the MainView renders, since the raw-mode stdin
+    // handler attaches asynchronously and a single `t` can race with the effect.
+    await waitFor(() => stripAnsi(stdout.lastFrame() || '').includes('Discovery'),
+      {timeout: 3000, interval: 50, message: 'tracker board visible on startup'});
+
     await waitFor(() => {
+      stdin.emit('data', Buffer.from('t'));
       const clean = stripAnsi(stdout.lastFrame() || '');
       return clean.includes('feature-y [workspace]') && (clean.includes('├─ [projA]') || clean.includes('└─ [projA]'));
-    }, {timeout: 3000, interval: 50, message: 'workspace header and child visible'});
+    }, {timeout: 3000, interval: 50, message: 'workspace header and child visible in MainView'});
 
     const clean = stripAnsi(stdout.lastFrame() || '');
     // Extract the line for projA child and assert CHANGES contains arrows with counts
