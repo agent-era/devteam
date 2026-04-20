@@ -1,18 +1,16 @@
 import React, {useEffect, useMemo, useState} from 'react';
 import {Box, Text, useInput} from 'ink';
-import SyntaxHighlight from 'ink-syntax-highlight';
 import {runCommandAsync, runCommand} from '../../shared/utils/commandExecutor.js';
 import {findBaseBranch} from '../../shared/utils/gitHelpers.js';
 import {useTerminalDimensions} from '../../hooks/useTerminalDimensions.js';
 import {BASE_BRANCH_CANDIDATES} from '../../constants.js';
-import {CommentStore} from '../../models.js';
 import {commentStoreManager} from '../../services/CommentStoreManager.js';
 import {TmuxService} from '../../services/TmuxService.js';
 import CommentInputDialog from '../dialogs/CommentInputDialog.js';
 import SessionWaitingDialog from '../dialogs/SessionWaitingDialog.js';
 import UnsubmittedCommentsDialog from '../dialogs/UnsubmittedCommentsDialog.js';
 import FileTreeOverlay from '../dialogs/FileTreeOverlay.js';
-import {truncateDisplay, padEndDisplay, fitDisplay} from '../../shared/utils/formatting.js';
+import {truncateDisplay, fitDisplay} from '../../shared/utils/formatting.js';
 import AnnotatedText from '../common/AnnotatedText.js';
 import {LineWrapper} from '../../shared/utils/lineWrapper.js';
 import {ViewportCalculator} from '../../shared/utils/viewport.js';
@@ -23,6 +21,8 @@ import {loadDiff} from '../../shared/utils/diff/loadDiff.js';
 import {convertToSideBySide} from '../../shared/utils/diff/convertToSideBySide.js';
 import {formatCommentsAsPrompt} from '../../shared/utils/diff/formatCommentsAsPrompt.js';
 import type {DiffLine, SideBySideLine, ViewMode, WrapMode} from '../../shared/utils/diff/types.js';
+import UnifiedDiffRows from './diff/UnifiedDiffRows.js';
+import SideBySideDiffRows from './diff/SideBySideDiffRows.js';
 
 type Props = {
   worktreePath: string;
@@ -888,145 +888,29 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
         </Text>
       )}
       <Box flexDirection="column" height={viewportRows}>
-        {visibleLines.flatMap((line, visibleLineIndex) => {
-          const actualLineIndex = viewport.visibleLines[visibleLineIndex];
-          const isCurrentLine = actualLineIndex === selectedLine;
-          const rowBackground = isCurrentLine ? 'blue' : undefined;
-          const isWrap = wrapMode === 'wrap';
-
-          if (viewMode === 'unified') {
-            const unifiedLine = line as DiffLine;
-            const perFileIndex = unifiedPerFileIndex[actualLineIndex];
-            const hasComment = !!unifiedLine.fileName && perFileIndex !== undefined && commentStore.hasComment(perFileIndex, unifiedLine.fileName);
-            const gutterSymbol = unifiedLine.type === 'added' ? '+ ' : unifiedLine.type === 'removed' ? '- ' : '  ';
-            const gutterColor = unifiedLine.type === 'added' || unifiedLine.type === 'removed' ? 'white' : 'gray';
-            const bodyPrefix = unifiedLine.type === 'header' ? '' : (hasComment ? '  [C] ' : '  ');
-            const bodyWidth = Math.max(1, terminalWidth - 4);
-            const isFileHeader = unifiedLine.type === 'header' && unifiedLine.headerType === 'file';
-            const isHunkHeader = unifiedLine.type === 'header' && unifiedLine.headerType === 'hunk';
-            const bodyColor = isFileHeader ? 'white' : undefined;
-            const useSyntax = (unifiedLine.type === 'added' || unifiedLine.type === 'removed') && !isCurrentLine;
-            const lineTint = useSyntax ? (unifiedLine.type === 'added' ? 'green' : 'red') : undefined;
-            const lineBackground = isFileHeader ? (rowBackground ?? 'gray') : (rowBackground ?? lineTint);
-            const rawBody = `${bodyPrefix}${unifiedLine.text || ' '}`;
-
-            if (isWrap) {
-              const segments = LineWrapper.wrapLine(rawBody, bodyWidth);
-              return segments.map((seg, segIdx) => (
-                <Box key={`line-${actualLineIndex}-${segIdx}`} flexDirection="row" height={1} flexShrink={0}>
-                  <Text color={gutterColor} backgroundColor={lineBackground} bold={isCurrentLine}>
-                    {segIdx === 0 ? gutterSymbol : '  '}
-                  </Text>
-                  {useSyntax ? (
-                    <SyntaxHighlight code={padEndDisplay(seg, bodyWidth)} language={languageCache(unifiedLine.fileName)} />
-                  ) : (
-                    <Text
-                      color={bodyColor}
-                      dimColor={unifiedLine.type === 'context' || isHunkHeader}
-                      backgroundColor={lineBackground}
-                      bold={isCurrentLine || isFileHeader}
-                      wrap="truncate"
-                    >
-                      {padEndDisplay(seg, bodyWidth)}
-                    </Text>
-                  )}
-                </Box>
-              ));
-            }
-
-            const bodyText = fitDisplay(rawBody, bodyWidth);
-            return [(
-              <Box key={`line-${actualLineIndex}`} flexDirection="row" height={1} flexShrink={0}>
-                <Text color={gutterColor} backgroundColor={lineBackground} bold={isCurrentLine}>
-                  {gutterSymbol}
-                </Text>
-                {useSyntax ? (
-                  <SyntaxHighlight code={bodyText} language={languageCache(unifiedLine.fileName)} />
-                ) : (
-                  <Text
-                    color={bodyColor}
-                    dimColor={unifiedLine.type === 'context' || isHunkHeader}
-                    backgroundColor={lineBackground}
-                    bold={isCurrentLine || isFileHeader}
-                    wrap="truncate"
-                  >
-                    {bodyText}
-                  </Text>
-                )}
-              </Box>
-            )];
-          }
-
-          const sideBySideLine = line as SideBySideLine;
-          const paneWidth = Math.max(1, Math.floor((terminalWidth - 2) / 2));
-          const sbsFileForComment = sideBySideLine.right?.fileName || sideBySideLine.left?.fileName || '';
-          const sbsIndexForComment = sideBySidePerFileIndex[actualLineIndex];
-          const hasComment = !!sbsFileForComment && sbsIndexForComment !== undefined && commentStore.hasComment(sbsIndexForComment, sbsFileForComment);
-
-          const formatPaneSegments = (
-            pane: SideBySideLine['left'] | SideBySideLine['right'],
-            prefix: string
-          ): {segments: string[]; color?: string; dimColor?: boolean; bold?: boolean; useSyntax?: boolean; language?: string; backgroundColor?: string} => {
-            if (!pane) {
-              return {segments: [padEndDisplay('', paneWidth)], dimColor: true};
-            }
-
-            const raw = `${prefix}${pane.text || ' '}`;
-            const segs = isWrap
-              ? LineWrapper.wrapLine(raw, paneWidth)
-              : [truncateDisplay(raw, paneWidth)];
-
-            const paddedSegs = segs.map(s => padEndDisplay(s, paneWidth));
-
-            if (pane.type === 'header') {
-              return pane.headerType === 'file'
-                ? {segments: paddedSegs, color: 'white', bold: true, backgroundColor: 'gray'}
-                : {segments: paddedSegs, dimColor: true};
-            }
-            if (pane.type === 'context' || pane.type === 'empty') {
-              return {segments: paddedSegs, dimColor: true, bold: isCurrentLine};
-            }
-            return {segments: paddedSegs, useSyntax: !isCurrentLine, language: languageCache(pane.fileName), bold: isCurrentLine};
-          };
-
-          const isHeaderLine = sideBySideLine.left?.type === 'header' || sideBySideLine.right?.type === 'header';
-          const leftPane = formatPaneSegments(sideBySideLine.left, isHeaderLine ? ' ' : (hasComment ? '  [C] ' : '  '));
-          const rightPane = formatPaneSegments(sideBySideLine.right, isHeaderLine ? ' ' : '  ');
-          const numRows = Math.max(leftPane.segments.length, rightPane.segments.length);
-          const emptyLeft = padEndDisplay('', paneWidth);
-          const emptyRight = padEndDisplay('', paneWidth);
-
-          return Array.from({length: numRows}, (_, rowIdx) => (
-            <Box key={`line-${actualLineIndex}-${rowIdx}`} flexDirection="row" height={1} flexShrink={0}>
-              {leftPane.useSyntax ? (
-                <SyntaxHighlight code={leftPane.segments[rowIdx] ?? emptyLeft} language={leftPane.language} />
-              ) : (
-                <Text
-                  color={leftPane.color}
-                  dimColor={leftPane.dimColor}
-                  backgroundColor={rowBackground ?? leftPane.backgroundColor}
-                  bold={leftPane.bold}
-                  wrap="truncate"
-                >
-                  {leftPane.segments[rowIdx] ?? emptyLeft}
-                </Text>
-              )}
-              {rightPane.useSyntax ? (
-                <SyntaxHighlight code={rightPane.segments[rowIdx] ?? emptyRight} language={rightPane.language} />
-              ) : (
-                <Text
-                  color={rightPane.color}
-                  dimColor={rightPane.dimColor}
-                  backgroundColor={rowBackground ?? rightPane.backgroundColor}
-                  bold={rightPane.bold}
-                  wrap="truncate"
-                >
-                  {rightPane.segments[rowIdx] ?? emptyRight}
-                </Text>
-              )}
-            </Box>
-          ));
-        })}
+        {viewMode === 'unified' ? (
+          <UnifiedDiffRows
+            lines={lines}
+            visibleLineIndices={viewport.visibleLines}
+            selectedLine={selectedLine}
+            terminalWidth={terminalWidth}
+            wrapMode={wrapMode}
+            perFileIndex={unifiedPerFileIndex}
+            commentStore={commentStore}
+            getLanguage={languageCache}
+          />
+        ) : (
+          <SideBySideDiffRows
+            lines={sideBySideLines}
+            visibleLineIndices={viewport.visibleLines}
+            selectedLine={selectedLine}
+            terminalWidth={terminalWidth}
+            wrapMode={wrapMode}
+            perFileIndex={sideBySidePerFileIndex}
+            commentStore={commentStore}
+            getLanguage={languageCache}
+          />
+        )}
       </Box>
       
       {showCommentSummary && (
