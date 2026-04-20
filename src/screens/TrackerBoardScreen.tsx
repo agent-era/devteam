@@ -230,8 +230,15 @@ export default function TrackerBoardScreen({
   const handleArchiveItem = React.useCallback(() => {
     if (!currentItem) return;
     const wt = getWorktreeForItem(currentItem);
-    if (!wt) return;
-    showArchiveConfirmation(wt, {onReturn: backToTracker});
+    const worktreeInfo = wt ?? new WorktreeInfo({
+      project: currentItem.project,
+      feature: currentItem.slug,
+      path: '',
+    });
+    showArchiveConfirmation(worktreeInfo, {
+      onReturn: backToTracker,
+      projectPath: currentItem.projectPath,
+    });
   }, [currentItem, getWorktreeForItem, showArchiveConfirmation, backToTracker]);
 
   const handleCreateSubmit = React.useCallback(() => {
@@ -308,7 +315,7 @@ export default function TrackerBoardScreen({
     onExecuteRun: hasWorktree ? handleExecuteRun : undefined,
     onDiff: hasWorktree ? () => handleDiff('full') : undefined,
     onDiffUncommitted: hasWorktree ? () => handleDiff('uncommitted') : undefined,
-    onArchive: hasWorktree ? handleArchiveItem : undefined,
+    onArchive: currentItem ? handleArchiveItem : undefined,
     // `t` toggles between tracker and worktree list. Symmetric with `t` on the
     // worktree list which routes to the tracker.
     onTracker: showList,
@@ -556,14 +563,14 @@ export default function TrackerBoardScreen({
           <Text color={proposalStatus.color}>{proposalStatus.text}</Text>
         )}
         {!inputActive && (
-          <Footer hasSession={!!currentItemSession} hasWorktree={hasWorktree} />
+          <Footer hasSession={!!currentItemSession} hasWorktree={hasWorktree} hasItem={!!currentItem} />
         )}
       </Box>
     </Box>
   );
 }
 
-const Footer = React.memo(function Footer({hasSession, hasWorktree}: {hasSession: boolean; hasWorktree: boolean}) {
+const Footer = React.memo(function Footer({hasSession, hasWorktree, hasItem}: {hasSession: boolean; hasWorktree: boolean; hasItem: boolean}) {
   const sep = <Text dimColor>  ·  </Text>;
   return (
     <Box>
@@ -593,6 +600,10 @@ const Footer = React.memo(function Footer({hasSession, hasWorktree}: {hasSession
           <Text>  </Text>
           <Text color="magenta">d</Text>
           <Text dimColor> diff</Text>
+        </>
+      )}
+      {hasItem && (
+        <>
           <Text>  </Text>
           <Text dimColor>archi</Text>
           <Text color="magenta">v</Text>
