@@ -67,6 +67,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
   });
 
   useEffect(() => {
+    if (!comments.baseHashReady) return;
     (async () => {
       const lns = await loadDiff(worktreePath, diffType, diffType === 'full' ? comments.baseCommitHash : undefined);
       setLines(lns);
@@ -75,7 +76,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       nav.setTargetScrollRow(0);
       nav.setSelectedLine(0);
     })();
-  }, [worktreePath, diffType, comments.baseCommitHash]);
+  }, [worktreePath, diffType, comments.baseCommitHash, comments.baseHashReady]);
 
   const overlayAreaHeight = nav.showFileTreeOverlay ? Math.max(6, Math.floor(terminalHeight / 2)) : 0;
   const showCommentSummary = comments.showAllComments && comments.commentStore.count > 0;

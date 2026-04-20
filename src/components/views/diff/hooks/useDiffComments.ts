@@ -82,6 +82,7 @@ export function useDiffComments(params: Params) {
   const commentStore = useMemo(() => commentStoreManager.getStore(worktreePath), [worktreePath]);
   const [tmuxService] = useState(() => new TmuxService());
   const [baseCommitHash, setBaseCommitHash] = useState<string>('');
+  const [baseHashReady, setBaseHashReady] = useState(false);
   const [showCommentDialog, setShowCommentDialog] = useState(false);
   const [showAllComments, setShowAllComments] = useState(true);
   const [showSessionWaitingDialog, setShowSessionWaitingDialog] = useState(false);
@@ -106,6 +107,7 @@ export function useDiffComments(params: Params) {
       } catch {}
       setBaseCommitHash(computed);
       commentStore.baseCommitHash = computed || undefined;
+      setBaseHashReady(true);
     })();
   }, [worktreePath, diffType, commentStore]);
 
@@ -210,6 +212,7 @@ export function useDiffComments(params: Params) {
   return {
     commentStore,
     baseCommitHash,
+    baseHashReady,
     showCommentDialog,
     showAllComments,
     toggleShowAllComments: () => setShowAllComments(prev => !prev),
