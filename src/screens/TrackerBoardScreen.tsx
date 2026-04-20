@@ -1,6 +1,6 @@
 import React from 'react';
 import {Box, Text, useInput} from 'ink';
-import {TrackerBoard, TrackerItem, TrackerService} from '../services/TrackerService.js';
+import {TrackerBoard, TrackerItem, TrackerService, TrackerStage} from '../services/TrackerService.js';
 import {useKeyboardShortcuts} from '../hooks/useKeyboardShortcuts.js';
 import {useTerminalDimensions} from '../hooks/useTerminalDimensions.js';
 import {useUIContext} from '../contexts/UIContext.js';
@@ -257,7 +257,7 @@ export default function TrackerBoardScreen({
     setCreateTitle('');
     if (!title) return;
 
-    const stage = (currentColumn?.id || 'backlog') as Parameters<typeof service.createItem>[2];
+    const stage = (currentColumn?.id || 'backlog') as TrackerStage;
     const tempSlug = service.slugify(title);
     if (!tempSlug) return;
 
@@ -267,9 +267,9 @@ export default function TrackerBoardScreen({
 
     const existingSlugs = board.columns.flatMap(col => col.items.map(it => it.slug));
     void service.deriveSlug(title, existingSlugs).then(finalSlug => {
-      if (finalSlug !== tempSlug) service.renameItem(projectPath, tempSlug, finalSlug, title);
+      const renamed = finalSlug !== tempSlug && service.renameItem(projectPath, tempSlug, finalSlug, title);
       setPendingCreations(prev => { const next = new Set(prev); next.delete(tempSlug); return next; });
-      reloadBoard();
+      if (renamed) reloadBoard();
     });
   }, [createTitle, service, projectPath, currentColumn, reloadBoard, board]);
 

@@ -374,6 +374,10 @@ export class TrackerService {
       .slice(0, 20);
   }
 
+  private isValidSlug(slug: string): boolean {
+    return /^[a-z0-9][a-z0-9-]*$/.test(slug);
+  }
+
   nextStage(stage: TrackerStage): TrackerStage | null {
     const idx = STAGE_ORDER.indexOf(stage);
     if (idx < 0 || idx >= STAGE_ORDER.length - 1) return null;
@@ -390,7 +394,7 @@ export class TrackerService {
     const slug = explicitSlug || this.slugify(title);
     // Reject anything that isn't a plain slug — slugs are interpolated into file
     // paths, so a stray '.' or '/' would let a crafted title escape the tracker dir.
-    if (!slug || !/^[a-z0-9][a-z0-9-]*$/.test(slug)) return;
+    if (!slug || !this.isValidSlug(slug)) return;
     // Idempotent: if the slug is already in the index at the requested stage, do
     // nothing. Avoids double-create when the orphan-materialise handler races a
     // re-render that triggers Enter twice.
@@ -416,8 +420,8 @@ export class TrackerService {
     const result = await runClaudeAsync(prompt, {timeoutMs: 8000});
     let derived = this.slugify(title);
     if (result.success && result.output) {
-      const candidate = result.output.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 30);
-      if (candidate && /^[a-z0-9][a-z0-9-]*$/.test(candidate)) derived = candidate;
+      const candidate = this.slugify(result.output.trim());
+      if (candidate && this.isValidSlug(candidate)) derived = candidate;
     }
     if (!existingSlugs.includes(derived)) return derived;
     let i = 2;
@@ -427,7 +431,7 @@ export class TrackerService {
 
   renameItem(projectPath: string, oldSlug: string, newSlug: string, title: string): boolean {
     if (oldSlug === newSlug) return false;
-    if (!newSlug || !/^[a-z0-9][a-z0-9-]*$/.test(newSlug)) return false;
+    if (!newSlug || !this.isValidSlug(newSlug)) return false;
     const index = this.readIndex(projectPath);
     const stage = this.createStageBySlug(index).get(oldSlug);
     if (!stage) return false;
