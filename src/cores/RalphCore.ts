@@ -274,7 +274,11 @@ export class RalphCore implements CoreBase<State> {
 
     // ── nudge guards ─────────────────────────────────────────────────────────
     if (!config.enabled) return next;
-    if (!sessionName || !wt.session?.attached) return next;
+    // Need a tmux session to deliver the nudge into. Attachment (whether the
+    // user is viewing the pane) is *not* a "running agent" signal — a
+    // backgrounded tmux session is still running the agent, and ai_status
+    // handles the "is the agent alive and idle?" question below.
+    if (!sessionName) return next;
     if (aiStatus === 'working' || aiStatus === 'waiting') return next;
     if (aiStatus !== 'idle') return next;
     if (idleSince === null || nowMs - idleSince < config.idleThresholdMs) return next;

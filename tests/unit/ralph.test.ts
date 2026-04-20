@@ -246,7 +246,10 @@ describe('RalphCore safety invariants', () => {
     expect(tmux.sent.length).toBe(0);
   });
 
-  test('never sends a nudge when the tmux session is not attached', () => {
+  test('nudges a backgrounded session when the agent is running + idle', () => {
+    // Attachment just means the user is viewing the pane; it's orthogonal
+    // to whether the agent itself is running. ai_status === 'idle' is the
+    // authoritative "running and ready" signal.
     enableRalph();
     writeStatus('my-slug', {});
     const t0 = Date.now();
@@ -256,7 +259,7 @@ describe('RalphCore safety invariants', () => {
     core.sampleOnce();
     now = t0 + 10 * 60 * 1000;
     core.sampleOnce();
-    expect(tmux.sent.length).toBe(0);
+    expect(tmux.sent.length).toBe(1);
   });
 });
 
