@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from 'react';
+import React, {useEffect, useMemo, useState} from 'react';
 import {Box, Text, useInput, useStdin} from 'ink';
 import {useWorktreeContext} from '../contexts/WorktreeContext.js';
 import ProgressDialog from '../components/dialogs/ProgressDialog.js';
@@ -27,6 +27,7 @@ export default function ArchiveConfirmScreen({
 }: ArchiveConfirmScreenProps) {
   const {archiveFeature, archiveWorkspace, getUntrackedNonIgnoredFiles} = useWorktreeContext();
   const {isRawModeSupported} = useStdin();
+  const trackerService = useMemo(() => new TrackerService(), []);
   const [isArchiving, setIsArchiving] = useState(false);
   const [untrackedFiles, setUntrackedFiles] = useState<string[]>([]);
 
@@ -51,7 +52,7 @@ export default function ArchiveConfirmScreen({
         }
       }
       if (featureInfo.projectPath && featureInfo.project !== 'workspace') {
-        new TrackerService().moveItem(featureInfo.projectPath, featureInfo.feature, 'archive');
+        trackerService.moveItem(featureInfo.projectPath, featureInfo.feature, 'archive');
       }
       onSuccess();
     } catch (error) {

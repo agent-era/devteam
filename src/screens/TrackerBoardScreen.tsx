@@ -5,7 +5,7 @@ import {useKeyboardShortcuts} from '../hooks/useKeyboardShortcuts.js';
 import {useTerminalDimensions} from '../hooks/useTerminalDimensions.js';
 import {useUIContext} from '../contexts/UIContext.js';
 import {useWorktreeContext} from '../contexts/WorktreeContext.js';
-import {WorktreeInfo, SessionInfo} from '../models.js';
+import {WorktreeInfo} from '../models.js';
 import type {AIStatus} from '../models.js';
 import {truncateDisplay} from '../shared/utils/formatting.js';
 import TrackerProjectPickerDialog from '../components/dialogs/TrackerProjectPickerDialog.js';
@@ -234,7 +234,6 @@ export default function TrackerBoardScreen({
       project: currentItem.project,
       feature: currentItem.slug,
       path: '',
-      session: new SessionInfo(),
     });
     showArchiveConfirmation(worktreeInfo, {
       onReturn: backToTracker,
