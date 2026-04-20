@@ -47,25 +47,18 @@ const STAGE_OPTION_DEFS: Partial<Record<Exclude<TrackerStage, 'archive'>, Option
     ]},
   ],
   requirements: [
+    // Collaboration shape. `freeform` was fuzzy; check-in cadence is
+    // covered by the project-global inputMode (Style tab).
     {key: 'style', label: 'Style', choices: [
       {value: 'interview', label: 'Interview first'},
       {value: 'draft_first', label: 'Draft then refine'},
-      {value: 'freeform', label: 'Free-form'},
     ]},
+    // Scope dial for the spec itself. Controls which output sections are
+    // required and the min-word floor.
     {key: 'detail', label: 'Detail', choices: [
       {value: 'minimal', label: 'Minimal'},
       {value: 'standard', label: 'Standard'},
       {value: 'thorough', label: 'Thorough'},
-    ]},
-    {key: 'approval', label: 'Check-ins', choices: [
-      {value: 'per_section', label: 'Per section'},
-      {value: 'end_only', label: 'End only'},
-      {value: 'none', label: 'None'},
-    ]},
-    {key: 'user_stories', label: 'User stories', choices: [
-      {value: 'skip', label: 'Skip'},
-      {value: 'include', label: 'Include'},
-      {value: 'lead', label: 'Lead with'},
     ]},
     ...COMMON_STAGE_OPTIONS,
   ],

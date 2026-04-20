@@ -1399,69 +1399,39 @@ Advance: set \`status.json.stage\` to \`requirements\`.
       }
 
       case 'requirements': {
+        // Two knobs: collaboration shape (style) + spec depth (detail).
+        // Check-in cadence is governed by the project inputMode, not here.
         const style = s['style'] ?? 'interview';
         const detail = s['detail'] ?? 'standard';
-        const approval = s['approval'] ?? 'per_section';
-        const userStories = s['user_stories'] ?? 'skip';
 
-        const steps: (string | null)[] = [];
-        steps.push('Read `notes.md` (discovery output) and the existing `requirements.md` — note the discovery stub heading and anything already written.');
-        steps.push('**Preserve the what / why from discovery.** The "Problem" and "Why" sections come straight from `notes.md` — copy them into `requirements.md` verbatim or lightly edited. Do not delete, paraphrase away, or weaken that context when adding new sections.');
+        const collabStep = style === 'draft_first'
+          ? 'Draft a strawman `requirements.md` from `notes.md` before asking anything. Share the draft; collect corrections per the project inputMode.'
+          : 'Ask targeted questions about acceptance criteria, edge cases, and constraints — batch them, follow the project inputMode. Then draft.';
 
-        if (style === 'interview') {
-          steps.push(`Use the ask_questions tool to ask targeted questions about acceptance criteria, edge cases, and constraints.${approval !== 'none' ? ' Batch questions — don\'t ask one at a time.' : ''}`);
-          steps.push('Draft the remaining requirements sections based on the answers, **appending** to the preserved discovery context rather than replacing it.');
-          if (approval === 'per_section') steps.push('Walk through each new section with the user for approval before moving to the next.');
-          else if (approval === 'end_only') steps.push('Draft all new sections, then present the complete document for user review.');
-          steps.push('Write the final `requirements.md` — it must still open with the discovery "Problem" and "Why" content, followed by the new sections.');
-        } else if (style === 'draft_first') {
-          steps.push('Draft a strawman `requirements.md` based on `notes.md` and your understanding — write it before asking anything. **Start with "Problem" and "Why" copied from `notes.md`**, then append your draft of the remaining sections.');
-          if (approval === 'per_section') steps.push('Walk through each section with the user. Use the ask_questions tool for feedback and corrections.');
-          else if (approval === 'end_only') steps.push('Share the complete draft. Use the ask_questions tool to collect corrections and open questions.');
-          else steps.push('Share the draft and incorporate any feedback the user volunteers.');
-          steps.push('Revise and write the final `requirements.md` — the "Problem" and "Why" from discovery must remain intact at the top.');
-        } else { // freeform
-          steps.push('Ask the user how they want to proceed — let them guide the format and depth.');
-          steps.push('Use the ask_questions tool as needed throughout the conversation.');
-          steps.push('Write `requirements.md` in whatever format fits the item — but always retain the "Problem" / "Why" context surfaced by discovery.');
-        }
-
-        const outputSections: string[] = [];
-        outputSections.push('- **Problem** (from discovery): the user problem this solves — preserved from `notes.md`');
-        outputSections.push('- **Why** (from discovery): context / motivation / findings — preserved from `notes.md`');
-        if (userStories === 'lead') outputSections.push('- **User stories** (lead): as a [user], I want [feature] so that [benefit]');
-        outputSections.push('- **Summary**: one-paragraph summary of what is being built');
-        if (userStories === 'include') outputSections.push('- **User stories**: as a [user], I want [feature] so that [benefit]');
-        outputSections.push('- **Acceptance criteria**: numbered list of testable conditions');
-        if (detail !== 'minimal') outputSections.push('- **Edge cases**: important boundary conditions');
+        const sections: string[] = [
+          '- **Problem** + **Why** — copied from `notes.md` (do not drop or rewrite).',
+          '- **Summary** — one paragraph of what will be built.',
+          '- **Acceptance criteria** — numbered testable conditions.',
+        ];
+        if (detail !== 'minimal') sections.push('- **Edge cases** — boundary conditions.');
         if (detail === 'thorough') {
-          outputSections.push('- **Constraints**: technical, performance, security, or UX constraints');
-          outputSections.push('- **Dependencies**: other items or systems this depends on');
-          outputSections.push('- **Out of scope**: explicitly what is NOT being built');
+          sections.push('- **Constraints** — technical / performance / security / UX.');
+          sections.push('- **Dependencies** — other items or systems.');
+          sections.push('- **Out of scope** — what is NOT being built.');
         }
-
         const minWords = detail === 'minimal' ? 30 : detail === 'thorough' ? 100 : 50;
 
         return `# Stage ${n}: Requirements
 
-**Goal**: Document what needs to be built — acceptance criteria, edge cases, constraints — **while preserving the what / why surfaced during discovery**.
+Document what to build. Always preserve the **Problem** and **Why** from \`notes.md\` — copy them verbatim; never paraphrase them away.
 
-## Steps
-
-${numbered(steps)}
-
-## Output
-
-`+"`"+`requirements.md`+"`"+` must contain, in this order:
-${outputSections.join('\n')}
-
-The **Problem** and **Why** sections are copied forward from `+"`"+`notes.md`+"`"+` — do not drop or substantially rewrite them. Reviewers should be able to see the original motivation without going back to `+"`"+`notes.md`+"`"+`.
+${numbered([
+  'Read `notes.md` and the existing `requirements.md` stub.',
+  collabStep,
+  `Write \`requirements.md\` in order:\n${sections.join('\n')}`,
+])}
 
 Minimum ${minWords} words of real content.
-
-## Advancing
-
-When `+"`"+`requirements.md`+"`"+` has sufficient detail: update the `+"`"+`tracker/index.json`+"`"+` (path is in the prompt, relative to cwd) slug to `+"`"+`implementation.implement`+"`"+`. Read `+"`"+`tracker/stages/4-implement.md`+"`"+` and continue.
 `;
       }
 

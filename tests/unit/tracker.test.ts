@@ -747,7 +747,7 @@ describe('defaultStageFileContent', () => {
 
   test('requirements: style=interview asks questions before drafting', () => {
     const content = service.defaultStageFileContent('requirements', {style: 'interview'});
-    expect(content).toContain('ask targeted questions');
+    expect(content).toMatch(/ask targeted questions/i);
   });
 
   test('requirements: style=draft_first drafts before asking', () => {
@@ -761,19 +761,6 @@ describe('defaultStageFileContent', () => {
     expect(thorough).toContain('Constraints');
     expect(thorough).toContain('Dependencies');
     expect(minimal).not.toContain('Constraints');
-  });
-
-  test('requirements: user_stories=lead puts user stories first in output', () => {
-    const content = service.defaultStageFileContent('requirements', {user_stories: 'lead'});
-    const storiesIdx = content.indexOf('User stories');
-    const summaryIdx = content.indexOf('Summary');
-    expect(storiesIdx).toBeGreaterThan(-1);
-    expect(storiesIdx).toBeLessThan(summaryIdx);
-  });
-
-  test('requirements: approval=per_section mentions section approval', () => {
-    const content = service.defaultStageFileContent('requirements', {approval: 'per_section'});
-    expect(content).toContain('approval');
   });
 
   test('requirements: min words varies by detail level', () => {
@@ -859,17 +846,17 @@ describe('defaultStageFileContent', () => {
     expect(content).toContain('Write new docs');
   });
 
-  test('non-discovery stages include advancing instructions referencing index.json', () => {
-    // Discovery now signals advancement via a heading in requirements.md (auto-detected),
-    // so it doesn't need to mention index.json itself.
-    for (const stage of ['requirements', 'implement', 'cleanup'] as const) {
+  test('implement + cleanup include advancing instructions referencing index.json', () => {
+    // Discovery and requirements now rely on status.json (set via the
+    // protocol tail) to advance — they don't repeat index.json guidance.
+    for (const stage of ['implement', 'cleanup'] as const) {
       const content = service.defaultStageFileContent(stage);
       expect(content).toContain('index.json');
     }
   });
 
   test('advancing instructions describe paths as relative / from prompt', () => {
-    for (const stage of ['requirements', 'implement', 'cleanup'] as const) {
+    for (const stage of ['implement', 'cleanup'] as const) {
       const content = service.defaultStageFileContent(stage);
       expect(content).toMatch(/path in (the )?prompt|relative path|path.*prompt/i);
     }
