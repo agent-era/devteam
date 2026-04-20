@@ -15,14 +15,13 @@ interface OptionDef {
 }
 
 // Gate is per-stage (different stages want different approval semantics).
-// Input mode is project-global — it's a personal preference for how the
-// agent should ask questions, not something that changes per stage — and
-// lives on the Style tab (see STYLE_OPTIONS).
+// Two values: auto-advance (agent writes a review when appropriate then
+// advances without asking) or require approval (agent pauses for the user).
+// Input mode is project-global — lives on the Style tab (STYLE_OPTIONS).
 const COMMON_STAGE_OPTIONS: OptionDef[] = [
   {key: 'gate_on_advance', label: 'Gate on advance', choices: [
-    {value: 'none', label: 'None (auto-advance)'},
-    {value: 'review_and_advance', label: 'Write review, then advance'},
-    {value: 'wait_for_approval', label: 'Wait for approval'},
+    {value: 'auto_advance', label: 'Auto-advance'},
+    {value: 'require_approval', label: 'Require approval'},
   ]},
 ];
 

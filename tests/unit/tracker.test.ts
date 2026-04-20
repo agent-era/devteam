@@ -320,12 +320,26 @@ describe('defaultStageFileContent renders status + gate protocol', () => {
   });
 
   test.each([
-    ['none', 'silently'],
-    ['review_and_advance', 'Stage review'],
-    ['wait_for_approval', 'approval'],
+    ['auto_advance', 'Stage review'],
+    ['require_approval', 'approval'],
   ] as const)('gate_on_advance=%s renders the right gate text', (gate, needle) => {
     const content = service.defaultStageFileContent('requirements', {gate_on_advance: gate});
     expect(content).toMatch(new RegExp(needle, 'i'));
+  });
+
+  test('auto_advance also tells the agent to skip review for trivial stages', () => {
+    const content = service.defaultStageFileContent('discovery', {gate_on_advance: 'auto_advance'});
+    expect(content).toMatch(/skip the review/i);
+  });
+
+  test('legacy gate values are mapped to the new shape', () => {
+    // Old configs saying 'none' or 'review_and_advance' both mean auto_advance.
+    const fromNone = service.defaultStageFileContent('discovery', {gate_on_advance: 'none'});
+    const fromReview = service.defaultStageFileContent('discovery', {gate_on_advance: 'review_and_advance'});
+    const fromWait = service.defaultStageFileContent('discovery', {gate_on_advance: 'wait_for_approval'});
+    expect(fromNone).toMatch(/auto_advance/);
+    expect(fromReview).toMatch(/auto_advance/);
+    expect(fromWait).toMatch(/require_approval/);
   });
 
   test('submit=approve adds a submit gate to cleanup', () => {
@@ -340,22 +354,24 @@ describe('defaultStageFileContent renders status + gate protocol', () => {
     expect(content).toMatch(/automatically/i);
   });
 
-  test('review_and_advance gate references the stage\'s output file', () => {
-    const disc = service.defaultStageFileContent('discovery', {gate_on_advance: 'review_and_advance'});
+  test('auto_advance gate references the stage\'s output file for the review', () => {
+    const disc = service.defaultStageFileContent('discovery', {gate_on_advance: 'auto_advance'});
     expect(disc).toContain('notes.md');
-    const req = service.defaultStageFileContent('requirements', {gate_on_advance: 'review_and_advance'});
+    const req = service.defaultStageFileContent('requirements', {gate_on_advance: 'auto_advance'});
     expect(req).toContain('requirements.md');
-    const impl = service.defaultStageFileContent('implement', {gate_on_advance: 'review_and_advance'});
+    const impl = service.defaultStageFileContent('implement', {gate_on_advance: 'auto_advance'});
     expect(impl).toContain('implementation.md');
   });
 
-  test('gate defaults: requirements and cleanup default to wait_for_approval, implement to review_and_advance', () => {
+  test('gate defaults: requirements and cleanup require approval, discovery and implement auto-advance', () => {
+    const disc = service.defaultStageFileContent('discovery', {});
+    expect(disc).toMatch(/Gate on advance: `auto_advance`/);
     const req = service.defaultStageFileContent('requirements', {});
-    expect(req).toMatch(/Gate on advance: `wait_for_approval`/);
-    const clean = service.defaultStageFileContent('cleanup', {});
-    expect(clean).toMatch(/Gate on advance: `wait_for_approval`/);
+    expect(req).toMatch(/Gate on advance: `require_approval`/);
     const impl = service.defaultStageFileContent('implement', {});
-    expect(impl).toMatch(/Gate on advance: `review_and_advance`/);
+    expect(impl).toMatch(/Gate on advance: `auto_advance`/);
+    const clean = service.defaultStageFileContent('cleanup', {});
+    expect(clean).toMatch(/Gate on advance: `require_approval`/);
   });
 });
 

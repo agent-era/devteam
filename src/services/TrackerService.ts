@@ -1206,11 +1206,15 @@ Read \`tracker/stages/working-style.md\` for the project's preferred working sty
     // WorkStyle and falls back to the default when absent (e.g., tests that
     // don't pass a workStyle).
     const inputMode: InputModeStyle = workStyle?.inputMode ?? DEFAULT_WORK_STYLE.inputMode;
-    const gate = s['gate_on_advance'] ?? (stage === 'requirements' || stage === 'cleanup'
-      ? 'wait_for_approval'
-      : stage === 'implement'
-      ? 'review_and_advance'
-      : 'none');
+    // Back-compat: old configs might still have 'none' / 'review_and_advance' /
+    // 'wait_for_approval'. Map them onto the current two-value shape.
+    const rawGate = s['gate_on_advance'] ?? (stage === 'requirements' || stage === 'cleanup'
+      ? 'require_approval'
+      : 'auto_advance');
+    const gate =
+      rawGate === 'wait_for_approval' ? 'require_approval'
+      : rawGate === 'none' || rawGate === 'review_and_advance' ? 'auto_advance'
+      : rawGate;
     const submit = s['submit'] ?? 'approve';
     const outputFile =
       stage === 'discovery' ? 'notes.md'
@@ -1234,11 +1238,9 @@ Read \`tracker/stages/working-style.md\` for the project's preferred working sty
 
     const gateInstruction = (() => {
       switch (gate) {
-        case 'none':
-          return 'Advance silently: update `status.json.stage` to the next stage and continue.';
-        case 'review_and_advance':
-          return `Before advancing, append a short "## Stage review" section (1–3 sentences) to \`${outputFile}\` summarising what you did this stage. Then update \`status.json.stage\` to the next stage and continue.`;
-        case 'wait_for_approval':
+        case 'auto_advance':
+          return `Advance without asking. Before you do, if this stage produced meaningful findings, decisions, or changes, append a short "## Stage review" section (1–3 sentences) to \`${outputFile}\` summarising what you did — skip the review for trivial no-op stages. Then update \`status.json.stage\` to the next stage and continue.`;
+        case 'require_approval':
           return 'Before advancing, pause and ask for the user\'s approval using this stage\'s input mode (above). Do not update `status.json.stage` until the user explicitly approves the advance.';
         default:
           return '';
