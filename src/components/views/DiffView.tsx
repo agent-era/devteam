@@ -192,22 +192,14 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
   }
 
   if (comments.showCommentDialog) {
-    const sl = nav.selectedLine;
-    const isUnified = nav.viewMode === 'unified';
-    const uLine = lines[sl];
-    const sLine = sideBySideLines[sl];
-    const fileName = isUnified ? (uLine?.fileName || '') : (sLine?.right?.fileName || sLine?.left?.fileName || '');
-    const lineText = isUnified ? (uLine?.text || '') : (sLine?.right?.text || sLine?.left?.text || '');
-    const isRemoved = isUnified ? uLine?.type === 'removed' : sLine?.left?.type === 'removed';
-    const pfi = isUnified ? unifiedPerFileIndex[sl] : sideBySidePerFileIndex[sl];
-    const initialComment = fileName && pfi !== undefined ? (comments.commentStore.getComment(pfi, fileName)?.commentText || '') : '';
+    const ctx = comments.commentDialogContext();
     return (
       <Box flexDirection="column" height={terminalHeight} justifyContent="center" alignItems="center">
         <CommentInputDialog
-          fileName={fileName}
-          lineText={lineText}
-          isRemoved={isRemoved}
-          initialComment={initialComment}
+          fileName={ctx.fileName}
+          lineText={ctx.lineText}
+          isRemoved={ctx.isRemoved}
+          initialComment={ctx.initialComment}
           onSave={comments.handleCommentSave}
           onCancel={comments.handleCommentCancel}
         />

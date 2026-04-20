@@ -57,21 +57,30 @@ export function parseUnifiedDiff(diff: string): Map<string, DiffLine[]> {
   return fileContents;
 }
 
+export async function resolveBaseCommitHash(worktreePath: string, diffType: DiffType): Promise<string> {
+  try {
+    if (diffType === 'uncommitted') {
+      return (await runCommandAsync(['git', '-C', worktreePath, 'rev-parse', 'HEAD']) || '').trim();
+    }
+    let ref = 'HEAD~1';
+    const base = findBaseBranch(worktreePath, BASE_BRANCH_CANDIDATES);
+    if (base) {
+      const mb = await runCommandAsync(['git', '-C', worktreePath, 'merge-base', 'HEAD', base]);
+      if (mb) ref = mb.trim();
+    }
+    return (await runCommandAsync(['git', '-C', worktreePath, 'rev-parse', ref]) || '').trim();
+  } catch {
+    return '';
+  }
+}
+
 export async function loadDiff(worktreePath: string, diffType: DiffType = 'full', baseCommitHash?: string): Promise<DiffLine[]> {
   let diff: string | null = null;
 
   if (diffType === 'uncommitted') {
     diff = await runCommandAsync(['git', '-C', worktreePath, 'diff', '--no-color', '--no-ext-diff', 'HEAD']);
   } else {
-    let target = baseCommitHash;
-    if (!target) {
-      target = 'HEAD~1';
-      const base = findBaseBranch(worktreePath, BASE_BRANCH_CANDIDATES);
-      if (base) {
-        const mb = await runCommandAsync(['git', '-C', worktreePath, 'merge-base', 'HEAD', base]);
-        if (mb) target = mb.trim();
-      }
-    }
+    const target = baseCommitHash || (await resolveBaseCommitHash(worktreePath, 'full')) || 'HEAD~1';
     diff = await runCommandAsync(['git', '-C', worktreePath, 'diff', '--no-color', '--no-ext-diff', target]);
   }
 

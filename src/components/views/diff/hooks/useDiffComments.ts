@@ -1,10 +1,9 @@
 import {useEffect, useMemo, useState} from 'react';
-import {runCommand, runCommandAsync} from '../../../../shared/utils/commandExecutor.js';
-import {findBaseBranch} from '../../../../shared/utils/gitHelpers.js';
-import {BASE_BRANCH_CANDIDATES} from '../../../../constants.js';
+import {runCommand} from '../../../../shared/utils/commandExecutor.js';
 import {commentStoreManager} from '../../../../services/CommentStoreManager.js';
 import {TmuxService} from '../../../../services/TmuxService.js';
 import {formatCommentsAsLines, formatCommentsAsPrompt} from '../../../../shared/utils/diff/formatCommentsAsPrompt.js';
+import {resolveBaseCommitHash} from '../../../../shared/utils/diff/loadDiff.js';
 import type {DiffLine, SideBySideLine, DiffType, ViewMode} from '../../../../shared/utils/diff/types.js';
 
 type Params = {
@@ -91,20 +90,7 @@ export function useDiffComments(params: Params) {
 
   useEffect(() => {
     (async () => {
-      let computed = '';
-      try {
-        if (diffType === 'uncommitted') {
-          computed = (await runCommandAsync(['git', '-C', worktreePath, 'rev-parse', 'HEAD']) || '').trim();
-        } else {
-          let ref = 'HEAD~1';
-          const base = findBaseBranch(worktreePath, BASE_BRANCH_CANDIDATES);
-          if (base) {
-            const mb = await runCommandAsync(['git', '-C', worktreePath, 'merge-base', 'HEAD', base]);
-            if (mb) ref = mb.trim();
-          }
-          computed = (await runCommandAsync(['git', '-C', worktreePath, 'rev-parse', ref]) || '').trim();
-        }
-      } catch {}
+      const computed = await resolveBaseCommitHash(worktreePath, diffType);
       setBaseCommitHash(computed);
       commentStore.baseCommitHash = computed || undefined;
       setBaseHashReady(true);
@@ -134,10 +120,11 @@ export function useDiffComments(params: Params) {
         ? tmuxService.sessionName('workspace', workspaceFeature)
         : tmuxService.sessionName(project, feature);
 
-      const sessions = await tmuxService.listSessions();
-      const sessionExists = sessions.includes(sessionName);
+      const launchClaudeWithPrompt = () => {
+        tmuxService.sendText(sessionName, `claude ${JSON.stringify(formatCommentsAsPrompt(comments, opts))}`, {executeCommand: true});
+      };
 
-      if (sessionExists) {
+      if (tmuxService.hasSession(sessionName)) {
         const {status} = await tmuxService.getAIStatus(sessionName);
 
         if (status === 'waiting') {
@@ -147,7 +134,7 @@ export function useDiffComments(params: Params) {
         }
 
         if (status === 'not_running') {
-          tmuxService.sendText(sessionName, `claude ${JSON.stringify(formatCommentsAsPrompt(comments, opts))}`, {executeCommand: true});
+          launchClaudeWithPrompt();
         } else {
           tmuxService.sendMultilineText(sessionName, formatCommentsAsLines(comments, opts), {endWithAltEnter: true});
           runCommand(['sleep', '0.5']);
@@ -160,9 +147,7 @@ export function useDiffComments(params: Params) {
       } else {
         tmuxService.createSession(sessionName, worktreePath);
         const hasClaude = runCommand(['bash', '-lc', 'command -v claude || true']).trim();
-        if (hasClaude) {
-          tmuxService.sendText(sessionName, `claude ${JSON.stringify(formatCommentsAsPrompt(comments, opts))}`, {executeCommand: true});
-        }
+        if (hasClaude) launchClaudeWithPrompt();
       }
 
       commentStore.clear();
@@ -175,7 +160,6 @@ export function useDiffComments(params: Params) {
 
   const handleCommentSave = (commentText: string) => {
     const target = getCommentTarget(params);
-    // Preserve original guard: in side-by-side, skip save when there is no line text at all.
     const skipEmpty = params.viewMode === 'sidebyside' && !target?.lineText;
     if (target && !skipEmpty) {
       if (target.perFileIndex !== undefined) {
@@ -201,6 +185,21 @@ export function useDiffComments(params: Params) {
     if (target && !target.isHunkHeader) setShowCommentDialog(true);
   };
 
+  const commentDialogContext = () => {
+    const {viewMode, lines, sideBySideLines, selectedLine} = params;
+    const uLine = lines[selectedLine];
+    const sLine = sideBySideLines[selectedLine];
+    const isUnified = viewMode === 'unified';
+    const fileName = isUnified ? (uLine?.fileName || '') : (sLine?.right?.fileName || sLine?.left?.fileName || '');
+    const lineText = isUnified ? (uLine?.text || '') : (sLine?.right?.text || sLine?.left?.text || '');
+    const isRemoved = isUnified ? uLine?.type === 'removed' : sLine?.left?.type === 'removed';
+    const target = getCommentTarget(params);
+    const existing = target && target.perFileIndex !== undefined
+      ? commentStore.getComment(target.perFileIndex, target.fileName)?.commentText
+      : undefined;
+    return {fileName, lineText, isRemoved: !!isRemoved, initialComment: existing || ''};
+  };
+
   const requestClose = () => {
     if (commentStore.count > 0) {
       setShowUnsubmittedCommentsDialog(true);
@@ -221,6 +220,7 @@ export function useDiffComments(params: Params) {
     showUnsubmittedCommentsDialog,
     anyDialogOpen: showCommentDialog || showSessionWaitingDialog || showUnsubmittedCommentsDialog,
     tryOpenCommentDialog,
+    commentDialogContext,
     deleteCurrentComment,
     sendCommentsToTmux,
     handleCommentSave,
