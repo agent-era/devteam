@@ -7,7 +7,7 @@ import {useTerminalDimensions} from '../hooks/useTerminalDimensions.js';
 interface TrackerItemScreenProps {
   item: TrackerItem;
   onBack: () => void;
-  onCurrentStageWork: () => void;
+  onAttachSession: () => void;
   onStageAction: () => void;
 }
 
@@ -26,7 +26,7 @@ interface ContentLine {
   indent?: number;
 }
 
-function buildActions(
+export function buildActions(
   item: TrackerItem,
   stagesConfig: Required<StagesConfig>,
   service: TrackerService,
@@ -38,8 +38,7 @@ function buildActions(
 
   const actions: Action[] = [];
 
-  const stageLabel = item.stage !== 'archive' ? STAGE_LABELS[item.stage] : item.stage;
-  actions.push({id: 'current-stage', label: `Start ${stageLabel} session`});
+  actions.push({id: 'attach-session', label: 'Attach session'});
 
   const nextStage = service.nextStage(item.stage);
   if (nextStage) {
@@ -110,7 +109,7 @@ function buildContentLines(
 export default function TrackerItemScreen({
   item,
   onBack,
-  onCurrentStageWork,
+  onAttachSession,
   onStageAction,
 }: TrackerItemScreenProps) {
   const {rows} = useTerminalDimensions();
@@ -145,12 +144,12 @@ export default function TrackerItemScreen({
   const handleSelect = React.useCallback(() => {
     const action = actions[selectedAction];
     if (!action) return;
-    if (action.id === 'current-stage') {
-      onCurrentStageWork();
+    if (action.id === 'attach-session') {
+      onAttachSession();
     } else if (action.id === 'stage-action') {
       onStageAction();
     }
-  }, [actions, selectedAction, onCurrentStageWork, onStageAction]);
+  }, [actions, selectedAction, onAttachSession, onStageAction]);
 
   useInput((input, key) => {
     if (key.upArrow) setScrollTop(prev => Math.max(0, prev - 1));

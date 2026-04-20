@@ -19,6 +19,7 @@ interface TrackerBoardScreenProps {
   projectPath: string;
   onBack: () => void;
   onOpenItem: (item: TrackerItem) => void;
+  onAttachItem: (item: TrackerItem) => void;
   onLaunchItemBackground?: (item: TrackerItem, tool: AITool) => Promise<void>;
   onCustomizeStages?: () => void;
 }
@@ -54,6 +55,7 @@ export default function TrackerBoardScreen({
   projectPath,
   onBack,
   onOpenItem,
+  onAttachItem,
   onLaunchItemBackground,
   onCustomizeStages,
 }: TrackerBoardScreenProps) {
@@ -87,7 +89,6 @@ export default function TrackerBoardScreen({
 
   const {
     worktrees,
-    attachSession,
     attachShellSession,
     attachRunSession,
     discoverProjects,
@@ -236,10 +237,14 @@ export default function TrackerBoardScreen({
 
   const handleAttach = React.useCallback(() => {
     if (!currentItem) return;
-    const sessWt = getSessionForItem(currentItem);
-    if (!sessWt) return;
-    runWithLoading(() => attachSession(sessWt), {onReturn: backToTracker});
-  }, [currentItem, getSessionForItem, attachSession, runWithLoading, backToTracker]);
+    // Orphan items (worktree-only, no tracker entry) need a tracker item before
+    // onAttachItem can build a prompt-free attach flow, same as the onSelect handler.
+    if (!currentItem.requirementsPath) {
+      service.createItem(projectPath, currentItem.title || currentItem.slug, 'implement', currentItem.slug);
+      setBoard(service.loadBoard(project, projectPath));
+    }
+    onAttachItem(currentItem);
+  }, [currentItem, onAttachItem, service, projectPath, project]);
 
   const handleShell = React.useCallback(() => {
     if (!currentItem) return;
@@ -391,7 +396,7 @@ export default function TrackerBoardScreen({
       }
       onOpenItem(currentItem);
     },
-    onAttach: currentItemSession ? handleAttach : undefined,
+    onAttach: currentItem ? handleAttach : undefined,
     onCreate: () => setCreateMode(true),
     onMoveItemNext: handleMoveItemNext,
     onGenerateProposals: handleProposalKey,
@@ -689,11 +694,11 @@ const Footer = React.memo(function Footer({hasSession, hasWorktree, hasItem}: {h
       {sep}
       <Text color="magenta">↵</Text>
       <Text dimColor> open</Text>
-      {hasSession && (
+      {hasItem && (
         <>
           <Text>  </Text>
-          <Text color="yellow" bold>a</Text>
-          <Text color="yellow"> attach</Text>
+          <Text color={hasSession ? 'yellow' : 'magenta'} bold={hasSession}>a</Text>
+          <Text color={hasSession ? 'yellow' : undefined} dimColor={!hasSession}> attach</Text>
         </>
       )}
       {hasWorktree && (
