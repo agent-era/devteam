@@ -1360,9 +1360,9 @@ When the user confirms pursuit: update the `+"`"+`tracker/index.json`+"`"+` (pat
 
         const researchStep =
           effort === 'skim'
-            ? 'Skim codebase for duplicates. No web search.'
+            ? 'Skim codebase for duplicates.'
             : effort === 'deep'
-            ? 'Thorough codebase scan: patterns, conflicts, tests. Web research: domain, external APIs, prior art, alternatives.'
+            ? 'Thorough codebase scan: patterns, conflicts, tests. Web research: domain, APIs, prior art, alternatives.'
             : 'Scan codebase for related patterns. Web search if the domain is unfamiliar.';
 
         const reportStep = (() => {
@@ -1370,35 +1370,31 @@ When the user confirms pursuit: update the `+"`"+`tracker/index.json`+"`"+` (pat
             case 'just_advance':
               return 'Advance silently.';
             case 'always_confirm':
-              return 'Summarise findings and wait for approval (set `is_waiting_for_user: true` + `awaiting_advance_approval: true`).';
+              return 'Summarise findings, wait for approval — set `is_waiting_for_user` + `awaiting_advance_approval` to true.';
             case 'confirm_if_notable':
             default:
-              return 'If findings are notable (surprise, risk, pivot, conflict, viable alternative), summarise and wait for approval (`is_waiting_for_user: true` + `awaiting_advance_approval: true`). Otherwise advance silently.';
+              return 'If findings are notable (surprise, risk, pivot, conflict, alternative), summarise and wait for approval (set `is_waiting_for_user` + `awaiting_advance_approval` to true). Otherwise advance silently.';
           }
         })();
 
         const outputFields =
           effort === 'skim'
-            ? '- Problem\n- Recommendation'
+            ? 'Problem, Recommendation.'
             : effort === 'deep'
-            ? '- Problem\n- Context (code findings + research)\n- Options (2+ with tradeoffs)\n- Recommendation (reasoning + risks)'
-            : '- Problem\n- Findings\n- Recommendation';
+            ? 'Problem; Context (code + research); Options (2+ with tradeoffs); Recommendation (reasoning + risks).'
+            : 'Problem, Findings, Recommendation.';
 
         return `# Stage ${n}: Discovery
 
-Understand the user problem. Research the code and domain — don't interrogate the user.
-
-**Skip rules.** Trivial items (typo, rename, doc tweak): write one-line \`notes.md\` and advance. Clarifying questions: only if the problem statement itself is too vague to interpret. "X or Y?" questions belong in requirements.
-
-## Do
+Research the problem — code and domain. Trivial items (typo, rename, doc): one-line \`notes.md\`, advance. Clarifying questions: only if the request itself is unreadable; "X or Y?" trade-offs belong in requirements.
 
 ${numbered([
   researchStep,
-  `Write \`notes.md\`:\n${outputFields}`,
+  `Write \`notes.md\`: ${outputFields}`,
   reportStep,
 ])}
 
-Advance by setting \`status.json.stage\` to \`requirements\`.
+Advance: set \`status.json.stage\` to \`requirements\`.
 `;
       }
 
