@@ -276,6 +276,9 @@ export default function TrackerBoardScreen({
     });
   }, [currentItem, getWorktreeForItem, showArchiveConfirmation, backToTracker]);
 
+  const unmountedRef = React.useRef(false);
+  React.useEffect(() => () => { unmountedRef.current = true; }, []);
+
   const startDerivation = React.useCallback((pending: PendingNew, tool: AITool | null) => {
     setPendingNew(pending);
     // Reading slugs from disk (rather than the closure-captured board) avoids a
@@ -283,6 +286,7 @@ export default function TrackerBoardScreen({
     // ~5s slug-derivation window.
     const slugsAtStart = new Set(service.loadBoard(project, projectPath).columns.flatMap(c => c.items.map(it => it.slug)));
     void service.deriveSlug(pending.title, [...slugsAtStart]).then(slug => {
+      if (unmountedRef.current) return;
       setPendingNew(null);
       // Re-check uniqueness right before creating in case a concurrent
       // derivation committed the same slug while this one was in flight.

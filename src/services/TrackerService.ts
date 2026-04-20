@@ -437,11 +437,12 @@ export class TrackerService {
   }
 
   async deriveSlug(title: string, existingSlugs: string[]): Promise<string> {
-    const prompt = `Generate a concise kebab-case slug (2-4 words, max 30 chars) for this tracker item. Reply with ONLY the slug, nothing else.\n\nTitle: ${title}`;
+    const maxLen = 30;
+    const prompt = `Generate a concise kebab-case slug (2-4 words, max ${maxLen} chars) for this tracker item. Reply with ONLY the slug, nothing else.\n\nTitle: ${title}`;
     const result = await runClaudeAsync(prompt, {timeoutMs: 8000});
     let derived = this.slugify(title);
     if (result.success && result.output) {
-      const candidate = this.slugify(result.output.trim(), 40);
+      const candidate = this.slugify(result.output.trim(), maxLen);
       if (candidate && this.isValidSlug(candidate)) derived = candidate;
     }
     if (!existingSlugs.includes(derived)) return derived;
