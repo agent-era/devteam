@@ -22,7 +22,7 @@ interface UIContextType {
   mode: UIMode;
   shouldExit: boolean;
   createProjects: any[] | null;
-  pendingArchive: {project: string; feature: string; path: string} | null;
+  pendingArchive: {project: string; feature: string; path: string; projectPath?: string} | null;
   branchProject: string | null;
   branchList: any[];
   diffWorktree: string | null;
@@ -45,7 +45,7 @@ interface UIContextType {
   // UI navigation operations - self-documenting methods
   showList: () => void;
   showCreateFeature: (projects: any[]) => void;
-  showArchiveConfirmation: (worktree: WorktreeInfo, options?: {onReturn?: () => void}) => void;
+  showArchiveConfirmation: (worktree: WorktreeInfo, options?: {onReturn?: () => void; projectPath?: string}) => void;
   showHelp: () => void;
   showBranchPicker: (projects: any[], defaultProject?: string) => void;
   showBranchListForProject: (project: string, branches: any[]) => void;
@@ -84,7 +84,7 @@ export function UIProvider({children}: UIProviderProps) {
   const [mode, setMode] = useState<UIMode>('list');
   const [shouldExit, setShouldExit] = useState(false);
   const [createProjects, setCreateProjects] = useState<any[] | null>(null);
-  const [pendingArchive, setPendingArchive] = useState<{project: string; feature: string; path: string} | null>(null);
+  const [pendingArchive, setPendingArchive] = useState<{project: string; feature: string; path: string; projectPath?: string} | null>(null);
   const [branchProject, setBranchProject] = useState<string | null>(null);
   const [branchList, setBranchList] = useState<any[]>([]);
   const [diffWorktree, setDiffWorktree] = useState<string | null>(null);
@@ -139,7 +139,7 @@ export function UIProvider({children}: UIProviderProps) {
     setCreateProjects(projects);
   };
 
-  const showArchiveConfirmation = (worktree: WorktreeInfo, options?: {onReturn?: () => void}) => {
+  const showArchiveConfirmation = (worktree: WorktreeInfo, options?: {onReturn?: () => void; projectPath?: string}) => {
     // Set mode first so the very next render leaves the WorktreeListScreen branch
     // (and its stdin handler) immediately, even if pendingArchive arrives one tick
     // later. Otherwise the stale handler can intercept the next keystroke.
@@ -147,7 +147,8 @@ export function UIProvider({children}: UIProviderProps) {
     setPendingArchive({
       project: worktree.project,
       feature: worktree.feature,
-      path: worktree.path
+      path: worktree.path,
+      projectPath: options?.projectPath,
     });
     setArchiveReturn(options?.onReturn ? () => options.onReturn! : null);
   };

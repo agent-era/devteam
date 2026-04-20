@@ -2,12 +2,14 @@ import React, {useEffect, useState} from 'react';
 import {Box, Text, useInput, useStdin} from 'ink';
 import {useWorktreeContext} from '../contexts/WorktreeContext.js';
 import ProgressDialog from '../components/dialogs/ProgressDialog.js';
+import {TrackerService} from '../services/TrackerService.js';
 
 
 interface ArchiveFeatureInfo {
   project: string;
   feature: string;
   path: string;
+  projectPath?: string;
 }
 
 interface ArchiveConfirmScreenProps {
@@ -29,7 +31,7 @@ export default function ArchiveConfirmScreen({
   const [untrackedFiles, setUntrackedFiles] = useState<string[]>([]);
 
   useEffect(() => {
-    if (featureInfo.project === 'workspace') return;
+    if (featureInfo.project === 'workspace' || !featureInfo.path) return;
     try {
       setUntrackedFiles(getUntrackedNonIgnoredFiles(featureInfo.path));
     } catch {
@@ -40,15 +42,16 @@ export default function ArchiveConfirmScreen({
   const handleConfirm = async () => {
     try {
       setIsArchiving(true);
-      if (featureInfo.project === 'workspace') {
-        await archiveWorkspace(featureInfo.feature);
-      } else {
-        // Archive single feature
-        await archiveFeature(
-          featureInfo.project,
-          featureInfo.path,
-          featureInfo.feature
-        );
+      const hasWorktree = !!featureInfo.path;
+      if (hasWorktree) {
+        if (featureInfo.project === 'workspace') {
+          await archiveWorkspace(featureInfo.feature);
+        } else {
+          await archiveFeature(featureInfo.project, featureInfo.path, featureInfo.feature);
+        }
+      }
+      if (featureInfo.projectPath && featureInfo.project !== 'workspace') {
+        new TrackerService().moveItem(featureInfo.projectPath, featureInfo.feature, 'archive');
       }
       onSuccess();
     } catch (error) {
