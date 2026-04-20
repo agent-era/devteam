@@ -30,6 +30,21 @@ Replaced the `Start {stage} session` action on `TrackerItemScreen` with an `Atta
 
 4. **`launchSessionForItem` kept, not deleted.** Acceptance criterion 6 said to remove it if unused. It's still used by `handleStageAction` for the stage-advance flow (which legitimately sends a prompt), so it stays.
 
+## Follow-up: `a` on the kanban board attaches directly
+
+While polishing, the user flagged that pressing `a` on `TrackerBoardScreen` was falling through to `onSelect` (opening the item details screen) whenever the item's tmux session wasn't running, because `onAttach` was gated on `currentItemSession`. That's exactly the prompt-free-attach flow we just built, so pressing `a` should do it too — it should never land the user on the details screen.
+
+- **`src/screens/TrackerBoardScreen.tsx`**
+  - Added `onAttachItem: (item: TrackerItem) => void` prop.
+  - Rewrote `handleAttach` to call `onAttachItem(currentItem)` instead of `attachSession(sessWt)` directly. Dropped the `getSessionForItem` guard so `a` works whether or not a session is currently running — the shared `handleAttachSession` flow in `App.tsx` already creates the worktree/session on demand.
+  - Orphan-item materialization (previously only in `onSelect`) is mirrored in `handleAttach` so orphans don't hit an empty-`requirementsPath` attach.
+  - `useKeyboardShortcuts` gets `onAttach` unconditionally when a `currentItem` exists (no more `currentItemSession ?` fallthrough to `onSelect`).
+  - Removed the now-unused `attachSession` destructure from `useWorktreeContext`.
+  - Footer: the `a attach` hint now shows whenever an item is selected (dimmed when no session is running, highlighted yellow when one is) — previously it was hidden entirely without a session, even though the new behavior makes `a` always useful.
+
+- **`src/App.tsx`**
+  - Wired `onAttachItem={(item) => handleAttachSession(item)}` on the `TrackerBoardScreen` render — board and item-detail screens now share one attach handler.
+
 ## Notes for cleanup
 
 - No dead code introduced; no dead code left behind that I could find from this change.

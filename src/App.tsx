@@ -566,6 +566,7 @@ function AppContent() {
         projectPath={trackerProject.path}
         onBack={requestExit}
         onOpenItem={(item) => showTrackerItem(item.slug)}
+        onAttachItem={(item) => handleAttachSession(item)}
         onLaunchItemBackground={(item, tool) =>
           launchSessionForItemBackground(trackerProject!, item, item.stage, tool)
         }
