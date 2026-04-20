@@ -29,9 +29,11 @@ function makeItem(overrides: Partial<TrackerItem> = {}): TrackerItem {
     bucket: 'backlog',
     itemDir,
     requirementsPath: path.join(itemDir, 'requirements.md'),
+    implementationPath: path.join(itemDir, 'implementation.md'),
+    notesPath: path.join(itemDir, 'notes.md'),
     requirementsBody: '',
+    frontmatter: {},
     worktreeExists: false,
-    worktreePath: null,
     hasImplementationNotes: false,
     hasNotes: false,
     ...overrides,
@@ -214,47 +216,47 @@ describe('loadBoard', () => {
 describe('evaluateExitCriteria', () => {
   test('requirements_has_body passes when body is non-empty', () => {
     const item = makeItem({requirementsBody: 'some content'});
-    const results = service.evaluateExitCriteria(item, [{check: 'requirements_has_body', description: 'Has body'}]);
+    const results = service.evaluateExitCriteria(item, [{id: 'rb', check: 'requirements_has_body', description: 'Has body'}]);
     expect(results[0].met).toBe(true);
   });
 
   test('requirements_has_body fails when body is empty', () => {
     const item = makeItem({requirementsBody: ''});
-    const results = service.evaluateExitCriteria(item, [{check: 'requirements_has_body', description: 'Has body'}]);
+    const results = service.evaluateExitCriteria(item, [{id: 'rb', check: 'requirements_has_body', description: 'Has body'}]);
     expect(results[0].met).toBe(false);
   });
 
   test('requirements_min_50_words passes with 50+ words', () => {
     const item = makeItem({requirementsBody: 'word '.repeat(50)});
-    const results = service.evaluateExitCriteria(item, [{check: 'requirements_min_50_words', description: '50 words'}]);
+    const results = service.evaluateExitCriteria(item, [{id: 'rw', check: 'requirements_min_50_words', description: '50 words'}]);
     expect(results[0].met).toBe(true);
   });
 
   test('requirements_min_50_words fails with fewer than 50 words', () => {
     const item = makeItem({requirementsBody: 'only a few words'});
-    const results = service.evaluateExitCriteria(item, [{check: 'requirements_min_50_words', description: '50 words'}]);
+    const results = service.evaluateExitCriteria(item, [{id: 'rw', check: 'requirements_min_50_words', description: '50 words'}]);
     expect(results[0].met).toBe(false);
   });
 
   test('has_notes checks item flag', () => {
     const withNotes = makeItem({hasNotes: true});
     const withoutNotes = makeItem({hasNotes: false});
-    expect(service.evaluateExitCriteria(withNotes, [{check: 'has_notes', description: 'Has notes'}])[0].met).toBe(true);
-    expect(service.evaluateExitCriteria(withoutNotes, [{check: 'has_notes', description: 'Has notes'}])[0].met).toBe(false);
+    expect(service.evaluateExitCriteria(withNotes, [{id: 'hn', check: 'has_notes', description: 'Has notes'}])[0].met).toBe(true);
+    expect(service.evaluateExitCriteria(withoutNotes, [{id: 'hn', check: 'has_notes', description: 'Has notes'}])[0].met).toBe(false);
   });
 
   test('worktree_exists checks item flag', () => {
     const withWt = makeItem({worktreeExists: true});
     const withoutWt = makeItem({worktreeExists: false});
-    expect(service.evaluateExitCriteria(withWt, [{check: 'worktree_exists', description: 'Worktree'}])[0].met).toBe(true);
-    expect(service.evaluateExitCriteria(withoutWt, [{check: 'worktree_exists', description: 'Worktree'}])[0].met).toBe(false);
+    expect(service.evaluateExitCriteria(withWt, [{id: 'wt', check: 'worktree_exists', description: 'Worktree'}])[0].met).toBe(true);
+    expect(service.evaluateExitCriteria(withoutWt, [{id: 'wt', check: 'worktree_exists', description: 'Worktree'}])[0].met).toBe(false);
   });
 
   test('multiple criteria all evaluated', () => {
     const item = makeItem({hasNotes: true, requirementsBody: ''});
     const results = service.evaluateExitCriteria(item, [
-      {check: 'has_notes', description: 'Has notes'},
-      {check: 'requirements_has_body', description: 'Has body'},
+      {id: 'hn', check: 'has_notes', description: 'Has notes'},
+      {id: 'rb', check: 'requirements_has_body', description: 'Has body'},
     ]);
     expect(results).toHaveLength(2);
     expect(results[0].met).toBe(true);
@@ -267,7 +269,7 @@ describe('evaluateExitCriteria', () => {
 describe('loadWorkStyle / saveWorkStyle', () => {
   test('returns defaults when no file exists', () => {
     const ws = service.loadWorkStyle(tmpDir);
-    expect(ws).toMatchObject(DEFAULT_WORK_STYLE);
+    expect(ws).toMatchObject(DEFAULT_WORK_STYLE as unknown as Record<string, unknown>);
   });
 
   test('persists and reloads saved work style', () => {
