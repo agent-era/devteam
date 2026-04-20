@@ -2,7 +2,7 @@ import {describe, test, expect, beforeEach, afterEach} from '@jest/globals';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import {TrackerService, parseFrontmatter, DEFAULT_WORK_STYLE, TrackerItem, StageConfig, WorkStyle, ItemStatus, ITEM_STATUS_STALE_MS} from '../../src/services/TrackerService.js';
+import {TrackerService, parseFrontmatter, DEFAULT_WORK_STYLE, TrackerItem, StageConfig, WorkStyle, InputModeStyle, ItemStatus, ITEM_STATUS_STALE_MS} from '../../src/services/TrackerService.js';
 
 let tmpDir: string;
 let service: TrackerService;
@@ -303,7 +303,7 @@ describe('defaultStageFileContent renders status + gate protocol', () => {
   });
 
   test.each(STAGES)('every stage renders Input mode + Gate on advance sections', (stage) => {
-    const content = service.defaultStageFileContent(stage, {});
+    const content = service.defaultStageFileContent(stage, {}, DEFAULT_WORK_STYLE);
     expect(content).toContain('Input mode:');
     expect(content).toContain('Gate on advance:');
   });
@@ -313,8 +313,9 @@ describe('defaultStageFileContent renders status + gate protocol', () => {
     ['inline', 'Inline'],
     ['batch', 'Batch'],
     ['doc_review', 'review'],
-  ] as const)('input_mode=%s renders mode-specific guidance', (mode, needle) => {
-    const content = service.defaultStageFileContent('discovery', {input_mode: mode});
+  ] as const)('inputMode (global style) = %s renders mode-specific guidance', (mode, needle) => {
+    const ws: WorkStyle = {...DEFAULT_WORK_STYLE, inputMode: mode as InputModeStyle};
+    const content = service.defaultStageFileContent('discovery', {}, ws);
     expect(content).toMatch(new RegExp(needle, 'i'));
   });
 

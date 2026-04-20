@@ -63,6 +63,9 @@ export type TestingStyle = 'always' | 'suggest' | 'skip';
 export type CommitStyle = 'never' | 'milestones' | 'often';
 export type BlockerStyle = 'ask' | 'try_first' | 'continue';
 export type ContextDepthStyle = 'light' | 'moderate' | 'deep';
+// How the agent should deliver questions/requests for review. Project-wide
+// preference; drives the "Input mode" block in every generated stage guide.
+export type InputModeStyle = 'ask_questions' | 'inline' | 'batch' | 'doc_review';
 
 export interface WorkStyle {
   decisionStyle: DecisionStyle;
@@ -74,6 +77,7 @@ export interface WorkStyle {
   commits: CommitStyle;
   onBlockers: BlockerStyle;
   contextDepth: ContextDepthStyle;
+  inputMode: InputModeStyle;
   customInstructions: string;
 }
 
@@ -87,6 +91,7 @@ export const DEFAULT_WORK_STYLE: WorkStyle = {
   commits: 'never',
   onBlockers: 'ask',
   contextDepth: 'moderate',
+  inputMode: 'ask_questions',
   customInstructions: '',
 };
 
@@ -877,6 +882,12 @@ export class TrackerService {
       try_first: ['Try alternatives first', 'Try reasonable alternatives before asking. Ask only if exhausted.'],
       continue: ['Note & continue', 'Note the issue clearly and continue with the rest of the work.'],
     };
+    const INPUT_MODE_LABELS: Record<string, [string, string]> = {
+      ask_questions: ['ask_questions tool', 'Use the ask_questions tool whenever you need input. Produces a detectable numbered prompt in the terminal.'],
+      inline: ['Inline chat', 'Ask questions inline in the conversation. Before pausing, set is_waiting_for_user: true in status.json with a brief_description; clear it on resume.'],
+      batch: ['Batched', 'Batch every question into a single message — do not ask one at a time. Set is_waiting_for_user: true in status.json before sending; clear on resume.'],
+      doc_review: ['Doc review', 'Write the stage\'s output file first, then ask the user to review it. Set is_waiting_for_user: true in status.json before asking for review; clear on resume.'],
+    };
 
     const row = (label: string, map: Record<string, [string, string]>, val: string) => {
       const [name, desc] = map[val] ?? [val, ''];
@@ -909,7 +920,7 @@ ${row('Commits', COMMITS_LABELS, workStyle.commits)}
 
 ${row('On blockers', BLOCKERS_LABELS, workStyle.onBlockers)}
 
-Use the ask_questions tool (or equivalent) when you need to ask the user questions, rather than asking inline.
+${row('Input mode', INPUT_MODE_LABELS, workStyle.inputMode)}
 ${custom}`;
   }
 
@@ -1171,19 +1182,30 @@ Read \`tracker/stages/working-style.md\` for the project's preferred working sty
 `;
   }
 
-  defaultStageFileContent(stage: Exclude<TrackerStage, 'archive'>, settings?: Record<string, string>): string {
-    return this.defaultStageFileBody(stage, settings) + this.renderStageProtocol(stage, settings);
+  defaultStageFileContent(
+    stage: Exclude<TrackerStage, 'archive'>,
+    settings?: Record<string, string>,
+    workStyle?: WorkStyle,
+  ): string {
+    return this.defaultStageFileBody(stage, settings) + this.renderStageProtocol(stage, settings, workStyle);
   }
 
-  // Common tail appended to every generated stage guide. Surfaces three new
-  // settings (input_mode, gate_on_advance, submit) and the status.json
-  // self-report protocol that ralph relies on. Kept separate from the
-  // per-stage body generator so adding a setting doesn't require touching
-  // every stage's case block.
-  private renderStageProtocol(stage: Exclude<TrackerStage, 'archive'>, settings?: Record<string, string>): string {
+  // Common tail appended to every generated stage guide. Surfaces the
+  // gate_on_advance / submit per-stage settings plus the project-global
+  // inputMode from WorkStyle, and the status.json self-report protocol
+  // that ralph relies on. Kept separate from the per-stage body generator
+  // so adding a setting doesn't require touching every stage's case block.
+  private renderStageProtocol(
+    stage: Exclude<TrackerStage, 'archive'>,
+    settings?: Record<string, string>,
+    workStyle?: WorkStyle,
+  ): string {
     if (stage === 'backlog') return ''; // status.json + gates don't apply pre-discovery
     const s = settings || {};
-    const inputMode = s['input_mode'] ?? 'ask_questions';
+    // inputMode is a project-global preference, not per-stage. It lives on
+    // WorkStyle and falls back to the default when absent (e.g., tests that
+    // don't pass a workStyle).
+    const inputMode: InputModeStyle = workStyle?.inputMode ?? DEFAULT_WORK_STYLE.inputMode;
     const gate = s['gate_on_advance'] ?? (stage === 'requirements' || stage === 'cleanup'
       ? 'wait_for_approval'
       : stage === 'implement'

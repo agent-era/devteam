@@ -281,13 +281,15 @@ export class RalphCore implements CoreBase<State> {
     if (prev.lastStage !== null && prev.lastStage !== stage) return next;
 
     // Fire the nudge. `stage !== 'archive'` has already been guarded above,
-    // so stage is Exclude<TrackerStage, 'archive'> here.
+    // so stage is Exclude<TrackerStage, 'archive'> here. inputMode is
+    // project-global (WorkStyle); gate_on_advance is per-stage.
     const stageSettings = this.tracker.loadStagesConfig(projectPath);
     const settings = stageSettings?.[stage as Exclude<TrackerStage, 'archive'>]?.settings ?? {};
+    const workStyle = this.tracker.loadWorkStyle(projectPath);
     const nudgeText = buildNudgeText({
       slug: wt.feature,
       stage,
-      inputMode: settings['input_mode'] ?? 'ask_questions',
+      inputMode: workStyle.inputMode,
       gateOnAdvance: settings['gate_on_advance'] ?? 'none',
     });
 

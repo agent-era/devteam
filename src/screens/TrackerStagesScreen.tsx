@@ -14,15 +14,11 @@ interface OptionDef {
   choices: {value: string; label: string}[];
 }
 
-// Options shared by every stage: input mode + gate. Kept in one place so all
-// four stages surface the same ralph-facing knobs with consistent labels.
+// Gate is per-stage (different stages want different approval semantics).
+// Input mode is project-global — it's a personal preference for how the
+// agent should ask questions, not something that changes per stage — and
+// lives on the Style tab (see STYLE_OPTIONS).
 const COMMON_STAGE_OPTIONS: OptionDef[] = [
-  {key: 'input_mode', label: 'Input mode', choices: [
-    {value: 'ask_questions', label: 'ask_questions tool'},
-    {value: 'inline', label: 'Inline chat'},
-    {value: 'batch', label: 'Batched'},
-    {value: 'doc_review', label: 'Doc review'},
-  ]},
   {key: 'gate_on_advance', label: 'Gate on advance', choices: [
     {value: 'none', label: 'None (auto-advance)'},
     {value: 'review_and_advance', label: 'Write review, then advance'},
@@ -182,6 +178,12 @@ const STYLE_OPTIONS: StyleOptionDef[] = [
     {value: 'try_first', label: 'Try alternatives first'},
     {value: 'continue', label: 'Note & continue'},
   ]},
+  {key: 'inputMode', label: 'Input mode', choices: [
+    {value: 'ask_questions', label: 'ask_questions tool'},
+    {value: 'inline', label: 'Inline chat'},
+    {value: 'batch', label: 'Batched'},
+    {value: 'doc_review', label: 'Doc review'},
+  ]},
 ];
 
 const STYLE_CUSTOM_ROW = STYLE_OPTIONS.length;
@@ -257,11 +259,12 @@ export default function TrackerStagesScreen({projectPath, onBack}: TrackerStages
   const stageOpts = currentStage ? (STAGE_OPTION_DEFS[currentStage] || []) : [];
   const stageSettings = currentStage ? (config[currentStage].settings || {}) : {};
 
-  // For stage tabs: generate preview in-memory from settings so it updates in real-time
+  // For stage tabs: generate preview in-memory from settings so it updates in real-time.
+  // inputMode is global (Style tab) — pass it so the protocol tail reflects live changes.
   const stageFileContent = React.useMemo(() => {
-    if (isStyleTab || !currentStage) return '';
-    return service.defaultStageFileContent(currentStage, stageSettings);
-  }, [isStyleTab, currentStage, stageSettings, service]);
+    if (isStyleTab || isRalphTab || !currentStage) return '';
+    return service.defaultStageFileContent(currentStage, stageSettings, workStyle);
+  }, [isStyleTab, isRalphTab, currentStage, stageSettings, workStyle, service]);
 
   const stageFileLines = React.useMemo(() => fileContentToLines(stageFileContent), [stageFileContent]);
 
@@ -291,11 +294,11 @@ export default function TrackerStagesScreen({projectPath, onBack}: TrackerStages
     const newSettings = {...stageSettings, [opt.key]: next};
     service.saveStageSettings(projectPath, currentStage, newSettings);
     // Write updated file to disk so the agent gets the new settings
-    const updatedContent = service.defaultStageFileContent(currentStage, newSettings);
+    const updatedContent = service.defaultStageFileContent(currentStage, newSettings, workStyle);
     const filePath = service.getStageFilePath(projectPath, currentStage);
     try { fs.writeFileSync(filePath, updatedContent, 'utf8'); } catch {}
     setConfig(service.loadStagesConfig(projectPath));
-  }, [currentStage, stageOpts, selectedRow, stageSettings, service, projectPath]);
+  }, [currentStage, stageOpts, selectedRow, stageSettings, workStyle, service, projectPath]);
 
   const cycleStyleOption = React.useCallback((delta: number) => {
     const opt = STYLE_OPTIONS[selectedRow];
@@ -306,7 +309,19 @@ export default function TrackerStagesScreen({projectPath, onBack}: TrackerStages
     const updated = {...workStyle, [opt.key]: next};
     setWorkStyle(updated);
     service.saveWorkStyle(projectPath, updated);
-  }, [selectedRow, workStyle, service, projectPath]);
+    // inputMode changes affect the protocol tail in every stage guide, so
+    // regenerate all four files on disk. Other style fields only drive
+    // working-style.md (saveWorkStyle already rewrites that).
+    if (opt.key === 'inputMode') {
+      for (const stage of ['discovery', 'requirements', 'implement', 'cleanup'] as const) {
+        const stageSettings = config[stage]?.settings || {};
+        const filePath = service.getStageFilePath(projectPath, stage);
+        try {
+          fs.writeFileSync(filePath, service.defaultStageFileContent(stage, stageSettings, updated), 'utf8');
+        } catch {}
+      }
+    }
+  }, [selectedRow, workStyle, config, service, projectPath]);
 
   const cycleRalphOption = React.useCallback((delta: number) => {
     const opt = RALPH_OPTIONS[selectedRow];
