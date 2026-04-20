@@ -359,16 +359,11 @@ export default function TrackerBoardScreen({
     }
   }
 
-  // Compute column height from terminal rows minus chrome. Banner and group-label
-  // rows have been inlined into the title and column borders to maximise board
-  // height. Remaining chrome: 1 title + (1 footer status if any) + 1 footer line.
-  // FullScreen reserves 1 row at the bottom (to prevent terminal scroll), so we
-  // subtract an extra 2: 1 for FullScreen's reserved row + 1 margin line to keep
-  // column content from being clipped at the edge.
+  // Column height = termRows minus all vertical chrome:
+  //   1 title row + 1 footer row + footerStatusRow (optional)
+  //   + 1 reserved by FullScreen (prevents terminal scroll)
+  //   + 1 margin (keeps content from touching the edge)
   const footerStatusRow = proposalStatus ? 1 : 0;
-  // Clamp to at least 5 rows so a column always fits its header + one item;
-  // otherwise track the terminal height tightly so we don't overflow on short
-  // terminals or leave chrome below a tall board.
   const colHeight = Math.max(5, termRows - (4 + footerStatusRow));
 
   // Group columns
