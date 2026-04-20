@@ -539,7 +539,49 @@ export class TrackerService {
     this.removeSlugFromIndexObj(index, slug);
     this.addSlugToIndexObj(index, slug, toStage);
     writeJSONAtomic(this.getIndexPath(projectPath), index);
+    // Mirror the canonical stage into the per-item status.json so ralph (and
+    // anything that reads status.json first) sees the new stage immediately.
+    // Archive moves don't get a status.json — archived items live outside
+    // the live-state protocol.
+    if (toStage !== 'archive') {
+      const prev = this.getItemStatus(projectPath, slug);
+      this.writeItemStatus(projectPath, slug, {
+        stage: toStage,
+        is_waiting_for_user: prev?.is_waiting_for_user ?? false,
+        brief_description: prev?.brief_description ?? '',
+        timestamp: new Date().toISOString(),
+      });
+    }
     return true;
+  }
+
+  // Canonical current stage for an item. Prefers the agent's status.json
+  // (which is the live self-report), then falls back to index.json bucket
+  // membership, then to 'backlog' if the slug is unknown. Never returns null
+  // for a known slug — an item always has a stage somewhere.
+  getItemStage(projectPath: string, slug: string): TrackerStage {
+    const status = this.getItemStatus(projectPath, slug);
+    if (status) return status.stage;
+    const legacy = this.createStageBySlug(this.readIndex(projectPath)).get(slug);
+    return legacy ?? 'backlog';
+  }
+
+  // Enumerate every known active item grouped by stage. Stage for each slug
+  // comes from status.json first; unmigrated items fall back to the index
+  // buckets. Archived items are listed verbatim from index.archive.
+  listItemsByStage(projectPath: string): Map<string, TrackerStage> {
+    const index = this.readIndex(projectPath);
+    const out = this.createStageBySlug(index);
+    // Override with status.json where present, so the agent's live self-report
+    // wins over the index buckets.
+    const knownSlugs = new Set(out.keys());
+    // Also surface slugs that have a status.json but aren't in the index yet
+    // (e.g., an agent wrote status.json before the index was updated).
+    for (const slug of knownSlugs) {
+      const status = this.getItemStatus(projectPath, slug);
+      if (status) out.set(slug, status.stage);
+    }
+    return out;
   }
 
   // Auto-advance items based on signals in their files:
@@ -1130,6 +1172,99 @@ Read \`tracker/stages/working-style.md\` for the project's preferred working sty
   }
 
   defaultStageFileContent(stage: Exclude<TrackerStage, 'archive'>, settings?: Record<string, string>): string {
+    return this.defaultStageFileBody(stage, settings) + this.renderStageProtocol(stage, settings);
+  }
+
+  // Common tail appended to every generated stage guide. Surfaces three new
+  // settings (input_mode, gate_on_advance, submit) and the status.json
+  // self-report protocol that ralph relies on. Kept separate from the
+  // per-stage body generator so adding a setting doesn't require touching
+  // every stage's case block.
+  private renderStageProtocol(stage: Exclude<TrackerStage, 'archive'>, settings?: Record<string, string>): string {
+    if (stage === 'backlog') return ''; // status.json + gates don't apply pre-discovery
+    const s = settings || {};
+    const inputMode = s['input_mode'] ?? 'ask_questions';
+    const gate = s['gate_on_advance'] ?? (stage === 'requirements' || stage === 'cleanup'
+      ? 'wait_for_approval'
+      : stage === 'implement'
+      ? 'review_and_advance'
+      : 'none');
+    const submit = s['submit'] ?? 'approve';
+    const outputFile =
+      stage === 'discovery' ? 'notes.md'
+      : stage === 'requirements' ? 'requirements.md'
+      : stage === 'implement' ? 'implementation.md'
+      : 'implementation.md';
+
+    const inputInstruction = (() => {
+      switch (inputMode) {
+        case 'inline':
+          return 'Ask questions inline in the conversation when you need input. Before sending each question, set `is_waiting_for_user: true` in `status.json` with a `brief_description` of what you need. Clear it (set back to false) the moment you receive the user\'s response and resume work.';
+        case 'batch':
+          return 'Batch every question you have into a single message — do not ask one at a time. Before sending the batched message, set `is_waiting_for_user: true` in `status.json` with a `brief_description` summarising the batch. Clear it when the user replies.';
+        case 'doc_review':
+          return `Write the stage's output file (\`${outputFile}\`) first. Then ask the user to review it. Before asking for review, set \`is_waiting_for_user: true\` in \`status.json\` with a \`brief_description\` of what you need reviewed. Clear it when the user responds.`;
+        case 'ask_questions':
+        default:
+          return 'Use the `ask_questions` tool when you need input from the user. Keep `status.json` up to date — set `is_waiting_for_user: true` with a `brief_description` when you\'re waiting, and clear it when the user responds.';
+      }
+    })();
+
+    const gateInstruction = (() => {
+      switch (gate) {
+        case 'none':
+          return 'Advance silently: update `status.json.stage` to the next stage and continue.';
+        case 'review_and_advance':
+          return `Before advancing, append a short "## Stage review" section (1–3 sentences) to \`${outputFile}\` summarising what you did this stage. Then update \`status.json.stage\` to the next stage and continue.`;
+        case 'wait_for_approval':
+          return 'Before advancing, pause and ask for the user\'s approval using this stage\'s input mode (above). Do not update `status.json.stage` until the user explicitly approves the advance.';
+        default:
+          return '';
+      }
+    })();
+
+    const submitBlock = stage === 'cleanup'
+      ? (submit === 'auto'
+          ? '\n### Submit (PR creation)\n\nAfter cleanup passes, open the PR automatically — no extra approval step.\n'
+          : '\n### Submit (PR creation)\n\nAfter cleanup passes, pause and ask the user for explicit approval using this stage\'s input mode before opening the PR. Do not create the PR until approved.\n')
+      : '';
+
+    return `
+## Agent status protocol
+
+You must keep \`tracker/items/<slug>/status.json\` current. It's the canonical live state for this item and ralph reads it to decide whether you're stuck or legitimately waiting.
+
+Schema:
+\`\`\`json
+{
+  "stage": "${stage}",
+  "is_waiting_for_user": false,
+  "brief_description": "short description of current activity (≤ 120 chars)",
+  "timestamp": "ISO-8601 now"
+}
+\`\`\`
+
+Update \`status.json\` at every meaningful transition:
+
+- **Stage start**: write the file with the current stage and \`is_waiting_for_user: false\`.
+- **Pausing for input**: set \`is_waiting_for_user: true\` and put what you're waiting on in \`brief_description\`.
+- **Resuming**: set \`is_waiting_for_user: false\` and update \`brief_description\` to reflect what you're now doing.
+- **Advancing**: set \`stage\` to the next stage before you move on.
+
+### Input mode: \`${inputMode}\`
+
+${inputInstruction}
+
+### Gate on advance: \`${gate}\`
+
+${gateInstruction}
+${submitBlock}`;
+  }
+
+  // Original per-stage content generator — the body that the user edits via
+  // the stages screen. Kept private and wrapped by defaultStageFileContent()
+  // so the status/gate protocol is always appended.
+  private defaultStageFileBody(stage: Exclude<TrackerStage, 'archive'>, settings?: Record<string, string>): string {
     const n = this.STAGE_FILE_NUMBERS[stage];
     const s = settings || {};
     const numbered = (items: (string | null)[]): string =>

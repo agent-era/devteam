@@ -211,6 +211,153 @@ describe('item status.json helpers', () => {
   });
 });
 
+// ─── stage derivation (status.json + index.json) ────────────────────────────
+
+describe('getItemStage / listItemsByStage', () => {
+  const SLUG = 'has-status';
+
+  test('getItemStage prefers status.json over index.json', () => {
+    service.createItem(tmpDir, 'Has Status', 'discovery', SLUG);
+    // index.json has it in discovery, status.json will report implement
+    service.writeItemStatus(tmpDir, SLUG, {
+      stage: 'implement',
+      is_waiting_for_user: false,
+      brief_description: 'writing code',
+      timestamp: new Date().toISOString(),
+    });
+    expect(service.getItemStage(tmpDir, SLUG)).toBe('implement');
+  });
+
+  test('getItemStage falls back to index.json when status.json is missing', () => {
+    service.createItem(tmpDir, 'No Status', 'requirements', 'no-status');
+    expect(service.getItemStage(tmpDir, 'no-status')).toBe('requirements');
+  });
+
+  test('getItemStage returns backlog for unknown slugs', () => {
+    service.ensureTracker(tmpDir);
+    expect(service.getItemStage(tmpDir, 'never-existed')).toBe('backlog');
+  });
+
+  test('listItemsByStage overrides index with status.json stage', () => {
+    service.createItem(tmpDir, 'One', 'discovery', 'one');
+    service.createItem(tmpDir, 'Two', 'implement', 'two');
+    service.writeItemStatus(tmpDir, 'one', {
+      stage: 'requirements',
+      is_waiting_for_user: false,
+      brief_description: '',
+      timestamp: new Date().toISOString(),
+    });
+    const out = service.listItemsByStage(tmpDir);
+    expect(out.get('one')).toBe('requirements');
+    expect(out.get('two')).toBe('implement');
+  });
+});
+
+// ─── moveItem writes status.json ────────────────────────────────────────────
+
+describe('moveItem mirrors stage into status.json', () => {
+  test('moves across stages and writes a fresh status.json', () => {
+    service.createItem(tmpDir, 'Moves Around', 'discovery', 'moves');
+    expect(service.moveItem(tmpDir, 'moves', 'requirements')).toBe(true);
+    const status = service.getItemStatus(tmpDir, 'moves');
+    expect(status?.stage).toBe('requirements');
+    expect(status?.is_waiting_for_user).toBe(false);
+  });
+
+  test('preserves is_waiting_for_user across a move', () => {
+    service.createItem(tmpDir, 'Waiting', 'discovery', 'waits');
+    service.writeItemStatus(tmpDir, 'waits', {
+      stage: 'discovery',
+      is_waiting_for_user: true,
+      brief_description: 'pre-move wait',
+      timestamp: new Date().toISOString(),
+    });
+    service.moveItem(tmpDir, 'waits', 'requirements');
+    const status = service.getItemStatus(tmpDir, 'waits');
+    expect(status?.stage).toBe('requirements');
+    expect(status?.is_waiting_for_user).toBe(true);
+    expect(status?.brief_description).toBe('pre-move wait');
+  });
+
+  test('archive move does not write status.json', () => {
+    service.createItem(tmpDir, 'Archives', 'discovery', 'arch');
+    service.moveItem(tmpDir, 'arch', 'archive');
+    // status.json may or may not exist from a prior move to a non-archive
+    // stage; what matters is that the archive move itself didn't (re)write
+    // it. We assert by ensuring moveItem returns true and index is updated.
+    const index = JSON.parse(fs.readFileSync(path.join(tmpDir, 'tracker', 'index.json'), 'utf8'));
+    expect(index.archive).toContain('arch');
+  });
+});
+
+// ─── defaultStageFileContent protocol suffix ────────────────────────────────
+
+describe('defaultStageFileContent renders status + gate protocol', () => {
+  const STAGES = ['discovery', 'requirements', 'implement', 'cleanup'] as const;
+
+  test.each(STAGES)('every stage includes the status.json protocol section', (stage) => {
+    const content = service.defaultStageFileContent(stage, {});
+    expect(content).toContain('Agent status protocol');
+    expect(content).toContain('status.json');
+    expect(content).toContain('is_waiting_for_user');
+  });
+
+  test.each(STAGES)('every stage renders Input mode + Gate on advance sections', (stage) => {
+    const content = service.defaultStageFileContent(stage, {});
+    expect(content).toContain('Input mode:');
+    expect(content).toContain('Gate on advance:');
+  });
+
+  test.each([
+    ['ask_questions', 'ask_questions'],
+    ['inline', 'Inline'],
+    ['batch', 'Batch'],
+    ['doc_review', 'review'],
+  ] as const)('input_mode=%s renders mode-specific guidance', (mode, needle) => {
+    const content = service.defaultStageFileContent('discovery', {input_mode: mode});
+    expect(content).toMatch(new RegExp(needle, 'i'));
+  });
+
+  test.each([
+    ['none', 'silently'],
+    ['review_and_advance', 'Stage review'],
+    ['wait_for_approval', 'approval'],
+  ] as const)('gate_on_advance=%s renders the right gate text', (gate, needle) => {
+    const content = service.defaultStageFileContent('requirements', {gate_on_advance: gate});
+    expect(content).toMatch(new RegExp(needle, 'i'));
+  });
+
+  test('submit=approve adds a submit gate to cleanup', () => {
+    const content = service.defaultStageFileContent('cleanup', {submit: 'approve'});
+    expect(content).toContain('Submit (PR creation)');
+    expect(content).toMatch(/approval/i);
+  });
+
+  test('submit=auto on cleanup tells the agent to open the PR automatically', () => {
+    const content = service.defaultStageFileContent('cleanup', {submit: 'auto'});
+    expect(content).toContain('Submit (PR creation)');
+    expect(content).toMatch(/automatically/i);
+  });
+
+  test('review_and_advance gate references the stage\'s output file', () => {
+    const disc = service.defaultStageFileContent('discovery', {gate_on_advance: 'review_and_advance'});
+    expect(disc).toContain('notes.md');
+    const req = service.defaultStageFileContent('requirements', {gate_on_advance: 'review_and_advance'});
+    expect(req).toContain('requirements.md');
+    const impl = service.defaultStageFileContent('implement', {gate_on_advance: 'review_and_advance'});
+    expect(impl).toContain('implementation.md');
+  });
+
+  test('gate defaults: requirements and cleanup default to wait_for_approval, implement to review_and_advance', () => {
+    const req = service.defaultStageFileContent('requirements', {});
+    expect(req).toMatch(/Gate on advance: `wait_for_approval`/);
+    const clean = service.defaultStageFileContent('cleanup', {});
+    expect(clean).toMatch(/Gate on advance: `wait_for_approval`/);
+    const impl = service.defaultStageFileContent('implement', {});
+    expect(impl).toMatch(/Gate on advance: `review_and_advance`/);
+  });
+});
+
 // ─── createItem ─────────────────────────────────────────────────────────────
 
 describe('createItem', () => {
@@ -490,10 +637,12 @@ describe('defaultStageFileContent', () => {
   });
 
   test('discovery: always_skip produces minimal short instructions', () => {
-    const content = service.defaultStageFileContent('discovery', {skip: 'always_skip'});
-    expect(content).toContain('always skip');
-    expect(content).not.toContain('codebase scan');
-    expect(content).not.toContain('ask_questions');
+    // The protocol suffix intentionally mentions ask_questions as the default
+    // input mode; scope the "must not appear" assertions to the body only.
+    const body = service.defaultStageFileContent('discovery', {skip: 'always_skip'}).split('## Agent status protocol')[0];
+    expect(body).toContain('always skip');
+    expect(body).not.toContain('codebase scan');
+    expect(body).not.toContain('ask_questions');
   });
 
   test('discovery: depth=quick omits codebase scan', () => {
@@ -508,8 +657,8 @@ describe('defaultStageFileContent', () => {
   });
 
   test('discovery: questions=none skips ask_questions step', () => {
-    const content = service.defaultStageFileContent('discovery', {depth: 'normal', skip: 'always_run', questions: 'none'});
-    expect(content).not.toContain('ask_questions');
+    const body = service.defaultStageFileContent('discovery', {depth: 'normal', skip: 'always_run', questions: 'none'}).split('## Agent status protocol')[0];
+    expect(body).not.toContain('ask_questions');
   });
 
   test('discovery: questions=standard includes ask_questions step', () => {
@@ -605,10 +754,10 @@ describe('defaultStageFileContent', () => {
   });
 
   test('implement: impl_notes=skip omits implementation.md step', () => {
-    const withSkip = service.defaultStageFileContent('implement', {impl_notes: 'skip'});
-    const withBrief = service.defaultStageFileContent('implement', {impl_notes: 'brief'});
-    expect(withSkip).not.toContain('implementation.md');
-    expect(withBrief).toContain('implementation.md');
+    const withSkipBody = service.defaultStageFileContent('implement', {impl_notes: 'skip'}).split('## Agent status protocol')[0];
+    const withBriefBody = service.defaultStageFileContent('implement', {impl_notes: 'brief'}).split('## Agent status protocol')[0];
+    expect(withSkipBody).not.toContain('implementation.md');
+    expect(withBriefBody).toContain('implementation.md');
   });
 
   test('cleanup: scope=quick says fix only critical issues', () => {

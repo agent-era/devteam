@@ -13,6 +13,22 @@ interface OptionDef {
   choices: {value: string; label: string}[];
 }
 
+// Options shared by every stage: input mode + gate. Kept in one place so all
+// four stages surface the same ralph-facing knobs with consistent labels.
+const COMMON_STAGE_OPTIONS: OptionDef[] = [
+  {key: 'input_mode', label: 'Input mode', choices: [
+    {value: 'ask_questions', label: 'ask_questions tool'},
+    {value: 'inline', label: 'Inline chat'},
+    {value: 'batch', label: 'Batched'},
+    {value: 'doc_review', label: 'Doc review'},
+  ]},
+  {key: 'gate_on_advance', label: 'Gate on advance', choices: [
+    {value: 'none', label: 'None (auto-advance)'},
+    {value: 'review_and_advance', label: 'Write review, then advance'},
+    {value: 'wait_for_approval', label: 'Wait for approval'},
+  ]},
+];
+
 // Per-stage structured options (different per stage)
 const STAGE_OPTION_DEFS: Partial<Record<Exclude<TrackerStage, 'archive'>, OptionDef[]>> = {
   discovery: [
@@ -36,6 +52,7 @@ const STAGE_OPTION_DEFS: Partial<Record<Exclude<TrackerStage, 'archive'>, Option
       {value: 'minimal', label: 'Minimal (1)'},
       {value: 'standard', label: 'Standard (1–3)'},
     ]},
+    ...COMMON_STAGE_OPTIONS,
   ],
   requirements: [
     {key: 'style', label: 'Style', choices: [
@@ -58,6 +75,7 @@ const STAGE_OPTION_DEFS: Partial<Record<Exclude<TrackerStage, 'archive'>, Option
       {value: 'include', label: 'Include'},
       {value: 'lead', label: 'Lead with'},
     ]},
+    ...COMMON_STAGE_OPTIONS,
   ],
   implement: [
     {key: 'start_with', label: 'Start with', choices: [
@@ -80,6 +98,7 @@ const STAGE_OPTION_DEFS: Partial<Record<Exclude<TrackerStage, 'archive'>, Option
       {value: 'brief', label: 'Brief'},
       {value: 'detailed', label: 'Detailed'},
     ]},
+    ...COMMON_STAGE_OPTIONS,
   ],
   cleanup: [
     {key: 'scope', label: 'Scope', choices: [
@@ -101,6 +120,11 @@ const STAGE_OPTION_DEFS: Partial<Record<Exclude<TrackerStage, 'archive'>, Option
       {value: 'skip', label: 'Skip'},
       {value: 'notes', label: 'Key notes'},
       {value: 'full', label: 'Full description'},
+    ]},
+    ...COMMON_STAGE_OPTIONS,
+    {key: 'submit', label: 'Submit (PR)', choices: [
+      {value: 'approve', label: 'Wait for approval'},
+      {value: 'auto', label: 'Auto-submit'},
     ]},
   ],
 };
