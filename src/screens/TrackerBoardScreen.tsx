@@ -49,6 +49,14 @@ function computeColumnScroll(selected: number, total: number, visible: number): 
   return Math.max(0, Math.min(max, top));
 }
 
+function findSlugPosition(board: TrackerBoard, slug: string): {column: number; row: number} | null {
+  for (let ci = 0; ci < board.columns.length; ci++) {
+    const ri = board.columns[ci].items.findIndex(it => it.slug === slug);
+    if (ri >= 0) return {column: ci, row: ri};
+  }
+  return null;
+}
+
 export default function TrackerBoardScreen({
   project,
   projectPath,
@@ -78,6 +86,8 @@ export default function TrackerBoardScreen({
     finishProposalGeneration,
     showProposals,
     showTracker,
+    getTrackerSelection,
+    setTrackerSelection,
     showList,
     showDiffView,
     showArchiveConfirmation,
@@ -165,13 +175,26 @@ export default function TrackerBoardScreen({
   // useState's initializer loaded the first board; only reload when the project
   // actually changes (effect skips its first run via a ref guard).
   const isFirstMount = React.useRef(true);
+  // Skip the first post-mount sync tick so the initial (0,0) render doesn't
+  // overwrite a remembered slug before mount-restore has applied. Project switches
+  // reset this too so the stale pre-switch item isn't written to the new project.
+  const firstSyncRef = React.useRef(true);
   React.useEffect(() => {
     if (isFirstMount.current) {
       isFirstMount.current = false;
     } else {
-      setBoard(service.loadBoard(project, projectPath));
-      setSelectedColumn(0);
-      setSelectedRowByColumn({});
+      const newBoard = service.loadBoard(project, projectPath);
+      setBoard(newBoard);
+      const savedSlug = getTrackerSelection(project);
+      const pos = savedSlug ? findSlugPosition(newBoard, savedSlug) : null;
+      if (pos) {
+        setSelectedColumn(pos.column);
+        setSelectedRowByColumn({[pos.column]: pos.row});
+      } else {
+        setSelectedColumn(0);
+        setSelectedRowByColumn({});
+      }
+      firstSyncRef.current = true;
     }
     // Resume any pending proposals from disk (survives app restart).
     if (!proposalItems && !proposalGenerating) {
@@ -195,6 +218,18 @@ export default function TrackerBoardScreen({
     }, VISIBLE_STATUS_REFRESH_DURATION);
   }, [project, refreshProjectWorktrees]);
 
+  // Mount-only: matches against `board` (not rawBoard) so worktree-only orphan items
+  // can be restored too.
+  React.useEffect(() => {
+    const savedSlug = getTrackerSelection(project);
+    if (!savedSlug) return;
+    const pos = findSlugPosition(board, savedSlug);
+    if (!pos) return;
+    setSelectedColumn(pos.column);
+    setSelectedRowByColumn({[pos.column]: pos.row});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const reloadBoard = React.useCallback(() => {
     setBoard(service.loadBoard(project, projectPath));
   }, [service, project, projectPath]);
@@ -202,6 +237,15 @@ export default function TrackerBoardScreen({
   const currentColumn = board.columns[selectedColumn];
   const currentRow = selectedRowByColumn[selectedColumn] || 0;
   const currentItem = currentColumn?.items[currentRow] || null;
+
+  const currentItemSlug = currentItem?.slug;
+  React.useEffect(() => {
+    if (firstSyncRef.current) {
+      firstSyncRef.current = false;
+      return;
+    }
+    if (currentItemSlug) setTrackerSelection(project, currentItemSlug);
+  }, [currentItemSlug, project, setTrackerSelection]);
 
   const handleVerticalMove = React.useCallback((delta: number) => {
     setSelectedRowByColumn(prev => {
