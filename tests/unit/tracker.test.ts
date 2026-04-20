@@ -2,7 +2,7 @@ import {describe, test, expect, beforeEach, afterEach} from '@jest/globals';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import {TrackerService, parseFrontmatter, DEFAULT_WORK_STYLE, TrackerItem, StageConfig, WorkStyle} from '../../src/services/TrackerService.js';
+import {TrackerService, parseFrontmatter, DEFAULT_WORK_STYLE, TrackerItem, StageConfig, WorkStyle, ItemStatus, ITEM_STATUS_STALE_MS} from '../../src/services/TrackerService.js';
 
 let tmpDir: string;
 let service: TrackerService;
@@ -112,6 +112,102 @@ describe('nextStage / previousStage', () => {
 
   test('previousStage returns null at start', () => {
     expect(service.previousStage('backlog')).toBeNull();
+  });
+});
+
+// ─── item status.json helpers ───────────────────────────────────────────────
+
+describe('item status.json helpers', () => {
+  const SLUG = 'test-item';
+
+  function seedItemDir(): string {
+    const dir = path.join(tmpDir, 'tracker', 'items', SLUG);
+    fs.mkdirSync(dir, {recursive: true});
+    return dir;
+  }
+
+  test('getItemStatus returns null when file is absent', () => {
+    seedItemDir();
+    expect(service.getItemStatus(tmpDir, SLUG)).toBeNull();
+  });
+
+  test('writeItemStatus round-trips through getItemStatus', () => {
+    seedItemDir();
+    const now = new Date().toISOString();
+    const status: ItemStatus = {
+      stage: 'discovery',
+      is_waiting_for_user: true,
+      brief_description: 'need approval on notes.md',
+      timestamp: now,
+    };
+    service.writeItemStatus(tmpDir, SLUG, status);
+    const roundTripped = service.getItemStatus(tmpDir, SLUG);
+    expect(roundTripped).toEqual(status);
+  });
+
+  test('writeItemStatus creates the item dir when missing and writes there', () => {
+    const status: ItemStatus = {
+      stage: 'backlog',
+      is_waiting_for_user: false,
+      brief_description: 'working',
+      timestamp: new Date().toISOString(),
+    };
+    service.writeItemStatus(tmpDir, SLUG, status);
+    const written = path.join(tmpDir, 'tracker', 'items', SLUG, 'status.json');
+    expect(fs.existsSync(written)).toBe(true);
+  });
+
+  test('writeItemStatus truncates brief_description to 120 chars', () => {
+    seedItemDir();
+    const longReason = 'x'.repeat(500);
+    service.writeItemStatus(tmpDir, SLUG, {
+      stage: 'requirements',
+      is_waiting_for_user: true,
+      brief_description: longReason,
+      timestamp: new Date().toISOString(),
+    });
+    const read = service.getItemStatus(tmpDir, SLUG);
+    expect(read?.brief_description.length).toBe(120);
+  });
+
+  test('getItemStatus returns null on malformed JSON', () => {
+    const dir = seedItemDir();
+    fs.writeFileSync(path.join(dir, 'status.json'), 'not json {{{');
+    expect(service.getItemStatus(tmpDir, SLUG)).toBeNull();
+  });
+
+  test('getItemStatus returns null when required fields are missing', () => {
+    const dir = seedItemDir();
+    fs.writeFileSync(path.join(dir, 'status.json'), JSON.stringify({stage: 'discovery'}));
+    expect(service.getItemStatus(tmpDir, SLUG)).toBeNull();
+  });
+
+  test('isItemStatusStale is true when timestamp is older than 24h', () => {
+    const old = new Date(Date.now() - ITEM_STATUS_STALE_MS - 1000).toISOString();
+    expect(service.isItemStatusStale({
+      stage: 'implement',
+      is_waiting_for_user: true,
+      brief_description: '',
+      timestamp: old,
+    })).toBe(true);
+  });
+
+  test('isItemStatusStale is false for a fresh timestamp', () => {
+    expect(service.isItemStatusStale({
+      stage: 'implement',
+      is_waiting_for_user: true,
+      brief_description: '',
+      timestamp: new Date().toISOString(),
+    })).toBe(false);
+  });
+
+  test('isItemStatusStale is true when timestamp is unparseable', () => {
+    expect(service.isItemStatusStale({
+      stage: 'implement',
+      is_waiting_for_user: true,
+      brief_description: '',
+      timestamp: 'not-a-date',
+    })).toBe(true);
   });
 });
 

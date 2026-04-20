@@ -28,6 +28,23 @@ export interface ExitCriterionResult {
   met: boolean;
 }
 
+// Agent-reported live state for an item. Written by the agent at every
+// meaningful transition (stage start/advance, pause, resume). Ralph reads this
+// to decide whether an idle pane is truly stuck or legitimately waiting.
+export interface ItemStatus {
+  stage: Exclude<TrackerStage, 'archive'>;
+  is_waiting_for_user: boolean;
+  // Short human-readable note: current activity when not waiting, or what's
+  // being waited on when waiting. ≤ 120 chars.
+  brief_description: string;
+  // ISO-8601 timestamp of last update. Used for the staleness check.
+  timestamp: string;
+}
+
+// Treat a waiting flag as stale (and ignore it) after this many ms. Guards
+// against crashed agents that never cleared is_waiting_for_user.
+export const ITEM_STATUS_STALE_MS = 24 * 60 * 60 * 1000;
+
 export interface StageConfig {
   actionLabel: string;
   description: string;
@@ -392,6 +409,69 @@ export class TrackerService {
     const idx = STAGE_ORDER.indexOf(stage);
     if (idx <= 0) return null;
     return STAGE_ORDER[idx - 1];
+  }
+
+  // Path to the agent's self-reported status file for an item. Lives alongside
+  // the stage output files (notes.md, requirements.md, implementation.md).
+  getItemStatusPath(projectPath: string, slug: string): string | null {
+    const itemDir = this.resolveItemDir(projectPath, slug);
+    if (!itemDir) return null;
+    return path.join(itemDir, 'status.json');
+  }
+
+  // Read the agent's current status. Returns null when the file is absent or
+  // malformed. Validates the schema loosely so a partial write doesn't explode
+  // ralph's sampling loop.
+  getItemStatus(projectPath: string, slug: string): ItemStatus | null {
+    const statusPath = this.getItemStatusPath(projectPath, slug);
+    if (!statusPath || !fs.existsSync(statusPath)) return null;
+    const raw = readFileOrNull(statusPath);
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw) as Partial<ItemStatus>;
+      if (
+        !parsed ||
+        typeof parsed.stage !== 'string' ||
+        typeof parsed.is_waiting_for_user !== 'boolean' ||
+        typeof parsed.timestamp !== 'string'
+      ) return null;
+      return {
+        stage: parsed.stage as Exclude<TrackerStage, 'archive'>,
+        is_waiting_for_user: parsed.is_waiting_for_user,
+        brief_description: typeof parsed.brief_description === 'string' ? parsed.brief_description : '',
+        timestamp: parsed.timestamp,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  // Overwrite the status file. Writes to the resolved item dir, or (as a
+  // fallback for items with no worktree yet) to the main-project stub dir so
+  // the file still has a home. Truncates brief_description to 120 chars to
+  // keep the UI row tidy.
+  writeItemStatus(projectPath: string, slug: string, status: ItemStatus): void {
+    let itemDir = this.resolveItemDir(projectPath, slug);
+    if (!itemDir) {
+      itemDir = path.join(projectPath, 'tracker', 'items', slug);
+      ensureDirectory(itemDir);
+    }
+    const payload: ItemStatus = {
+      stage: status.stage,
+      is_waiting_for_user: status.is_waiting_for_user,
+      brief_description: (status.brief_description || '').slice(0, 120),
+      timestamp: status.timestamp || new Date().toISOString(),
+    };
+    writeJSONAtomic(path.join(itemDir, 'status.json'), payload);
+  }
+
+  // A status is "stale" if its timestamp is older than ITEM_STATUS_STALE_MS.
+  // Ralph ignores `is_waiting_for_user: true` on stale records so a crashed
+  // agent doesn't suppress nudges indefinitely.
+  isItemStatusStale(status: ItemStatus, now: Date = new Date()): boolean {
+    const ts = Date.parse(status.timestamp);
+    if (Number.isNaN(ts)) return true;
+    return now.getTime() - ts > ITEM_STATUS_STALE_MS;
   }
 
   createItem(projectPath: string, title: string, stage: TrackerStage = 'discovery', explicitSlug?: string, body?: string): void {
