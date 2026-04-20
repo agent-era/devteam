@@ -37,6 +37,8 @@ interface UIContextType {
   trackerItemSlug: string | null;
   archiveReturn: (() => void) | null;
   diffReturn: (() => void) | null;
+  settingsReturn: (() => void) | null;
+  infoReturn: (() => void) | null;
   proposalItems: ProposalCandidate[] | null;
   proposalGenerating: boolean;
   proposalError: string | null;
@@ -51,8 +53,8 @@ interface UIContextType {
   showDiffView: (worktreePath: string, type: 'full' | 'uncommitted', options?: {onReturn?: () => void}) => void;
   showAIToolSelection: (worktree: WorktreeInfo, options?: {initialPrompt?: string; onReturn?: () => void}) => void;
   showNoProjectsDialog: () => void;
-  showInfo: (message: string, options?: {title?: string; onClose?: () => void}) => void;
-  showSettings: (project: string) => void;
+  showInfo: (message: string, options?: {title?: string; onClose?: () => void; onReturn?: () => void}) => void;
+  showSettings: (project: string, options?: {onReturn?: () => void}) => void;
   showTracker: (project: {name: string; path: string}) => void;
   showTrackerItem: (slug: string) => void;
   showTrackerStages: () => void;
@@ -107,6 +109,8 @@ export function UIProvider({children}: UIProviderProps) {
   // view); when set, the screen routes back here instead of falling to showList.
   const [archiveReturn, setArchiveReturn] = useState<(() => void) | null>(null);
   const [diffReturn, setDiffReturn] = useState<(() => void) | null>(null);
+  const [settingsReturn, setSettingsReturn] = useState<(() => void) | null>(null);
+  const [infoReturn, setInfoReturn] = useState<(() => void) | null>(null);
 
 
   const resetUIState = () => {
@@ -126,6 +130,8 @@ export function UIProvider({children}: UIProviderProps) {
     setTrackerItemSlug(null);
     setArchiveReturn(null);
     setDiffReturn(null);
+    setSettingsReturn(null);
+    setInfoReturn(null);
     setProposalItems(null);
     // Proposal generating/error state is intentionally preserved across navigation
     // (generation continues in background; user sees the result when they return)
@@ -212,14 +218,16 @@ export function UIProvider({children}: UIProviderProps) {
     setMode('noProjects');
   };
 
-  const showInfo = (message: string, options?: {title?: string; onClose?: () => void}) => {
+  const showInfo = (message: string, options?: {title?: string; onClose?: () => void; onReturn?: () => void}) => {
     setInfo({title: options?.title, message, onClose: options?.onClose});
+    setInfoReturn(options?.onReturn ? () => options.onReturn! : null);
     setMode('info');
   };
 
-  const showSettings = (project: string) => {
+  const showSettings = (project: string, options?: {onReturn?: () => void}) => {
     setMode('settings');
     setSettingsProject(project);
+    setSettingsReturn(options?.onReturn ? () => options.onReturn! : null);
   };
 
   const showTracker = (project: {name: string; path: string}) => {
@@ -311,6 +319,8 @@ export function UIProvider({children}: UIProviderProps) {
     trackerItemSlug,
     archiveReturn,
     diffReturn,
+    settingsReturn,
+    infoReturn,
     proposalItems,
     proposalGenerating,
     proposalError,
