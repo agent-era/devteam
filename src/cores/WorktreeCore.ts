@@ -248,6 +248,8 @@ export class WorktreeCore implements CoreBase<State> {
   }
 
   async refreshProjectWorktrees(projectName: string): Promise<void> {
+    // Shares `isRefreshingVisible` with refreshVisibleStatus on purpose — only
+    // one concurrent poll should spawn tmux/git subprocesses at a time.
     if (this.isRefreshingVisible) return;
     this.isRefreshingVisible = true;
     try {

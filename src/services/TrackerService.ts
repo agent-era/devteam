@@ -423,7 +423,10 @@ export class TrackerService {
   private writeRequirementsStub(reqPath: string, title: string, slug: string, body: string): boolean {
     if (fs.existsSync(reqPath)) return false;
     const today = new Date().toISOString().slice(0, 10);
-    fs.writeFileSync(reqPath, `---\ntitle: ${title}\nslug: ${slug}\nupdated: ${today}\n---\n\n${body}\n`);
+    // Strip newlines in the title so they can't break out of the frontmatter
+    // into forged keys like "slug: injected".
+    const safeTitle = title.replace(/[\r\n]+/g, ' ').trim();
+    fs.writeFileSync(reqPath, `---\ntitle: ${safeTitle}\nslug: ${slug}\nupdated: ${today}\n---\n\n${body}\n`);
     return true;
   }
 
@@ -439,33 +442,6 @@ export class TrackerService {
     let i = 2;
     while (existingSlugs.includes(`${derived}-${i}`)) i++;
     return `${derived}-${i}`;
-  }
-
-  renameItem(projectPath: string, oldSlug: string, newSlug: string, title: string): boolean {
-    if (oldSlug === newSlug) return false;
-    if (!newSlug || !this.isValidSlug(newSlug)) return false;
-    const index = this.readIndex(projectPath);
-    const stage = this.createStageBySlug(index).get(oldSlug);
-    if (!stage) return false;
-    this.removeSlugFromIndexObj(index, oldSlug);
-    this.addSlugToIndexObj(index, newSlug, stage);
-    const sessions = (index.sessions ?? {}) as NonNullable<TrackerIndex['sessions']>;
-    delete sessions[oldSlug];
-    sessions[newSlug] = {title};
-    index.sessions = sessions;
-    writeJSONAtomic(this.getIndexPath(projectPath), index);
-    const oldDir = path.join(projectPath, 'tracker', 'items', oldSlug);
-    const newDir = path.join(projectPath, 'tracker', 'items', newSlug);
-    if (fs.existsSync(oldDir) && !fs.existsSync(newDir)) {
-      fs.renameSync(oldDir, newDir);
-      // Update slug in requirements.md frontmatter so readItem returns the new slug.
-      const reqPath = path.join(newDir, 'requirements.md');
-      if (fs.existsSync(reqPath)) {
-        const content = fs.readFileSync(reqPath, 'utf8');
-        fs.writeFileSync(reqPath, content.replace(/^slug: .+$/m, `slug: ${newSlug}`), 'utf8');
-      }
-    }
-    return true;
   }
 
   moveItem(projectPath: string, slug: string, toStage: TrackerStage): boolean {

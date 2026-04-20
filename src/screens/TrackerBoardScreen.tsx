@@ -8,6 +8,7 @@ import {useWorktreeContext} from '../contexts/WorktreeContext.js';
 import {WorktreeInfo} from '../models.js';
 import type {AIStatus, AITool} from '../models.js';
 import {truncateDisplay} from '../shared/utils/formatting.js';
+import {logError} from '../shared/utils/logger.js';
 import {startIntervalIfEnabled} from '../shared/utils/intervals.js';
 import {VISIBLE_STATUS_REFRESH_DURATION} from '../constants.js';
 import TrackerProjectPickerDialog from '../components/dialogs/TrackerProjectPickerDialog.js';
@@ -277,18 +278,28 @@ export default function TrackerBoardScreen({
 
   const startDerivation = React.useCallback((pending: PendingNew, tool: AITool | null) => {
     setPendingNew(pending);
-    const existingSlugs = board.columns.flatMap(col => col.items.map(it => it.slug));
-    void service.deriveSlug(pending.title, existingSlugs).then(slug => {
+    // Reading slugs from disk (rather than the closure-captured board) avoids a
+    // stale-read race when the user queues two items back-to-back within the
+    // ~5s slug-derivation window.
+    const slugsAtStart = new Set(service.loadBoard(project, projectPath).columns.flatMap(c => c.items.map(it => it.slug)));
+    void service.deriveSlug(pending.title, [...slugsAtStart]).then(slug => {
       setPendingNew(null);
-      service.createItem(projectPath, pending.title, pending.stage, slug);
+      // Re-check uniqueness right before creating in case a concurrent
+      // derivation committed the same slug while this one was in flight.
+      const taken = new Set(service.loadBoard(project, projectPath).columns.flatMap(c => c.items.map(it => it.slug)));
+      let finalSlug = slug;
+      for (let i = 2; taken.has(finalSlug); i++) finalSlug = `${slug}-${i}`;
+      service.createItem(projectPath, pending.title, pending.stage, finalSlug);
       const freshBoard = service.loadBoard(project, projectPath);
       setBoard(freshBoard);
       if (!onLaunchItemBackground || !tool) return;
-      const item = freshBoard.columns.flatMap(c => c.items).find(i => i.slug === slug);
+      const item = freshBoard.columns.flatMap(c => c.items).find(i => i.slug === finalSlug);
       if (!item) return;
-      void onLaunchItemBackground(item, tool);
+      onLaunchItemBackground(item, tool).catch(err => {
+        logError('launchSessionForItemBackground failed', {error: err instanceof Error ? err.message : String(err)});
+      });
     });
-  }, [board, service, projectPath, project, onLaunchItemBackground]);
+  }, [service, projectPath, project, onLaunchItemBackground]);
 
   const handleCreateSubmit = React.useCallback(() => {
     const title = createTitle.trim();
