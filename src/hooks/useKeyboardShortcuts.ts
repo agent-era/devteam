@@ -17,12 +17,19 @@ export interface KeyboardActions {
   onNextPage?: () => void;
   onJumpToFirst?: () => void;
   onJumpToLast?: () => void;
+  onMoveHorizontal?: (delta: number) => void;
   onQuit?: () => void;
   onNumberSelect?: (number: number) => void;
   onExecuteRun?: () => void;
   onSelectWithToolPicker?: () => void;
   onSettings?: () => void;
   onUpdate?: () => void;
+  onTracker?: () => void;
+  onMoveItemNext?: () => void;
+  onGenerateProposals?: () => void;
+  onStagesConfig?: () => void;
+  onAttach?: () => void;
+  onPickProject?: () => void;
 }
 
 export interface KeyboardShortcutsOptions {
@@ -70,6 +77,10 @@ export function useKeyboardShortcuts(
         actions.onMove?.(1);
       } else if (input === 'k' || input === '\u001b[A') { // k or up arrow
         actions.onMove?.(-1);
+      } else if (input === 'h' || input === '\u001b[D') { // h or left arrow
+        actions.onMoveHorizontal?.(-1);
+      } else if (input === 'l' || input === '\u001b[C') { // l or right arrow
+        actions.onMoveHorizontal?.(1);
       } else if (input === '\u001b[13;2u') { // Shift+Enter (CSI-u capable terminals)
         actions.onSelectWithToolPicker?.();
       } else if (input === '\r' || input === '\n') { // Enter
@@ -80,7 +91,7 @@ export function useKeyboardShortcuts(
 
       // Actions
       else if (input === 'n') actions.onCreate?.();
-      else if (input === 'a') actions.onSelect?.();
+      else if (input === 'a') { if (actions.onAttach) actions.onAttach(); else actions.onSelect?.(); }
       else if (input === 'v') actions.onArchive?.();
       else if (input === 'r') actions.onRefresh?.();
       else if (input === '?') actions.onHelp?.();
@@ -91,7 +102,12 @@ export function useKeyboardShortcuts(
       else if (input === 'x') actions.onExecuteRun?.();
       else if (input === 'T') actions.onSelectWithToolPicker?.();
       else if (input === 'c') actions.onSettings?.();
+      else if (input === 't') actions.onTracker?.();
       else if (input === 'u') actions.onUpdate?.();
+      else if (input === 'm') actions.onMoveItemNext?.();
+      else if (input === 'p') actions.onGenerateProposals?.();
+      else if (input === 'e') actions.onStagesConfig?.();
+      else if (input === 'P') actions.onPickProject?.();
 
       // Pagination
       else if (input === '<' || input === ',') actions.onPreviousPage?.();

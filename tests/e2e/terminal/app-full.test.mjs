@@ -1,18 +1,25 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import React from 'react';
 
 test('full App renders list rows with fakes', async () => {
   process.env.NO_APP_INTERVALS = '1';
+  process.env.E2E_IGNORE_RAWMODE = '1';
   const Ink = await import('../../../node_modules/ink/build/index.js');
   const {TestableApp} = await import('../../../dist/App.js');
   const {FakeGitService} = await import('../../../dist-tests/tests/fakes/FakeGitService.js');
   const {FakeTmuxService} = await import('../../../dist-tests/tests/fakes/FakeTmuxService.js');
   const {FakeGitHubService} = await import('../../../dist-tests/tests/fakes/FakeGitHubService.js');
 
+  // Real tmp path so the tracker (default startup view) can materialise its index.
+  const tmpProject = fs.mkdtempSync(path.join(os.tmpdir(), 'devteam-app-'));
+
   // Seed fakes using instance fields
   const gitService = new FakeGitService('/fake/projects');
-  gitService.addProject('demo');
+  gitService.addProject('demo', tmpProject);
   const wt1 = gitService.addWorktree('demo', 'feature-1');
   gitService.setGitStatus(wt1.path, {ahead: 1, base_added_lines: 5});
   gitService.addWorktree('demo', 'feature-2');
@@ -29,11 +36,19 @@ test('full App renders list rows with fakes', async () => {
   const tree = React.createElement(TestableApp, {gitService, gitHubService, tmuxService});
   const inst = Ink.render(tree, {stdout, stdin, debug: true, exitOnCtrlC: false, patchConsole: false});
   try {
-    const {waitFor, includesWorktree} = await import('./_utils.js');
-    await waitFor(() => includesWorktree(stdout.lastFrame() || '', 'demo', 'feature-1'), {timeout: 20000, interval: 50, message: 'feature-1 [demo] visible'});
-    await waitFor(() => includesWorktree(stdout.lastFrame() || '', 'demo', 'feature-2'), {timeout: 20000, interval: 50, message: 'feature-2 [demo] visible'});
+    const {waitFor, includesWorktree, stripAnsi} = await import('./_utils.js');
+    // Startup goes to the tracker; press `t` to reach the MainView where feature rows live.
+    await waitFor(() => stripAnsi(stdout.lastFrame() || '').includes('Discovery'),
+      {timeout: 3000, interval: 50, message: 'tracker visible on startup'});
+    await waitFor(() => {
+      stdin.emit('data', Buffer.from('t'));
+      return includesWorktree(stdout.lastFrame() || '', 'demo', 'feature-1');
+    }, {timeout: 3000, interval: 50, message: 'feature-1 [demo] visible'});
+    await waitFor(() => includesWorktree(stdout.lastFrame() || '', 'demo', 'feature-2'),
+      {timeout: 3000, interval: 50, message: 'feature-2 [demo] visible'});
   } finally {
     try { inst.unmount?.(); } catch {}
+    try { fs.rmSync(tmpProject, {recursive: true, force: true}); } catch {}
     try { restoreTimers?.(); } catch {}
   }
 });

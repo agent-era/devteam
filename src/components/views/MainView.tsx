@@ -36,7 +36,7 @@ interface Props {
   hasProjects?: boolean;
 }
 
-const HEADER_TEXT = '[a]gent, [s]hell, e[x]ec, [n]ew, archi[v]e, [d]iff, [?]help, [q]uit';
+const HEADER_TEXT = '[a]gent, [s]hell, e[x]ec, [n]ew, [t]racker, archi[v]e, [d]iff, [?]help, [q]uit';
 
 export default function MainView({
   worktrees,

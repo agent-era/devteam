@@ -256,6 +256,16 @@ export class GitService {
     return fs.existsSync(worktreePath);
   }
 
+  addWorktreeOnExistingBranch(project: string, featureName: string): boolean {
+    const mainRepo = path.join(this.basePath, project);
+    const branchesDir = path.join(this.basePath, `${project}${DIR_BRANCHES_SUFFIX}`);
+    const worktreePath = path.join(branchesDir, featureName);
+    if (fs.existsSync(worktreePath)) return false;
+    ensureDirectory(branchesDir);
+    runCommand(['git', '-C', mainRepo, 'worktree', 'add', worktreePath, featureName], {timeout: 30000});
+    return fs.existsSync(worktreePath);
+  }
+
   createWorktreeFromRemote(project: string, remoteBranch: string, localName: string): boolean {
     const mainRepo = path.join(this.basePath, project);
     const branchesDir = path.join(this.basePath, `${project}${DIR_BRANCHES_SUFFIX}`);

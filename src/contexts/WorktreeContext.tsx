@@ -25,6 +25,7 @@ interface WorktreeContextType {
   
   // Worktree operations
   createFeature: (projectName: string, featureName: string) => Promise<WorktreeInfo | null>;
+  recreateImplementWorktree: (project: string, slug: string) => Promise<WorktreeInfo | null>;
   createFromBranch: (project: string, remoteBranch: string, localName: string) => Promise<boolean>;
   archiveFeature: (worktreeOrProject: WorktreeInfo | string, path?: string, feature?: string) => Promise<{archivedPath: string}>;
   archiveWorkspace: (featureName: string) => Promise<void>;
@@ -34,8 +35,8 @@ interface WorktreeContextType {
   attachWorkspaceSession: (featureName: string, aiTool?: AITool) => Promise<void>;
   workspaceExists: (featureName: string) => boolean;
   
-  // Session operations  
-  attachSession: (worktree: WorktreeInfo, aiTool?: AITool) => Promise<void>;
+  // Session operations
+  attachSession: (worktree: WorktreeInfo, aiTool?: AITool, initialPrompt?: string) => Promise<void>;
   attachShellSession: (worktree: WorktreeInfo) => Promise<void>;
   attachRunSession: (worktree: WorktreeInfo) => Promise<'success' | 'no_config'>;
   
@@ -81,6 +82,7 @@ export function WorktreeProvider({children, core: coreOverride}: WorktreeProvide
 
   // Worktree operations
   const createFeature = useCallback(async (projectName: string, featureName: string) => core.createFeature(projectName, featureName), [core]);
+  const recreateImplementWorktree = useCallback(async (project: string, slug: string) => core.recreateImplementWorktree(project, slug), [core]);
   const createFromBranch = useCallback(async (project: string, remoteBranch: string, localName: string) => core.createFromBranch(project, remoteBranch, localName), [core]);
   const archiveFeature = useCallback(async (wtOrProject: WorktreeInfo | string, p?: string, f?: string) => core.archiveFeature(wtOrProject, p, f), [core]);
   const archiveWorkspace = useCallback(async (featureName: string) => core.archiveWorkspace(featureName), [core]);
@@ -94,7 +96,7 @@ export function WorktreeProvider({children, core: coreOverride}: WorktreeProvide
   const workspaceExists = useCallback((featureName: string) => core.workspaceExists(featureName), [core]);
 
   // Sessions
-  const attachSession = useCallback(async (worktree: WorktreeInfo, aiTool?: AITool) => core.attachSession(worktree, aiTool), [core]);
+  const attachSession = useCallback(async (worktree: WorktreeInfo, aiTool?: AITool, initialPrompt?: string) => core.attachSession(worktree, aiTool, initialPrompt), [core]);
   const attachShellSession = useCallback(async (worktree: WorktreeInfo) => core.attachShellSession(worktree), [core]);
   const attachRunSession = useCallback(async (worktree: WorktreeInfo) => core.attachRunSession(worktree), [core]);
 
@@ -134,6 +136,7 @@ export function WorktreeProvider({children, core: coreOverride}: WorktreeProvide
     
     // Worktree operations
     createFeature,
+    recreateImplementWorktree,
     createFromBranch,
     archiveFeature,
     archiveWorkspace,
@@ -147,7 +150,7 @@ export function WorktreeProvider({children, core: coreOverride}: WorktreeProvide
     attachSession,
     attachShellSession,
     attachRunSession,
-    
+
     // AI tool management
     getAvailableAITools,
     needsToolSelection,
@@ -163,7 +166,7 @@ export function WorktreeProvider({children, core: coreOverride}: WorktreeProvide
     generateConfigWithAI,
     editConfigWithAI,
     applyConfig,
-    reapplyFiles
+    reapplyFiles,
   };
 
   return (

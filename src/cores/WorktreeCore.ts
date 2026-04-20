@@ -5,7 +5,7 @@ import {getProjectsDirectory} from '../config.js';
 import {TmuxService} from '../services/TmuxService.js';
 import {WorkspaceService} from '../services/WorkspaceService.js';
 import {MemoryMonitorService, MemoryStatus} from '../services/MemoryMonitorService.js';
-import {RUN_CONFIG_FILE, DIR_BRANCHES_SUFFIX, TMUX_DISPLAY_TIME, RUN_CONFIG_CLAUDE_PROMPT, SETTINGS_EDIT_CLAUDE_PROMPT, AI_TOOLS, type ProjectConfig} from '../constants.js';
+import {RUN_CONFIG_FILE, DIR_BRANCHES_SUFFIX, TMUX_DISPLAY_TIME, RUN_CONFIG_CLAUDE_PROMPT, SETTINGS_EDIT_CLAUDE_PROMPT, AI_TOOLS, SESSION_PREFIX, type ProjectConfig} from '../constants.js';
 import {detectAvailableAITools, runCommandQuick, runClaudeAsync} from '../shared/utils/commandExecutor.js';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -249,6 +249,21 @@ export class WorktreeCore implements CoreBase<State> {
     return new WorktreeInfo({project: projectName, feature: uniqueName, path: worktreePath, branch: uniqueName});
   }
 
+  async recreateImplementWorktree(project: string, slug: string): Promise<WorktreeInfo | null> {
+    const worktreePath = path.join(this.git.basePath, `${project}${DIR_BRANCHES_SUFFIX}`, slug);
+    // Branch exists with committed tracker files — just check it out as a new worktree
+    if (this.git.branchExists(project, slug)) {
+      const created = this.git.addWorktreeOnExistingBranch(project, slug);
+      if (created) {
+        this.setupWorktreeEnvironment(project, worktreePath);
+        await this.refresh();
+        return new WorktreeInfo({project, feature: slug, path: worktreePath, branch: slug});
+      }
+    }
+    // Fallback: create a fresh worktree from origin/main (branch will be auto-named)
+    return this.createFeature(project, slug);
+  }
+
   async createFromBranch(project: string, remoteBranch: string, localName: string): Promise<boolean> {
     const created = this.git.createWorktreeFromRemote(project, remoteBranch, localName);
     if (!created) return false;
@@ -298,7 +313,7 @@ export class WorktreeCore implements CoreBase<State> {
   workspaceExists(featureName: string): boolean { try { return this.workspace.hasWorkspaceForFeature(this.git.basePath, featureName); } catch { return false; } }
 
   // Sessions
-  async attachSession(worktree: WorktreeInfo, aiTool?: AITool): Promise<void> {
+  async attachSession(worktree: WorktreeInfo, aiTool?: AITool, initialPrompt?: string): Promise<void> {
     const sessionName = this.tmux.sessionName(worktree.project, worktree.feature);
     const sessions = await this.tmux.listSessions();
     const sessionTool = worktree.session?.ai_tool as AITool | undefined;
@@ -317,7 +332,7 @@ export class WorktreeCore implements CoreBase<State> {
       if (selectedTool !== 'none') {
         const flags = this.getAIToolFlags(worktree.project, selectedTool);
         const flagStr = flags.length > 0 ? ' ' + flags.map(shellQuote).join(' ') : '';
-        if (selectedTool === 'claude') this.launchClaudeSessionWithFallback(sessionName, worktree.path, flagStr, `${worktree.feature} - ${worktree.project}`);
+        if (selectedTool === 'claude') this.launchClaudeSessionWithFallback(sessionName, worktree.path, flagStr, `${worktree.feature} - ${worktree.project}`, initialPrompt);
         else this.tmux.createSessionWithCommand(sessionName, worktree.path, aiLaunchCommand(selectedTool) + flagStr, true);
         setLastTool(selectedTool, worktree.path);
       } else {
@@ -499,10 +514,11 @@ export class WorktreeCore implements CoreBase<State> {
     for (const name of [s, sh, rn]) { if (active.includes(name)) this.tmux.killSession(name); }
   }
 
-  private launchClaudeSessionWithFallback(sessionName: string, cwd: string, flagStr: string = '', displayName?: string): void {
+  private launchClaudeSessionWithFallback(sessionName: string, cwd: string, flagStr: string = '', displayName?: string, initialPrompt?: string): void {
     const nameFlag = displayName ? ` -n ${shellQuote(displayName)}` : '';
-    const continueCmd = aiLaunchCommand('claude') + nameFlag + flagStr;
-    const fallbackCmd = 'claude' + nameFlag + flagStr;
+    const promptArg = initialPrompt ? ` ${shellQuote(initialPrompt)}` : '';
+    const fallbackCmd = 'claude' + nameFlag + flagStr + promptArg;
+    const continueCmd = aiLaunchCommand('claude') + nameFlag + flagStr + promptArg;
     this.tmux.createSessionWithCommand(sessionName, cwd, `${continueCmd} || ${fallbackCmd}`, true);
   }
 

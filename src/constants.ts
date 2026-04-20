@@ -163,6 +163,7 @@ export function generateHelpSections(projectsDir: string): string[] {
     '  [a]gent           open/create agent session',
     '  [s]hell           open shell in worktree',
     '  e[x]ec            run program in worktree',
+    '  [t]racker         open project tracker',
     '  [c]onfigure       project settings (AI-assisted)',
     '  [T]               open agent with a different AI tool (also: Shift+Enter)',
     '  archi[v]e         archive selected feature',

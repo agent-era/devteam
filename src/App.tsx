@@ -1,4 +1,5 @@
 import React, {useEffect, useMemo} from 'react';
+import path from 'path';
 import {useApp, useStdin, Box} from 'ink';
 import {runInteractive} from './shared/utils/commandExecutor.js';
 import {TmuxService} from './services/TmuxService.js';
@@ -13,10 +14,15 @@ import ProgressDialog from './components/dialogs/ProgressDialog.js';
 import AIToolDialog from './components/dialogs/AIToolDialog.js';
 import NoProjectsDialog from './components/dialogs/NoProjectsDialog.js';
 import LoadingScreen from './components/common/LoadingScreen.js';
+import {getLastTrackerProject} from './shared/utils/lastTrackerProject.js';
 
 import WorktreeListScreen from './screens/WorktreeListScreen.js';
 import CreateFeatureScreen from './screens/CreateFeatureScreen.js';
 import ArchiveConfirmScreen from './screens/ArchiveConfirmScreen.js';
+import TrackerBoardScreen from './screens/TrackerBoardScreen.js';
+import TrackerItemScreen from './screens/TrackerItemScreen.js';
+import TrackerStagesScreen from './screens/TrackerStagesScreen.js';
+import TrackerProposalScreen from './screens/TrackerProposalScreen.js';
 
 import {WorktreeProvider, useWorktreeContext} from './contexts/WorktreeContext.js';
 import {GitHubProvider, useGitHubContext} from './contexts/GitHubContext.js';
@@ -24,6 +30,7 @@ import {UIProvider, useUIContext} from './contexts/UIContext.js';
 import {InputFocusProvider} from './contexts/InputFocusContext.js';
 import {WorktreeCore} from './cores/WorktreeCore.js';
 import {GitHubCore} from './cores/GitHubCore.js';
+import {TrackerService, type TrackerItem, type TrackerStage} from './services/TrackerService.js';
 
 
 function AppContent() {
@@ -38,6 +45,7 @@ function AppContent() {
     selectedIndex,
     getSelectedWorktree,
     createFeature,
+    recreateImplementWorktree,
     createFromBranch,
     archiveFeature,
     attachSession,
@@ -53,7 +61,7 @@ function AppContent() {
     applyConfig,
     reapplyFiles,
     getAvailableAITools,
-    needsToolSelection
+    needsToolSelection,
   } = useWorktreeContext();
   
   const {refreshPRStatus, getPRStatus} = useGitHubContext();
@@ -68,6 +76,10 @@ function AppContent() {
     diffWorktree,
     diffType,
     pendingWorktree,
+    pendingWorktreePrompt,
+    pendingWorktreeReturn,
+    archiveReturn,
+    diffReturn,
     info,
 
     showList,
@@ -88,9 +100,17 @@ function AppContent() {
     settingsProject,
     settingsAIResult,
     settingsAILoadingProject,
+    trackerProject,
+    trackerItemSlug,
+    showTracker,
+    showTrackerItem,
+    showTrackerStages,
+    proposalItems,
+    finishProposalGeneration,
     runWithLoading,
     requestExit
   } = useUIContext();
+
 
   // Exit immediately if raw mode isn't supported (unless overridden in E2E)
   useEffect(() => {
@@ -99,7 +119,7 @@ function AppContent() {
     }
   }, [isRawModeSupported, exit]);
 
-  // On startup: discover projects
+  // On startup: discover projects and default to the tracker for the last-used project
   useEffect(() => {
     try {
       const projects = discoverProjects();
@@ -107,6 +127,9 @@ function AppContent() {
         showNoProjectsDialog();
         return;
       }
+      const lastName = getLastTrackerProject();
+      const project = (lastName && projects.find(p => p.name === lastName)) || projects[0];
+      showTracker(project);
     } catch {
       showNoProjectsDialog();
     }
@@ -171,6 +194,93 @@ function AppContent() {
         showSettings(selectedWorktree.project);
       } else {
         showList();
+      }
+    }, {returnToList: false});
+  };
+
+  const handleTracker = () => {
+    const projects = discoverProjects();
+    if (!projects.length) {
+      showNoProjectsDialog();
+      return;
+    }
+    const selectedWorktree = getSelectedWorktree();
+    if (selectedWorktree && selectedWorktree.project !== 'workspace') {
+      const project = projects.find(candidate => candidate.name === selectedWorktree.project);
+      if (project) {
+        showTracker(project);
+        return;
+      }
+    }
+    showTracker(projects[0]);
+  };
+
+  const tracker = useMemo(() => new TrackerService(), []);
+
+  // Re-load only when the slug or project changes; without this, every WorktreeCore
+  // tick would walk the item tree from disk just to redraw the item screen.
+  const trackerItem = useMemo(() => {
+    if (mode !== 'trackerItem' || !trackerProject || !trackerItemSlug) return null;
+    const board = tracker.loadBoard(trackerProject.name, trackerProject.path);
+    return board.columns.flatMap(c => c.items).find(c => c.slug === trackerItemSlug) ?? null;
+  }, [mode, trackerProject, trackerItemSlug, tracker]);
+
+  const buildPromptForItem = (item: TrackerItem, stageOverride?: TrackerStage, itemDirOverride?: string) => {
+    const stagesConfig = tracker.loadStagesConfig(item.projectPath);
+    const stage = stageOverride ?? item.stage;
+    const stageConf = stage !== 'archive' ? stagesConfig[stage as Exclude<TrackerStage, 'archive'>] : null;
+    if (!stageConf) return '';
+    return tracker.buildPlanningPrompt(item, stageConf, itemDirOverride);
+  };
+
+  // Reuse the existing worktree if present, recover one from the branch if it was
+  // obliterated, or create a fresh one. Item tracker files are seeded into the
+  // worktree so the agent works entirely with paths relative to its repo root.
+  const launchSessionForItem = async (
+    project: {name: string; path: string},
+    item: TrackerItem,
+    stage: TrackerStage,
+  ) => {
+    let worktree = worktrees.find(wt => wt.project === project.name && wt.feature === item.slug) || null;
+    if (!worktree) worktree = await recreateImplementWorktree(project.name, item.slug);
+    if (!worktree) { showTracker(project); return; }
+
+    const worktreeItemDir = path.join(worktree.path, 'tracker', 'items', item.slug);
+    tracker.ensureItemFiles(project.path, item.slug, worktree.path, item);
+    const fullPrompt = buildPromptForItem(item, stage, worktreeItemDir);
+
+    const needsSelection = await needsToolSelection(worktree);
+    if (needsSelection) {
+      showAIToolSelection(worktree, {initialPrompt: fullPrompt, onReturn: () => showTracker(project)});
+    } else {
+      await attachSession(worktree, undefined, fullPrompt);
+      showTracker(project);
+    }
+  };
+
+  const handleCurrentStageWork = (item: TrackerItem) => {
+    if (!trackerProject) return;
+    const project = trackerProject;
+    runWithLoading(async () => { await launchSessionForItem(project, item, item.stage); }, {returnToList: false});
+  };
+
+  const handleStageAction = (item: TrackerItem) => {
+    if (!trackerProject) return;
+    const project = trackerProject;
+    const nextStage = tracker.nextStage(item.stage);
+    const targetStage = nextStage && nextStage !== 'archive' ? nextStage : item.stage;
+    const updatedItem = {...item, stage: targetStage};
+    runWithLoading(async () => {
+      try {
+        // Only advance the on-disk stage once the worktree exists and the prompt is
+        // built — if launchSessionForItem throws or the worktree can't be created,
+        // we don't want the item left half-advanced with no session.
+        await launchSessionForItem(project, updatedItem, targetStage);
+        if (nextStage && nextStage !== 'archive') {
+          tracker.moveItem(project.path, item.slug, nextStage);
+        }
+      } catch {
+        // launchSessionForItem already routes back to the tracker on failure.
       }
     }, {returnToList: false});
   };
@@ -273,11 +383,12 @@ function AppContent() {
   }
 
   if (!content && mode === 'confirmArchive' && pendingArchive) {
+    const back = archiveReturn ?? showList;
     content = (
       <ArchiveConfirmScreen
         featureInfo={pendingArchive}
-        onCancel={showList}
-        onSuccess={showList}
+        onCancel={back}
+        onSuccess={back}
       />
     );
   }
@@ -301,7 +412,7 @@ function AppContent() {
           worktreePath={diffWorktree}
           title={diffType === 'uncommitted' ? 'Diff Viewer (Uncommitted Changes)' : 'Diff Viewer'}
           diffType={diffType}
-          onClose={showList}
+          onClose={diffReturn ?? showList}
           onAttachToSession={handleAttachToSession}
           workspaceFeature={workspaceFeature}
         />
@@ -383,6 +494,8 @@ function AppContent() {
   }
 
   if (!content && mode === 'selectAITool' && pendingWorktree) {
+    const returnFn = pendingWorktreeReturn ?? showList;
+    const prompt = pendingWorktreePrompt ?? undefined;
     content = (
       <Box flexGrow={1} alignItems="center" justifyContent="center">
         <AIToolDialog
@@ -390,14 +503,13 @@ function AppContent() {
           currentTool={pendingWorktree.session?.ai_tool}
           onSelect={async (tool) => {
             const wt = pendingWorktree;
-            // Attach session with selected tool immediately
             try {
-              runWithLoading(() => attachSession(wt, tool));
+              runWithLoading(() => attachSession(wt, tool, prompt), {onReturn: returnFn});
             } catch (error) {
               console.error('Failed to attach session with selected tool:', error);
             }
           }}
-          onCancel={showList}
+          onCancel={returnFn}
         />
       </Box>
     );
@@ -411,8 +523,55 @@ function AppContent() {
     );
   }
 
-  // Default: Main worktree list screen
-  if (!content) {
+  if (!content && mode === 'tracker' && trackerProject) {
+    content = (
+      <TrackerBoardScreen
+        project={trackerProject.name}
+        projectPath={trackerProject.path}
+        onBack={requestExit}
+        onOpenItem={(item) => showTrackerItem(item.slug)}
+        onCustomizeStages={showTrackerStages}
+      />
+    );
+  }
+
+  if (!content && mode === 'trackerStages' && trackerProject) {
+    content = (
+      <TrackerStagesScreen
+        projectPath={trackerProject.path}
+        onBack={() => showTracker(trackerProject)}
+      />
+    );
+  }
+
+  if (!content && mode === 'proposals' && trackerProject && proposalItems) {
+    content = (
+      <TrackerProposalScreen
+        project={trackerProject.name}
+        projectPath={trackerProject.path}
+        proposals={proposalItems}
+        onBack={() => showTracker(trackerProject)}
+        onResolved={() => { finishProposalGeneration(null); showTracker(trackerProject); }}
+      />
+    );
+  }
+
+  if (!content && mode === 'trackerItem' && trackerProject && trackerItemSlug) {
+    if (trackerItem && trackerItem.slug === trackerItemSlug) {
+      content = (
+        <TrackerItemScreen
+          item={trackerItem}
+          onBack={() => showTracker(trackerProject)}
+          onCurrentStageWork={() => handleCurrentStageWork(trackerItem)}
+          onStageAction={() => handleStageAction(trackerItem)}
+        />
+      );
+    }
+  }
+
+  // Routes are exact-match; the worktree list only fires for mode='list'. See
+  // UIContext.showArchiveConfirmation for why a catch-all fallback would race.
+  if (!content && mode === 'list') {
     content = (
       <WorktreeListScreen
         onCreateFeature={handleCreateFeature}
@@ -420,12 +579,14 @@ function AppContent() {
         onHelp={showHelp}
         onBranch={handleBranch}
         onDiff={handleDiff}
-        onQuit={requestExit}
+        onQuit={handleTracker}
         onExecuteRun={handleExecuteRun}
         onSettings={handleSettings}
+        onTracker={handleTracker}
       />
     );
   }
+  if (!content) content = <Box flexGrow={1} />;
 
   // Wrap all routed content in a single persistent FullScreen to avoid flicker/blanking
   return (
