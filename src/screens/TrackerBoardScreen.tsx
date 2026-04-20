@@ -627,18 +627,26 @@ export default function TrackerBoardScreen({
             const hasSession = !!sessWt;
 
             // Ralph waiting signal: the agent self-reported is_waiting_for_user
-            // in status.json. We treat that as equivalent to the tmux-level
-            // `waiting` state for rendering — it's the same "human needs to
-            // respond" UX — and surface the brief_description as secondary
-            // text so the user sees what the agent is waiting on.
+            // in status.json. `awaiting_advance_approval` is a distinct subset
+            // ("stage work complete, waiting for your go-ahead to advance") —
+            // we give it its own green "ready to advance" treatment because
+            // that's the moment the human most wants to spot at a glance.
             const itemStatus = service.getItemStatus(projectPath, item.slug);
-            const ralphWaiting = !!itemStatus
-              && itemStatus.is_waiting_for_user
-              && !service.isItemStatusStale(itemStatus);
+            const statusFresh = !!itemStatus && !service.isItemStatusStale(itemStatus);
+            const readyToAdvance = statusFresh && !!itemStatus!.awaiting_advance_approval;
+            const ralphWaiting = statusFresh && !!itemStatus!.is_waiting_for_user && !readyToAdvance;
             const isWaiting = aiWaiting || ralphWaiting;
 
-            const statusGlyph = isWaiting ? '!' : isWorking ? '⟳' : hasSession ? '◆' : ' ';
-            const statusColor = isWaiting ? 'yellow' : isWorking ? 'cyan' : hasSession ? 'gray' : undefined;
+            const statusGlyph =
+              readyToAdvance ? '✓' :
+              isWaiting ? '!' :
+              isWorking ? '⟳' :
+              hasSession ? '◆' : ' ';
+            const statusColor =
+              readyToAdvance ? 'green' :
+              isWaiting ? 'yellow' :
+              isWorking ? 'cyan' :
+              hasSession ? 'gray' : undefined;
 
             // Slug row eats: 2 (border) + 2 (paddingX) + 2 (cursor) + 2 (status glyph) = 8 chars
             const slug = truncateDisplay(item.slug, Math.max(4, colWidth - 8));
@@ -652,17 +660,22 @@ export default function TrackerBoardScreen({
             const waitingLabel = ralphWaiting && itemStatus?.brief_description
               ? itemStatus.brief_description
               : 'waiting for you';
+            const readyLabel = itemStatus?.brief_description
+              ? `READY TO ADVANCE — ${itemStatus.brief_description}`
+              : 'READY TO ADVANCE';
 
             return (
               <Box key={item.slug} flexDirection="column" marginBottom={1} flexShrink={0}>
                 {/* Slug row: cursor + status + name */}
                 <Box>
                   <Text color={accent} bold>{isSelected ? '▸ ' : '  '}</Text>
-                  <Text color={statusColor} bold={isWaiting}>{statusGlyph} </Text>
+                  <Text color={statusColor} bold={isWaiting || readyToAdvance}>{statusGlyph} </Text>
                   <Text
                     inverse={isSelected}
-                    color={!isSelected && isWaiting ? 'yellow' : undefined}
-                    bold={isWaiting || isSelected}
+                    color={!isSelected
+                      ? (readyToAdvance ? 'green' : isWaiting ? 'yellow' : undefined)
+                      : undefined}
+                    bold={isWaiting || readyToAdvance || isSelected}
                     wrap="truncate"
                   >
                     {slug}
@@ -672,19 +685,24 @@ export default function TrackerBoardScreen({
                     long brief_descriptions from the agent stay readable. */}
                 {(() => {
                   const text =
-                    isWaiting ? waitingLabel
+                    readyToAdvance ? readyLabel
+                    : isWaiting ? waitingLabel
                     : isWorking ? (itemStatus?.brief_description || 'running')
                     : hasSession ? (itemStatus?.brief_description || 'session idle')
                     : secondary || '';
                   if (!text) return null;
                   const lines = wrapToLines(text, secMax, SECONDARY_MAX_LINES);
-                  const color = isWaiting ? 'yellow' : isWorking ? 'cyan' : undefined;
-                  const dim = !isWaiting && !isWorking;
+                  const color =
+                    readyToAdvance ? 'green'
+                    : isWaiting ? 'yellow'
+                    : isWorking ? 'cyan'
+                    : undefined;
+                  const dim = !readyToAdvance && !isWaiting && !isWorking;
                   return lines.map((line, lineIdx) => (
                     <Text
                       key={lineIdx}
                       color={color}
-                      bold={isWaiting}
+                      bold={isWaiting || readyToAdvance}
                       dimColor={dim}
                       wrap="truncate"
                     >

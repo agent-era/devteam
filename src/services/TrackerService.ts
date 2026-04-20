@@ -39,6 +39,13 @@ export interface ItemStatus {
   brief_description: string;
   // ISO-8601 timestamp of last update. Used for the staleness check.
   timestamp: string;
+  // True when the stage's work is complete and the agent is specifically
+  // waiting for the user to approve the advance to the next stage. Distinct
+  // from `is_waiting_for_user` (which covers any mid-stage waiting) because
+  // "done, waiting for go-ahead" is a very different UX signal from "stuck
+  // on a clarifying question" — the kanban wants to call it out visibly,
+  // and ralph suppresses nudges for it regardless of is_waiting_for_user.
+  awaiting_advance_approval?: boolean;
 }
 
 // Treat a waiting flag as stale (and ignore it) after this many ms. Guards
@@ -445,6 +452,8 @@ export class TrackerService {
         is_waiting_for_user: parsed.is_waiting_for_user,
         brief_description: typeof parsed.brief_description === 'string' ? parsed.brief_description : '',
         timestamp: parsed.timestamp,
+        awaiting_advance_approval:
+          typeof parsed.awaiting_advance_approval === 'boolean' ? parsed.awaiting_advance_approval : false,
       };
     } catch {
       return null;
@@ -466,6 +475,7 @@ export class TrackerService {
       is_waiting_for_user: status.is_waiting_for_user,
       brief_description: (status.brief_description || '').slice(0, 120),
       timestamp: status.timestamp || new Date().toISOString(),
+      awaiting_advance_approval: !!status.awaiting_advance_approval,
     };
     writeJSONAtomic(path.join(itemDir, 'status.json'), payload);
   }
@@ -1241,7 +1251,7 @@ Read \`tracker/stages/working-style.md\` for the project's preferred working sty
         case 'auto_advance':
           return `Advance without asking. Before you do, if this stage produced meaningful findings, decisions, or changes, append a short "## Stage review" section (1–3 sentences) to \`${outputFile}\` summarising what you did — skip the review for trivial no-op stages. Then update \`status.json.stage\` to the next stage and continue.`;
         case 'require_approval':
-          return 'Before advancing, pause and ask for the user\'s approval using this stage\'s input mode (above). Do not update `status.json.stage` until the user explicitly approves the advance.';
+          return 'When the stage\'s work is complete, pause and ask for the user\'s approval to advance. At that point, update `status.json` to set BOTH `is_waiting_for_user: true` AND `awaiting_advance_approval: true`, with a `brief_description` summarising what\'s ready for review (the kanban surfaces this specifically). Do not update `status.json.stage` until the user explicitly approves. When the user approves, flip both flags back to false and update `stage`.';
         default:
           return '';
       }
@@ -1256,24 +1266,31 @@ Read \`tracker/stages/working-style.md\` for the project's preferred working sty
     return `
 ## Agent status protocol
 
-You must keep \`tracker/items/<slug>/status.json\` current. It's the canonical live state for this item and ralph reads it to decide whether you're stuck or legitimately waiting.
+You must keep \`tracker/items/<slug>/status.json\` current. It's the canonical live state for this item and ralph reads it to decide whether you're stuck or legitimately waiting. The kanban renders \`brief_description\` directly on the card, so write about *substance*, not stage identity.
 
 Schema:
 \`\`\`json
 {
   "stage": "${stage}",
   "is_waiting_for_user": false,
-  "brief_description": "short description of current activity (≤ 120 chars)",
+  "awaiting_advance_approval": false,
+  "brief_description": "the concrete thing you're doing or need (≤ 120 chars)",
   "timestamp": "ISO-8601 now"
 }
 \`\`\`
 
+\`brief_description\` guidance — the stage is already visible from the kanban column. Write about the *work*:
+
+- Good: \`drafting acceptance criteria for the caching layer\`, \`blocked: do we want retry-on-429?\`, \`ran the suite, 3 failing in auth spec\`, \`needs your sign-off on the schema I wrote\`.
+- Not useful: \`in requirements stage\`, \`doing discovery\`, \`working on implement\`.
+
 Update \`status.json\` at every meaningful transition:
 
 - **Stage start**: write the file with the current stage and \`is_waiting_for_user: false\`.
-- **Pausing for input**: set \`is_waiting_for_user: true\` and put what you're waiting on in \`brief_description\`.
-- **Resuming**: set \`is_waiting_for_user: false\` and update \`brief_description\` to reflect what you're now doing.
-- **Advancing**: set \`stage\` to the next stage before you move on.
+- **Pausing for input**: set \`is_waiting_for_user: true\` and put the specific thing you're blocked on in \`brief_description\`.
+- **Resuming**: set \`is_waiting_for_user: false\` and update \`brief_description\` to the specific thing you're now doing.
+- **Stage done, waiting for approval to advance** (when gate is \`require_approval\`): set \`is_waiting_for_user: true\` AND \`awaiting_advance_approval: true\`, and put a concrete summary of what the user should review/approve in \`brief_description\`.
+- **Advancing**: flip both flags back to false and set \`stage\` to the next stage.
 
 ### Input mode: \`${inputMode}\`
 

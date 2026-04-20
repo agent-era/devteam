@@ -113,10 +113,10 @@ export function buildNudgeText(opts: {
   return [
     `Quick check-in — this session has been idle for a while, so I wanted to make sure you're not stuck.`,
     `Current stage is \`${opts.stage}\` (guide: ${stageFile}, gate: ${opts.gateOnAdvance}, input_mode: ${opts.inputMode}). The expected output for this stage is \`${outputFile}\`.`,
-    `Please update \`${statusPath}\` to reflect where you are right now:`,
-    `set \`stage\` to your current stage, then either set \`is_waiting_for_user: true\` with a short \`brief_description\` if you need my input before you can continue, or \`is_waiting_for_user: false\` with a note of what you're actively working on.`,
-    `If you're waiting on me, flipping that flag in status.json (or using ask_questions if that's your input_mode) will stop these check-ins from firing.`,
-    `Otherwise, please keep making progress on \`${outputFile}\` and advance the stage when ready.`,
+    `Please update \`${statusPath}\` so the kanban reflects where you are — the \`brief_description\` field is rendered directly on the card and should describe the *work* (what you're doing, or what you need), not the stage (that's already visible).`,
+    `If the stage work is done and you're waiting on my approval to advance, set \`is_waiting_for_user: true\` AND \`awaiting_advance_approval: true\` with a concrete summary of what I should review.`,
+    `If you're blocked mid-stage on something else, set \`is_waiting_for_user: true\` with a \`brief_description\` of the specific thing you need (or use ask_questions if that's your input_mode).`,
+    `Either flag stops these check-ins from firing. Otherwise please keep making progress on \`${outputFile}\` and advance when ready.`,
   ].join(' ');
 }
 
@@ -242,8 +242,11 @@ export class RalphCore implements CoreBase<State> {
     }
 
     // Any fresh waiting flag also resets the cap — the agent explicitly said
-    // it's waiting on a human, so any prior stuck-ness is moot.
-    const fresh = status && status.is_waiting_for_user && !this.tracker.isItemStatusStale(status, new Date(nowMs));
+    // it's waiting on a human, so any prior stuck-ness is moot. We treat
+    // `awaiting_advance_approval` as an equivalent suppressor: work is done,
+    // the agent is waiting for the go-ahead, that's not a stall.
+    const nonStale = status && !this.tracker.isItemStatusStale(status, new Date(nowMs));
+    const fresh = nonStale && (status.is_waiting_for_user || !!status.awaiting_advance_approval);
     if (fresh && (prev.idleSince !== null || prev.nudgesThisStage > 0 || prev.capped)) {
       nudgesThisStage = 0;
       capped = false;

@@ -213,6 +213,26 @@ describe('RalphCore safety invariants', () => {
     expect(tmux.sent.length).toBe(0);
   });
 
+  test('never sends a nudge when awaiting_advance_approval is set (even without is_waiting_for_user)', () => {
+    // The agent may end up with only awaiting_advance_approval true (work is
+    // done, just waiting for user sign-off). That's still a legitimate
+    // human-pause — ralph must treat it the same as is_waiting_for_user.
+    enableRalph();
+    writeStatus('my-slug', {
+      is_waiting_for_user: false,
+      awaiting_advance_approval: true,
+      brief_description: 'ready to advance from requirements',
+    });
+    const t0 = Date.now();
+    let now = t0;
+    const wt = makeWorktree({ai_status: 'idle'});
+    const {core, tmux} = buildCore({worktrees: [wt], now: () => now});
+    core.sampleOnce();
+    now = t0 + 10 * 60 * 1000;
+    core.sampleOnce();
+    expect(tmux.sent.length).toBe(0);
+  });
+
   test('never sends a nudge when ralph is disabled for the project', () => {
     saveRalphConfig(projectPath, {enabled: false, idleThresholdMs: 60_000, maxNudgesPerStage: 3});
     writeStatus('my-slug', {});

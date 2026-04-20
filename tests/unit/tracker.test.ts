@@ -139,10 +139,32 @@ describe('item status.json helpers', () => {
       is_waiting_for_user: true,
       brief_description: 'need approval on notes.md',
       timestamp: now,
+      awaiting_advance_approval: false,
     };
     service.writeItemStatus(tmpDir, SLUG, status);
     const roundTripped = service.getItemStatus(tmpDir, SLUG);
     expect(roundTripped).toEqual(status);
+  });
+
+  test('awaiting_advance_approval round-trips and defaults to false when absent', () => {
+    seedItemDir();
+    service.writeItemStatus(tmpDir, SLUG, {
+      stage: 'requirements',
+      is_waiting_for_user: true,
+      awaiting_advance_approval: true,
+      brief_description: 'ready to review requirements.md',
+      timestamp: new Date().toISOString(),
+    });
+    const read = service.getItemStatus(tmpDir, SLUG);
+    expect(read?.awaiting_advance_approval).toBe(true);
+    // Writing one without the flag stores false.
+    service.writeItemStatus(tmpDir, SLUG, {
+      stage: 'requirements',
+      is_waiting_for_user: false,
+      brief_description: 'drafting',
+      timestamp: new Date().toISOString(),
+    });
+    expect(service.getItemStatus(tmpDir, SLUG)?.awaiting_advance_approval).toBe(false);
   });
 
   test('writeItemStatus creates the item dir when missing and writes there', () => {
@@ -372,6 +394,20 @@ describe('defaultStageFileContent renders status + gate protocol', () => {
     expect(impl).toMatch(/Gate on advance: `auto_advance`/);
     const clean = service.defaultStageFileContent('cleanup', {});
     expect(clean).toMatch(/Gate on advance: `require_approval`/);
+  });
+
+  test('require_approval gate instructs the agent to set awaiting_advance_approval', () => {
+    const content = service.defaultStageFileContent('requirements', {gate_on_advance: 'require_approval'});
+    expect(content).toContain('awaiting_advance_approval');
+  });
+
+  test('protocol tells the agent brief_description is about substance, not the stage', () => {
+    const content = service.defaultStageFileContent('requirements', {});
+    expect(content).toMatch(/substance/i);
+    // The good/bad examples must both be present so the message can't be
+    // misread as "describe the stage".
+    expect(content).toMatch(/Good:/);
+    expect(content).toMatch(/Not useful:/);
   });
 });
 
