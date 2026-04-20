@@ -219,14 +219,14 @@ describe('renameItem', () => {
     expect(service.renameItem(tmpDir, 'feature', 'feature', 'Feature')).toBe(false);
   });
 
-  test('renames item directory if it exists', () => {
+  test('renames item directory and updates slug in frontmatter', () => {
     service.createItem(tmpDir, 'My Feature', 'discovery');
-    const oldDir = path.join(tmpDir, 'tracker', 'items', 'my-feature');
-    fs.mkdirSync(oldDir, {recursive: true});
-    fs.writeFileSync(path.join(oldDir, 'requirements.md'), '---\ntitle: My Feature\nslug: my-feature\n---\n');
     service.renameItem(tmpDir, 'my-feature', 'renamed-feature', 'My Feature');
+    const oldDir = path.join(tmpDir, 'tracker', 'items', 'my-feature');
+    const newReqPath = path.join(tmpDir, 'tracker', 'items', 'renamed-feature', 'requirements.md');
     expect(fs.existsSync(oldDir)).toBe(false);
-    expect(fs.existsSync(path.join(tmpDir, 'tracker', 'items', 'renamed-feature'))).toBe(true);
+    expect(fs.existsSync(newReqPath)).toBe(true);
+    expect(fs.readFileSync(newReqPath, 'utf8')).toMatch(/^slug: renamed-feature$/m);
   });
 });
 

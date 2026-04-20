@@ -453,7 +453,15 @@ export class TrackerService {
     writeJSONAtomic(this.getIndexPath(projectPath), index);
     const oldDir = path.join(projectPath, 'tracker', 'items', oldSlug);
     const newDir = path.join(projectPath, 'tracker', 'items', newSlug);
-    if (fs.existsSync(oldDir) && !fs.existsSync(newDir)) fs.renameSync(oldDir, newDir);
+    if (fs.existsSync(oldDir) && !fs.existsSync(newDir)) {
+      fs.renameSync(oldDir, newDir);
+      // Update slug in requirements.md frontmatter so readItem returns the new slug.
+      const reqPath = path.join(newDir, 'requirements.md');
+      if (fs.existsSync(reqPath)) {
+        const content = fs.readFileSync(reqPath, 'utf8');
+        fs.writeFileSync(reqPath, content.replace(/^slug: .+$/m, `slug: ${newSlug}`), 'utf8');
+      }
+    }
     return true;
   }
 
