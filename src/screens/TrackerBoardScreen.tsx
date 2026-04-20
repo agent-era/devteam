@@ -596,9 +596,20 @@ export default function TrackerBoardScreen({
             const isSelected = isActiveColumn && selectedRow === itemIndex;
             const sessWt = getSessionForItem(item);
             const aiStatus: AIStatus | undefined = sessWt?.session?.ai_status;
-            const isWaiting = aiStatus === 'waiting';
+            const aiWaiting = aiStatus === 'waiting';
             const isWorking = aiStatus === 'working' || aiStatus === 'active';
             const hasSession = !!sessWt;
+
+            // Ralph waiting signal: the agent self-reported is_waiting_for_user
+            // in status.json. We treat that as equivalent to the tmux-level
+            // `waiting` state for rendering — it's the same "human needs to
+            // respond" UX — and surface the brief_description as secondary
+            // text so the user sees what the agent is waiting on.
+            const itemStatus = service.getItemStatus(projectPath, item.slug);
+            const ralphWaiting = !!itemStatus
+              && itemStatus.is_waiting_for_user
+              && !service.isItemStatusStale(itemStatus);
+            const isWaiting = aiWaiting || ralphWaiting;
 
             const statusGlyph = isWaiting ? '!' : isWorking ? '⟳' : hasSession ? '◆' : ' ';
             const statusColor = isWaiting ? 'yellow' : isWorking ? 'cyan' : hasSession ? 'gray' : undefined;
@@ -608,6 +619,13 @@ export default function TrackerBoardScreen({
             // Secondary row eats: 2 (border) + 2 (paddingX) + 4 (indent) = 8 chars
             const secMax = Math.max(4, colWidth - 8);
             const secondary = !hasSession ? renderSecondary(item) : '';
+
+            // Prefer the agent's own brief_description over the generic
+            // "waiting for you" label when the ralph flag is set — it tells
+            // the human exactly what needs attention.
+            const waitingLabel = ralphWaiting && itemStatus?.brief_description
+              ? itemStatus.brief_description
+              : 'waiting for you';
 
             return (
               <Box key={item.slug} flexDirection="column" marginBottom={1} flexShrink={0}>
@@ -626,11 +644,11 @@ export default function TrackerBoardScreen({
                 </Box>
                 {/* Status / secondary text */}
                 {isWaiting ? (
-                  <Text color="yellow" bold wrap="truncate">{`    ${truncateDisplay('waiting for you', secMax)}`}</Text>
+                  <Text color="yellow" bold wrap="truncate">{`    ${truncateDisplay(waitingLabel, secMax)}`}</Text>
                 ) : isWorking ? (
-                  <Text color="cyan" wrap="truncate">{`    ${truncateDisplay('running', secMax)}`}</Text>
+                  <Text color="cyan" wrap="truncate">{`    ${truncateDisplay(itemStatus?.brief_description || 'running', secMax)}`}</Text>
                 ) : hasSession ? (
-                  <Text dimColor wrap="truncate">{`    ${truncateDisplay('session idle', secMax)}`}</Text>
+                  <Text dimColor wrap="truncate">{`    ${truncateDisplay(itemStatus?.brief_description || 'session idle', secMax)}`}</Text>
                 ) : secondary ? (
                   <Text dimColor wrap="truncate">{`    ${truncateDisplay(secondary, secMax)}`}</Text>
                 ) : null}
