@@ -280,6 +280,9 @@ export class TrackerService {
     // Legacy worktree path (pre-`items/` rename).
     const legacyWtDir = path.join(this.getWorktreePathForSlug(projectPath, slug), 'tracker', slug);
     if (fs.existsSync(legacyWtDir)) return legacyWtDir;
+    // Stub written by createItem before a worktree exists.
+    const mainItemDir = path.join(projectPath, 'tracker', 'items', slug);
+    if (fs.existsSync(mainItemDir)) return mainItemDir;
     // Archive lives in the main project regardless of worktree existence.
     const archiveDir = this.getArchiveItemDir(projectPath, slug);
     if (fs.existsSync(archiveDir)) return archiveDir;
@@ -366,12 +369,12 @@ export class TrackerService {
     };
   }
 
-  slugify(title: string): string {
+  slugify(title: string, maxLength = 20): string {
     return title
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, '')
-      .slice(0, 20);
+      .slice(0, maxLength);
   }
 
   private isValidSlug(slug: string): boolean {
@@ -403,9 +406,6 @@ export class TrackerService {
       if (stageBySlug.get(slug) === stage) return;
     }
     this.ensureTracker(projectPath);
-    // Files are materialised on demand by ensureItemFiles() when a session is launched.
-    // Persist the title under sessions[slug] so we can show a meaningful title on the
-    // board before the worktree exists; frontmatter wins once files are written.
     const index = this.readIndex(projectPath);
     this.removeSlugFromIndexObj(index, slug);
     this.addSlugToIndexObj(index, slug, stage);
@@ -413,6 +413,15 @@ export class TrackerService {
     sessions[slug] = {...sessions[slug], title};
     index.sessions = sessions;
     writeJSONAtomic(this.getIndexPath(projectPath), index);
+    // Write requirements stub immediately so the item screen shows the description
+    // before a worktree session is launched. ensureItemFiles will migrate this later.
+    const mainItemDir = path.join(projectPath, 'tracker', 'items', slug);
+    ensureDirectory(mainItemDir);
+    const reqPath = path.join(mainItemDir, 'requirements.md');
+    if (!fs.existsSync(reqPath)) {
+      const today = new Date().toISOString().slice(0, 10);
+      fs.writeFileSync(reqPath, `---\ntitle: ${title}\nslug: ${slug}\nupdated: ${today}\n---\n\n${title}\n`);
+    }
   }
 
   async deriveSlug(title: string, existingSlugs: string[]): Promise<string> {
@@ -420,7 +429,7 @@ export class TrackerService {
     const result = await runClaudeAsync(prompt, {timeoutMs: 8000});
     let derived = this.slugify(title);
     if (result.success && result.output) {
-      const candidate = this.slugify(result.output.trim());
+      const candidate = this.slugify(result.output.trim(), 40);
       if (candidate && this.isValidSlug(candidate)) derived = candidate;
     }
     if (!existingSlugs.includes(derived)) return derived;
@@ -503,10 +512,12 @@ export class TrackerService {
 
     let wroteAnything = false;
 
-    // 1) Migrate from any legacy location: previous worktree path or main-project buckets.
+    // 1) Migrate from legacy locations (highest priority first), then the main-project
+    // stub written by createItem as a last resort.
     const legacySources = [
       path.join(worktreePath, 'tracker', slug),
       ...this.findLegacyMainProjectDirs(mainProjectPath, slug),
+      path.join(mainProjectPath, 'tracker', 'items', slug),
     ].filter(p => fs.existsSync(p));
     for (const src of legacySources) {
       for (const file of fs.readdirSync(src)) {

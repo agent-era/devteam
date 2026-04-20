@@ -79,9 +79,14 @@ describe('slugify', () => {
     expect(service.slugify('  --hello--  ')).toBe('hello');
   });
 
-  test('truncates long titles', () => {
+  test('truncates long titles to default 20 chars', () => {
     const long = 'a'.repeat(80);
-    expect(service.slugify(long).length).toBeLessThanOrEqual(60);
+    expect(service.slugify(long).length).toBe(20);
+  });
+
+  test('respects custom maxLength', () => {
+    const long = 'a'.repeat(80);
+    expect(service.slugify(long, 40).length).toBe(40);
   });
 });
 
@@ -113,15 +118,16 @@ describe('nextStage / previousStage', () => {
 // ─── createItem ─────────────────────────────────────────────────────────────
 
 describe('createItem', () => {
-  test('adds slug to index.json with title metadata; does not write item files', () => {
+  test('adds slug to index.json and writes requirements stub to main project', () => {
     service.createItem(tmpDir, 'Add user auth', 'discovery');
 
     const indexPath = path.join(tmpDir, 'tracker', 'index.json');
     const index = JSON.parse(fs.readFileSync(indexPath, 'utf8'));
     expect(index.backlog.discovery).toContain('add-user-auth');
     expect(index.sessions['add-user-auth'].title).toBe('Add user auth');
-    // Item content lives in the worktree — main project bucket dirs stay empty.
-    expect(fs.existsSync(path.join(tmpDir, 'tracker', 'backlog', 'add-user-auth'))).toBe(false);
+    const reqPath = path.join(tmpDir, 'tracker', 'items', 'add-user-auth', 'requirements.md');
+    expect(fs.existsSync(reqPath)).toBe(true);
+    expect(fs.readFileSync(reqPath, 'utf8')).toContain('Add user auth');
   });
 
   test('adds slug to index.json in correct stage', () => {
