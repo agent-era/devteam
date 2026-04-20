@@ -182,6 +182,48 @@ describe('moveItem', () => {
   });
 });
 
+// ─── renameItem ─────────────────────────────────────────────────────────────
+
+describe('renameItem', () => {
+  test('renames slug in index and updates sessions title', () => {
+    service.createItem(tmpDir, 'Fix login bug', 'discovery', 'fix-login-bug');
+    const renamed = service.renameItem(tmpDir, 'fix-login-bug', 'login-bug-fix', 'Fix login bug');
+    expect(renamed).toBe(true);
+    const index = JSON.parse(fs.readFileSync(path.join(tmpDir, 'tracker', 'index.json'), 'utf8'));
+    expect(index.backlog.discovery).not.toContain('fix-login-bug');
+    expect(index.backlog.discovery).toContain('login-bug-fix');
+    expect(index.sessions['login-bug-fix'].title).toBe('Fix login bug');
+    expect(index.sessions['fix-login-bug']).toBeUndefined();
+  });
+
+  test('preserves stage when renaming', () => {
+    service.createItem(tmpDir, 'Build API', 'implement');
+    service.renameItem(tmpDir, 'build-api', 'api-build', 'Build API');
+    const index = JSON.parse(fs.readFileSync(path.join(tmpDir, 'tracker', 'index.json'), 'utf8'));
+    expect(index.implementation.implement).toContain('api-build');
+  });
+
+  test('returns false when old slug not in index', () => {
+    service.ensureTracker(tmpDir);
+    expect(service.renameItem(tmpDir, 'nonexistent', 'new-slug', 'title')).toBe(false);
+  });
+
+  test('returns false when old and new slug are the same', () => {
+    service.createItem(tmpDir, 'Feature', 'discovery');
+    expect(service.renameItem(tmpDir, 'feature', 'feature', 'Feature')).toBe(false);
+  });
+
+  test('renames item directory if it exists', () => {
+    service.createItem(tmpDir, 'My Feature', 'discovery');
+    const oldDir = path.join(tmpDir, 'tracker', 'items', 'my-feature');
+    fs.mkdirSync(oldDir, {recursive: true});
+    fs.writeFileSync(path.join(oldDir, 'requirements.md'), '---\ntitle: My Feature\nslug: my-feature\n---\n');
+    service.renameItem(tmpDir, 'my-feature', 'renamed-feature', 'My Feature');
+    expect(fs.existsSync(oldDir)).toBe(false);
+    expect(fs.existsSync(path.join(tmpDir, 'tracker', 'items', 'renamed-feature'))).toBe(true);
+  });
+});
+
 // ─── loadBoard ──────────────────────────────────────────────────────────────
 
 describe('loadBoard', () => {

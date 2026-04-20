@@ -411,6 +411,39 @@ export class TrackerService {
     writeJSONAtomic(this.getIndexPath(projectPath), index);
   }
 
+  async deriveSlug(title: string, existingSlugs: string[]): Promise<string> {
+    const prompt = `Generate a concise kebab-case slug (2-4 words, max 30 chars) for this tracker item. Reply with ONLY the slug, nothing else.\n\nTitle: ${title}`;
+    const result = await runClaudeAsync(prompt, {timeoutMs: 8000});
+    let derived = this.slugify(title);
+    if (result.success && result.output) {
+      const candidate = result.output.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 30);
+      if (candidate && /^[a-z0-9][a-z0-9-]*$/.test(candidate)) derived = candidate;
+    }
+    if (!existingSlugs.includes(derived)) return derived;
+    let i = 2;
+    while (existingSlugs.includes(`${derived}-${i}`)) i++;
+    return `${derived}-${i}`;
+  }
+
+  renameItem(projectPath: string, oldSlug: string, newSlug: string, title: string): boolean {
+    if (oldSlug === newSlug) return false;
+    if (!newSlug || !/^[a-z0-9][a-z0-9-]*$/.test(newSlug)) return false;
+    const index = this.readIndex(projectPath);
+    const stage = this.createStageBySlug(index).get(oldSlug);
+    if (!stage) return false;
+    this.removeSlugFromIndexObj(index, oldSlug);
+    this.addSlugToIndexObj(index, newSlug, stage);
+    const sessions = (index.sessions ?? {}) as NonNullable<TrackerIndex['sessions']>;
+    delete sessions[oldSlug];
+    sessions[newSlug] = {title};
+    index.sessions = sessions;
+    writeJSONAtomic(this.getIndexPath(projectPath), index);
+    const oldDir = path.join(projectPath, 'tracker', 'items', oldSlug);
+    const newDir = path.join(projectPath, 'tracker', 'items', newSlug);
+    if (fs.existsSync(oldDir) && !fs.existsSync(newDir)) fs.renameSync(oldDir, newDir);
+    return true;
+  }
+
   moveItem(projectPath: string, slug: string, toStage: TrackerStage): boolean {
     const index = this.readIndex(projectPath);
     const currentStage = this.createStageBySlug(index).get(slug);

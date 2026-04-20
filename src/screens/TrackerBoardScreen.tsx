@@ -18,6 +18,8 @@ interface TrackerBoardScreenProps {
   onCustomizeStages?: () => void;
 }
 
+const SPINNER_CHARS = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+
 const MIN_COLUMN_WIDTH = 20;
 const MAX_COLUMN_WIDTH = 50;
 const PLAN_COLOR = 'blue';
@@ -49,6 +51,8 @@ export default function TrackerBoardScreen({
   const [selectedRowByColumn, setSelectedRowByColumn] = React.useState<Record<number, number>>({});
   const [createMode, setCreateMode] = React.useState(false);
   const [createTitle, setCreateTitle] = React.useState('');
+  const [pendingCreations, setPendingCreations] = React.useState<Set<string>>(new Set());
+  const [spinnerFrame, setSpinnerFrame] = React.useState(0);
   const [proposalInputMode, setProposalInputMode] = React.useState(false);
   const [proposalPrompt, setProposalPrompt] = React.useState('');
   const [pickerMode, setPickerMode] = React.useState(false);
@@ -160,6 +164,12 @@ export default function TrackerBoardScreen({
     }
   }, [project, projectPath, service]);
 
+  React.useEffect(() => {
+    if (pendingCreations.size === 0) return;
+    const id = setInterval(() => setSpinnerFrame(f => (f + 1) % SPINNER_CHARS.length), 80);
+    return () => clearInterval(id);
+  }, [pendingCreations.size]);
+
   const reloadBoard = React.useCallback(() => {
     setBoard(service.loadBoard(project, projectPath));
   }, [service, project, projectPath]);
@@ -243,13 +253,25 @@ export default function TrackerBoardScreen({
 
   const handleCreateSubmit = React.useCallback(() => {
     const title = createTitle.trim();
-    if (title) {
-      service.createItem(projectPath, title, currentColumn?.id || 'backlog');
-      reloadBoard();
-    }
     setCreateMode(false);
     setCreateTitle('');
-  }, [createTitle, service, projectPath, currentColumn, reloadBoard]);
+    if (!title) return;
+
+    const stage = (currentColumn?.id || 'backlog') as Parameters<typeof service.createItem>[2];
+    const tempSlug = service.slugify(title);
+    if (!tempSlug) return;
+
+    service.createItem(projectPath, title, stage, tempSlug);
+    reloadBoard();
+    setPendingCreations(prev => new Set(prev).add(tempSlug));
+
+    const existingSlugs = board.columns.flatMap(col => col.items.map(it => it.slug));
+    void service.deriveSlug(title, existingSlugs).then(finalSlug => {
+      if (finalSlug !== tempSlug) service.renameItem(projectPath, tempSlug, finalSlug, title);
+      setPendingCreations(prev => { const next = new Set(prev); next.delete(tempSlug); return next; });
+      reloadBoard();
+    });
+  }, [createTitle, service, projectPath, currentColumn, reloadBoard, board]);
 
   const handleProposalSubmit = React.useCallback(() => {
     if (proposalGenerating) return;
@@ -453,8 +475,9 @@ export default function TrackerBoardScreen({
             const isWorking = aiStatus === 'working' || aiStatus === 'active';
             const hasSession = !!sessWt;
 
-            const statusGlyph = isWaiting ? '!' : isWorking ? '⟳' : hasSession ? '◆' : ' ';
-            const statusColor = isWaiting ? 'yellow' : isWorking ? 'cyan' : hasSession ? 'gray' : undefined;
+            const isPending = pendingCreations.has(item.slug);
+            const statusGlyph = isPending ? SPINNER_CHARS[spinnerFrame] : isWaiting ? '!' : isWorking ? '⟳' : hasSession ? '◆' : ' ';
+            const statusColor = isPending ? 'yellow' : isWaiting ? 'yellow' : isWorking ? 'cyan' : hasSession ? 'gray' : undefined;
 
             // Slug row eats: 2 (border) + 2 (paddingX) + 2 (cursor) + 2 (status glyph) = 8 chars
             const slug = truncateDisplay(item.slug, Math.max(4, colWidth - 8));
@@ -478,7 +501,9 @@ export default function TrackerBoardScreen({
                   </Text>
                 </Box>
                 {/* Status / secondary text */}
-                {isWaiting ? (
+                {isPending ? (
+                  <Text color="yellow" wrap="truncate">{`    ${truncateDisplay('deriving slug…', secMax)}`}</Text>
+                ) : isWaiting ? (
                   <Text color="yellow" bold wrap="truncate">{`    ${truncateDisplay('waiting for you', secMax)}`}</Text>
                 ) : isWorking ? (
                   <Text color="cyan" wrap="truncate">{`    ${truncateDisplay('running', secMax)}`}</Text>
