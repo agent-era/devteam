@@ -29,11 +29,13 @@ describe('board create-item flow (derive-first, no rename)', () => {
     expect(col.items.map(i => i.slug)).not.toContain('add-oauth-login-for'); // no temp slug
   });
 
-  test('requirements.md body contains the user-typed description', () => {
+  test('user-typed description is written to notes.md (discovery output), not requirements.md', () => {
     const description = 'Allow users to sign in with Google and GitHub via OAuth2.';
     service.createItem(tmpDir, 'OAuth Login', 'backlog', 'oauth-login', description);
+    const notesPath = path.join(tmpDir, 'tracker', 'items', 'oauth-login', 'notes.md');
+    expect(fs.readFileSync(notesPath, 'utf8')).toContain(description);
     const reqPath = path.join(tmpDir, 'tracker', 'items', 'oauth-login', 'requirements.md');
-    expect(fs.readFileSync(reqPath, 'utf8')).toContain(description);
+    expect(fs.readFileSync(reqPath, 'utf8')).not.toContain(description);
   });
 
   test('single-tool path calls onLaunchItemBackground immediately after slug derivation', async () => {

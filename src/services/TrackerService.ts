@@ -413,11 +413,17 @@ export class TrackerService {
     sessions[slug] = {...sessions[slug], title};
     index.sessions = sessions;
     writeJSONAtomic(this.getIndexPath(projectPath), index);
-    // Write requirements stub immediately so the item screen shows the description
-    // before a worktree session is launched. ensureItemFiles will migrate this later.
     const mainItemDir = path.join(projectPath, 'tracker', 'items', slug);
     ensureDirectory(mainItemDir);
-    this.writeRequirementsStub(path.join(mainItemDir, 'requirements.md'), title, slug, body || title);
+    // Requirements is just a stub with the title — it's written for real during
+    // the requirements stage. The user's initial description (the "what / why"
+    // they had in mind when they created the item) goes into notes.md, which is
+    // the discovery stage's output file.
+    this.writeRequirementsStub(path.join(mainItemDir, 'requirements.md'), title, slug, title);
+    if (body && body !== title) {
+      const notesPath = path.join(mainItemDir, 'notes.md');
+      if (!fs.existsSync(notesPath)) fs.writeFileSync(notesPath, `${body}\n`);
+    }
   }
 
   private writeRequirementsStub(reqPath: string, title: string, slug: string, body: string): boolean {

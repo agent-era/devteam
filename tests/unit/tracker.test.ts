@@ -144,28 +144,30 @@ describe('createItem', () => {
     expect(index.implementation.implement).toContain('build-api');
   });
 
-  test('writes provided body to requirements.md instead of title', () => {
+  test('writes provided body to notes.md (discovery output), keeping requirements.md as a title stub', () => {
     service.createItem(tmpDir, 'Add auth', 'discovery', undefined, 'Implement OAuth2 login with Google and GitHub providers.');
-    const reqPath = path.join(tmpDir, 'tracker', 'items', 'add-auth', 'requirements.md');
-    const content = fs.readFileSync(reqPath, 'utf8');
-    expect(content).toContain('Implement OAuth2 login with Google and GitHub providers.');
-    expect(content).not.toMatch(/\nAdd auth\n/);
+    const notesPath = path.join(tmpDir, 'tracker', 'items', 'add-auth', 'notes.md');
+    expect(fs.readFileSync(notesPath, 'utf8')).toContain('Implement OAuth2 login with Google and GitHub providers.');
+    const reqContent = fs.readFileSync(path.join(tmpDir, 'tracker', 'items', 'add-auth', 'requirements.md'), 'utf8');
+    expect(reqContent).not.toContain('Implement OAuth2 login with Google and GitHub providers.');
   });
 
-  test('uses title as body when body param is omitted', () => {
+  test('does not create notes.md when body is omitted', () => {
     service.createItem(tmpDir, 'My Feature', 'discovery');
-    const reqPath = path.join(tmpDir, 'tracker', 'items', 'my-feature', 'requirements.md');
-    const content = fs.readFileSync(reqPath, 'utf8');
-    expect(content).toMatch(/\nMy Feature\n/);
+    const notesPath = path.join(tmpDir, 'tracker', 'items', 'my-feature', 'notes.md');
+    expect(fs.existsSync(notesPath)).toBe(false);
+    const reqContent = fs.readFileSync(path.join(tmpDir, 'tracker', 'items', 'my-feature', 'requirements.md'), 'utf8');
+    expect(reqContent).toMatch(/\nMy Feature\n/);
   });
 
   test('uses explicit slug when provided alongside body', () => {
     service.createItem(tmpDir, 'Proposal Title', 'backlog', 'ai-derived-slug', 'Detailed description from proposal.');
     const reqPath = path.join(tmpDir, 'tracker', 'items', 'ai-derived-slug', 'requirements.md');
     expect(fs.existsSync(reqPath)).toBe(true);
-    const content = fs.readFileSync(reqPath, 'utf8');
-    expect(content).toContain('Detailed description from proposal.');
-    expect(content).toMatch(/^slug: ai-derived-slug$/m);
+    const notesPath = path.join(tmpDir, 'tracker', 'items', 'ai-derived-slug', 'notes.md');
+    expect(fs.readFileSync(notesPath, 'utf8')).toContain('Detailed description from proposal.');
+    const reqContent = fs.readFileSync(reqPath, 'utf8');
+    expect(reqContent).toMatch(/^slug: ai-derived-slug$/m);
   });
 });
 

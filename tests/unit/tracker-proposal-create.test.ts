@@ -40,24 +40,26 @@ describe('proposal acceptance: slug and description', () => {
     expect(index.backlog.backlog ?? []).not.toContain('oauth-login'.replace('-', '')); // not re-slugified
   });
 
-  test('requirements.md body contains proposal description, not just title', () => {
+  test('proposal description is written to notes.md (discovery output)', () => {
     acceptProposals(tmpDir, proposals, new Set([0]));
+    const notesPath = path.join(tmpDir, 'tracker', 'items', 'oauth-login', 'notes.md');
+    expect(fs.existsSync(notesPath)).toBe(true);
+    expect(fs.readFileSync(notesPath, 'utf8')).toContain('Implement Google and GitHub OAuth2 sign-in flows.');
     const reqPath = path.join(tmpDir, 'tracker', 'items', 'oauth-login', 'requirements.md');
-    expect(fs.existsSync(reqPath)).toBe(true);
-    const content = fs.readFileSync(reqPath, 'utf8');
-    expect(content).toContain('Implement Google and GitHub OAuth2 sign-in flows.');
-    expect(content).toMatch(/^title: "OAuth Login"$/m);
-    expect(content).toMatch(/^slug: oauth-login$/m);
+    const reqContent = fs.readFileSync(reqPath, 'utf8');
+    expect(reqContent).toMatch(/^title: "OAuth Login"$/m);
+    expect(reqContent).toMatch(/^slug: oauth-login$/m);
+    expect(reqContent).not.toContain('Implement Google and GitHub OAuth2 sign-in flows.');
   });
 
-  test('accepting multiple proposals creates all items with correct slugs and descriptions', () => {
+  test('accepting multiple proposals creates notes.md for each with its description', () => {
     acceptProposals(tmpDir, proposals, new Set([0, 1]));
     const index = JSON.parse(fs.readFileSync(path.join(tmpDir, 'tracker', 'index.json'), 'utf8'));
     expect(index.backlog.backlog).toContain('oauth-login');
     expect(index.backlog.backlog).toContain('dark-mode');
 
-    const reqDark = path.join(tmpDir, 'tracker', 'items', 'dark-mode', 'requirements.md');
-    expect(fs.readFileSync(reqDark, 'utf8')).toContain('Add a dark color scheme toggle to settings.');
+    const notesDark = path.join(tmpDir, 'tracker', 'items', 'dark-mode', 'notes.md');
+    expect(fs.readFileSync(notesDark, 'utf8')).toContain('Add a dark color scheme toggle to settings.');
   });
 
   test('unaccepted proposals are not created', () => {
