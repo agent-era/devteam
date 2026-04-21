@@ -178,10 +178,21 @@ export class RalphCore implements CoreBase<State> {
     const nowMs = this.now();
     let changed = false;
 
+    // Many worktrees typically share a project; reading ralph.json once per
+    // unique project per sample avoids N × 60s file reads.
+    const configByProject = new Map<string, RalphConfig>();
+    const loadCfg = (projectPath: string): RalphConfig => {
+      const cached = configByProject.get(projectPath);
+      if (cached) return cached;
+      const fresh = loadRalphConfig(projectPath);
+      configByProject.set(projectPath, fresh);
+      return fresh;
+    };
+
     for (const wt of worktrees) {
       const key = stateKey(wt.project, wt.feature);
       const cur = this.state.worktrees[key] ?? this.blankState(wt.project, wt.feature);
-      const next = this.sampleWorktree(wt, cur, nowMs);
+      const next = this.sampleWorktree(wt, cur, nowMs, loadCfg);
       if (!shallowEqual(cur, next)) {
         this.state.worktrees[key] = next;
         changed = true;
@@ -214,11 +225,12 @@ export class RalphCore implements CoreBase<State> {
     wt: WorktreeInfo,
     prev: RalphWorktreeState,
     nowMs: number,
+    loadCfg: (projectPath: string) => RalphConfig = loadRalphConfig,
   ): RalphWorktreeState {
     const projectPath = this.getProjectPath(wt.project);
     if (!projectPath) return prev;
 
-    const config = loadRalphConfig(projectPath);
+    const config = loadCfg(projectPath);
     const stage = this.tracker.getItemStage(projectPath, wt.feature);
     const status = this.tracker.getItemStatus(projectPath, wt.feature);
     const aiStatus = wt.session?.ai_status ?? 'not_running';
@@ -281,10 +293,9 @@ export class RalphCore implements CoreBase<State> {
       return next;
     }
 
-    // Stage has to have been unchanged for the idle window as well. We proxy
-    // this via lastStage — if the stage hasn't changed since the previous
-    // sample *and* we've been idle long enough, that's a stall.
-    if (prev.lastStage !== null && prev.lastStage !== stage) return next;
+    // (A stage change is already handled up top — it zeros idleSince, which
+    // the earlier idleSince guard catches — so we don't need a second check
+    // here.)
 
     // Fire the nudge. `stage !== 'archive'` has already been guarded above,
     // so stage is Exclude<TrackerStage, 'archive'> here. inputMode is
