@@ -157,13 +157,24 @@ export function WorktreeProvider({children, core: coreOverride}: WorktreeProvide
   const worktreesWithRalph = React.useMemo(() => {
     const projects = gitRef.current.discoverProjects();
     const projectPathByName = new Map(projects.map(p => [p.name, p.path]));
+    // Dedupe `loadRalphConfig` reads — a worktree list with N items in the
+    // same project was firing N readFileSync calls per refresh. One per
+    // unique project is enough.
+    const ralphConfigByProject = new Map<string, ReturnType<typeof loadRalphConfig>>();
+    const getCfg = (projectPath: string) => {
+      const cached = ralphConfigByProject.get(projectPath);
+      if (cached) return cached;
+      const fresh = loadRalphConfig(projectPath);
+      ralphConfigByProject.set(projectPath, fresh);
+      return fresh;
+    };
     return state.worktrees.map(wt => {
       const projectPath = projectPathByName.get(wt.project);
       if (!projectPath) return wt;
       const status = trackerRef.current.getItemStatus(projectPath, wt.feature);
       const ralphWt = ralphState.worktrees[`${wt.project}::${wt.feature}`];
-      const cfg = loadRalphConfig(projectPath);
       if (!status && !ralphWt) return wt;
+      const cfg = getCfg(projectPath);
       const decorated = new WorktreeInfo({...wt});
       decorated.ralph = {
         state: trackerRef.current.isItemWaiting(status) ? status!.state : 'working',

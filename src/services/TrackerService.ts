@@ -450,6 +450,10 @@ export class TrackerService {
     try {
       const parsed = JSON.parse(raw) as Record<string, unknown>;
       if (!parsed || typeof parsed.stage !== 'string' || typeof parsed.timestamp !== 'string') return null;
+      // Whitelist the stage string before using it anywhere that constructs
+      // file paths (getStageFilePath) — otherwise a malicious or corrupted
+      // status.json with `stage: "../../.ssh/id_rsa"` would flow through.
+      if (!STAGE_ORDER.includes(parsed.stage as TrackerStage) || parsed.stage === 'archive') return null;
       // Accept both the new `state` enum and the legacy boolean schema so
       // existing status.json files on disk keep working.
       const state = normaliseItemState(parsed);

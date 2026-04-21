@@ -182,6 +182,17 @@ describe('item status.json helpers', () => {
     expect(service.getItemStatus(tmpDir, SLUG)).toBeNull();
   });
 
+  test('getItemStatus rejects a stage value outside the known enum (path-traversal safety)', () => {
+    const dir = seedItemDir();
+    const ts = new Date().toISOString();
+    for (const badStage of ['../../evil', 'archive', 'unknown_stage', '']) {
+      fs.writeFileSync(path.join(dir, 'status.json'), JSON.stringify({
+        stage: badStage, state: 'working', brief_description: '', timestamp: ts,
+      }));
+      expect(service.getItemStatus(tmpDir, SLUG)).toBeNull();
+    }
+  });
+
   test('getItemStatus accepts the three state values', () => {
     const dir = seedItemDir();
     const ts = new Date().toISOString();

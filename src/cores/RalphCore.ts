@@ -102,20 +102,23 @@ export function buildNudgeText(opts: {
   inputMode: string;
   gateOnAdvance: string;
 }): string {
-  const outputFile =
-    opts.stage === 'discovery' ? 'notes.md'
-    : opts.stage === 'requirements' ? 'requirements.md'
-    : opts.stage === 'implement' ? 'implementation.md'
-    : opts.stage === 'cleanup' ? 'implementation.md'
-    : '—';
+  // Cleanup polishes the implementation in place and (optionally) drafts
+  // the PR description — there's no single output file, so we describe the
+  // work more generically for that stage.
+  const progressTarget =
+    opts.stage === 'discovery' ? '`notes.md`'
+    : opts.stage === 'requirements' ? '`requirements.md`'
+    : opts.stage === 'implement' ? '`implementation.md`'
+    : opts.stage === 'cleanup' ? 'the cleanup checklist (tests, review, PR prep)'
+    : 'this stage';
   const stageFile = `tracker/stages/${opts.stage}.md`;
   const statusPath = `tracker/items/${opts.slug}/status.json`;
   return [
     `Quick check-in — this session has been idle for a while, so I wanted to make sure you're not stuck.`,
-    `Current stage is \`${opts.stage}\` (guide: ${stageFile}, gate: ${opts.gateOnAdvance}, input_mode: ${opts.inputMode}). The expected output for this stage is \`${outputFile}\`.`,
+    `Current stage is \`${opts.stage}\` (guide: ${stageFile}, gate: ${opts.gateOnAdvance}, input_mode: ${opts.inputMode}).`,
     `Please update \`${statusPath}\` so the kanban reflects where you are — the \`brief_description\` field is rendered directly on the card and should describe the *work* (what you're doing, or what you need), not the stage (that's already visible).`,
     `If you're blocked on a clarification, set \`state: "waiting_for_input"\` in \`status.json\` with a \`brief_description\` of the specific thing you need. If stage work is complete and you're waiting on my approval to advance, set \`state: "waiting_for_approval"\` instead (kanban renders those distinctly so I can approve them fast). Or use ask_questions if that's your input_mode.`,
-    `Either waiting state stops these check-ins from firing. Otherwise please keep making progress on \`${outputFile}\` and advance when ready.`,
+    `Either waiting state stops these check-ins from firing. Otherwise please keep making progress on ${progressTarget} and advance when ready.`,
   ].join(' ');
 }
 
@@ -183,6 +186,10 @@ export class RalphCore implements CoreBase<State> {
         this.state.worktrees[key] = next;
         changed = true;
       } else if (!this.state.worktrees[key]) {
+        // First time we see this worktree but sampleWorktree returned the
+        // blank state unchanged (e.g. getProjectPath was empty or the item
+        // has no tracker config yet). Register it so consumers get a
+        // well-formed entry on the next subscribe callback.
         this.state.worktrees[key] = cur;
         changed = true;
       }
