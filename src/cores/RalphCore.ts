@@ -31,8 +31,8 @@ export interface RalphWorktreeState {
   idleSince: number | null;
   // Stage value observed on the previous sample. null before the first sample.
   lastStage: TrackerStage | null;
-  // Nudges sent during the current stage. Reset on stage change or on a
-  // fresh is_waiting_for_user flip.
+  // Nudges sent during the current stage. Reset on stage change or when
+  // the agent freshly flips state to waiting_for_input / waiting_for_approval.
   nudgesThisStage: number;
   // Timestamp of the most recent nudge sent to this worktree.
   lastNudgeAt: number | null;
@@ -230,10 +230,8 @@ export class RalphCore implements CoreBase<State> {
     }
 
     // A fresh non-working state resets the cap — the agent explicitly said
-    // it's waiting on a human, so any prior stuck-ness is moot. Both
-    // waiting states (for_input and for_approval) suppress nudges equally.
-    const nonStale = status && !this.tracker.isItemStatusStale(status, new Date(nowMs));
-    const fresh = nonStale && status.state !== 'working';
+    // it's waiting on a human, so any prior stuck-ness is moot.
+    const fresh = this.tracker.isItemWaiting(status, new Date(nowMs));
     if (fresh && (prev.idleSince !== null || prev.nudgesThisStage > 0 || prev.capped)) {
       nudgesThisStage = 0;
       capped = false;

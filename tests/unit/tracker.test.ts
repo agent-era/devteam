@@ -157,7 +157,7 @@ describe('item status.json helpers', () => {
     expect(fs.existsSync(written)).toBe(true);
   });
 
-  test('writeItemStatus truncates brief_description to 120 chars', () => {
+  test('writeItemStatus truncates brief_description to 200 chars', () => {
     seedItemDir();
     const longReason = 'x'.repeat(500);
     service.writeItemStatus(tmpDir, SLUG, {
@@ -167,7 +167,7 @@ describe('item status.json helpers', () => {
       timestamp: new Date().toISOString(),
     });
     const read = service.getItemStatus(tmpDir, SLUG);
-    expect(read?.brief_description.length).toBe(120);
+    expect(read?.brief_description.length).toBe(200);
   });
 
   test('getItemStatus returns null on malformed JSON', () => {

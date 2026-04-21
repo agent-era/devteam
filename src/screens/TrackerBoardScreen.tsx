@@ -631,9 +631,8 @@ export default function TrackerBoardScreen({
             // "ready to advance" treatment so it's spottable at a glance and
             // can be acted on with the `m` shortcut from the board.
             const itemStatus = service.getItemStatus(projectPath, item.slug);
-            const statusFresh = !!itemStatus && !service.isItemStatusStale(itemStatus);
-            const readyToAdvance = statusFresh && itemStatus!.state === 'waiting_for_approval';
-            const ralphWaiting = statusFresh && itemStatus!.state === 'waiting_for_input';
+            const readyToAdvance = service.isItemReadyToAdvance(itemStatus);
+            const ralphWaiting = !!itemStatus && !readyToAdvance && service.isItemWaiting(itemStatus);
             const isWaiting = aiWaiting || ralphWaiting;
 
             const statusGlyph =
@@ -653,16 +652,12 @@ export default function TrackerBoardScreen({
             const secMax = Math.max(4, colWidth - 8);
             const secondary = !hasSession ? renderSecondary(item) : '';
 
-            // Prefer the agent's own brief_description when available.
             const waitingLabel = ralphWaiting && itemStatus?.brief_description
               ? itemStatus.brief_description
               : 'waiting for you';
-            const readyLabel = (() => {
-              const brief = itemStatus?.brief_description
-                ? `READY TO ADVANCE — ${itemStatus.brief_description}`
-                : 'READY TO ADVANCE';
-              return isSelected ? `${brief}  ·  [m] approve` : brief;
-            })();
+            const readyLabel = itemStatus?.brief_description
+              ? `Ready — ${itemStatus.brief_description}`
+              : 'Ready';
 
             return (
               <Box key={item.slug} flexDirection="column" marginBottom={1} flexShrink={0}>
@@ -691,7 +686,10 @@ export default function TrackerBoardScreen({
                     : hasSession ? (itemStatus?.brief_description || 'session idle')
                     : secondary || '';
                   if (!text) return null;
-                  const lines = wrapToLines(text, secMax, SECONDARY_MAX_LINES);
+                  // Focused card gets more lines so the full (up to 200-char)
+                  // brief_description is readable; other cards stay compact.
+                  const maxLines = isSelected ? 4 : SECONDARY_MAX_LINES;
+                  const lines = wrapToLines(text, secMax, maxLines);
                   const color =
                     readyToAdvance ? 'green'
                     : isWaiting ? 'yellow'
@@ -710,6 +708,16 @@ export default function TrackerBoardScreen({
                     </Text>
                   ));
                 })()}
+                {/* Dedicated approve-hint row — only when this card is the
+                    selected one and ready for approval. Keeping it on its
+                    own line (rather than suffixing the brief_description)
+                    makes the shortcut visible even when the description
+                    wraps to two lines. */}
+                {readyToAdvance && isSelected && (
+                  <Text color="green" bold>
+                    {`    press [m] to approve and advance`}
+                  </Text>
+                )}
               </Box>
             );
           })}

@@ -33,15 +33,12 @@ export interface ExitCriterionResult {
 // to decide whether an idle pane is truly stuck or legitimately waiting.
 export interface ItemStatus {
   stage: Exclude<TrackerStage, 'archive'>;
-  // One tri-state instead of overlapping booleans:
-  //   - 'working': actively progressing, no human needed.
-  //   - 'waiting_for_input': mid-stage — blocked on a clarification.
-  //   - 'waiting_for_approval': stage work is done, wants sign-off to advance.
-  // Ralph treats the two waiting states the same (suppress nudges); the UI
-  // renders them differently so "ready to advance" is visually distinct.
+  // Ralph treats both waiting states the same (suppress nudges); the kanban
+  // renders waiting_for_approval distinctly so "ready to advance" is
+  // spottable at a glance.
   state: ItemStatusState;
   // Short human-readable note: what the agent is currently doing, or the
-  // concrete thing it's waiting on. ≤ 120 chars.
+  // concrete thing it's waiting on. ≤ 200 chars.
   brief_description: string;
   // ISO-8601 timestamp of last update. Used for the staleness check.
   timestamp: string;
@@ -281,11 +278,6 @@ export const STAGE_LABELS: Record<TrackerStage, string> = {
   archive: 'Archive',
 };
 
-// Wider title used for the board column header (where space allows a longer label).
-const COLUMN_TITLES: Record<TrackerStage, string> = {
-  ...STAGE_LABELS,
-};
-
 export class TrackerService {
   getTrackerPath(projectPath: string): string {
     return path.join(projectPath, 'tracker');
@@ -383,7 +375,7 @@ export class TrackerService {
         .sort((a, b) => a.slug.localeCompare(b.slug));
       return {
         id,
-        title: COLUMN_TITLES[id],
+        title: STAGE_LABELS[id],
         bucket,
         items: [...ordered, ...extras],
       };
@@ -475,8 +467,8 @@ export class TrackerService {
 
   // Overwrite the status file. Writes to the resolved item dir, or (as a
   // fallback for items with no worktree yet) to the main-project stub dir so
-  // the file still has a home. Truncates brief_description to 120 chars to
-  // keep the UI row tidy.
+  // the file still has a home. Truncates brief_description to 200 chars to
+  // keep the UI row from growing without bound.
   writeItemStatus(projectPath: string, slug: string, status: ItemStatus): void {
     let itemDir = this.resolveItemDir(projectPath, slug);
     if (!itemDir) {
@@ -486,19 +478,30 @@ export class TrackerService {
     const payload: ItemStatus = {
       stage: status.stage,
       state: status.state,
-      brief_description: (status.brief_description || '').slice(0, 120),
+      brief_description: (status.brief_description || '').slice(0, 200),
       timestamp: status.timestamp || new Date().toISOString(),
     };
     writeJSONAtomic(path.join(itemDir, 'status.json'), payload);
   }
 
   // A status is "stale" if its timestamp is older than ITEM_STATUS_STALE_MS.
-  // Ralph ignores `is_waiting_for_user: true` on stale records so a crashed
-  // agent doesn't suppress nudges indefinitely.
+  // Ralph ignores non-working state on stale records so a crashed agent
+  // doesn't suppress nudges indefinitely.
   isItemStatusStale(status: ItemStatus, now: Date = new Date()): boolean {
     const ts = Date.parse(status.timestamp);
     if (Number.isNaN(ts)) return true;
     return now.getTime() - ts > ITEM_STATUS_STALE_MS;
+  }
+
+  // Fresh + non-working. Covers both waiting_for_input and waiting_for_approval.
+  isItemWaiting(status: ItemStatus | null | undefined, now?: Date): boolean {
+    return !!status && status.state !== 'working' && !this.isItemStatusStale(status, now);
+  }
+
+  // Fresh + specifically waiting_for_approval. The kanban uses this to render
+  // the green "ready to advance" treatment and expose the [m] approve shortcut.
+  isItemReadyToAdvance(status: ItemStatus | null | undefined, now?: Date): boolean {
+    return !!status && status.state === 'waiting_for_approval' && !this.isItemStatusStale(status, now);
   }
 
   createItem(projectPath: string, title: string, stage: TrackerStage = 'discovery', explicitSlug?: string, body?: string): void {
@@ -908,9 +911,9 @@ export class TrackerService {
     };
     const INPUT_MODE_LABELS: Record<string, [string, string]> = {
       ask_questions: ['ask_questions tool', 'Use the ask_questions tool whenever you need input. Produces a detectable numbered prompt in the terminal.'],
-      inline: ['Inline chat', 'Ask questions inline in the conversation. Before pausing, set is_waiting_for_user: true in status.json with a brief_description; clear it on resume.'],
-      batch: ['Batched', 'Batch every question into a single message — do not ask one at a time. Set is_waiting_for_user: true in status.json before sending; clear on resume.'],
-      doc_review: ['Doc review', 'Write the stage\'s output file first, then ask the user to review it. Set is_waiting_for_user: true in status.json before asking for review; clear on resume.'],
+      inline: ['Inline chat', 'Ask questions inline in the conversation. Before pausing, set state: "waiting_for_input" in status.json with a brief_description; set it back to "working" on resume.'],
+      batch: ['Batched', 'Batch every question into a single message — do not ask one at a time. Set state: "waiting_for_input" in status.json before sending; set it back to "working" on resume.'],
+      doc_review: ['Doc review', 'Write the stage\'s output file first, then ask the user to review it. Set state: "waiting_for_input" in status.json before asking for review; set it back to "working" on resume.'],
     };
 
     const row = (label: string, map: Record<string, [string, string]>, val: string) => {
@@ -1282,7 +1285,7 @@ Schema:
 {
   "stage": "${stage}",
   "state": "working",
-  "brief_description": "the concrete thing you're doing or need (≤ 120 chars)",
+  "brief_description": "the concrete thing you're doing or need (≤ 200 chars)",
   "timestamp": "ISO-8601 now"
 }
 \`\`\`

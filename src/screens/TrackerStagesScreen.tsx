@@ -465,7 +465,8 @@ export default function TrackerStagesScreen({projectPath, onBack}: TrackerStages
           <Box flexDirection="column">
             <Text dimColor>
               Ralph watches idle agents and nudges them to keep advancing
-              (unless they've flagged `is_waiting_for_user` in status.json).
+              (unless they've set `state` to `waiting_for_input` or
+              `waiting_for_approval` in status.json).
             </Text>
             <Box marginTop={1} flexDirection="column">
               {RALPH_OPTIONS.map((opt, rowIdx) => {

@@ -164,11 +164,9 @@ export function WorktreeProvider({children, core: coreOverride}: WorktreeProvide
       const ralphWt = ralphState.worktrees[`${wt.project}::${wt.feature}`];
       const cfg = loadRalphConfig(projectPath);
       if (!status && !ralphWt) return wt;
-      const freshWaiting =
-        !!status && status.state !== 'working' && !trackerRef.current.isItemStatusStale(status);
       const decorated = new WorktreeInfo({...wt});
       decorated.ralph = {
-        is_waiting_for_user: freshWaiting,
+        state: trackerRef.current.isItemWaiting(status) ? status!.state : 'working',
         brief_description: status?.brief_description,
         nudges_this_stage: ralphWt?.nudgesThisStage ?? 0,
         max_nudges_per_stage: cfg.maxNudgesPerStage,

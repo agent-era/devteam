@@ -31,13 +31,17 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
   const highlightInfo = useHighlightPriority(worktree, prStatus);
   const isDimmed = shouldDimRow(prStatus);
 
-  // Compact ralph indicator: "⏸ brief_description" when waiting for user,
-  // "n:X/Y" when nudges fired, "!" when capped. Empty when ralph has nothing
-  // to say. Everything is truncated inside the cell width downstream.
+  // Compact ralph indicator: distinguishes the two waiting states (input vs
+  // approval) so the main view doesn't collapse them the way the old single
+  // boolean did. "n:X/Y" when nudges have fired, "!" when capped.
   const ralphSuffix = (() => {
     const r = worktree.ralph;
     if (!r) return '';
-    if (r.is_waiting_for_user) {
+    if (r.state === 'waiting_for_approval') {
+      const desc = (r.brief_description || '').trim();
+      return desc ? ` ✓ ${desc}` : ' ✓ ready';
+    }
+    if (r.state === 'waiting_for_input') {
       const desc = (r.brief_description || '').trim();
       return desc ? ` ⏸ ${desc}` : ' ⏸';
     }

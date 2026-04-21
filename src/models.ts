@@ -139,8 +139,11 @@ export class WorktreeInfo {
   // Ralph-sourced live state (optional — may be undefined for worktrees that
   // aren't tracker items). Populated by WorktreeContext from RalphCore +
   // TrackerService.getItemStatus so WorktreeRow can render a compact chip.
+  // `state` mirrors ItemStatus.state when the status file is fresh, or
+  // 'working' when there is no fresh waiting signal — consumers don't need
+  // to re-check staleness.
   ralph?: {
-    is_waiting_for_user: boolean;
+    state: 'working' | 'waiting_for_input' | 'waiting_for_approval';
     brief_description?: string;
     nudges_this_stage: number;
     max_nudges_per_stage: number;
