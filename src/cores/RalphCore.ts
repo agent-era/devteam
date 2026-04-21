@@ -108,27 +108,15 @@ export function buildNudgeText(opts: {
     : opts.stage === 'implement' ? 'implementation.md'
     : opts.stage === 'cleanup' ? 'implementation.md'
     : '—';
-  const stageFile = `tracker/stages/${stageFileNumber(opts.stage)}-${opts.stage}.md`;
+  const stageFile = `tracker/stages/${opts.stage}.md`;
   const statusPath = `tracker/items/${opts.slug}/status.json`;
   return [
     `Quick check-in — this session has been idle for a while, so I wanted to make sure you're not stuck.`,
     `Current stage is \`${opts.stage}\` (guide: ${stageFile}, gate: ${opts.gateOnAdvance}, input_mode: ${opts.inputMode}). The expected output for this stage is \`${outputFile}\`.`,
     `Please update \`${statusPath}\` so the kanban reflects where you are — the \`brief_description\` field is rendered directly on the card and should describe the *work* (what you're doing, or what you need), not the stage (that's already visible).`,
-    `If the stage work is done and you're waiting on my approval to advance, set \`is_waiting_for_user: true\` AND \`awaiting_advance_approval: true\` with a concrete summary of what I should review.`,
-    `If you're blocked mid-stage on something else, set \`is_waiting_for_user: true\` with a \`brief_description\` of the specific thing you need (or use ask_questions if that's your input_mode).`,
-    `Either flag stops these check-ins from firing. Otherwise please keep making progress on \`${outputFile}\` and advance when ready.`,
+    `If you're blocked on a clarification, set \`state: "waiting_for_input"\` in \`status.json\` with a \`brief_description\` of the specific thing you need. If stage work is complete and you're waiting on my approval to advance, set \`state: "waiting_for_approval"\` instead (kanban renders those distinctly so I can approve them fast). Or use ask_questions if that's your input_mode.`,
+    `Either waiting state stops these check-ins from firing. Otherwise please keep making progress on \`${outputFile}\` and advance when ready.`,
   ].join(' ');
-}
-
-function stageFileNumber(stage: TrackerStage): number {
-  switch (stage) {
-    case 'backlog': return 1;
-    case 'discovery': return 2;
-    case 'requirements': return 3;
-    case 'implement': return 4;
-    case 'cleanup': return 5;
-    default: return 0;
-  }
 }
 
 function stateKey(project: string, slug: string): string {
@@ -241,12 +229,11 @@ export class RalphCore implements CoreBase<State> {
       idleSince = null;
     }
 
-    // Any fresh waiting flag also resets the cap — the agent explicitly said
-    // it's waiting on a human, so any prior stuck-ness is moot. We treat
-    // `awaiting_advance_approval` as an equivalent suppressor: work is done,
-    // the agent is waiting for the go-ahead, that's not a stall.
+    // A fresh non-working state resets the cap — the agent explicitly said
+    // it's waiting on a human, so any prior stuck-ness is moot. Both
+    // waiting states (for_input and for_approval) suppress nudges equally.
     const nonStale = status && !this.tracker.isItemStatusStale(status, new Date(nowMs));
-    const fresh = nonStale && (status.is_waiting_for_user || !!status.awaiting_advance_approval);
+    const fresh = nonStale && status.state !== 'working';
     if (fresh && (prev.idleSince !== null || prev.nudgesThisStage > 0 || prev.capped)) {
       nudgesThisStage = 0;
       capped = false;

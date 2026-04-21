@@ -33,19 +33,36 @@ export interface ExitCriterionResult {
 // to decide whether an idle pane is truly stuck or legitimately waiting.
 export interface ItemStatus {
   stage: Exclude<TrackerStage, 'archive'>;
-  is_waiting_for_user: boolean;
-  // Short human-readable note: current activity when not waiting, or what's
-  // being waited on when waiting. ≤ 120 chars.
+  // One tri-state instead of overlapping booleans:
+  //   - 'working': actively progressing, no human needed.
+  //   - 'waiting_for_input': mid-stage — blocked on a clarification.
+  //   - 'waiting_for_approval': stage work is done, wants sign-off to advance.
+  // Ralph treats the two waiting states the same (suppress nudges); the UI
+  // renders them differently so "ready to advance" is visually distinct.
+  state: ItemStatusState;
+  // Short human-readable note: what the agent is currently doing, or the
+  // concrete thing it's waiting on. ≤ 120 chars.
   brief_description: string;
   // ISO-8601 timestamp of last update. Used for the staleness check.
   timestamp: string;
-  // True when the stage's work is complete and the agent is specifically
-  // waiting for the user to approve the advance to the next stage. Distinct
-  // from `is_waiting_for_user` (which covers any mid-stage waiting) because
-  // "done, waiting for go-ahead" is a very different UX signal from "stuck
-  // on a clarifying question" — the kanban wants to call it out visibly,
-  // and ralph suppresses nudges for it regardless of is_waiting_for_user.
-  awaiting_advance_approval?: boolean;
+}
+
+export type ItemStatusState = 'working' | 'waiting_for_input' | 'waiting_for_approval';
+
+// Coerce a freshly-parsed status.json payload to a valid state. Accepts the
+// new `state` enum and the legacy `is_waiting_for_user` / `awaiting_advance_approval`
+// booleans so existing files on disk keep working. Returns null when the
+// payload isn't recognisable as a status record.
+function normaliseItemState(parsed: Record<string, unknown>): ItemStatusState | null {
+  const raw = parsed.state;
+  if (raw === 'working' || raw === 'waiting_for_input' || raw === 'waiting_for_approval') return raw;
+  if (typeof raw === 'string') return null; // unknown value — treat as malformed
+  const approval = parsed.awaiting_advance_approval === true;
+  const input = parsed.is_waiting_for_user === true;
+  if (approval) return 'waiting_for_approval';
+  if (input) return 'waiting_for_input';
+  if (parsed.is_waiting_for_user === false) return 'working';
+  return null; // no legacy boolean either — schema doesn't match
 }
 
 // Treat a waiting flag as stale (and ignore it) after this many ms. Guards
@@ -159,7 +176,7 @@ Write your findings to tracker/items/<slug>/notes.md. Keep it short: user proble
     settings: {style: 'interview', detail: 'standard'},
   },
   implement: {
-    actionLabel: 'Move to cleanup',
+    actionLabel: 'Move to cleanup and submit',
     description: 'Build the feature. Follow TDD, commit incrementally.',
     checklist: [
       'Review requirements before starting',
@@ -260,14 +277,13 @@ export const STAGE_LABELS: Record<TrackerStage, string> = {
   discovery: 'Discovery',
   requirements: 'Requirements',
   implement: 'Implement',
-  cleanup: 'Cleanup',
+  cleanup: 'Cleanup and submit',
   archive: 'Archive',
 };
 
 // Wider title used for the board column header (where space allows a longer label).
 const COLUMN_TITLES: Record<TrackerStage, string> = {
   ...STAGE_LABELS,
-  cleanup: 'Cleanup and Submit',
 };
 
 export class TrackerService {
@@ -440,20 +456,17 @@ export class TrackerService {
     const raw = readFileOrNull(statusPath);
     if (!raw) return null;
     try {
-      const parsed = JSON.parse(raw) as Partial<ItemStatus>;
-      if (
-        !parsed ||
-        typeof parsed.stage !== 'string' ||
-        typeof parsed.is_waiting_for_user !== 'boolean' ||
-        typeof parsed.timestamp !== 'string'
-      ) return null;
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      if (!parsed || typeof parsed.stage !== 'string' || typeof parsed.timestamp !== 'string') return null;
+      // Accept both the new `state` enum and the legacy boolean schema so
+      // existing status.json files on disk keep working.
+      const state = normaliseItemState(parsed);
+      if (!state) return null;
       return {
         stage: parsed.stage as Exclude<TrackerStage, 'archive'>,
-        is_waiting_for_user: parsed.is_waiting_for_user,
+        state,
         brief_description: typeof parsed.brief_description === 'string' ? parsed.brief_description : '',
         timestamp: parsed.timestamp,
-        awaiting_advance_approval:
-          typeof parsed.awaiting_advance_approval === 'boolean' ? parsed.awaiting_advance_approval : false,
       };
     } catch {
       return null;
@@ -472,10 +485,9 @@ export class TrackerService {
     }
     const payload: ItemStatus = {
       stage: status.stage,
-      is_waiting_for_user: status.is_waiting_for_user,
+      state: status.state,
       brief_description: (status.brief_description || '').slice(0, 120),
       timestamp: status.timestamp || new Date().toISOString(),
-      awaiting_advance_approval: !!status.awaiting_advance_approval,
     };
     writeJSONAtomic(path.join(itemDir, 'status.json'), payload);
   }
@@ -559,11 +571,13 @@ export class TrackerService {
     // Archive moves don't get a status.json — archived items live outside
     // the live-state protocol.
     if (toStage !== 'archive') {
-      const prev = this.getItemStatus(projectPath, slug);
+      // Advancing is a clean slate — the previous brief_description describes
+      // finished work, and waiting flags from the old stage don't apply to
+      // the new one. Reset to working so ralph can resume normal cadence.
       this.writeItemStatus(projectPath, slug, {
         stage: toStage,
-        is_waiting_for_user: prev?.is_waiting_for_user ?? false,
-        brief_description: prev?.brief_description ?? '',
+        state: 'working',
+        brief_description: '',
         timestamp: new Date().toISOString(),
       });
     }
@@ -1111,21 +1125,16 @@ Use ask_questions tool when you need to ask the user. Read the stage guide and g
 
   // ── Stage instruction files ──────────────────────────────────────────────
 
-  private readonly STAGE_FILE_NUMBERS: Record<Exclude<TrackerStage, 'archive'>, number> = {
-    backlog: 1, discovery: 2, requirements: 3, implement: 4, cleanup: 5,
-  };
-
   getStagesDir(projectPath: string): string {
     return path.join(this.getTrackerPath(projectPath), 'stages');
   }
 
   getStageFilePath(projectPath: string, stage: Exclude<TrackerStage, 'archive'>): string {
-    const n = this.STAGE_FILE_NUMBERS[stage];
-    return path.join(this.getStagesDir(projectPath), `${n}-${stage}.md`);
+    return path.join(this.getStagesDir(projectPath), `${stage}.md`);
   }
 
   getOverviewFilePath(projectPath: string): string {
-    return path.join(this.getStagesDir(projectPath), '0-overview.md');
+    return path.join(this.getStagesDir(projectPath), 'overview.md');
   }
 
   readStageFile(projectPath: string, stage: Exclude<TrackerStage, 'archive'>): string {
@@ -1145,13 +1154,13 @@ This project uses devteam's tracker to manage work items through a structured wo
 
 ## Stages
 
-Items progress through these numbered stages:
+Items progress through these stages in order:
 
-1. **Backlog** (\`1-backlog.md\`) — Item created, not yet being worked on. Triage and describe.
-2. **Discovery** (\`2-discovery.md\`) — Clarify the user problem and approach. Output: \`notes.md\`.
-3. **Requirements** (\`3-requirements.md\`) — Document what to build. Output: \`requirements.md\`.
-4. **Implement** (\`4-implement.md\`) — Build the feature. Output: code + \`implementation.md\`.
-5. **Cleanup** (\`5-cleanup.md\`) — Polish, review, and ship.
+1. **Backlog** (\`backlog.md\`) — Item created, not yet being worked on. Triage and describe.
+2. **Discovery** (\`discovery.md\`) — Clarify the user problem and approach. Output: \`notes.md\`.
+3. **Requirements** (\`requirements.md\`) — Document what to build. Output: \`requirements.md\`.
+4. **Implement** (\`implement.md\`) — Build the feature. Output: code + \`implementation.md\`.
+5. **Cleanup and submit** (\`cleanup.md\`) — Polish, review, and ship.
 
 ## Item Files
 
@@ -1193,7 +1202,7 @@ Read \`tracker/stages/working-style.md\` for the project's preferred working sty
   }
 
   defaultStageFileContent(
-    stage: Exclude<TrackerStage, 'archive'>,
+    stage: Exclude<TrackerStage, 'archive' | 'backlog'>,
     settings?: Record<string, string>,
     workStyle?: WorkStyle,
   ): string {
@@ -1235,14 +1244,14 @@ Read \`tracker/stages/working-style.md\` for the project's preferred working sty
     const inputInstruction = (() => {
       switch (inputMode) {
         case 'inline':
-          return 'Ask questions inline in the conversation when you need input. Before sending each question, set `is_waiting_for_user: true` in `status.json` with a `brief_description` of what you need. Clear it (set back to false) the moment you receive the user\'s response and resume work.';
+          return 'Ask questions inline in the conversation when you need input. Before sending each question, set `state: "waiting_for_input"` in `status.json` with a `brief_description` of what you need. Set it back to `"working"` the moment you receive the user\'s response and resume work.';
         case 'batch':
-          return 'Batch every question you have into a single message — do not ask one at a time. Before sending the batched message, set `is_waiting_for_user: true` in `status.json` with a `brief_description` summarising the batch. Clear it when the user replies.';
+          return 'Batch every question you have into a single message — do not ask one at a time. Before sending the batched message, set `state: "waiting_for_input"` in `status.json` with a `brief_description` summarising the batch. Clear it to `"working"` when the user replies.';
         case 'doc_review':
-          return `Write the stage's output file (\`${outputFile}\`) first. Then ask the user to review it. Before asking for review, set \`is_waiting_for_user: true\` in \`status.json\` with a \`brief_description\` of what you need reviewed. Clear it when the user responds.`;
+          return `Write the stage's output file (\`${outputFile}\`) first. Then ask the user to review it. Before asking for review, set \`state: "waiting_for_input"\` in \`status.json\` with a \`brief_description\` of what you need reviewed. Clear it to \`"working"\` when the user responds.`;
         case 'ask_questions':
         default:
-          return 'Use the `ask_questions` tool when you need input from the user. Keep `status.json` up to date — set `is_waiting_for_user: true` with a `brief_description` when you\'re waiting, and clear it when the user responds.';
+          return 'Use the `ask_questions` tool when you need input from the user. Keep `status.json` up to date — set `state: "waiting_for_input"` with a `brief_description` when you\'re waiting, and set it back to `"working"` when the user responds.';
       }
     })();
 
@@ -1251,7 +1260,7 @@ Read \`tracker/stages/working-style.md\` for the project's preferred working sty
         case 'auto_advance':
           return `Advance without asking. Before you do, if this stage produced meaningful findings, decisions, or changes, append a short "## Stage review" section (1–3 sentences) to \`${outputFile}\` summarising what you did — skip the review for trivial no-op stages. Then update \`status.json.stage\` to the next stage and continue.`;
         case 'require_approval':
-          return 'When the stage\'s work is complete, pause and ask for the user\'s approval to advance. At that point, update `status.json` to set BOTH `is_waiting_for_user: true` AND `awaiting_advance_approval: true`, with a `brief_description` summarising what\'s ready for review (the kanban surfaces this specifically). Do not update `status.json.stage` until the user explicitly approves. When the user approves, flip both flags back to false and update `stage`.';
+          return 'When the stage\'s work is complete, pause and ask for the user\'s approval to advance. Set `state: "waiting_for_approval"` in `status.json` with a `brief_description` that summarises what the user should review (e.g., "caching layer complete"). Do not update `status.json.stage` until the user explicitly approves. When they do, set `state: "working"` and update `stage`.';
         default:
           return '';
       }
@@ -1272,25 +1281,31 @@ Schema:
 \`\`\`json
 {
   "stage": "${stage}",
-  "is_waiting_for_user": false,
-  "awaiting_advance_approval": false,
+  "state": "working",
   "brief_description": "the concrete thing you're doing or need (≤ 120 chars)",
   "timestamp": "ISO-8601 now"
 }
 \`\`\`
 
+\`state\` is one of:
+
+- \`"working"\` — actively progressing. No human needed.
+- \`"waiting_for_input"\` — mid-stage, blocked on a clarification from the user. \`brief_description\` should name the specific question.
+- \`"waiting_for_approval"\` — stage work is done; asking the user to sign off before advancing. Set this only when the gate is \`require_approval\`. \`brief_description\` should summarise what's ready for review.
+
+Ralph suppresses check-ins whenever \`state\` isn't \`"working"\`. The kanban renders approval-state cards with a distinct "ready to advance" treatment, so use it specifically — not as a generic waiting catch-all.
+
 \`brief_description\` guidance — the stage is already visible from the kanban column. Write about the *work*:
 
-- Good: \`drafting acceptance criteria for the caching layer\`, \`blocked: do we want retry-on-429?\`, \`ran the suite, 3 failing in auth spec\`, \`needs your sign-off on the schema I wrote\`.
+- Good: \`drafting acceptance criteria for the caching layer\`, \`blocked: do we want retry-on-429?\`, \`ran the suite, 3 failing in auth spec\`, \`caching layer complete\`.
 - Not useful: \`in requirements stage\`, \`doing discovery\`, \`working on implement\`.
 
 Update \`status.json\` at every meaningful transition:
 
-- **Stage start**: write the file with the current stage and \`is_waiting_for_user: false\`.
-- **Pausing for input**: set \`is_waiting_for_user: true\` and put the specific thing you're blocked on in \`brief_description\`.
-- **Resuming**: set \`is_waiting_for_user: false\` and update \`brief_description\` to the specific thing you're now doing.
-- **Stage done, waiting for approval to advance** (when gate is \`require_approval\`): set \`is_waiting_for_user: true\` AND \`awaiting_advance_approval: true\`, and put a concrete summary of what the user should review/approve in \`brief_description\`.
-- **Advancing**: flip both flags back to false and set \`stage\` to the next stage.
+- **Stage start**: write the file with the current stage and \`state: "working"\`.
+- **Blocked on a clarification**: set \`state: "waiting_for_input"\`; put the concrete ask in \`brief_description\`.
+- **Stage work complete, awaiting approval**: set \`state: "waiting_for_approval"\`; summarise what's ready.
+- **Resuming or advancing**: set \`state: "working"\` and update \`brief_description\` to what you're now doing; update \`stage\` if you're moving to the next one.
 
 ### Input mode: \`${inputMode}\`
 
@@ -1303,54 +1318,14 @@ ${stage === 'discovery'
   // Original per-stage content generator — the body that the user edits via
   // the stages screen. Kept private and wrapped by defaultStageFileContent()
   // so the status/gate protocol is always appended.
-  private defaultStageFileBody(stage: Exclude<TrackerStage, 'archive'>, settings?: Record<string, string>): string {
-    const n = this.STAGE_FILE_NUMBERS[stage];
+  private defaultStageFileBody(stage: Exclude<TrackerStage, 'archive' | 'backlog'>, settings?: Record<string, string>): string {
     const s = settings || {};
     const numbered = (items: (string | null)[]): string =>
       items.filter((x): x is string => !!x).map((x, i) => `${i + 1}. ${x}`).join('\n');
 
     switch (stage) {
-      case 'backlog': {
-        const effortEstimate = s['effort_estimate'] ?? 'rough';
-        const autoDiscover = s['auto_discover'] ?? 'prompt';
-
-        const effortStep =
-          effortEstimate === 'skip' ? null
-          : effortEstimate === 'detailed'
-            ? 'Assess effort: estimate story points or days, identify blockers and risks. Note this in `requirements.md`.'
-            : 'Assess rough effort and value — a t-shirt size (S/M/L/XL) is enough. Note it in `requirements.md`.';
-
-        const afterStep =
-          autoDiscover === 'auto'
-            ? 'Advance to discovery automatically — no need to prompt the user.'
-            : autoDiscover === 'manual'
-            ? 'Stop here. The user will manually trigger the next stage.'
-            : 'Use the ask_questions tool to ask: is this worth pursuing now, or should it stay in backlog?';
-
-        return `# Stage ${n}: Backlog
-
-**Goal**: Triage this item — clarify what it is, assess scope, decide whether to pursue.
-
-## Steps
-
-${numbered([
-  'Read the item title. Is it clear and actionable? Rewrite it if not.',
-  'Check the tracker for similar or duplicate items.',
-  effortStep,
-  'Write a short description of the item in `requirements.md` — what it is and why it matters. Not full requirements yet, just enough context to revisit later.',
-  afterStep,
-])}
-
-## Output
-
-`+"`"+`requirements.md`+"`"+` with a short description${effortEstimate !== 'skip' ? ' and effort estimate' : ''}.
-
-## Advancing
-
-When the user confirms pursuit: update the `+"`"+`tracker/index.json`+"`"+` (path is in the prompt, relative to cwd) to move the slug from `+"`"+`backlog.backlog`+"`"+` to `+"`"+`backlog.discovery`+"`"+`. Then read `+"`"+`tracker/stages/2-discovery.md`+"`"+` and continue.
-`;
-      }
-
+      // No 'backlog' case — the stage is deprecated (merged into discovery
+      // for display purposes) and `ensureStageFiles` doesn't emit backlog.md.
       case 'discovery': {
         // Effort = research scope (code + web). Asking the user is a
         // narrow, baked-in behaviour — not a tunable — because most
@@ -1370,10 +1345,10 @@ When the user confirms pursuit: update the `+"`"+`tracker/index.json`+"`"+` (pat
             case 'just_advance':
               return 'Advance silently.';
             case 'always_confirm':
-              return 'Summarise findings, wait for approval — set `is_waiting_for_user` + `awaiting_advance_approval` to true.';
+              return 'Summarise findings, set `state: "waiting_for_approval"` with a `brief_description` summarising what was found, and wait for approval.';
             case 'confirm_if_notable':
             default:
-              return 'If findings are notable (surprise, risk, pivot, conflict, alternative), summarise and wait for approval (set `is_waiting_for_user` + `awaiting_advance_approval` to true). Otherwise advance silently.';
+              return 'If findings are notable (surprise, risk, pivot, conflict, alternative), summarise and set `state: "waiting_for_approval"` with a `brief_description` summarising what was found. Otherwise advance silently.';
           }
         })();
 
@@ -1384,7 +1359,7 @@ When the user confirms pursuit: update the `+"`"+`tracker/index.json`+"`"+` (pat
             ? 'Problem; Context (code + research); Options (2+ with tradeoffs); Recommendation (reasoning + risks).'
             : 'Problem, Findings, Recommendation.';
 
-        return `# Stage ${n}: Discovery
+        return `# Discovery
 
 Research the problem — code and domain. Trivial items (typo, rename, doc): one-line \`notes.md\`, advance. Clarifying questions: only if the request itself is unreadable; "X or Y?" trade-offs belong in requirements.
 
@@ -1421,7 +1396,7 @@ Advance: set \`status.json.stage\` to \`requirements\`.
         }
         const minWords = detail === 'minimal' ? 30 : detail === 'thorough' ? 100 : 50;
 
-        return `# Stage ${n}: Requirements
+        return `# Requirements
 
 Document what to build. Always preserve the **Problem** and **Why** from \`notes.md\` — copy them verbatim; never paraphrase them away.
 
@@ -1476,7 +1451,7 @@ Minimum ${minWords} words of real content.
         if (implNotes === 'brief') outputLines.push('- `implementation.md`: what was built, key decisions, notes for cleanup');
         else if (implNotes === 'detailed') outputLines.push('- `implementation.md`: full implementation journal — decisions, rationale, architecture, known issues');
 
-        return `# Stage ${n}: Implement
+        return `# Implement
 
 **Goal**: Build the feature according to the requirements.
 
@@ -1490,7 +1465,7 @@ ${outputLines.join('\n')}
 
 ## Advancing
 
-When implementation is complete${tdd !== 'skip' ? ' and tests pass' : ''}: update the `+"`"+`tracker/index.json`+"`"+` (path is in the prompt, relative to cwd) slug to `+"`"+`implementation.cleanup`+"`"+`. Read `+"`"+`tracker/stages/5-cleanup.md`+"`"+` and continue.
+When implementation is complete${tdd !== 'skip' ? ' and tests pass' : ''}: update the `+"`"+`tracker/index.json`+"`"+` (path is in the prompt, relative to cwd) slug to `+"`"+`implementation.cleanup`+"`"+`. Read `+"`"+`tracker/stages/cleanup.md`+"`"+` and continue.
 `;
       }
 
@@ -1527,7 +1502,7 @@ When implementation is complete${tdd !== 'skip' ? ' and tests pass' : ''}: updat
         if (prPrep === 'notes') steps.push('Jot down key changes and decisions for the PR description.');
         else if (prPrep === 'full') steps.push('Write a full PR description: summary, changes made, how to test, screenshots or logs if applicable.');
 
-        return `# Stage ${n}: Cleanup
+        return `# Cleanup and submit
 
 **Goal**: Polish and ship. Review what was built, catch issues, get it across the finish line.
 

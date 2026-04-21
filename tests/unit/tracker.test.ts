@@ -136,41 +136,19 @@ describe('item status.json helpers', () => {
     const now = new Date().toISOString();
     const status: ItemStatus = {
       stage: 'discovery',
-      is_waiting_for_user: true,
+      state: 'waiting_for_input',
       brief_description: 'need approval on notes.md',
       timestamp: now,
-      awaiting_advance_approval: false,
     };
     service.writeItemStatus(tmpDir, SLUG, status);
     const roundTripped = service.getItemStatus(tmpDir, SLUG);
     expect(roundTripped).toEqual(status);
   });
 
-  test('awaiting_advance_approval round-trips and defaults to false when absent', () => {
-    seedItemDir();
-    service.writeItemStatus(tmpDir, SLUG, {
-      stage: 'requirements',
-      is_waiting_for_user: true,
-      awaiting_advance_approval: true,
-      brief_description: 'ready to review requirements.md',
-      timestamp: new Date().toISOString(),
-    });
-    const read = service.getItemStatus(tmpDir, SLUG);
-    expect(read?.awaiting_advance_approval).toBe(true);
-    // Writing one without the flag stores false.
-    service.writeItemStatus(tmpDir, SLUG, {
-      stage: 'requirements',
-      is_waiting_for_user: false,
-      brief_description: 'drafting',
-      timestamp: new Date().toISOString(),
-    });
-    expect(service.getItemStatus(tmpDir, SLUG)?.awaiting_advance_approval).toBe(false);
-  });
-
   test('writeItemStatus creates the item dir when missing and writes there', () => {
     const status: ItemStatus = {
       stage: 'backlog',
-      is_waiting_for_user: false,
+      state: 'working',
       brief_description: 'working',
       timestamp: new Date().toISOString(),
     };
@@ -184,7 +162,7 @@ describe('item status.json helpers', () => {
     const longReason = 'x'.repeat(500);
     service.writeItemStatus(tmpDir, SLUG, {
       stage: 'requirements',
-      is_waiting_for_user: true,
+      state: 'waiting_for_input',
       brief_description: longReason,
       timestamp: new Date().toISOString(),
     });
@@ -204,11 +182,45 @@ describe('item status.json helpers', () => {
     expect(service.getItemStatus(tmpDir, SLUG)).toBeNull();
   });
 
+  test('getItemStatus accepts the three state values', () => {
+    const dir = seedItemDir();
+    const ts = new Date().toISOString();
+    for (const state of ['working', 'waiting_for_input', 'waiting_for_approval'] as const) {
+      fs.writeFileSync(path.join(dir, 'status.json'), JSON.stringify({
+        stage: 'implement', state, brief_description: '', timestamp: ts,
+      }));
+      expect(service.getItemStatus(tmpDir, SLUG)?.state).toBe(state);
+    }
+  });
+
+  test('getItemStatus maps legacy boolean schema to the new state enum', () => {
+    const dir = seedItemDir();
+    const ts = new Date().toISOString();
+    // Old single-bool schema: waiting → waiting_for_input.
+    fs.writeFileSync(path.join(dir, 'status.json'), JSON.stringify({
+      stage: 'implement', is_waiting_for_user: true, brief_description: '', timestamp: ts,
+    }));
+    expect(service.getItemStatus(tmpDir, SLUG)?.state).toBe('waiting_for_input');
+
+    // Old dual-bool schema: awaiting_advance_approval wins → waiting_for_approval.
+    fs.writeFileSync(path.join(dir, 'status.json'), JSON.stringify({
+      stage: 'implement', is_waiting_for_user: true, awaiting_advance_approval: true,
+      brief_description: '', timestamp: ts,
+    }));
+    expect(service.getItemStatus(tmpDir, SLUG)?.state).toBe('waiting_for_approval');
+
+    // Not waiting at all → working.
+    fs.writeFileSync(path.join(dir, 'status.json'), JSON.stringify({
+      stage: 'implement', is_waiting_for_user: false, brief_description: '', timestamp: ts,
+    }));
+    expect(service.getItemStatus(tmpDir, SLUG)?.state).toBe('working');
+  });
+
   test('isItemStatusStale is true when timestamp is older than 24h', () => {
     const old = new Date(Date.now() - ITEM_STATUS_STALE_MS - 1000).toISOString();
     expect(service.isItemStatusStale({
       stage: 'implement',
-      is_waiting_for_user: true,
+      state: 'waiting_for_input',
       brief_description: '',
       timestamp: old,
     })).toBe(true);
@@ -217,7 +229,7 @@ describe('item status.json helpers', () => {
   test('isItemStatusStale is false for a fresh timestamp', () => {
     expect(service.isItemStatusStale({
       stage: 'implement',
-      is_waiting_for_user: true,
+      state: 'waiting_for_input',
       brief_description: '',
       timestamp: new Date().toISOString(),
     })).toBe(false);
@@ -226,7 +238,7 @@ describe('item status.json helpers', () => {
   test('isItemStatusStale is true when timestamp is unparseable', () => {
     expect(service.isItemStatusStale({
       stage: 'implement',
-      is_waiting_for_user: true,
+      state: 'waiting_for_input',
       brief_description: '',
       timestamp: 'not-a-date',
     })).toBe(true);
@@ -243,7 +255,7 @@ describe('getItemStage / listItemsByStage', () => {
     // index.json has it in discovery, status.json will report implement
     service.writeItemStatus(tmpDir, SLUG, {
       stage: 'implement',
-      is_waiting_for_user: false,
+      state: 'working',
       brief_description: 'writing code',
       timestamp: new Date().toISOString(),
     });
@@ -265,7 +277,7 @@ describe('getItemStage / listItemsByStage', () => {
     service.createItem(tmpDir, 'Two', 'implement', 'two');
     service.writeItemStatus(tmpDir, 'one', {
       stage: 'requirements',
-      is_waiting_for_user: false,
+      state: 'working',
       brief_description: '',
       timestamp: new Date().toISOString(),
     });
@@ -283,22 +295,25 @@ describe('moveItem mirrors stage into status.json', () => {
     expect(service.moveItem(tmpDir, 'moves', 'requirements')).toBe(true);
     const status = service.getItemStatus(tmpDir, 'moves');
     expect(status?.stage).toBe('requirements');
-    expect(status?.is_waiting_for_user).toBe(false);
+    expect(status?.state).toBe('working');
   });
 
-  test('preserves is_waiting_for_user across a move', () => {
-    service.createItem(tmpDir, 'Waiting', 'discovery', 'waits');
-    service.writeItemStatus(tmpDir, 'waits', {
-      stage: 'discovery',
-      is_waiting_for_user: true,
-      brief_description: 'pre-move wait',
+  test('advancing resets state to working and clears brief_description', () => {
+    // Advancing is typically the approval of a waiting_for_approval state —
+    // the previous brief ("caching layer complete") describes finished work,
+    // so the new stage should start fresh.
+    service.createItem(tmpDir, 'Approved', 'implement', 'approved');
+    service.writeItemStatus(tmpDir, 'approved', {
+      stage: 'implement',
+      state: 'waiting_for_approval',
+      brief_description: 'caching layer complete',
       timestamp: new Date().toISOString(),
     });
-    service.moveItem(tmpDir, 'waits', 'requirements');
-    const status = service.getItemStatus(tmpDir, 'waits');
-    expect(status?.stage).toBe('requirements');
-    expect(status?.is_waiting_for_user).toBe(true);
-    expect(status?.brief_description).toBe('pre-move wait');
+    service.moveItem(tmpDir, 'approved', 'cleanup');
+    const status = service.getItemStatus(tmpDir, 'approved');
+    expect(status?.stage).toBe('cleanup');
+    expect(status?.state).toBe('working');
+    expect(status?.brief_description).toBe('');
   });
 
   test('archive move does not write status.json', () => {
@@ -321,7 +336,9 @@ describe('defaultStageFileContent renders status + gate protocol', () => {
     const content = service.defaultStageFileContent(stage, {});
     expect(content).toContain('Agent status protocol');
     expect(content).toContain('status.json');
-    expect(content).toContain('is_waiting_for_user');
+    // The three-state enum is the canonical waiting signal.
+    expect(content).toContain('waiting_for_input');
+    expect(content).toContain('waiting_for_approval');
   });
 
   test.each(STAGES)('every stage renders the Input mode section', (stage) => {
@@ -427,9 +444,10 @@ describe('defaultStageFileContent renders status + gate protocol', () => {
     expect(clean).toMatch(/Gate on advance: `require_approval`/);
   });
 
-  test('require_approval gate instructs the agent to set awaiting_advance_approval', () => {
+  test('require_approval gate tells the agent to use waiting_for_approval state', () => {
     const content = service.defaultStageFileContent('requirements', {gate_on_advance: 'require_approval'});
-    expect(content).toContain('awaiting_advance_approval');
+    expect(content).toContain('waiting_for_approval');
+    expect(content).toMatch(/do not update.*stage.*until.*approves/i);
   });
 
   test('protocol tells the agent brief_description is about substance, not the stage', () => {
@@ -695,31 +713,6 @@ describe('loadStagesConfig / saveStageSettings', () => {
 // ─── defaultStageFileContent ─────────────────────────────────────────────────
 
 describe('defaultStageFileContent', () => {
-  test('backlog: default content has goal and steps', () => {
-    const content = service.defaultStageFileContent('backlog');
-    expect(content).toContain('# Stage 1: Backlog');
-    expect(content).toContain('Goal');
-    expect(content).toContain('Steps');
-    expect(content).toContain('Advancing');
-  });
-
-  test('backlog: effort_estimate=skip omits effort step', () => {
-    const withSkip = service.defaultStageFileContent('backlog', {effort_estimate: 'skip'});
-    const withRough = service.defaultStageFileContent('backlog', {effort_estimate: 'rough'});
-    expect(withSkip).not.toContain('t-shirt');
-    expect(withRough).toContain('t-shirt');
-  });
-
-  test('backlog: auto_discover=auto says advance automatically', () => {
-    const content = service.defaultStageFileContent('backlog', {auto_discover: 'auto'});
-    expect(content).toContain('automatically');
-  });
-
-  test('backlog: auto_discover=manual says stop here', () => {
-    const content = service.defaultStageFileContent('backlog', {auto_discover: 'manual'});
-    expect(content).toContain('Stop here');
-  });
-
   test('discovery: effort=skim stays minimal (no codebase-scan or web-search prose)', () => {
     const body = service.defaultStageFileContent('discovery', {effort: 'skim'}).split('## Agent status protocol')[0];
     expect(body).toContain('Skim codebase');
@@ -869,7 +862,7 @@ describe('ensureStageFiles', () => {
   test('creates all stage files and overview', () => {
     service.ensureStageFiles(tmpDir);
     const stagesDir = service.getStagesDir(tmpDir);
-    expect(fs.existsSync(path.join(stagesDir, '0-overview.md'))).toBe(true);
+    expect(fs.existsSync(path.join(stagesDir, 'overview.md'))).toBe(true);
     for (const stage of ['discovery', 'requirements', 'implement', 'cleanup'] as const) {
       expect(fs.existsSync(service.getStageFilePath(tmpDir, stage))).toBe(true);
     }

@@ -5,7 +5,7 @@ import {TrackerService, StagesConfig, TrackerStage, WorkStyle, STAGE_LABELS} fro
 import {RalphConfig, loadRalphConfig, saveRalphConfig} from '../cores/RalphCore.js';
 import {useTerminalDimensions} from '../hooks/useTerminalDimensions.js';
 
-const STAGE_KEYS: Exclude<TrackerStage, 'archive'>[] = ['discovery', 'requirements', 'implement', 'cleanup'];
+const STAGE_KEYS: Exclude<TrackerStage, 'archive' | 'backlog'>[] = ['discovery', 'requirements', 'implement', 'cleanup'];
 const ALL_TABS = [...STAGE_KEYS, 'style', 'ralph'] as const;
 
 interface OptionDef {
@@ -17,13 +17,22 @@ interface OptionDef {
 // Gate is per-stage (different stages want different approval semantics).
 // Two values: auto-advance (agent writes a review when appropriate then
 // advances without asking) or require approval (agent pauses for the user).
+// Label carries the stage context so options stay terse and generic — no
+// redundant "…before cleanup / …before implementing" repetition.
 // Input mode is project-global — lives on the Style tab (STYLE_OPTIONS).
-const COMMON_STAGE_OPTIONS: OptionDef[] = [
-  {key: 'gate_on_advance', label: 'Gate on advance', choices: [
-    {value: 'auto_advance', label: 'Auto-advance'},
-    {value: 'require_approval', label: 'Require approval'},
-  ]},
-];
+function gateOptionFor(stage: 'requirements' | 'implement' | 'cleanup'): OptionDef {
+  const label = stage === 'requirements' ? 'After requirements'
+    : stage === 'implement' ? 'After implementation'
+    : 'After cleanup and submit';
+  return {
+    key: 'gate_on_advance',
+    label,
+    choices: [
+      {value: 'auto_advance', label: 'Move on'},
+      {value: 'require_approval', label: 'Ask me first'},
+    ],
+  };
+}
 
 // Per-stage structured options (different per stage)
 const STAGE_OPTION_DEFS: Partial<Record<Exclude<TrackerStage, 'archive'>, OptionDef[]>> = {
@@ -60,7 +69,7 @@ const STAGE_OPTION_DEFS: Partial<Record<Exclude<TrackerStage, 'archive'>, Option
       {value: 'standard', label: 'Standard'},
       {value: 'thorough', label: 'Thorough'},
     ]},
-    ...COMMON_STAGE_OPTIONS,
+    gateOptionFor('requirements'),
   ],
   implement: [
     {key: 'start_with', label: 'Start with', choices: [
@@ -83,7 +92,7 @@ const STAGE_OPTION_DEFS: Partial<Record<Exclude<TrackerStage, 'archive'>, Option
       {value: 'brief', label: 'Brief'},
       {value: 'detailed', label: 'Detailed'},
     ]},
-    ...COMMON_STAGE_OPTIONS,
+    gateOptionFor('implement'),
   ],
   cleanup: [
     {key: 'scope', label: 'Scope', choices: [
@@ -106,7 +115,7 @@ const STAGE_OPTION_DEFS: Partial<Record<Exclude<TrackerStage, 'archive'>, Option
       {value: 'notes', label: 'Key notes'},
       {value: 'full', label: 'Full description'},
     ]},
-    ...COMMON_STAGE_OPTIONS,
+    gateOptionFor('cleanup'),
     {key: 'submit', label: 'Submit (PR)', choices: [
       {value: 'approve', label: 'Wait for approval'},
       {value: 'auto', label: 'Auto-submit'},
@@ -243,7 +252,7 @@ export default function TrackerStagesScreen({projectPath, onBack}: TrackerStages
   const currentTab = ALL_TABS[selectedTab];
   const isStyleTab = currentTab === 'style';
   const isRalphTab = currentTab === 'ralph';
-  const currentStage = isStyleTab || isRalphTab ? null : currentTab as Exclude<TrackerStage, 'archive'>;
+  const currentStage = isStyleTab || isRalphTab ? null : currentTab as Exclude<TrackerStage, 'archive' | 'backlog'>;
   const stageOpts = currentStage ? (STAGE_OPTION_DEFS[currentStage] || []) : [];
   const stageSettings = currentStage ? (config[currentStage].settings || {}) : {};
 

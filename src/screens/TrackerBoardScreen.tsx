@@ -626,15 +626,14 @@ export default function TrackerBoardScreen({
             const isWorking = aiStatus === 'working' || aiStatus === 'active';
             const hasSession = !!sessWt;
 
-            // Ralph waiting signal: the agent self-reported is_waiting_for_user
-            // in status.json. `awaiting_advance_approval` is a distinct subset
-            // ("stage work complete, waiting for your go-ahead to advance") —
-            // we give it its own green "ready to advance" treatment because
-            // that's the moment the human most wants to spot at a glance.
+            // Ralph status signal: the agent self-reported a non-working
+            // state in status.json. `waiting_for_approval` gets its own green
+            // "ready to advance" treatment so it's spottable at a glance and
+            // can be acted on with the `m` shortcut from the board.
             const itemStatus = service.getItemStatus(projectPath, item.slug);
             const statusFresh = !!itemStatus && !service.isItemStatusStale(itemStatus);
-            const readyToAdvance = statusFresh && !!itemStatus!.awaiting_advance_approval;
-            const ralphWaiting = statusFresh && !!itemStatus!.is_waiting_for_user && !readyToAdvance;
+            const readyToAdvance = statusFresh && itemStatus!.state === 'waiting_for_approval';
+            const ralphWaiting = statusFresh && itemStatus!.state === 'waiting_for_input';
             const isWaiting = aiWaiting || ralphWaiting;
 
             const statusGlyph =
@@ -654,15 +653,16 @@ export default function TrackerBoardScreen({
             const secMax = Math.max(4, colWidth - 8);
             const secondary = !hasSession ? renderSecondary(item) : '';
 
-            // Prefer the agent's own brief_description over the generic
-            // "waiting for you" label when the ralph flag is set — it tells
-            // the human exactly what needs attention.
+            // Prefer the agent's own brief_description when available.
             const waitingLabel = ralphWaiting && itemStatus?.brief_description
               ? itemStatus.brief_description
               : 'waiting for you';
-            const readyLabel = itemStatus?.brief_description
-              ? `READY TO ADVANCE — ${itemStatus.brief_description}`
-              : 'READY TO ADVANCE';
+            const readyLabel = (() => {
+              const brief = itemStatus?.brief_description
+                ? `READY TO ADVANCE — ${itemStatus.brief_description}`
+                : 'READY TO ADVANCE';
+              return isSelected ? `${brief}  ·  [m] approve` : brief;
+            })();
 
             return (
               <Box key={item.slug} flexDirection="column" marginBottom={1} flexShrink={0}>

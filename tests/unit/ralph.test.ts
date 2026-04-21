@@ -61,7 +61,7 @@ afterEach(() => {
 function writeStatus(slug: string, status: Partial<ItemStatus>): void {
   tracker.writeItemStatus(projectPath, slug, {
     stage: 'discovery',
-    is_waiting_for_user: false,
+    state: 'working',
     brief_description: '',
     timestamp: new Date().toISOString(),
     ...status,
@@ -136,7 +136,7 @@ describe('buildNudgeText', () => {
   test('references stage guide path and output file', () => {
     const text = buildNudgeText({slug: 'abc', stage: 'discovery', inputMode: 'ask_questions', gateOnAdvance: 'none'});
     expect(text).toContain('discovery');
-    expect(text).toContain('2-discovery.md');
+    expect(text).toContain('stages/discovery.md');
     expect(text).toContain('notes.md');
   });
 
@@ -158,9 +158,10 @@ describe('buildNudgeText', () => {
     expect(text.toLowerCase()).not.toContain('ralph');
   });
 
-  test('reminds the agent to flip is_waiting_for_user when they need input', () => {
+  test('reminds the agent to set the right state when waiting', () => {
     const text = buildNudgeText({slug: 'abc', stage: 'requirements', inputMode: 'inline', gateOnAdvance: 'require_approval'});
-    expect(text).toContain('is_waiting_for_user');
+    expect(text).toContain('waiting_for_input');
+    expect(text).toContain('waiting_for_approval');
     expect(text).toMatch(/brief_description/);
   });
 
@@ -199,9 +200,9 @@ describe('RalphCore safety invariants', () => {
     expect(tmux.sent.length).toBe(0);
   });
 
-  test('never sends a nudge when status.json has a fresh is_waiting_for_user=true', () => {
+  test('never sends a nudge when status.json has a fresh waiting_for_input state', () => {
     enableRalph();
-    writeStatus('my-slug', {is_waiting_for_user: true, brief_description: 'waiting on user'});
+    writeStatus('my-slug', {state: 'waiting_for_input', brief_description: 'waiting on user'});
     const t0 = Date.now();
     const wt = makeWorktree({ai_status: 'idle'});
     // First sample seeds the stall window; second advances past the threshold.
@@ -213,19 +214,14 @@ describe('RalphCore safety invariants', () => {
     expect(tmux.sent.length).toBe(0);
   });
 
-  test('never sends a nudge when awaiting_advance_approval is set (even without is_waiting_for_user)', () => {
-    // The agent may end up with only awaiting_advance_approval true (work is
-    // done, just waiting for user sign-off). That's still a legitimate
-    // human-pause — ralph must treat it the same as is_waiting_for_user.
+  test('never sends a nudge when status.json has a fresh waiting_for_approval state', () => {
+    // waiting_for_approval is a legitimate pause — the agent finished the
+    // stage and is waiting for human sign-off. Ralph must leave it alone.
     enableRalph();
-    writeStatus('my-slug', {
-      is_waiting_for_user: false,
-      awaiting_advance_approval: true,
-      brief_description: 'ready to advance from requirements',
-    });
+    writeStatus('my-slug', {state: 'waiting_for_approval', brief_description: 'caching layer complete'});
     const t0 = Date.now();
-    let now = t0;
     const wt = makeWorktree({ai_status: 'idle'});
+    let now = t0;
     const {core, tmux} = buildCore({worktrees: [wt], now: () => now});
     core.sampleOnce();
     now = t0 + 10 * 60 * 1000;
@@ -338,7 +334,7 @@ describe('RalphCore detection + cap + resets', () => {
     core.sampleOnce();
     expect(tmux.sent.length).toBe(1);
     // Agent sets is_waiting_for_user: true
-    writeStatus('my-slug', {is_waiting_for_user: true, brief_description: 'reviewing'});
+    writeStatus('my-slug', {state: 'waiting_for_input', brief_description: 'reviewing'});
     now = t0 + 240_000;
     core.sampleOnce();
     const state = core.get().worktrees['proj::my-slug'];
@@ -349,7 +345,7 @@ describe('RalphCore detection + cap + resets', () => {
   test('ignores stale waiting flags (> 24h old)', () => {
     enableRalph({idleThresholdMs: 60_000});
     const oldTimestamp = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
-    writeStatus('my-slug', {is_waiting_for_user: true, brief_description: 'stale', timestamp: oldTimestamp});
+    writeStatus('my-slug', {state: 'waiting_for_input', brief_description: 'stale', timestamp: oldTimestamp});
     const t0 = Date.now();
     let now = t0;
     const wt = makeWorktree({ai_status: 'idle'});
@@ -404,7 +400,7 @@ describe('RalphCore full fake-agent flow', () => {
     // Fake agent begins the stage and marks itself waiting on the user.
     writeStatus('my-slug', {
       stage: 'requirements',
-      is_waiting_for_user: true,
+      state: 'waiting_for_input',
       brief_description: 'awaiting approval',
     });
 
@@ -422,7 +418,7 @@ describe('RalphCore full fake-agent flow', () => {
     // User responds; agent clears the waiting flag and keeps working.
     writeStatus('my-slug', {
       stage: 'requirements',
-      is_waiting_for_user: false,
+      state: 'working',
       brief_description: 'drafting section 2',
     });
 
@@ -450,7 +446,7 @@ describe('RalphCore full fake-agent flow', () => {
     // Agent advances the stage (or a human does via moveItem, same effect).
     writeStatus('my-slug', {
       stage: 'implement',
-      is_waiting_for_user: false,
+      state: 'working',
       brief_description: 'writing RalphCore',
     });
     now = t0 + 31 * 60_000;

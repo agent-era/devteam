@@ -165,7 +165,7 @@ export function WorktreeProvider({children, core: coreOverride}: WorktreeProvide
       const cfg = loadRalphConfig(projectPath);
       if (!status && !ralphWt) return wt;
       const freshWaiting =
-        !!status && status.is_waiting_for_user && !trackerRef.current.isItemStatusStale(status);
+        !!status && status.state !== 'working' && !trackerRef.current.isItemStatusStale(status);
       const decorated = new WorktreeInfo({...wt});
       decorated.ralph = {
         is_waiting_for_user: freshWaiting,
