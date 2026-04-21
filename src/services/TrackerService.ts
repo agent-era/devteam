@@ -595,6 +595,10 @@ export class TrackerService {
   // (which is the live self-report), then falls back to index.json bucket
   // membership, then to 'backlog' if the slug is unknown. Never returns null
   // for a known slug — an item always has a stage somewhere.
+  // The staleness guard used by ralph (`isItemWaiting`) deliberately doesn't
+  // apply here: the last stage the agent wrote is still the correct stage
+  // even if the agent crashed 48h ago — nothing would auto-revert it — so
+  // stage reads trust status.json unconditionally.
   getItemStage(projectPath: string, slug: string): TrackerStage {
     const status = this.getItemStatus(projectPath, slug);
     if (status) return status.stage;
@@ -605,15 +609,14 @@ export class TrackerService {
   // Enumerate every known active item grouped by stage. Stage for each slug
   // comes from status.json first; unmigrated items fall back to the index
   // buckets. Archived items are listed verbatim from index.archive.
+  // Maps each index-known slug to its canonical stage, with any fresh
+  // status.json stage overriding the index bucket. Slugs that exist only in
+  // tracker/items/<slug>/ but aren't yet in the index aren't surfaced —
+  // callers that need orphan-detection should scan the directory themselves.
   listItemsByStage(projectPath: string): Map<string, TrackerStage> {
     const index = this.readIndex(projectPath);
     const out = this.createStageBySlug(index);
-    // Override with status.json where present, so the agent's live self-report
-    // wins over the index buckets.
-    const knownSlugs = new Set(out.keys());
-    // Also surface slugs that have a status.json but aren't in the index yet
-    // (e.g., an agent wrote status.json before the index was updated).
-    for (const slug of knownSlugs) {
+    for (const slug of out.keys()) {
       const status = this.getItemStatus(projectPath, slug);
       if (status) out.set(slug, status.stage);
     }
