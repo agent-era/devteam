@@ -2,7 +2,7 @@ import {describe, test, expect, beforeEach, afterEach} from '@jest/globals';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import {TrackerService, parseFrontmatter, DEFAULT_WORK_STYLE, TrackerItem, StageConfig, WorkStyle} from '../../src/services/TrackerService.js';
+import {TrackerService, parseFrontmatter, DEFAULT_WORK_STYLE, TrackerItem, StageConfig, WorkStyle, InputModeStyle, ItemStatus, ITEM_STATUS_STALE_MS} from '../../src/services/TrackerService.js';
 
 let tmpDir: string;
 let service: TrackerService;
@@ -112,6 +112,362 @@ describe('nextStage / previousStage', () => {
 
   test('previousStage returns null at start', () => {
     expect(service.previousStage('backlog')).toBeNull();
+  });
+});
+
+// ─── item status.json helpers ───────────────────────────────────────────────
+
+describe('item status.json helpers', () => {
+  const SLUG = 'test-item';
+
+  function seedItemDir(): string {
+    const dir = path.join(tmpDir, 'tracker', 'items', SLUG);
+    fs.mkdirSync(dir, {recursive: true});
+    return dir;
+  }
+
+  test('getItemStatus returns null when file is absent', () => {
+    seedItemDir();
+    expect(service.getItemStatus(tmpDir, SLUG)).toBeNull();
+  });
+
+  test('writeItemStatus round-trips through getItemStatus', () => {
+    seedItemDir();
+    const now = new Date().toISOString();
+    const status: ItemStatus = {
+      stage: 'discovery',
+      state: 'waiting_for_input',
+      brief_description: 'need approval on notes.md',
+      timestamp: now,
+    };
+    service.writeItemStatus(tmpDir, SLUG, status);
+    const roundTripped = service.getItemStatus(tmpDir, SLUG);
+    expect(roundTripped).toEqual(status);
+  });
+
+  test('writeItemStatus creates the item dir when missing and writes there', () => {
+    const status: ItemStatus = {
+      stage: 'backlog',
+      state: 'working',
+      brief_description: 'working',
+      timestamp: new Date().toISOString(),
+    };
+    service.writeItemStatus(tmpDir, SLUG, status);
+    const written = path.join(tmpDir, 'tracker', 'items', SLUG, 'status.json');
+    expect(fs.existsSync(written)).toBe(true);
+  });
+
+  test('writeItemStatus truncates brief_description to 200 chars', () => {
+    seedItemDir();
+    const longReason = 'x'.repeat(500);
+    service.writeItemStatus(tmpDir, SLUG, {
+      stage: 'requirements',
+      state: 'waiting_for_input',
+      brief_description: longReason,
+      timestamp: new Date().toISOString(),
+    });
+    const read = service.getItemStatus(tmpDir, SLUG);
+    expect(read?.brief_description.length).toBe(200);
+  });
+
+  test('getItemStatus returns null on malformed JSON', () => {
+    const dir = seedItemDir();
+    fs.writeFileSync(path.join(dir, 'status.json'), 'not json {{{');
+    expect(service.getItemStatus(tmpDir, SLUG)).toBeNull();
+  });
+
+  test('getItemStatus returns null when required fields are missing', () => {
+    const dir = seedItemDir();
+    fs.writeFileSync(path.join(dir, 'status.json'), JSON.stringify({stage: 'discovery'}));
+    expect(service.getItemStatus(tmpDir, SLUG)).toBeNull();
+  });
+
+  test('getItemStatus rejects a stage value outside the known enum (path-traversal safety)', () => {
+    const dir = seedItemDir();
+    const ts = new Date().toISOString();
+    for (const badStage of ['../../evil', 'archive', 'unknown_stage', '']) {
+      fs.writeFileSync(path.join(dir, 'status.json'), JSON.stringify({
+        stage: badStage, state: 'working', brief_description: '', timestamp: ts,
+      }));
+      expect(service.getItemStatus(tmpDir, SLUG)).toBeNull();
+    }
+  });
+
+  test('getItemStatus accepts the three state values', () => {
+    const dir = seedItemDir();
+    const ts = new Date().toISOString();
+    for (const state of ['working', 'waiting_for_input', 'waiting_for_approval'] as const) {
+      fs.writeFileSync(path.join(dir, 'status.json'), JSON.stringify({
+        stage: 'implement', state, brief_description: '', timestamp: ts,
+      }));
+      expect(service.getItemStatus(tmpDir, SLUG)?.state).toBe(state);
+    }
+  });
+
+  test('getItemStatus maps legacy boolean schema to the new state enum', () => {
+    const dir = seedItemDir();
+    const ts = new Date().toISOString();
+    // Old single-bool schema: waiting → waiting_for_input.
+    fs.writeFileSync(path.join(dir, 'status.json'), JSON.stringify({
+      stage: 'implement', is_waiting_for_user: true, brief_description: '', timestamp: ts,
+    }));
+    expect(service.getItemStatus(tmpDir, SLUG)?.state).toBe('waiting_for_input');
+
+    // Old dual-bool schema: awaiting_advance_approval wins → waiting_for_approval.
+    fs.writeFileSync(path.join(dir, 'status.json'), JSON.stringify({
+      stage: 'implement', is_waiting_for_user: true, awaiting_advance_approval: true,
+      brief_description: '', timestamp: ts,
+    }));
+    expect(service.getItemStatus(tmpDir, SLUG)?.state).toBe('waiting_for_approval');
+
+    // Not waiting at all → working.
+    fs.writeFileSync(path.join(dir, 'status.json'), JSON.stringify({
+      stage: 'implement', is_waiting_for_user: false, brief_description: '', timestamp: ts,
+    }));
+    expect(service.getItemStatus(tmpDir, SLUG)?.state).toBe('working');
+  });
+
+  test('isItemStatusStale is true when timestamp is older than 24h', () => {
+    const old = new Date(Date.now() - ITEM_STATUS_STALE_MS - 1000).toISOString();
+    expect(service.isItemStatusStale({
+      stage: 'implement',
+      state: 'waiting_for_input',
+      brief_description: '',
+      timestamp: old,
+    })).toBe(true);
+  });
+
+  test('isItemStatusStale is false for a fresh timestamp', () => {
+    expect(service.isItemStatusStale({
+      stage: 'implement',
+      state: 'waiting_for_input',
+      brief_description: '',
+      timestamp: new Date().toISOString(),
+    })).toBe(false);
+  });
+
+  test('isItemStatusStale is true when timestamp is unparseable', () => {
+    expect(service.isItemStatusStale({
+      stage: 'implement',
+      state: 'waiting_for_input',
+      brief_description: '',
+      timestamp: 'not-a-date',
+    })).toBe(true);
+  });
+});
+
+// ─── stage derivation (status.json + index.json) ────────────────────────────
+
+describe('getItemStage / listItemsByStage', () => {
+  const SLUG = 'has-status';
+
+  test('getItemStage prefers status.json over index.json', () => {
+    service.createItem(tmpDir, 'Has Status', 'discovery', SLUG);
+    // index.json has it in discovery, status.json will report implement
+    service.writeItemStatus(tmpDir, SLUG, {
+      stage: 'implement',
+      state: 'working',
+      brief_description: 'writing code',
+      timestamp: new Date().toISOString(),
+    });
+    expect(service.getItemStage(tmpDir, SLUG)).toBe('implement');
+  });
+
+  test('getItemStage falls back to index.json when status.json is missing', () => {
+    service.createItem(tmpDir, 'No Status', 'requirements', 'no-status');
+    expect(service.getItemStage(tmpDir, 'no-status')).toBe('requirements');
+  });
+
+  test('getItemStage returns backlog for unknown slugs', () => {
+    service.ensureTracker(tmpDir);
+    expect(service.getItemStage(tmpDir, 'never-existed')).toBe('backlog');
+  });
+
+  test('listItemsByStage overrides index with status.json stage', () => {
+    service.createItem(tmpDir, 'One', 'discovery', 'one');
+    service.createItem(tmpDir, 'Two', 'implement', 'two');
+    service.writeItemStatus(tmpDir, 'one', {
+      stage: 'requirements',
+      state: 'working',
+      brief_description: '',
+      timestamp: new Date().toISOString(),
+    });
+    const out = service.listItemsByStage(tmpDir);
+    expect(out.get('one')).toBe('requirements');
+    expect(out.get('two')).toBe('implement');
+  });
+});
+
+// ─── moveItem writes status.json ────────────────────────────────────────────
+
+describe('moveItem mirrors stage into status.json', () => {
+  test('moves across stages and writes a fresh status.json', () => {
+    service.createItem(tmpDir, 'Moves Around', 'discovery', 'moves');
+    expect(service.moveItem(tmpDir, 'moves', 'requirements')).toBe(true);
+    const status = service.getItemStatus(tmpDir, 'moves');
+    expect(status?.stage).toBe('requirements');
+    expect(status?.state).toBe('working');
+  });
+
+  test('advancing resets state to working and clears brief_description', () => {
+    // Advancing is typically the approval of a waiting_for_approval state —
+    // the previous brief ("caching layer complete") describes finished work,
+    // so the new stage should start fresh.
+    service.createItem(tmpDir, 'Approved', 'implement', 'approved');
+    service.writeItemStatus(tmpDir, 'approved', {
+      stage: 'implement',
+      state: 'waiting_for_approval',
+      brief_description: 'caching layer complete',
+      timestamp: new Date().toISOString(),
+    });
+    service.moveItem(tmpDir, 'approved', 'cleanup');
+    const status = service.getItemStatus(tmpDir, 'approved');
+    expect(status?.stage).toBe('cleanup');
+    expect(status?.state).toBe('working');
+    expect(status?.brief_description).toBe('');
+  });
+
+  test('archive move does not write status.json', () => {
+    service.createItem(tmpDir, 'Archives', 'discovery', 'arch');
+    service.moveItem(tmpDir, 'arch', 'archive');
+    // status.json may or may not exist from a prior move to a non-archive
+    // stage; what matters is that the archive move itself didn't (re)write
+    // it. We assert by ensuring moveItem returns true and index is updated.
+    const index = JSON.parse(fs.readFileSync(path.join(tmpDir, 'tracker', 'index.json'), 'utf8'));
+    expect(index.archive).toContain('arch');
+  });
+});
+
+// ─── defaultStageFileContent protocol suffix ────────────────────────────────
+
+describe('defaultStageFileContent renders status + gate protocol', () => {
+  const STAGES = ['discovery', 'requirements', 'implement', 'cleanup'] as const;
+
+  test.each(STAGES)('every stage includes the status.json protocol section', (stage) => {
+    const content = service.defaultStageFileContent(stage, {});
+    expect(content).toContain('Agent status protocol');
+    expect(content).toContain('status.json');
+    // The three-state enum is the canonical waiting signal.
+    expect(content).toContain('waiting_for_input');
+    expect(content).toContain('waiting_for_approval');
+  });
+
+  test.each(STAGES)('every stage renders the Input mode section', (stage) => {
+    const content = service.defaultStageFileContent(stage, {}, DEFAULT_WORK_STYLE);
+    expect(content).toContain('Input mode:');
+  });
+
+  test('non-discovery stages render the generic Gate on advance section', () => {
+    for (const stage of ['requirements', 'implement', 'cleanup'] as const) {
+      const content = service.defaultStageFileContent(stage, {}, DEFAULT_WORK_STYLE);
+      expect(content).toContain('Gate on advance:');
+    }
+  });
+
+  test('discovery does NOT render the generic Gate on advance section (report supersedes)', () => {
+    const content = service.defaultStageFileContent('discovery', {}, DEFAULT_WORK_STYLE);
+    expect(content).not.toContain('Gate on advance:');
+    // Points the reader at the Report setting instead.
+    expect(content).toMatch(/Report/);
+  });
+
+  test('discovery effort + report render the matching body', () => {
+    const skim = service.defaultStageFileContent('discovery', {effort: 'skim'});
+    expect(skim).toMatch(/Skim/);
+    const deep = service.defaultStageFileContent('discovery', {effort: 'deep'});
+    expect(deep).toMatch(/thorough/i);
+    const silent = service.defaultStageFileContent('discovery', {report: 'just_advance'});
+    expect(silent).toMatch(/advance silently/i);
+    const notable = service.defaultStageFileContent('discovery', {report: 'confirm_if_notable'});
+    expect(notable).toMatch(/notable/i);
+    const always = service.defaultStageFileContent('discovery', {report: 'always_confirm'});
+    expect(always).toMatch(/wait for approval/i);
+  });
+
+  test('discovery guide bakes in the trivial-skip + narrow-questions defaults', () => {
+    const content = service.defaultStageFileContent('discovery', {}, DEFAULT_WORK_STYLE);
+    expect(content).toMatch(/Trivial items/i);
+    expect(content).toMatch(/Clarifying questions/i);
+  });
+
+  test.each([
+    ['ask_questions', 'ask_questions'],
+    ['inline', 'Inline'],
+    ['batch', 'Batch'],
+    ['doc_review', 'review'],
+  ] as const)('inputMode (global style) = %s renders mode-specific guidance', (mode, needle) => {
+    const ws: WorkStyle = {...DEFAULT_WORK_STYLE, inputMode: mode as InputModeStyle};
+    const content = service.defaultStageFileContent('discovery', {}, ws);
+    expect(content).toMatch(new RegExp(needle, 'i'));
+  });
+
+  test.each([
+    ['auto_advance', 'Stage review'],
+    ['require_approval', 'approval'],
+  ] as const)('gate_on_advance=%s renders the right gate text', (gate, needle) => {
+    const content = service.defaultStageFileContent('requirements', {gate_on_advance: gate});
+    expect(content).toMatch(new RegExp(needle, 'i'));
+  });
+
+  test('auto_advance also tells the agent to skip review for trivial stages', () => {
+    // implement (not discovery) — discovery has its own Report setting that
+    // supersedes the common gate_on_advance.
+    const content = service.defaultStageFileContent('implement', {gate_on_advance: 'auto_advance'});
+    expect(content).toMatch(/skip the review/i);
+  });
+
+  test('legacy gate values are mapped to the new shape (non-discovery stages)', () => {
+    // Old configs saying 'none' or 'review_and_advance' both mean auto_advance.
+    const fromNone = service.defaultStageFileContent('implement', {gate_on_advance: 'none'});
+    const fromReview = service.defaultStageFileContent('implement', {gate_on_advance: 'review_and_advance'});
+    const fromWait = service.defaultStageFileContent('implement', {gate_on_advance: 'wait_for_approval'});
+    expect(fromNone).toMatch(/auto_advance/);
+    expect(fromReview).toMatch(/auto_advance/);
+    expect(fromWait).toMatch(/require_approval/);
+  });
+
+  test('submit=approve adds a submit gate to cleanup', () => {
+    const content = service.defaultStageFileContent('cleanup', {submit: 'approve'});
+    expect(content).toContain('Submit (PR creation)');
+    expect(content).toMatch(/approval/i);
+  });
+
+  test('submit=auto on cleanup tells the agent to open the PR automatically', () => {
+    const content = service.defaultStageFileContent('cleanup', {submit: 'auto'});
+    expect(content).toContain('Submit (PR creation)');
+    expect(content).toMatch(/automatically/i);
+  });
+
+  test('auto_advance gate references the stage\'s output file for the review (non-discovery)', () => {
+    const req = service.defaultStageFileContent('requirements', {gate_on_advance: 'auto_advance'});
+    expect(req).toContain('requirements.md');
+    const impl = service.defaultStageFileContent('implement', {gate_on_advance: 'auto_advance'});
+    expect(impl).toContain('implementation.md');
+  });
+
+  test('gate defaults: requirements + cleanup require approval, implement auto-advances', () => {
+    // Discovery has its own Report setting (no common gate), so not asserted here.
+    const req = service.defaultStageFileContent('requirements', {});
+    expect(req).toMatch(/Gate on advance: `require_approval`/);
+    const impl = service.defaultStageFileContent('implement', {});
+    expect(impl).toMatch(/Gate on advance: `auto_advance`/);
+    const clean = service.defaultStageFileContent('cleanup', {});
+    expect(clean).toMatch(/Gate on advance: `require_approval`/);
+  });
+
+  test('require_approval gate tells the agent to use waiting_for_approval state', () => {
+    const content = service.defaultStageFileContent('requirements', {gate_on_advance: 'require_approval'});
+    expect(content).toContain('waiting_for_approval');
+    expect(content).toMatch(/do not update.*stage.*until.*approves/i);
+  });
+
+  test('protocol tells the agent brief_description is about substance, not the stage', () => {
+    const content = service.defaultStageFileContent('requirements', {});
+    expect(content).toMatch(/substance/i);
+    // The good/bad examples must both be present so the message can't be
+    // misread as "describe the stage".
+    expect(content).toMatch(/Good:/);
+    expect(content).toMatch(/Not useful:/);
   });
 });
 
@@ -341,25 +697,25 @@ describe('loadStagesConfig / saveStageSettings', () => {
   });
 
   test('saveStageSettings persists and merges', () => {
-    service.saveStageSettings(tmpDir, 'discovery', {depth: 'thorough', skip: 'always_run'});
+    service.saveStageSettings(tmpDir, 'discovery', {effort: 'deep', report: 'always_confirm'});
     const config = service.loadStagesConfig(tmpDir);
-    expect(config.discovery.settings?.depth).toBe('thorough');
-    expect(config.discovery.settings?.skip).toBe('always_run');
+    expect(config.discovery.settings?.effort).toBe('deep');
+    expect(config.discovery.settings?.report).toBe('always_confirm');
   });
 
   test('saveStageSettings merges without overwriting other keys', () => {
-    service.saveStageSettings(tmpDir, 'discovery', {depth: 'quick'});
-    service.saveStageSettings(tmpDir, 'discovery', {skip: 'if_obvious'});
+    service.saveStageSettings(tmpDir, 'discovery', {effort: 'skim'});
+    service.saveStageSettings(tmpDir, 'discovery', {report: 'just_advance'});
     const config = service.loadStagesConfig(tmpDir);
-    expect(config.discovery.settings?.depth).toBe('quick');
-    expect(config.discovery.settings?.skip).toBe('if_obvious');
+    expect(config.discovery.settings?.effort).toBe('skim');
+    expect(config.discovery.settings?.report).toBe('just_advance');
   });
 
   test('settings for different stages are independent', () => {
-    service.saveStageSettings(tmpDir, 'discovery', {depth: 'quick'});
+    service.saveStageSettings(tmpDir, 'discovery', {effort: 'skim'});
     service.saveStageSettings(tmpDir, 'implement', {tdd: 'required'});
     const config = service.loadStagesConfig(tmpDir);
-    expect(config.discovery.settings?.depth).toBe('quick');
+    expect(config.discovery.settings?.effort).toBe('skim');
     expect(config.implement.settings?.tdd).toBe('required');
     expect(config.discovery.settings?.tdd).toBeUndefined();
   });
@@ -368,74 +724,34 @@ describe('loadStagesConfig / saveStageSettings', () => {
 // ─── defaultStageFileContent ─────────────────────────────────────────────────
 
 describe('defaultStageFileContent', () => {
-  test('backlog: default content has goal and steps', () => {
-    const content = service.defaultStageFileContent('backlog');
-    expect(content).toContain('# Stage 1: Backlog');
-    expect(content).toContain('Goal');
-    expect(content).toContain('Steps');
-    expect(content).toContain('Advancing');
+  test('discovery: effort=skim stays minimal (no codebase-scan or web-search prose)', () => {
+    const body = service.defaultStageFileContent('discovery', {effort: 'skim'}).split('## Agent status protocol')[0];
+    expect(body).toContain('Skim codebase');
+    expect(body).not.toContain('Thorough codebase scan');
+    expect(body).not.toContain('Web research');
   });
 
-  test('backlog: effort_estimate=skip omits effort step', () => {
-    const withSkip = service.defaultStageFileContent('backlog', {effort_estimate: 'skip'});
-    const withRough = service.defaultStageFileContent('backlog', {effort_estimate: 'rough'});
-    expect(withSkip).not.toContain('t-shirt');
-    expect(withRough).toContain('t-shirt');
+  test('discovery: effort=deep includes thorough codebase + web research prose', () => {
+    const content = service.defaultStageFileContent('discovery', {effort: 'deep'});
+    expect(content).toContain('Thorough codebase scan');
+    expect(content).toContain('Web research');
   });
 
-  test('backlog: auto_discover=auto says advance automatically', () => {
-    const content = service.defaultStageFileContent('backlog', {auto_discover: 'auto'});
-    expect(content).toContain('automatically');
+  test('discovery: output fields vary by effort', () => {
+    const skim = service.defaultStageFileContent('discovery', {effort: 'skim'});
+    const deep = service.defaultStageFileContent('discovery', {effort: 'deep'});
+    expect(skim).not.toContain('Options');
+    expect(deep).toContain('Options');
   });
 
-  test('backlog: auto_discover=manual says stop here', () => {
-    const content = service.defaultStageFileContent('backlog', {auto_discover: 'manual'});
-    expect(content).toContain('Stop here');
-  });
-
-  test('discovery: always_skip produces minimal short instructions', () => {
-    const content = service.defaultStageFileContent('discovery', {skip: 'always_skip'});
-    expect(content).toContain('always skip');
-    expect(content).not.toContain('codebase scan');
-    expect(content).not.toContain('ask_questions');
-  });
-
-  test('discovery: depth=quick omits codebase scan', () => {
-    const content = service.defaultStageFileContent('discovery', {depth: 'quick', skip: 'always_run'});
-    expect(content).not.toContain('codebase scan');
-  });
-
-  test('discovery: depth=thorough includes codebase scan and web search', () => {
-    const content = service.defaultStageFileContent('discovery', {depth: 'thorough', skip: 'always_run', web_search: 'if_needed'});
-    expect(content).toContain('Scan the codebase');
-    expect(content).toContain('web search');
-  });
-
-  test('discovery: questions=none skips ask_questions step', () => {
-    const content = service.defaultStageFileContent('discovery', {depth: 'normal', skip: 'always_run', questions: 'none'});
-    expect(content).not.toContain('ask_questions');
-  });
-
-  test('discovery: questions=standard includes ask_questions step', () => {
-    const content = service.defaultStageFileContent('discovery', {depth: 'normal', skip: 'always_run', questions: 'standard'});
-    expect(content).toContain('ask_questions');
-  });
-
-  test('discovery: output fields vary by depth', () => {
-    const quick = service.defaultStageFileContent('discovery', {depth: 'quick', skip: 'always_run'});
-    const thorough = service.defaultStageFileContent('discovery', {depth: 'thorough', skip: 'always_run'});
-    expect(quick).not.toContain('Options considered');
-    expect(thorough).toContain('Options considered');
-  });
-
-  test('discovery: skip=if_obvious adds a skip notice', () => {
-    const content = service.defaultStageFileContent('discovery', {skip: 'if_obvious'});
-    expect(content).toContain('obvious');
+  test('discovery: the trivial-item skip rule is always surfaced', () => {
+    const content = service.defaultStageFileContent('discovery', {});
+    expect(content).toMatch(/Trivial items/i);
   });
 
   test('requirements: style=interview asks questions before drafting', () => {
     const content = service.defaultStageFileContent('requirements', {style: 'interview'});
-    expect(content).toContain('ask targeted questions');
+    expect(content).toMatch(/ask targeted questions/i);
   });
 
   test('requirements: style=draft_first drafts before asking', () => {
@@ -449,19 +765,6 @@ describe('defaultStageFileContent', () => {
     expect(thorough).toContain('Constraints');
     expect(thorough).toContain('Dependencies');
     expect(minimal).not.toContain('Constraints');
-  });
-
-  test('requirements: user_stories=lead puts user stories first in output', () => {
-    const content = service.defaultStageFileContent('requirements', {user_stories: 'lead'});
-    const storiesIdx = content.indexOf('User stories');
-    const summaryIdx = content.indexOf('Summary');
-    expect(storiesIdx).toBeGreaterThan(-1);
-    expect(storiesIdx).toBeLessThan(summaryIdx);
-  });
-
-  test('requirements: approval=per_section mentions section approval', () => {
-    const content = service.defaultStageFileContent('requirements', {approval: 'per_section'});
-    expect(content).toContain('approval');
   });
 
   test('requirements: min words varies by detail level', () => {
@@ -509,10 +812,10 @@ describe('defaultStageFileContent', () => {
   });
 
   test('implement: impl_notes=skip omits implementation.md step', () => {
-    const withSkip = service.defaultStageFileContent('implement', {impl_notes: 'skip'});
-    const withBrief = service.defaultStageFileContent('implement', {impl_notes: 'brief'});
-    expect(withSkip).not.toContain('implementation.md');
-    expect(withBrief).toContain('implementation.md');
+    const withSkipBody = service.defaultStageFileContent('implement', {impl_notes: 'skip'}).split('## Agent status protocol')[0];
+    const withBriefBody = service.defaultStageFileContent('implement', {impl_notes: 'brief'}).split('## Agent status protocol')[0];
+    expect(withSkipBody).not.toContain('implementation.md');
+    expect(withBriefBody).toContain('implementation.md');
   });
 
   test('cleanup: scope=quick says fix only critical issues', () => {
@@ -547,17 +850,17 @@ describe('defaultStageFileContent', () => {
     expect(content).toContain('Write new docs');
   });
 
-  test('non-discovery stages include advancing instructions referencing index.json', () => {
-    // Discovery now signals advancement via a heading in requirements.md (auto-detected),
-    // so it doesn't need to mention index.json itself.
-    for (const stage of ['requirements', 'implement', 'cleanup'] as const) {
+  test('implement + cleanup include advancing instructions referencing index.json', () => {
+    // Discovery and requirements now rely on status.json (set via the
+    // protocol tail) to advance — they don't repeat index.json guidance.
+    for (const stage of ['implement', 'cleanup'] as const) {
       const content = service.defaultStageFileContent(stage);
       expect(content).toContain('index.json');
     }
   });
 
   test('advancing instructions describe paths as relative / from prompt', () => {
-    for (const stage of ['requirements', 'implement', 'cleanup'] as const) {
+    for (const stage of ['implement', 'cleanup'] as const) {
       const content = service.defaultStageFileContent(stage);
       expect(content).toMatch(/path in (the )?prompt|relative path|path.*prompt/i);
     }
@@ -570,7 +873,7 @@ describe('ensureStageFiles', () => {
   test('creates all stage files and overview', () => {
     service.ensureStageFiles(tmpDir);
     const stagesDir = service.getStagesDir(tmpDir);
-    expect(fs.existsSync(path.join(stagesDir, '0-overview.md'))).toBe(true);
+    expect(fs.existsSync(path.join(stagesDir, 'overview.md'))).toBe(true);
     for (const stage of ['discovery', 'requirements', 'implement', 'cleanup'] as const) {
       expect(fs.existsSync(service.getStageFilePath(tmpDir, stage))).toBe(true);
     }

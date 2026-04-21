@@ -31,11 +31,30 @@ export const WorktreeRow = memo<WorktreeRowProps>(({
   const highlightInfo = useHighlightPriority(worktree, prStatus);
   const isDimmed = shouldDimRow(prStatus);
 
+  // Compact ralph indicator: distinguishes the two waiting states (input vs
+  // approval) so the main view doesn't collapse them the way the old single
+  // boolean did. "n:X/Y" when nudges have fired, "!" when capped.
+  const ralphSuffix = (() => {
+    const r = worktree.ralph;
+    if (!r) return '';
+    if (r.state === 'waiting_for_approval') {
+      const desc = (r.brief_description || '').trim();
+      return desc ? ` ✓ ${desc}` : ' ✓ ready';
+    }
+    if (r.state === 'waiting_for_input') {
+      const desc = (r.brief_description || '').trim();
+      return desc ? ` ⏸ ${desc}` : ' ⏸';
+    }
+    if (r.capped) return ` !`;
+    if (r.nudges_this_stage > 0) return ` n:${r.nudges_this_stage}/${r.max_nudges_per_stage}`;
+    return '';
+  })();
+
   const data = {
     number: String(globalIndex + 1),
     projectFeature: worktree.is_workspace_child
-      ? `${worktree.is_last_workspace_child ? '└─' : '├─'} [${worktree.project}]`
-      : `${worktree.feature} [${worktree.project}]`,
+      ? `${worktree.is_last_workspace_child ? '└─' : '├─'} [${worktree.project}]${ralphSuffix}`
+      : `${worktree.feature} [${worktree.project}]${ralphSuffix}`,
     diff: formatDiffStats(worktree.git?.base_added_lines || 0, worktree.git?.base_deleted_lines || 0),
     changes: formatGitChanges(worktree.git?.ahead || 0, worktree.git?.behind || 0),
     pr: formatPRStatus(prStatus),

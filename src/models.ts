@@ -136,6 +136,19 @@ export class WorktreeInfo {
   children?: WorktreeInfo[];
   // Rendering helpers for workspace grouping
   is_last_workspace_child?: boolean;
+  // Ralph-sourced live state (optional — may be undefined for worktrees that
+  // aren't tracker items). Populated by WorktreeContext from RalphCore +
+  // TrackerService.getItemStatus so WorktreeRow can render a compact chip.
+  // `state` mirrors ItemStatus.state when the status file is fresh, or
+  // 'working' when there is no fresh waiting signal — consumers don't need
+  // to re-check staleness.
+  ralph?: {
+    state: 'working' | 'waiting_for_input' | 'waiting_for_approval';
+    brief_description?: string;
+    nudges_this_stage: number;
+    max_nudges_per_stage: number;
+    capped: boolean;
+  };
   constructor(init: Partial<WorktreeInfo> = {}) {
     this.project = '';
     this.feature = '';

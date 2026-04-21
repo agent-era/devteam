@@ -396,7 +396,7 @@ export class WorktreeCore implements CoreBase<State> {
       const flags = this.getAIToolFlags(worktree.project, selectedTool);
       const flagStr = flags.length > 0 ? ' ' + flags.map(shellQuote).join(' ') : '';
       if (selectedTool === 'claude') this.launchClaudeSessionWithFallback(sessionName, worktree.path, flagStr, `${worktree.feature} - ${worktree.project}`, initialPrompt);
-      else this.tmux.createSessionWithCommand(sessionName, worktree.path, aiLaunchCommand(selectedTool) + flagStr, true);
+      else this.launchAISessionWithFallback(sessionName, worktree.path, selectedTool, flagStr, initialPrompt);
       setLastTool(selectedTool, worktree.path);
     } else {
       this.tmux.createSession(sessionName, worktree.path, true);
@@ -593,6 +593,34 @@ export class WorktreeCore implements CoreBase<State> {
     const fallbackCmd = 'claude' + nameFlag + flagStr + promptArg;
     const continueCmd = aiLaunchCommand('claude') + nameFlag + flagStr + promptArg;
     this.tmux.createSessionWithCommand(sessionName, cwd, `${continueCmd} || ${fallbackCmd}`, true);
+  }
+
+  // codex / gemini: if we have an initial prompt, wire it into the launch via
+  // the tool's CLI args and add a fresh-session fallback (mirrors claude).
+  // Without a prompt, keep the plain resume launch — no fallback.
+  private launchAISessionWithFallback(sessionName: string, cwd: string, tool: AITool, flagStr: string = '', initialPrompt?: string): void {
+    if (!initialPrompt) {
+      this.tmux.createSessionWithCommand(sessionName, cwd, aiLaunchCommand(tool as Exclude<AITool, 'none'>) + flagStr, true);
+      return;
+    }
+    const promptQ = shellQuote(initialPrompt);
+    let resumeCmd: string;
+    let freshCmd: string;
+    if (tool === 'codex') {
+      // `codex resume [SESSION_ID] [PROMPT]`; with --last the SESSION_ID slot
+      // is filled, so a trailing positional maps to PROMPT.
+      resumeCmd = `codex resume --last${flagStr} ${promptQ}`;
+      freshCmd = `codex${flagStr} ${promptQ}`;
+    } else if (tool === 'gemini') {
+      // -i/--prompt-interactive runs the prompt then stays interactive.
+      resumeCmd = `gemini --resume latest${flagStr} -i ${promptQ}`;
+      freshCmd = `gemini${flagStr} -i ${promptQ}`;
+    } else {
+      const cmd = aiLaunchCommand(tool as Exclude<AITool, 'none'>) + flagStr;
+      resumeCmd = cmd;
+      freshCmd = cmd;
+    }
+    this.tmux.createSessionWithCommand(sessionName, cwd, `${resumeCmd} || ${freshCmd}`, true);
   }
 
   private setState(partial: Partial<State>): void {

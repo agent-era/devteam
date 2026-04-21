@@ -2,10 +2,11 @@ import React from 'react';
 import fs from 'fs';
 import {Box, Text, useInput} from 'ink';
 import {TrackerService, StagesConfig, TrackerStage, WorkStyle, STAGE_LABELS} from '../services/TrackerService.js';
+import {RalphConfig, loadRalphConfig, saveRalphConfig} from '../cores/RalphCore.js';
 import {useTerminalDimensions} from '../hooks/useTerminalDimensions.js';
 
-const STAGE_KEYS: Exclude<TrackerStage, 'archive'>[] = ['discovery', 'requirements', 'implement', 'cleanup'];
-const ALL_TABS = [...STAGE_KEYS, 'style'] as const;
+const STAGE_KEYS: Exclude<TrackerStage, 'archive' | 'backlog'>[] = ['discovery', 'requirements', 'implement', 'cleanup'];
+const ALL_TABS = [...STAGE_KEYS, 'style', 'ralph'] as const;
 
 interface OptionDef {
   key: string;
@@ -13,51 +14,62 @@ interface OptionDef {
   choices: {value: string; label: string}[];
 }
 
+// Gate is per-stage (different stages want different approval semantics).
+// Two values: auto-advance (agent writes a review when appropriate then
+// advances without asking) or require approval (agent pauses for the user).
+// Label carries the stage context so options stay terse and generic — no
+// redundant "…before cleanup / …before implementing" repetition.
+// Input mode is project-global — lives on the Style tab (STYLE_OPTIONS).
+function gateOptionFor(stage: 'requirements' | 'implement' | 'cleanup'): OptionDef {
+  const label = stage === 'requirements' ? 'After requirements'
+    : stage === 'implement' ? 'After implementation'
+    : 'After cleanup and submit';
+  return {
+    key: 'gate_on_advance',
+    label,
+    choices: [
+      {value: 'auto_advance', label: 'Move on'},
+      {value: 'require_approval', label: 'Ask me first'},
+    ],
+  };
+}
+
 // Per-stage structured options (different per stage)
 const STAGE_OPTION_DEFS: Partial<Record<Exclude<TrackerStage, 'archive'>, OptionDef[]>> = {
   discovery: [
-    {key: 'skip', label: 'When to run', choices: [
-      {value: 'always_run', label: 'Always'},
-      {value: 'if_obvious', label: 'Skip if obvious'},
-      {value: 'always_skip', label: 'Always skip'},
+    // Research scope only — code + web. Not about asking the user; those
+    // questions belong to requirements. Clarifying questions in discovery
+    // are a baked-in behaviour (only when the problem statement itself is
+    // incomprehensible), not a tunable.
+    {key: 'effort', label: 'Effort', choices: [
+      {value: 'skim', label: 'Skim'},
+      {value: 'standard', label: 'Standard'},
+      {value: 'deep', label: 'Deep'},
     ]},
-    {key: 'depth', label: 'Depth', choices: [
-      {value: 'quick', label: 'Quick'},
-      {value: 'normal', label: 'Normal'},
-      {value: 'thorough', label: 'Thorough'},
-    ]},
-    {key: 'web_search', label: 'Web search', choices: [
-      {value: 'never', label: 'Never'},
-      {value: 'if_needed', label: 'If needed'},
-      {value: 'always', label: 'Always'},
-    ]},
-    {key: 'questions', label: 'Questions', choices: [
-      {value: 'none', label: 'None'},
-      {value: 'minimal', label: 'Minimal (1)'},
-      {value: 'standard', label: 'Standard (1–3)'},
+    // How discovery closes out. Replaces the common gate_on_advance for
+    // this stage — `confirm_if_notable` (the middle value) is what the
+    // two-value gate can't express.
+    {key: 'report', label: 'Report', choices: [
+      {value: 'just_advance', label: 'Just advance'},
+      {value: 'confirm_if_notable', label: 'Confirm if notable'},
+      {value: 'always_confirm', label: 'Always confirm'},
     ]},
   ],
   requirements: [
+    // Collaboration shape. `freeform` was fuzzy; check-in cadence is
+    // covered by the project-global inputMode (Style tab).
     {key: 'style', label: 'Style', choices: [
       {value: 'interview', label: 'Interview first'},
       {value: 'draft_first', label: 'Draft then refine'},
-      {value: 'freeform', label: 'Free-form'},
     ]},
+    // Scope dial for the spec itself. Controls which output sections are
+    // required and the min-word floor.
     {key: 'detail', label: 'Detail', choices: [
       {value: 'minimal', label: 'Minimal'},
       {value: 'standard', label: 'Standard'},
       {value: 'thorough', label: 'Thorough'},
     ]},
-    {key: 'approval', label: 'Check-ins', choices: [
-      {value: 'per_section', label: 'Per section'},
-      {value: 'end_only', label: 'End only'},
-      {value: 'none', label: 'None'},
-    ]},
-    {key: 'user_stories', label: 'User stories', choices: [
-      {value: 'skip', label: 'Skip'},
-      {value: 'include', label: 'Include'},
-      {value: 'lead', label: 'Lead with'},
-    ]},
+    gateOptionFor('requirements'),
   ],
   implement: [
     {key: 'start_with', label: 'Start with', choices: [
@@ -80,6 +92,7 @@ const STAGE_OPTION_DEFS: Partial<Record<Exclude<TrackerStage, 'archive'>, Option
       {value: 'brief', label: 'Brief'},
       {value: 'detailed', label: 'Detailed'},
     ]},
+    gateOptionFor('implement'),
   ],
   cleanup: [
     {key: 'scope', label: 'Scope', choices: [
@@ -101,6 +114,11 @@ const STAGE_OPTION_DEFS: Partial<Record<Exclude<TrackerStage, 'archive'>, Option
       {value: 'skip', label: 'Skip'},
       {value: 'notes', label: 'Key notes'},
       {value: 'full', label: 'Full description'},
+    ]},
+    gateOptionFor('cleanup'),
+    {key: 'submit', label: 'Submit (PR)', choices: [
+      {value: 'approve', label: 'Wait for approval'},
+      {value: 'auto', label: 'Auto-submit'},
     ]},
   ],
 };
@@ -157,9 +175,47 @@ const STYLE_OPTIONS: StyleOptionDef[] = [
     {value: 'try_first', label: 'Try alternatives first'},
     {value: 'continue', label: 'Note & continue'},
   ]},
+  {key: 'inputMode', label: 'Input mode', choices: [
+    {value: 'ask_questions', label: 'ask_questions tool'},
+    {value: 'inline', label: 'Inline chat'},
+    {value: 'batch', label: 'Batched'},
+    {value: 'doc_review', label: 'Doc review'},
+  ]},
 ];
 
 const STYLE_CUSTOM_ROW = STYLE_OPTIONS.length;
+
+// Discrete choices for the two numeric ralph fields. The set is deliberately
+// small — most users just want "aggressive / default / conservative" without
+// fiddling with exact millisecond values.
+const RALPH_IDLE_CHOICES: {value: string; label: string; ms: number}[] = [
+  {value: '60000', label: '1 min (aggressive)', ms: 60_000},
+  {value: '180000', label: '3 min (default)', ms: 180_000},
+  {value: '600000', label: '10 min (conservative)', ms: 600_000},
+  {value: '1800000', label: '30 min (rarely)', ms: 1_800_000},
+];
+
+const RALPH_CAP_CHOICES: {value: string; label: string; n: number}[] = [
+  {value: '1', label: '1', n: 1},
+  {value: '3', label: '3 (default)', n: 3},
+  {value: '5', label: '5', n: 5},
+  {value: '10', label: '10', n: 10},
+];
+
+interface RalphOptionDef {
+  key: keyof RalphConfig;
+  label: string;
+  choices: {value: string; label: string}[];
+}
+
+const RALPH_OPTIONS: RalphOptionDef[] = [
+  {key: 'enabled', label: 'Enabled', choices: [
+    {value: 'false', label: 'Off'},
+    {value: 'true', label: 'On'},
+  ]},
+  {key: 'idleThresholdMs', label: 'Idle threshold', choices: RALPH_IDLE_CHOICES.map(c => ({value: c.value, label: c.label}))},
+  {key: 'maxNudgesPerStage', label: 'Max nudges/stage', choices: RALPH_CAP_CHOICES.map(c => ({value: c.value, label: c.label}))},
+];
 
 interface ContentLine {
   key: string;
@@ -184,6 +240,7 @@ export default function TrackerStagesScreen({projectPath, onBack}: TrackerStages
   const service = React.useMemo(() => new TrackerService(), []);
   const [config, setConfig] = React.useState<Required<StagesConfig>>(() => service.loadStagesConfig(projectPath));
   const [workStyle, setWorkStyle] = React.useState<WorkStyle>(() => service.loadWorkStyle(projectPath));
+  const [ralphConfig, setRalphConfig] = React.useState<RalphConfig>(() => loadRalphConfig(projectPath));
   const [selectedTab, setSelectedTab] = React.useState<number>(0);
   const [scrollTop, setScrollTop] = React.useState(0);
   const [selectedRow, setSelectedRow] = React.useState(0);
@@ -194,15 +251,17 @@ export default function TrackerStagesScreen({projectPath, onBack}: TrackerStages
 
   const currentTab = ALL_TABS[selectedTab];
   const isStyleTab = currentTab === 'style';
-  const currentStage = isStyleTab ? null : currentTab as Exclude<TrackerStage, 'archive'>;
+  const isRalphTab = currentTab === 'ralph';
+  const currentStage = isStyleTab || isRalphTab ? null : currentTab as Exclude<TrackerStage, 'archive' | 'backlog'>;
   const stageOpts = currentStage ? (STAGE_OPTION_DEFS[currentStage] || []) : [];
   const stageSettings = currentStage ? (config[currentStage].settings || {}) : {};
 
-  // For stage tabs: generate preview in-memory from settings so it updates in real-time
+  // For stage tabs: generate preview in-memory from settings so it updates in real-time.
+  // inputMode is global (Style tab) — pass it so the protocol tail reflects live changes.
   const stageFileContent = React.useMemo(() => {
-    if (isStyleTab || !currentStage) return '';
-    return service.defaultStageFileContent(currentStage, stageSettings);
-  }, [isStyleTab, currentStage, stageSettings, service]);
+    if (isStyleTab || isRalphTab || !currentStage) return '';
+    return service.defaultStageFileContent(currentStage, stageSettings, workStyle);
+  }, [isStyleTab, isRalphTab, currentStage, stageSettings, workStyle, service]);
 
   const stageFileLines = React.useMemo(() => fileContentToLines(stageFileContent), [stageFileContent]);
 
@@ -232,11 +291,11 @@ export default function TrackerStagesScreen({projectPath, onBack}: TrackerStages
     const newSettings = {...stageSettings, [opt.key]: next};
     service.saveStageSettings(projectPath, currentStage, newSettings);
     // Write updated file to disk so the agent gets the new settings
-    const updatedContent = service.defaultStageFileContent(currentStage, newSettings);
+    const updatedContent = service.defaultStageFileContent(currentStage, newSettings, workStyle);
     const filePath = service.getStageFilePath(projectPath, currentStage);
     try { fs.writeFileSync(filePath, updatedContent, 'utf8'); } catch {}
     setConfig(service.loadStagesConfig(projectPath));
-  }, [currentStage, stageOpts, selectedRow, stageSettings, service, projectPath]);
+  }, [currentStage, stageOpts, selectedRow, stageSettings, workStyle, service, projectPath]);
 
   const cycleStyleOption = React.useCallback((delta: number) => {
     const opt = STYLE_OPTIONS[selectedRow];
@@ -247,7 +306,39 @@ export default function TrackerStagesScreen({projectPath, onBack}: TrackerStages
     const updated = {...workStyle, [opt.key]: next};
     setWorkStyle(updated);
     service.saveWorkStyle(projectPath, updated);
-  }, [selectedRow, workStyle, service, projectPath]);
+    // inputMode changes affect the protocol tail in every stage guide, so
+    // regenerate all four files on disk. Other style fields only drive
+    // working-style.md (saveWorkStyle already rewrites that).
+    if (opt.key === 'inputMode') {
+      for (const stage of ['discovery', 'requirements', 'implement', 'cleanup'] as const) {
+        const stageSettings = config[stage]?.settings || {};
+        const filePath = service.getStageFilePath(projectPath, stage);
+        try {
+          fs.writeFileSync(filePath, service.defaultStageFileContent(stage, stageSettings, updated), 'utf8');
+        } catch {}
+      }
+    }
+  }, [selectedRow, workStyle, config, service, projectPath]);
+
+  const cycleRalphOption = React.useCallback((delta: number) => {
+    const opt = RALPH_OPTIONS[selectedRow];
+    if (!opt) return;
+    const curStr =
+      opt.key === 'enabled' ? String(ralphConfig.enabled)
+      : opt.key === 'idleThresholdMs' ? String(ralphConfig.idleThresholdMs)
+      : String(ralphConfig.maxNudgesPerStage);
+    const idx = opt.choices.findIndex(c => c.value === curStr);
+    const startIdx = idx < 0 ? 0 : idx;
+    const nextStr = opt.choices[(startIdx + delta + opt.choices.length) % opt.choices.length].value;
+    const updated: RalphConfig = {
+      ...ralphConfig,
+      [opt.key]:
+        opt.key === 'enabled' ? nextStr === 'true'
+        : Number(nextStr),
+    } as RalphConfig;
+    setRalphConfig(updated);
+    saveRalphConfig(projectPath, updated);
+  }, [selectedRow, ralphConfig, projectPath]);
 
   const handleEditSubmit = React.useCallback(() => {
     const prompt = editPrompt.trim();
@@ -306,6 +397,16 @@ export default function TrackerStagesScreen({projectPath, onBack}: TrackerStages
       else if (goRight) cycleStyleOption(1);
       else if (input === 'e') { setEditMode(true); setError(null); }
       else if (input === 'q' || key.escape) onBack();
+    } else if (isRalphTab) {
+      const maxRow = RALPH_OPTIONS.length - 1;
+      if (goDown) setSelectedRow(r => Math.min(maxRow, r + 1));
+      else if (goUp) {
+        if (selectedRow === 0) setSelectedRow(-1);
+        else setSelectedRow(r => r - 1);
+      }
+      else if (goLeft) cycleRalphOption(-1);
+      else if (goRight) cycleRalphOption(1);
+      else if (input === 'q' || key.escape) onBack();
     } else {
       // Stage tab content
       if (goDown) {
@@ -323,7 +424,10 @@ export default function TrackerStagesScreen({projectPath, onBack}: TrackerStages
   });
 
   const stageFilePath = currentStage ? service.getStageFilePath(projectPath, currentStage) : '';
-  const tabLabel = isStyleTab ? 'Style' : STAGE_LABELS[currentTab as Exclude<TrackerStage, 'archive'>];
+  const tabLabel =
+    isStyleTab ? 'Style'
+    : isRalphTab ? 'Ralph'
+    : STAGE_LABELS[currentTab as Exclude<TrackerStage, 'archive'>];
   const scrollIndicator = maxScroll > 0 ? ` ↑↓` : '';
 
   return (
@@ -333,7 +437,10 @@ export default function TrackerStagesScreen({projectPath, onBack}: TrackerStages
 
       <Box marginTop={1}>
         {ALL_TABS.map((tab, index) => {
-          const label = tab === 'style' ? 'Style' : STAGE_LABELS[tab as Exclude<TrackerStage, 'archive'>];
+          const label =
+            tab === 'style' ? 'Style'
+            : tab === 'ralph' ? 'Ralph'
+            : STAGE_LABELS[tab as Exclude<TrackerStage, 'archive'>];
           const active = index === selectedTab;
           const focusedHere = tabRowFocused && active;
           return (
@@ -354,7 +461,47 @@ export default function TrackerStagesScreen({projectPath, onBack}: TrackerStages
       <Box flexDirection="column" borderStyle="round" borderColor="green" paddingX={1} height={contentViewHeight + 2}>
         <Text bold color="green">{tabLabel}</Text>
 
-        {isStyleTab ? (
+        {isRalphTab ? (
+          <Box flexDirection="column">
+            <Text dimColor>
+              Ralph watches idle agents and nudges them to keep advancing
+              (unless they've set `state` to `waiting_for_input` or
+              `waiting_for_approval` in status.json).
+            </Text>
+            <Box marginTop={1} flexDirection="column">
+              {RALPH_OPTIONS.map((opt, rowIdx) => {
+                const curStr =
+                  opt.key === 'enabled' ? String(ralphConfig.enabled)
+                  : opt.key === 'idleThresholdMs' ? String(ralphConfig.idleThresholdMs)
+                  : String(ralphConfig.maxNudgesPerStage);
+                const isRowSelected = selectedRow === rowIdx;
+                return (
+                  <Box key={opt.key} flexDirection="row" marginBottom={0}>
+                    <Box width={20}>
+                      <Text bold={isRowSelected}>{opt.label}</Text>
+                    </Box>
+                    {opt.choices.map(choice => (
+                      <Box key={choice.value} marginRight={1}>
+                        <Text
+                          inverse={curStr === choice.value}
+                          color={isRowSelected && curStr === choice.value ? 'green' : undefined}
+                        >
+                          {` ${choice.label} `}
+                        </Text>
+                      </Box>
+                    ))}
+                  </Box>
+                );
+              })}
+            </Box>
+            <Box marginTop={1}>
+              <Text dimColor>
+                Config persists to tracker/ralph.json. Per-item status lives at
+                tracker/items/&lt;slug&gt;/status.json.
+              </Text>
+            </Box>
+          </Box>
+        ) : isStyleTab ? (
           <Box flexDirection="column">
             {STYLE_OPTIONS.map((opt, rowIdx) => {
               const cur = workStyle[opt.key] as string;

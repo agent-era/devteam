@@ -28,6 +28,44 @@ export interface ExitCriterionResult {
   met: boolean;
 }
 
+// Agent-reported live state for an item. Written by the agent at every
+// meaningful transition (stage start/advance, pause, resume). Ralph reads this
+// to decide whether an idle pane is truly stuck or legitimately waiting.
+export interface ItemStatus {
+  stage: Exclude<TrackerStage, 'archive'>;
+  // Ralph treats both waiting states the same (suppress nudges); the kanban
+  // renders waiting_for_approval distinctly so "ready to advance" is
+  // spottable at a glance.
+  state: ItemStatusState;
+  // Short human-readable note: what the agent is currently doing, or the
+  // concrete thing it's waiting on. ≤ 200 chars.
+  brief_description: string;
+  // ISO-8601 timestamp of last update. Used for the staleness check.
+  timestamp: string;
+}
+
+export type ItemStatusState = 'working' | 'waiting_for_input' | 'waiting_for_approval';
+
+// Coerce a freshly-parsed status.json payload to a valid state. Accepts the
+// new `state` enum and the legacy `is_waiting_for_user` / `awaiting_advance_approval`
+// booleans so existing files on disk keep working. Returns null when the
+// payload isn't recognisable as a status record.
+function normaliseItemState(parsed: Record<string, unknown>): ItemStatusState | null {
+  const raw = parsed.state;
+  if (raw === 'working' || raw === 'waiting_for_input' || raw === 'waiting_for_approval') return raw;
+  if (typeof raw === 'string') return null; // unknown value — treat as malformed
+  const approval = parsed.awaiting_advance_approval === true;
+  const input = parsed.is_waiting_for_user === true;
+  if (approval) return 'waiting_for_approval';
+  if (input) return 'waiting_for_input';
+  if (parsed.is_waiting_for_user === false) return 'working';
+  return null; // no legacy boolean either — schema doesn't match
+}
+
+// Treat a waiting flag as stale (and ignore it) after this many ms. Guards
+// against crashed agents that never cleared is_waiting_for_user.
+export const ITEM_STATUS_STALE_MS = 24 * 60 * 60 * 1000;
+
 export interface StageConfig {
   actionLabel: string;
   description: string;
@@ -46,6 +84,9 @@ export type TestingStyle = 'always' | 'suggest' | 'skip';
 export type CommitStyle = 'never' | 'milestones' | 'often';
 export type BlockerStyle = 'ask' | 'try_first' | 'continue';
 export type ContextDepthStyle = 'light' | 'moderate' | 'deep';
+// How the agent should deliver questions/requests for review. Project-wide
+// preference; drives the "Input mode" block in every generated stage guide.
+export type InputModeStyle = 'ask_questions' | 'inline' | 'batch' | 'doc_review';
 
 export interface WorkStyle {
   decisionStyle: DecisionStyle;
@@ -57,6 +98,7 @@ export interface WorkStyle {
   commits: CommitStyle;
   onBlockers: BlockerStyle;
   contextDepth: ContextDepthStyle;
+  inputMode: InputModeStyle;
   customInstructions: string;
 }
 
@@ -70,6 +112,7 @@ export const DEFAULT_WORK_STYLE: WorkStyle = {
   commits: 'never',
   onBlockers: 'ask',
   contextDepth: 'moderate',
+  inputMode: 'ask_questions',
   customInstructions: '',
 };
 
@@ -112,7 +155,7 @@ Write your findings to tracker/items/<slug>/notes.md. Keep it short: user proble
     exitCriteria: [
       {id: 'has-notes', description: 'Discovery notes written to notes.md', check: 'has_notes'},
     ],
-    settings: {skip: 'always_run', depth: 'normal'},
+    settings: {effort: 'standard', report: 'confirm_if_notable'},
   },
   requirements: {
     actionLabel: 'Start implement',
@@ -130,7 +173,7 @@ Write your findings to tracker/items/<slug>/notes.md. Keep it short: user proble
     settings: {style: 'interview', detail: 'standard'},
   },
   implement: {
-    actionLabel: 'Move to cleanup',
+    actionLabel: 'Move to cleanup and submit',
     description: 'Build the feature. Follow TDD, commit incrementally.',
     checklist: [
       'Review requirements before starting',
@@ -231,14 +274,8 @@ export const STAGE_LABELS: Record<TrackerStage, string> = {
   discovery: 'Discovery',
   requirements: 'Requirements',
   implement: 'Implement',
-  cleanup: 'Cleanup',
+  cleanup: 'Cleanup and submit',
   archive: 'Archive',
-};
-
-// Wider title used for the board column header (where space allows a longer label).
-const COLUMN_TITLES: Record<TrackerStage, string> = {
-  ...STAGE_LABELS,
-  cleanup: 'Cleanup and Submit',
 };
 
 export class TrackerService {
@@ -338,7 +375,7 @@ export class TrackerService {
         .sort((a, b) => a.slug.localeCompare(b.slug));
       return {
         id,
-        title: COLUMN_TITLES[id],
+        title: STAGE_LABELS[id],
         bucket,
         items: [...ordered, ...extras],
       };
@@ -392,6 +429,83 @@ export class TrackerService {
     const idx = STAGE_ORDER.indexOf(stage);
     if (idx <= 0) return null;
     return STAGE_ORDER[idx - 1];
+  }
+
+  // Path to the agent's self-reported status file for an item. Lives alongside
+  // the stage output files (notes.md, requirements.md, implementation.md).
+  getItemStatusPath(projectPath: string, slug: string): string | null {
+    const itemDir = this.resolveItemDir(projectPath, slug);
+    if (!itemDir) return null;
+    return path.join(itemDir, 'status.json');
+  }
+
+  // Read the agent's current status. Returns null when the file is absent or
+  // malformed. Validates the schema loosely so a partial write doesn't explode
+  // ralph's sampling loop.
+  getItemStatus(projectPath: string, slug: string): ItemStatus | null {
+    const statusPath = this.getItemStatusPath(projectPath, slug);
+    if (!statusPath || !fs.existsSync(statusPath)) return null;
+    const raw = readFileOrNull(statusPath);
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      if (!parsed || typeof parsed.stage !== 'string' || typeof parsed.timestamp !== 'string') return null;
+      // Whitelist the stage string before using it anywhere that constructs
+      // file paths (getStageFilePath) — otherwise a malicious or corrupted
+      // status.json with `stage: "../../.ssh/id_rsa"` would flow through.
+      if (!STAGE_ORDER.includes(parsed.stage as TrackerStage) || parsed.stage === 'archive') return null;
+      // Accept both the new `state` enum and the legacy boolean schema so
+      // existing status.json files on disk keep working.
+      const state = normaliseItemState(parsed);
+      if (!state) return null;
+      return {
+        stage: parsed.stage as Exclude<TrackerStage, 'archive'>,
+        state,
+        brief_description: typeof parsed.brief_description === 'string' ? parsed.brief_description : '',
+        timestamp: parsed.timestamp,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  // Overwrite the status file. Writes to the resolved item dir, or (as a
+  // fallback for items with no worktree yet) to the main-project stub dir so
+  // the file still has a home. Truncates brief_description to 200 chars to
+  // keep the UI row from growing without bound.
+  writeItemStatus(projectPath: string, slug: string, status: ItemStatus): void {
+    let itemDir = this.resolveItemDir(projectPath, slug);
+    if (!itemDir) {
+      itemDir = path.join(projectPath, 'tracker', 'items', slug);
+      ensureDirectory(itemDir);
+    }
+    const payload: ItemStatus = {
+      stage: status.stage,
+      state: status.state,
+      brief_description: (status.brief_description || '').slice(0, 200),
+      timestamp: status.timestamp || new Date().toISOString(),
+    };
+    writeJSONAtomic(path.join(itemDir, 'status.json'), payload);
+  }
+
+  // A status is "stale" if its timestamp is older than ITEM_STATUS_STALE_MS.
+  // Ralph ignores non-working state on stale records so a crashed agent
+  // doesn't suppress nudges indefinitely.
+  isItemStatusStale(status: ItemStatus, now: Date = new Date()): boolean {
+    const ts = Date.parse(status.timestamp);
+    if (Number.isNaN(ts)) return true;
+    return now.getTime() - ts > ITEM_STATUS_STALE_MS;
+  }
+
+  // Fresh + non-working. Covers both waiting_for_input and waiting_for_approval.
+  isItemWaiting(status: ItemStatus | null | undefined, now?: Date): boolean {
+    return !!status && status.state !== 'working' && !this.isItemStatusStale(status, now);
+  }
+
+  // Fresh + specifically waiting_for_approval. The kanban uses this to render
+  // the green "ready to advance" treatment and expose the [m] approve shortcut.
+  isItemReadyToAdvance(status: ItemStatus | null | undefined, now?: Date): boolean {
+    return !!status && status.state === 'waiting_for_approval' && !this.isItemStatusStale(status, now);
   }
 
   createItem(projectPath: string, title: string, stage: TrackerStage = 'discovery', explicitSlug?: string, body?: string): void {
@@ -459,7 +573,54 @@ export class TrackerService {
     this.removeSlugFromIndexObj(index, slug);
     this.addSlugToIndexObj(index, slug, toStage);
     writeJSONAtomic(this.getIndexPath(projectPath), index);
+    // Mirror the canonical stage into the per-item status.json so ralph (and
+    // anything that reads status.json first) sees the new stage immediately.
+    // Archive moves don't get a status.json — archived items live outside
+    // the live-state protocol.
+    if (toStage !== 'archive') {
+      // Advancing is a clean slate — the previous brief_description describes
+      // finished work, and waiting flags from the old stage don't apply to
+      // the new one. Reset to working so ralph can resume normal cadence.
+      this.writeItemStatus(projectPath, slug, {
+        stage: toStage,
+        state: 'working',
+        brief_description: '',
+        timestamp: new Date().toISOString(),
+      });
+    }
     return true;
+  }
+
+  // Canonical current stage for an item. Prefers the agent's status.json
+  // (which is the live self-report), then falls back to index.json bucket
+  // membership, then to 'backlog' if the slug is unknown. Never returns null
+  // for a known slug — an item always has a stage somewhere.
+  // The staleness guard used by ralph (`isItemWaiting`) deliberately doesn't
+  // apply here: the last stage the agent wrote is still the correct stage
+  // even if the agent crashed 48h ago — nothing would auto-revert it — so
+  // stage reads trust status.json unconditionally.
+  getItemStage(projectPath: string, slug: string): TrackerStage {
+    const status = this.getItemStatus(projectPath, slug);
+    if (status) return status.stage;
+    const legacy = this.createStageBySlug(this.readIndex(projectPath)).get(slug);
+    return legacy ?? 'backlog';
+  }
+
+  // Enumerate every known active item grouped by stage. Stage for each slug
+  // comes from status.json first; unmigrated items fall back to the index
+  // buckets. Archived items are listed verbatim from index.archive.
+  // Maps each index-known slug to its canonical stage, with any fresh
+  // status.json stage overriding the index bucket. Slugs that exist only in
+  // tracker/items/<slug>/ but aren't yet in the index aren't surfaced —
+  // callers that need orphan-detection should scan the directory themselves.
+  listItemsByStage(projectPath: string): Map<string, TrackerStage> {
+    const index = this.readIndex(projectPath);
+    const out = this.createStageBySlug(index);
+    for (const slug of out.keys()) {
+      const status = this.getItemStatus(projectPath, slug);
+      if (status) out.set(slug, status.stage);
+    }
+    return out;
   }
 
   // Auto-advance items based on signals in their files:
@@ -755,6 +916,12 @@ export class TrackerService {
       try_first: ['Try alternatives first', 'Try reasonable alternatives before asking. Ask only if exhausted.'],
       continue: ['Note & continue', 'Note the issue clearly and continue with the rest of the work.'],
     };
+    const INPUT_MODE_LABELS: Record<string, [string, string]> = {
+      ask_questions: ['ask_questions tool', 'Use the ask_questions tool whenever you need input. Produces a detectable numbered prompt in the terminal.'],
+      inline: ['Inline chat', 'Ask questions inline in the conversation. Before pausing, set state: "waiting_for_input" in status.json with a brief_description; set it back to "working" on resume.'],
+      batch: ['Batched', 'Batch every question into a single message — do not ask one at a time. Set state: "waiting_for_input" in status.json before sending; set it back to "working" on resume.'],
+      doc_review: ['Doc review', 'Write the stage\'s output file first, then ask the user to review it. Set state: "waiting_for_input" in status.json before asking for review; set it back to "working" on resume.'],
+    };
 
     const row = (label: string, map: Record<string, [string, string]>, val: string) => {
       const [name, desc] = map[val] ?? [val, ''];
@@ -787,7 +954,7 @@ ${row('Commits', COMMITS_LABELS, workStyle.commits)}
 
 ${row('On blockers', BLOCKERS_LABELS, workStyle.onBlockers)}
 
-Use the ask_questions tool (or equivalent) when you need to ask the user questions, rather than asking inline.
+${row('Input mode', INPUT_MODE_LABELS, workStyle.inputMode)}
 ${custom}`;
   }
 
@@ -968,21 +1135,16 @@ Use ask_questions tool when you need to ask the user. Read the stage guide and g
 
   // ── Stage instruction files ──────────────────────────────────────────────
 
-  private readonly STAGE_FILE_NUMBERS: Record<Exclude<TrackerStage, 'archive'>, number> = {
-    backlog: 1, discovery: 2, requirements: 3, implement: 4, cleanup: 5,
-  };
-
   getStagesDir(projectPath: string): string {
     return path.join(this.getTrackerPath(projectPath), 'stages');
   }
 
   getStageFilePath(projectPath: string, stage: Exclude<TrackerStage, 'archive'>): string {
-    const n = this.STAGE_FILE_NUMBERS[stage];
-    return path.join(this.getStagesDir(projectPath), `${n}-${stage}.md`);
+    return path.join(this.getStagesDir(projectPath), `${stage}.md`);
   }
 
   getOverviewFilePath(projectPath: string): string {
-    return path.join(this.getStagesDir(projectPath), '0-overview.md');
+    return path.join(this.getStagesDir(projectPath), 'overview.md');
   }
 
   readStageFile(projectPath: string, stage: Exclude<TrackerStage, 'archive'>): string {
@@ -1002,13 +1164,13 @@ This project uses devteam's tracker to manage work items through a structured wo
 
 ## Stages
 
-Items progress through these numbered stages:
+Items progress through these stages in order:
 
-1. **Backlog** (\`1-backlog.md\`) — Item created, not yet being worked on. Triage and describe.
-2. **Discovery** (\`2-discovery.md\`) — Clarify the user problem and approach. Output: \`notes.md\`.
-3. **Requirements** (\`3-requirements.md\`) — Document what to build. Output: \`requirements.md\`.
-4. **Implement** (\`4-implement.md\`) — Build the feature. Output: code + \`implementation.md\`.
-5. **Cleanup** (\`5-cleanup.md\`) — Polish, review, and ship.
+1. **Backlog** (\`backlog.md\`) — Item created, not yet being worked on. Triage and describe.
+2. **Discovery** (\`discovery.md\`) — Clarify the user problem and approach. Output: \`notes.md\`.
+3. **Requirements** (\`requirements.md\`) — Document what to build. Output: \`requirements.md\`.
+4. **Implement** (\`implement.md\`) — Build the feature. Output: code + \`implementation.md\`.
+5. **Cleanup and submit** (\`cleanup.md\`) — Polish, review, and ship.
 
 ## Item Files
 
@@ -1049,207 +1211,212 @@ Read \`tracker/stages/working-style.md\` for the project's preferred working sty
 `;
   }
 
-  defaultStageFileContent(stage: Exclude<TrackerStage, 'archive'>, settings?: Record<string, string>): string {
-    const n = this.STAGE_FILE_NUMBERS[stage];
+  defaultStageFileContent(
+    stage: Exclude<TrackerStage, 'archive' | 'backlog'>,
+    settings?: Record<string, string>,
+    workStyle?: WorkStyle,
+  ): string {
+    return this.defaultStageFileBody(stage, settings) + this.renderStageProtocol(stage, settings, workStyle);
+  }
+
+  // Common tail appended to every generated stage guide. Surfaces the
+  // gate_on_advance / submit per-stage settings plus the project-global
+  // inputMode from WorkStyle, and the status.json self-report protocol
+  // that ralph relies on. Kept separate from the per-stage body generator
+  // so adding a setting doesn't require touching every stage's case block.
+  private renderStageProtocol(
+    stage: Exclude<TrackerStage, 'archive'>,
+    settings?: Record<string, string>,
+    workStyle?: WorkStyle,
+  ): string {
+    if (stage === 'backlog') return ''; // status.json + gates don't apply pre-discovery
+    const s = settings || {};
+    // inputMode is a project-global preference, not per-stage. It lives on
+    // WorkStyle and falls back to the default when absent (e.g., tests that
+    // don't pass a workStyle).
+    const inputMode: InputModeStyle = workStyle?.inputMode ?? DEFAULT_WORK_STYLE.inputMode;
+    // Back-compat: old configs might still have 'none' / 'review_and_advance' /
+    // 'wait_for_approval'. Map them onto the current two-value shape.
+    const rawGate = s['gate_on_advance'] ?? (stage === 'requirements' || stage === 'cleanup'
+      ? 'require_approval'
+      : 'auto_advance');
+    const gate =
+      rawGate === 'wait_for_approval' ? 'require_approval'
+      : rawGate === 'none' || rawGate === 'review_and_advance' ? 'auto_advance'
+      : rawGate;
+    const submit = s['submit'] ?? 'approve';
+    const outputFile =
+      stage === 'discovery' ? 'notes.md'
+      : stage === 'requirements' ? 'requirements.md'
+      : stage === 'implement' ? 'implementation.md'
+      : 'implementation.md';
+
+    const inputInstruction = (() => {
+      switch (inputMode) {
+        case 'inline':
+          return 'Ask questions inline in the conversation when you need input. Before sending each question, set `state: "waiting_for_input"` in `status.json` with a `brief_description` of what you need. Set it back to `"working"` the moment you receive the user\'s response and resume work.';
+        case 'batch':
+          return 'Batch every question you have into a single message — do not ask one at a time. Before sending the batched message, set `state: "waiting_for_input"` in `status.json` with a `brief_description` summarising the batch. Clear it to `"working"` when the user replies.';
+        case 'doc_review':
+          return `Write the stage's output file (\`${outputFile}\`) first. Then ask the user to review it. Before asking for review, set \`state: "waiting_for_input"\` in \`status.json\` with a \`brief_description\` of what you need reviewed. Clear it to \`"working"\` when the user responds.`;
+        case 'ask_questions':
+        default:
+          return 'Use the `ask_questions` tool when you need input from the user. Keep `status.json` up to date — set `state: "waiting_for_input"` with a `brief_description` when you\'re waiting, and set it back to `"working"` when the user responds.';
+      }
+    })();
+
+    const gateInstruction = (() => {
+      switch (gate) {
+        case 'auto_advance':
+          return `Advance without asking. Before you do, if this stage produced meaningful findings, decisions, or changes, append a short "## Stage review" section (1–3 sentences) to \`${outputFile}\` summarising what you did — skip the review for trivial no-op stages. Then update \`status.json.stage\` to the next stage and continue.`;
+        case 'require_approval':
+          return 'When the stage\'s work is complete, pause and ask for the user\'s approval to advance. Set `state: "waiting_for_approval"` in `status.json` with a `brief_description` that summarises what the user should review (e.g., "caching layer complete"). Do not update `status.json.stage` until the user explicitly approves. When they do, set `state: "working"` and update `stage`.';
+        default:
+          return '';
+      }
+    })();
+
+    const submitBlock = stage === 'cleanup'
+      ? (submit === 'auto'
+          ? '\n### Submit (PR creation)\n\nAfter cleanup passes, open the PR automatically — no extra approval step.\n'
+          : '\n### Submit (PR creation)\n\nAfter cleanup passes, pause and ask the user for explicit approval using this stage\'s input mode before opening the PR. Do not create the PR until approved.\n')
+      : '';
+
+    return `
+## Agent status protocol
+
+You must keep \`tracker/items/<slug>/status.json\` current. It's the canonical live state for this item and ralph reads it to decide whether you're stuck or legitimately waiting. The kanban renders \`brief_description\` directly on the card, so write about *substance*, not stage identity.
+
+Schema:
+\`\`\`json
+{
+  "stage": "${stage}",
+  "state": "working",
+  "brief_description": "the concrete thing you're doing or need (≤ 200 chars)",
+  "timestamp": "ISO-8601 now"
+}
+\`\`\`
+
+\`state\` is one of:
+
+- \`"working"\` — actively progressing. No human needed.
+- \`"waiting_for_input"\` — mid-stage, blocked on a clarification from the user. \`brief_description\` should name the specific question.
+- \`"waiting_for_approval"\` — stage work is done; asking the user to sign off before advancing. Set this only when the gate is \`require_approval\`. \`brief_description\` should summarise what's ready for review.
+
+Ralph suppresses check-ins whenever \`state\` isn't \`"working"\`. The kanban renders approval-state cards with a distinct "ready to advance" treatment, so use it specifically — not as a generic waiting catch-all.
+
+\`brief_description\` guidance — the stage is already visible from the kanban column. Write about the *work*:
+
+- Good: \`drafting acceptance criteria for the caching layer\`, \`blocked: do we want retry-on-429?\`, \`ran the suite, 3 failing in auth spec\`, \`caching layer complete\`.
+- Not useful: \`in requirements stage\`, \`doing discovery\`, \`working on implement\`.
+
+Update \`status.json\` at every meaningful transition:
+
+- **Stage start**: write the file with the current stage and \`state: "working"\`.
+- **Blocked on a clarification**: set \`state: "waiting_for_input"\`; put the concrete ask in \`brief_description\`.
+- **Stage work complete, awaiting approval**: set \`state: "waiting_for_approval"\`; summarise what's ready.
+- **Resuming or advancing**: set \`state: "working"\` and update \`brief_description\` to what you're now doing; update \`stage\` if you're moving to the next one.
+
+### Input mode: \`${inputMode}\`
+
+${inputInstruction}
+${stage === 'discovery'
+  ? '\n(Advance behaviour for discovery is governed by the `Report` setting in the stage body above — the generic gate_on_advance does not apply here.)\n'
+  : `\n### Gate on advance: \`${gate}\`\n\n${gateInstruction}\n`}${submitBlock}`;
+  }
+
+  // Original per-stage content generator — the body that the user edits via
+  // the stages screen. Kept private and wrapped by defaultStageFileContent()
+  // so the status/gate protocol is always appended.
+  private defaultStageFileBody(stage: Exclude<TrackerStage, 'archive' | 'backlog'>, settings?: Record<string, string>): string {
     const s = settings || {};
     const numbered = (items: (string | null)[]): string =>
       items.filter((x): x is string => !!x).map((x, i) => `${i + 1}. ${x}`).join('\n');
 
     switch (stage) {
-      case 'backlog': {
-        const effortEstimate = s['effort_estimate'] ?? 'rough';
-        const autoDiscover = s['auto_discover'] ?? 'prompt';
-
-        const effortStep =
-          effortEstimate === 'skip' ? null
-          : effortEstimate === 'detailed'
-            ? 'Assess effort: estimate story points or days, identify blockers and risks. Note this in `requirements.md`.'
-            : 'Assess rough effort and value — a t-shirt size (S/M/L/XL) is enough. Note it in `requirements.md`.';
-
-        const afterStep =
-          autoDiscover === 'auto'
-            ? 'Advance to discovery automatically — no need to prompt the user.'
-            : autoDiscover === 'manual'
-            ? 'Stop here. The user will manually trigger the next stage.'
-            : 'Use the ask_questions tool to ask: is this worth pursuing now, or should it stay in backlog?';
-
-        return `# Stage ${n}: Backlog
-
-**Goal**: Triage this item — clarify what it is, assess scope, decide whether to pursue.
-
-## Steps
-
-${numbered([
-  'Read the item title. Is it clear and actionable? Rewrite it if not.',
-  'Check the tracker for similar or duplicate items.',
-  effortStep,
-  'Write a short description of the item in `requirements.md` — what it is and why it matters. Not full requirements yet, just enough context to revisit later.',
-  afterStep,
-])}
-
-## Output
-
-`+"`"+`requirements.md`+"`"+` with a short description${effortEstimate !== 'skip' ? ' and effort estimate' : ''}.
-
-## Advancing
-
-When the user confirms pursuit: update the `+"`"+`tracker/index.json`+"`"+` (path is in the prompt, relative to cwd) to move the slug from `+"`"+`backlog.backlog`+"`"+` to `+"`"+`backlog.discovery`+"`"+`. Then read `+"`"+`tracker/stages/2-discovery.md`+"`"+` and continue.
-`;
-      }
-
+      // No 'backlog' case — the stage is deprecated (merged into discovery
+      // for display purposes) and `ensureStageFiles` doesn't emit backlog.md.
       case 'discovery': {
-        const depth = s['depth'] ?? 'normal';
-        const skip = s['skip'] ?? 'if_obvious';
-        const webSearch = s['web_search'] ?? 'if_needed';
-        const questions = s['questions'] ?? 'standard';
+        // Effort = research scope (code + web). Asking the user is a
+        // narrow, baked-in behaviour — not a tunable — because most
+        // clarification belongs in requirements.
+        const effort = s['effort'] ?? 'standard';
+        const report = s['report'] ?? 'confirm_if_notable';
 
-        if (skip === 'always_skip') {
-          return `# Stage ${n}: Discovery
+        const researchStep =
+          effort === 'skim'
+            ? 'Skim codebase for duplicates.'
+            : effort === 'deep'
+            ? 'Thorough codebase scan: patterns, conflicts, tests. Web research: domain, APIs, prior art, alternatives.'
+            : 'Scan codebase for related patterns. Web search if the domain is unfamiliar.';
 
-**Mode: always skip** — Write a minimal `+"`"+`notes.md`+"`"+` and advance immediately. No investigation needed.
-
-## Steps
-
-${numbered([
-  'Infer the user problem from the item title and `requirements.md`.',
-  'Write a brief `notes.md` (3–5 sentences: problem, assumption, recommendation).',
-  'Advance: update the `tracker/index.json` (path is in the prompt, relative to cwd) slug to `backlog.requirements`. Read `tracker/stages/3-requirements.md` and continue.',
-])}
-`;
-        }
-
-        const skipClause = skip === 'if_obvious'
-          ? '\n> **If obvious**: if the problem and approach are already clear from the title and context, write a minimal `notes.md` and advance without full investigation.\n'
-          : '';
-
-        const steps: (string | null)[] = [];
-        steps.push('Read the item title and `requirements.md` stub. What is the actual user problem?');
-
-        if (depth === 'quick') {
-          if (webSearch === 'always') steps.push('Do a quick web search for relevant context or prior art.');
-          if (questions === 'standard') steps.push('Use the ask_questions tool to ask **1 focused question** if anything is ambiguous.');
-          else if (questions === 'minimal') steps.push('Use the ask_questions tool if anything critical is unclear — one question max.');
-          steps.push('Write findings to `notes.md` (user problem + recommendation). Keep it brief.');
-        } else if (depth === 'thorough') {
-          steps.push('Scan the codebase: relevant patterns, existing solutions, potential conflicts, test coverage.');
-          if (webSearch !== 'never') steps.push('Do a web search: domain knowledge, external APIs/libraries, prior art, competing approaches.');
-          if (questions === 'none') {
-            steps.push('Write comprehensive findings to `notes.md` based on research alone — no Q&A.');
-          } else {
-            const qCount = questions === 'minimal' ? '2–3' : '3–5';
-            steps.push(`Use the ask_questions tool to ask **${qCount} focused questions** about the problem and approach before concluding.`);
-            steps.push('Write comprehensive findings to `notes.md`.');
+        const reportStep = (() => {
+          switch (report) {
+            case 'just_advance':
+              return 'Advance silently.';
+            case 'always_confirm':
+              return 'Summarise findings, set `state: "waiting_for_approval"` with a `brief_description` summarising what was found, and wait for approval.';
+            case 'confirm_if_notable':
+            default:
+              return 'If findings are notable (surprise, risk, pivot, conflict, alternative), summarise and set `state: "waiting_for_approval"` with a `brief_description` summarising what was found. Otherwise advance silently.';
           }
-        } else { // normal
-          steps.push('Quick codebase scan: existing patterns, related code, similar solutions.');
-          if (webSearch === 'never') {
-            // no web search step
-          } else if (webSearch === 'always') {
-            steps.push('Do a web search to understand the domain and any relevant tools or APIs.');
-          } else {
-            steps.push('If the domain is unfamiliar or involves external APIs, do a brief web search.');
-          }
-          if (questions === 'none') {
-            steps.push('Write findings to `notes.md` based on research — no Q&A.');
-          } else {
-            const qCount = questions === 'minimal' ? '1 focused question' : '1–3 focused questions';
-            steps.push(`Use the ask_questions tool to ask **${qCount}** — focus on "why" and "what to build", not "how".`);
-            steps.push('Write findings to `notes.md`.');
-          }
-        }
+        })();
 
         const outputFields =
-          depth === 'quick'
-            ? '- **User problem**: who has this problem and what is the pain\n- **Recommendation**: proposed approach'
-            : depth === 'thorough'
-            ? '- **User problem**: who has this problem and what is the pain\n- **Context**: codebase findings and research\n- **Options considered**: 2+ approaches with tradeoffs\n- **Recommendation**: proposed approach with reasoning and known risks'
-            : '- **User problem**: who has this problem and what is the pain\n- **Findings**: relevant codebase or research findings\n- **Recommendation**: proposed approach with brief reasoning';
+          effort === 'skim'
+            ? 'Problem, Recommendation.'
+            : effort === 'deep'
+            ? 'Problem; Context (code + research); Options (2+ with tradeoffs); Recommendation (reasoning + risks).'
+            : 'Problem, Findings, Recommendation.';
 
-        return `# Stage ${n}: Discovery
-${skipClause}
-**Goal**: Clarify what user problem this item solves and whether the approach makes sense.
+        return `# Discovery
 
-## Steps
+Research the problem — code and domain. Trivial items (typo, rename, doc): one-line \`notes.md\`, advance. Clarifying questions: only if the request itself is unreadable; "X or Y?" trade-offs belong in requirements.
 
-${numbered(steps)}
+${numbered([
+  researchStep,
+  `Write \`notes.md\`: ${outputFields}`,
+  reportStep,
+])}
 
-## Output
-
-Write to `+"`"+`notes.md`+"`"+`:
-${outputFields}
-
-Keep the body of `+"`"+`requirements.md`+"`"+` untouched during discovery — that belongs to stage 3.
-
-## Advancing
-
-When `+"`"+`notes.md`+"`"+` is written, append a single line like \`## Requirements (stub)\` to `+"`"+`requirements.md`+"`"+` as the "discovery done" signal. The board auto-detects this heading and advances the item to the requirements stage. Then read `+"`"+`tracker/stages/3-requirements.md`+"`"+` and continue.
+Advance: set \`status.json.stage\` to \`requirements\`.
 `;
       }
 
       case 'requirements': {
+        // Two knobs: collaboration shape (style) + spec depth (detail).
+        // Check-in cadence is governed by the project inputMode, not here.
         const style = s['style'] ?? 'interview';
         const detail = s['detail'] ?? 'standard';
-        const approval = s['approval'] ?? 'per_section';
-        const userStories = s['user_stories'] ?? 'skip';
 
-        const steps: (string | null)[] = [];
-        steps.push('Read `notes.md` (discovery output) and the existing `requirements.md` — note the discovery stub heading and anything already written.');
-        steps.push('**Preserve the what / why from discovery.** The "Problem" and "Why" sections come straight from `notes.md` — copy them into `requirements.md` verbatim or lightly edited. Do not delete, paraphrase away, or weaken that context when adding new sections.');
+        const collabStep = style === 'draft_first'
+          ? 'Draft a strawman `requirements.md` from `notes.md` before asking anything. Share the draft; collect corrections per the project inputMode.'
+          : 'Ask targeted questions about acceptance criteria, edge cases, and constraints — batch them, follow the project inputMode. Then draft.';
 
-        if (style === 'interview') {
-          steps.push(`Use the ask_questions tool to ask targeted questions about acceptance criteria, edge cases, and constraints.${approval !== 'none' ? ' Batch questions — don\'t ask one at a time.' : ''}`);
-          steps.push('Draft the remaining requirements sections based on the answers, **appending** to the preserved discovery context rather than replacing it.');
-          if (approval === 'per_section') steps.push('Walk through each new section with the user for approval before moving to the next.');
-          else if (approval === 'end_only') steps.push('Draft all new sections, then present the complete document for user review.');
-          steps.push('Write the final `requirements.md` — it must still open with the discovery "Problem" and "Why" content, followed by the new sections.');
-        } else if (style === 'draft_first') {
-          steps.push('Draft a strawman `requirements.md` based on `notes.md` and your understanding — write it before asking anything. **Start with "Problem" and "Why" copied from `notes.md`**, then append your draft of the remaining sections.');
-          if (approval === 'per_section') steps.push('Walk through each section with the user. Use the ask_questions tool for feedback and corrections.');
-          else if (approval === 'end_only') steps.push('Share the complete draft. Use the ask_questions tool to collect corrections and open questions.');
-          else steps.push('Share the draft and incorporate any feedback the user volunteers.');
-          steps.push('Revise and write the final `requirements.md` — the "Problem" and "Why" from discovery must remain intact at the top.');
-        } else { // freeform
-          steps.push('Ask the user how they want to proceed — let them guide the format and depth.');
-          steps.push('Use the ask_questions tool as needed throughout the conversation.');
-          steps.push('Write `requirements.md` in whatever format fits the item — but always retain the "Problem" / "Why" context surfaced by discovery.');
-        }
-
-        const outputSections: string[] = [];
-        outputSections.push('- **Problem** (from discovery): the user problem this solves — preserved from `notes.md`');
-        outputSections.push('- **Why** (from discovery): context / motivation / findings — preserved from `notes.md`');
-        if (userStories === 'lead') outputSections.push('- **User stories** (lead): as a [user], I want [feature] so that [benefit]');
-        outputSections.push('- **Summary**: one-paragraph summary of what is being built');
-        if (userStories === 'include') outputSections.push('- **User stories**: as a [user], I want [feature] so that [benefit]');
-        outputSections.push('- **Acceptance criteria**: numbered list of testable conditions');
-        if (detail !== 'minimal') outputSections.push('- **Edge cases**: important boundary conditions');
+        const sections: string[] = [
+          '- **Problem** + **Why** — copied from `notes.md` (do not drop or rewrite).',
+          '- **Summary** — one paragraph of what will be built.',
+          '- **Acceptance criteria** — numbered testable conditions.',
+        ];
+        if (detail !== 'minimal') sections.push('- **Edge cases** — boundary conditions.');
         if (detail === 'thorough') {
-          outputSections.push('- **Constraints**: technical, performance, security, or UX constraints');
-          outputSections.push('- **Dependencies**: other items or systems this depends on');
-          outputSections.push('- **Out of scope**: explicitly what is NOT being built');
+          sections.push('- **Constraints** — technical / performance / security / UX.');
+          sections.push('- **Dependencies** — other items or systems.');
+          sections.push('- **Out of scope** — what is NOT being built.');
         }
-
         const minWords = detail === 'minimal' ? 30 : detail === 'thorough' ? 100 : 50;
 
-        return `# Stage ${n}: Requirements
+        return `# Requirements
 
-**Goal**: Document what needs to be built — acceptance criteria, edge cases, constraints — **while preserving the what / why surfaced during discovery**.
+Document what to build. Always preserve the **Problem** and **Why** from \`notes.md\` — copy them verbatim; never paraphrase them away.
 
-## Steps
-
-${numbered(steps)}
-
-## Output
-
-`+"`"+`requirements.md`+"`"+` must contain, in this order:
-${outputSections.join('\n')}
-
-The **Problem** and **Why** sections are copied forward from `+"`"+`notes.md`+"`"+` — do not drop or substantially rewrite them. Reviewers should be able to see the original motivation without going back to `+"`"+`notes.md`+"`"+`.
+${numbered([
+  'Read `notes.md` and the existing `requirements.md` stub.',
+  collabStep,
+  `Write \`requirements.md\` in order:\n${sections.join('\n')}`,
+])}
 
 Minimum ${minWords} words of real content.
-
-## Advancing
-
-When `+"`"+`requirements.md`+"`"+` has sufficient detail: update the `+"`"+`tracker/index.json`+"`"+` (path is in the prompt, relative to cwd) slug to `+"`"+`implementation.implement`+"`"+`. Read `+"`"+`tracker/stages/4-implement.md`+"`"+` and continue.
 `;
       }
 
@@ -1294,7 +1461,7 @@ When `+"`"+`requirements.md`+"`"+` has sufficient detail: update the `+"`"+`trac
         if (implNotes === 'brief') outputLines.push('- `implementation.md`: what was built, key decisions, notes for cleanup');
         else if (implNotes === 'detailed') outputLines.push('- `implementation.md`: full implementation journal — decisions, rationale, architecture, known issues');
 
-        return `# Stage ${n}: Implement
+        return `# Implement
 
 **Goal**: Build the feature according to the requirements.
 
@@ -1308,7 +1475,7 @@ ${outputLines.join('\n')}
 
 ## Advancing
 
-When implementation is complete${tdd !== 'skip' ? ' and tests pass' : ''}: update the `+"`"+`tracker/index.json`+"`"+` (path is in the prompt, relative to cwd) slug to `+"`"+`implementation.cleanup`+"`"+`. Read `+"`"+`tracker/stages/5-cleanup.md`+"`"+` and continue.
+When implementation is complete${tdd !== 'skip' ? ' and tests pass' : ''}: update the `+"`"+`tracker/index.json`+"`"+` (path is in the prompt, relative to cwd) slug to `+"`"+`implementation.cleanup`+"`"+`. Read `+"`"+`tracker/stages/cleanup.md`+"`"+` and continue.
 `;
       }
 
@@ -1345,7 +1512,7 @@ When implementation is complete${tdd !== 'skip' ? ' and tests pass' : ''}: updat
         if (prPrep === 'notes') steps.push('Jot down key changes and decisions for the PR description.');
         else if (prPrep === 'full') steps.push('Write a full PR description: summary, changes made, how to test, screenshots or logs if applicable.');
 
-        return `# Stage ${n}: Cleanup
+        return `# Cleanup and submit
 
 **Goal**: Polish and ship. Review what was built, catch issues, get it across the finish line.
 

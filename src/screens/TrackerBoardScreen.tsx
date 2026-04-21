@@ -36,9 +36,35 @@ const MIN_COLUMN_WIDTH = 20;
 const MAX_COLUMN_WIDTH = 50;
 const PLAN_COLOR = 'blue';
 const IMPL_COLOR = 'magenta';
-// Each item renders as 3 rows (slug + secondary + marginBottom). Used for per-column
-// scroll math so the column box stays within colHeight regardless of item count.
-const ROWS_PER_ITEM = 3;
+// Each item renders as up to 4 rows: slug + 2 secondary lines + marginBottom.
+// Reserved as a fixed slot so mixed short/long descriptions don't overlap
+// during scroll. Short descriptions just leave the second line blank.
+const ROWS_PER_ITEM = 4;
+const SECONDARY_MAX_LINES = 2;
+
+// Word-wrap `text` onto at most `maxLines` of width `width`. Breaks on spaces
+// when possible, falls back to character boundaries. Appends '…' to the last
+// line when content was truncated. Returns an array of 0–maxLines strings.
+function wrapToLines(text: string, width: number, maxLines: number): string[] {
+  if (!text || width <= 0 || maxLines <= 0) return [];
+  const out: string[] = [];
+  let remaining = text.trim();
+  while (remaining && out.length < maxLines) {
+    if (remaining.length <= width) { out.push(remaining); break; }
+    let breakAt = remaining.lastIndexOf(' ', width);
+    if (breakAt <= 0) breakAt = width;
+    out.push(remaining.slice(0, breakAt).trimEnd());
+    remaining = remaining.slice(breakAt).trimStart();
+  }
+  if (remaining && out.length > 0) {
+    const last = out[out.length - 1];
+    const fitsEllipsis = last.length + 1 <= width;
+    out[out.length - 1] = fitsEllipsis
+      ? last + '…'
+      : last.slice(0, Math.max(0, width - 1)) + '…';
+  }
+  return out;
+}
 // 2 borders + 1 header. Items area starts on the row directly below the title — no
 // inter-row gap so we get one extra item per column.
 const COLUMN_CHROME_ROWS = 3;
@@ -596,12 +622,29 @@ export default function TrackerBoardScreen({
             const isSelected = isActiveColumn && selectedRow === itemIndex;
             const sessWt = getSessionForItem(item);
             const aiStatus: AIStatus | undefined = sessWt?.session?.ai_status;
-            const isWaiting = aiStatus === 'waiting';
+            const aiWaiting = aiStatus === 'waiting';
             const isWorking = aiStatus === 'working' || aiStatus === 'active';
             const hasSession = !!sessWt;
 
-            const statusGlyph = isWaiting ? '!' : isWorking ? '⟳' : hasSession ? '◆' : ' ';
-            const statusColor = isWaiting ? 'yellow' : isWorking ? 'cyan' : hasSession ? 'gray' : undefined;
+            // Ralph status signal: the agent self-reported a non-working
+            // state in status.json. `waiting_for_approval` gets its own green
+            // "ready to advance" treatment so it's spottable at a glance and
+            // can be acted on with the `m` shortcut from the board.
+            const itemStatus = service.getItemStatus(projectPath, item.slug);
+            const readyToAdvance = service.isItemReadyToAdvance(itemStatus);
+            const ralphWaiting = !!itemStatus && !readyToAdvance && service.isItemWaiting(itemStatus);
+            const isWaiting = aiWaiting || ralphWaiting;
+
+            const statusGlyph =
+              readyToAdvance ? '✓' :
+              isWaiting ? '!' :
+              isWorking ? '⟳' :
+              hasSession ? '◆' : ' ';
+            const statusColor =
+              readyToAdvance ? 'green' :
+              isWaiting ? 'yellow' :
+              isWorking ? 'cyan' :
+              hasSession ? 'gray' : undefined;
 
             // Slug row eats: 2 (border) + 2 (paddingX) + 2 (cursor) + 2 (status glyph) = 8 chars
             const slug = truncateDisplay(item.slug, Math.max(4, colWidth - 8));
@@ -609,31 +652,72 @@ export default function TrackerBoardScreen({
             const secMax = Math.max(4, colWidth - 8);
             const secondary = !hasSession ? renderSecondary(item) : '';
 
+            const waitingLabel = ralphWaiting && itemStatus?.brief_description
+              ? itemStatus.brief_description
+              : 'waiting for you';
+            const readyLabel = itemStatus?.brief_description
+              ? `Ready — ${itemStatus.brief_description}`
+              : 'Ready';
+
             return (
               <Box key={item.slug} flexDirection="column" marginBottom={1} flexShrink={0}>
                 {/* Slug row: cursor + status + name */}
                 <Box>
                   <Text color={accent} bold>{isSelected ? '▸ ' : '  '}</Text>
-                  <Text color={statusColor} bold={isWaiting}>{statusGlyph} </Text>
+                  <Text color={statusColor} bold={isWaiting || readyToAdvance}>{statusGlyph} </Text>
                   <Text
                     inverse={isSelected}
-                    color={!isSelected && isWaiting ? 'yellow' : undefined}
-                    bold={isWaiting || isSelected}
+                    color={!isSelected
+                      ? (readyToAdvance ? 'green' : isWaiting ? 'yellow' : undefined)
+                      : undefined}
+                    bold={isWaiting || readyToAdvance || isSelected}
                     wrap="truncate"
                   >
                     {slug}
                   </Text>
                 </Box>
-                {/* Status / secondary text */}
-                {isWaiting ? (
-                  <Text color="yellow" bold wrap="truncate">{`    ${truncateDisplay('waiting for you', secMax)}`}</Text>
-                ) : isWorking ? (
-                  <Text color="cyan" wrap="truncate">{`    ${truncateDisplay('running', secMax)}`}</Text>
-                ) : hasSession ? (
-                  <Text dimColor wrap="truncate">{`    ${truncateDisplay('session idle', secMax)}`}</Text>
-                ) : secondary ? (
-                  <Text dimColor wrap="truncate">{`    ${truncateDisplay(secondary, secMax)}`}</Text>
-                ) : null}
+                {/* Status / secondary text — wraps to SECONDARY_MAX_LINES so
+                    long brief_descriptions from the agent stay readable. */}
+                {(() => {
+                  const text =
+                    readyToAdvance ? readyLabel
+                    : isWaiting ? waitingLabel
+                    : isWorking ? (itemStatus?.brief_description || 'running')
+                    : hasSession ? (itemStatus?.brief_description || 'session idle')
+                    : secondary || '';
+                  if (!text) return null;
+                  // Focused card gets more lines so the full (up to 200-char)
+                  // brief_description is readable; other cards stay compact.
+                  const maxLines = isSelected ? 4 : SECONDARY_MAX_LINES;
+                  const lines = wrapToLines(text, secMax, maxLines);
+                  const color =
+                    readyToAdvance ? 'green'
+                    : isWaiting ? 'yellow'
+                    : isWorking ? 'cyan'
+                    : undefined;
+                  const dim = !readyToAdvance && !isWaiting && !isWorking;
+                  return lines.map((line, lineIdx) => (
+                    <Text
+                      key={lineIdx}
+                      color={color}
+                      bold={isWaiting || readyToAdvance}
+                      dimColor={dim}
+                      wrap="truncate"
+                    >
+                      {`    ${line}`}
+                    </Text>
+                  ));
+                })()}
+                {/* Dedicated approve-hint row — only when this card is the
+                    selected one and ready for approval. Keeping it on its
+                    own line (rather than suffixing the brief_description)
+                    makes the shortcut visible even when the description
+                    wraps to two lines. */}
+                {readyToAdvance && isSelected && (
+                  <Text color="green" bold>
+                    {`    press [m] to approve and advance`}
+                  </Text>
+                )}
               </Box>
             );
           })}
