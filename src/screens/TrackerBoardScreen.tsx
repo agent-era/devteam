@@ -714,17 +714,17 @@ export default function TrackerBoardScreen({
                   const maxLines = isSelected ? 4 : SECONDARY_MAX_LINES;
                   const lines = wrapToLines(text, secMax, maxLines);
                   const color =
-                    readyToAdvance ? 'green'
+                    item.inactive ? 'gray'
+                    : readyToAdvance ? 'green'
                     : isWaiting ? 'yellow'
                     : isWorking ? 'cyan'
-                    : item.inactive ? 'gray'
                     : undefined;
-                  const dim = !readyToAdvance && !isWaiting && !isWorking;
+                  const dim = item.inactive || (!readyToAdvance && !isWaiting && !isWorking);
                   return lines.map((line, lineIdx) => (
                     <Text
                       key={lineIdx}
                       color={color}
-                      bold={isWaiting || readyToAdvance}
+                      bold={!item.inactive && (isWaiting || readyToAdvance)}
                       dimColor={dim}
                       wrap="truncate"
                     >
