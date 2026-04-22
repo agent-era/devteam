@@ -190,12 +190,17 @@ export default function TrackerBoardScreen({
         hasNotes: false,
         worktreePath: w.path,
         worktreeExists: true,
+        inactive: false,
       });
     }
     if (orphans.length === 0) return rawBoard;
-    const newColumns = rawBoard.columns.map(col =>
-      col.id === 'implement' ? {...col, items: [...col.items, ...orphans]} : col
-    );
+    // Splice orphans before the inactive tail to preserve active-first ordering.
+    const newColumns = rawBoard.columns.map(col => {
+      if (col.id !== 'implement') return col;
+      const firstInactive = col.items.findIndex(it => it.inactive);
+      const split = firstInactive === -1 ? col.items.length : firstInactive;
+      return {...col, items: [...col.items.slice(0, split), ...orphans, ...col.items.slice(split)]};
+    });
     return {...rawBoard, columns: newColumns};
   }, [rawBoard, worktrees, project, projectPath]);
 
@@ -351,6 +356,21 @@ export default function TrackerBoardScreen({
     });
   }, [currentItem, getWorktreeForItem, showArchiveConfirmation, backToTracker]);
 
+  const handleToggleInactive = React.useCallback(() => {
+    if (!currentItem) return;
+    if (!currentItem.requirementsPath) {
+      service.createItem(projectPath, currentItem.title || currentItem.slug, 'implement', currentItem.slug);
+    }
+    service.toggleItemInactive(projectPath, currentItem.slug);
+    const newBoard = service.loadBoard(project, projectPath);
+    setBoard(newBoard);
+    const pos = findSlugPosition(newBoard, currentItem.slug);
+    if (pos) {
+      setSelectedColumn(pos.column);
+      setSelectedRowByColumn(prev => ({...prev, [pos.column]: pos.row}));
+    }
+  }, [currentItem, service, projectPath, project]);
+
   const unmountedRef = React.useRef(false);
   React.useEffect(() => () => { unmountedRef.current = true; }, []);
 
@@ -469,6 +489,7 @@ export default function TrackerBoardScreen({
     onAttach: currentItem ? handleAttach : undefined,
     onCreate: () => setCreateMode(true),
     onMoveItemNext: handleMoveItemNext,
+    onToggleInactive: currentItem ? handleToggleInactive : undefined,
     onGenerateProposals: handleProposalKey,
     onStagesConfig: onCustomizeStages,
     onPickProject: () => setPickerMode(true),
@@ -644,7 +665,8 @@ export default function TrackerBoardScreen({
               readyToAdvance ? 'green' :
               isWaiting ? 'yellow' :
               isWorking ? 'cyan' :
-              hasSession ? 'gray' : undefined;
+              hasSession ? 'gray' :
+              item.inactive ? 'gray' : undefined;
 
             // Slug row eats: 2 (border) + 2 (paddingX) + 2 (cursor) + 2 (status glyph) = 8 chars
             const slug = truncateDisplay(item.slug, Math.max(4, colWidth - 8));
@@ -668,9 +690,10 @@ export default function TrackerBoardScreen({
                   <Text
                     inverse={isSelected}
                     color={!isSelected
-                      ? (readyToAdvance ? 'green' : isWaiting ? 'yellow' : undefined)
+                      ? (readyToAdvance ? 'green' : isWaiting ? 'yellow' : item.inactive ? 'gray' : undefined)
                       : undefined}
                     bold={isWaiting || readyToAdvance || isSelected}
+                    dimColor={item.inactive && !isSelected}
                     wrap="truncate"
                   >
                     {slug}
@@ -694,6 +717,7 @@ export default function TrackerBoardScreen({
                     readyToAdvance ? 'green'
                     : isWaiting ? 'yellow'
                     : isWorking ? 'cyan'
+                    : item.inactive ? 'gray'
                     : undefined;
                   const dim = !readyToAdvance && !isWaiting && !isWorking;
                   return lines.map((line, lineIdx) => (
@@ -803,14 +827,19 @@ export default function TrackerBoardScreen({
           <Text color={proposalStatus.color}>{proposalStatus.text}</Text>
         )}
         {!inputActive && (
-          <Footer hasSession={!!currentItemSession} hasWorktree={hasWorktree} hasItem={!!currentItem} />
+          <Footer
+            hasSession={!!currentItemSession}
+            hasWorktree={hasWorktree}
+            hasItem={!!currentItem}
+            inactive={!!currentItem?.inactive}
+          />
         )}
       </Box>
     </Box>
   );
 }
 
-const Footer = React.memo(function Footer({hasSession, hasWorktree, hasItem}: {hasSession: boolean; hasWorktree: boolean; hasItem: boolean}) {
+const Footer = React.memo(function Footer({hasSession, hasWorktree, hasItem, inactive}: {hasSession: boolean; hasWorktree: boolean; hasItem: boolean; inactive: boolean}) {
   const sep = <Text dimColor>  ·  </Text>;
   return (
     <Box>
@@ -856,6 +885,13 @@ const Footer = React.memo(function Footer({hasSession, hasWorktree, hasItem}: {h
       <Text>  </Text>
       <Text color="magenta">m</Text>
       <Text dimColor> advance</Text>
+      {hasItem && (
+        <>
+          <Text>  </Text>
+          <Text color="magenta">i</Text>
+          <Text dimColor>{inactive ? ' activate' : ' inactive'}</Text>
+        </>
+      )}
       {sep}
       <Text color="magenta">p</Text>
       <Text dimColor> proposals</Text>
@@ -884,4 +920,3 @@ function renderSecondary(item: TrackerItem): string {
   if (!item.requirementsBody.trim()) return 'needs requirements';
   return '';
 }
-

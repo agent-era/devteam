@@ -242,6 +242,21 @@ describe('RalphCore safety invariants', () => {
     expect(tmux.sent.length).toBe(0);
   });
 
+  test('never sends a nudge when the tracker item is inactive', () => {
+    enableRalph();
+    tracker.createItem(projectPath, 'My slug', 'discovery', 'my-slug');
+    tracker.setItemInactive(projectPath, 'my-slug', true);
+    writeStatus('my-slug', {});
+    const t0 = Date.now();
+    let now = t0;
+    const wt = makeWorktree({ai_status: 'idle'});
+    const {core, tmux} = buildCore({worktrees: [wt], now: () => now});
+    core.sampleOnce();
+    now = t0 + 10 * 60 * 1000;
+    core.sampleOnce();
+    expect(tmux.sent.length).toBe(0);
+  });
+
   test('nudges a backgrounded session when the agent is running + idle', () => {
     // Attachment just means the user is viewing the pane; it's orthogonal
     // to whether the agent itself is running. ai_status === 'idle' is the

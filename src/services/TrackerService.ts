@@ -220,7 +220,7 @@ export interface TrackerIndex {
   archive?: string[];
   // Sidecar metadata keyed by slug (currently just the title, used to display items
   // on the board before their requirements file is materialised).
-  sessions?: Record<string, {title?: string}>;
+  sessions?: Record<string, {title?: string; inactive?: boolean}>;
 }
 
 export interface TrackerFrontmatter {
@@ -247,6 +247,7 @@ export interface TrackerItem {
   hasNotes: boolean;
   worktreePath?: string;
   worktreeExists: boolean;
+  inactive: boolean;
 }
 
 export interface TrackerColumn {
@@ -358,7 +359,7 @@ export class TrackerService {
     this.reconcileAutoAdvance(projectPath);
     const index = this.readIndex(projectPath);
     const stageBySlug = this.createStageBySlug(index);
-    const allItems = this.loadItems(project, projectPath, stageBySlug);
+    const allItems = this.loadItems(project, projectPath, stageBySlug, index);
     const itemBySlug = new Map(allItems.map(item => [item.slug, item]));
 
     const buildColumn = (id: TrackerStage, bucket: TrackerBucket, orderedSlugs: string[]): TrackerColumn => {
@@ -377,7 +378,7 @@ export class TrackerService {
         id,
         title: STAGE_LABELS[id],
         bucket,
-        items: [...ordered, ...extras],
+        items: this.sortItemsForBoard([...ordered, ...extras]),
       };
     };
 
@@ -391,7 +392,7 @@ export class TrackerService {
     const discoveryExtras = allItems.filter(
       item => item.stage === 'discovery' && !seenSlugs.has(item.slug)
     );
-    backlogDiscovery.items = [...backlogDiscovery.items, ...discoveryExtras];
+    backlogDiscovery.items = this.sortItemsForBoard([...backlogDiscovery.items, ...discoveryExtras]);
 
     return {
       project,
@@ -404,6 +405,30 @@ export class TrackerService {
         buildColumn('cleanup', 'implementation', index.implementation?.cleanup || []),
       ],
     };
+  }
+
+  isItemInactive(projectPath: string, slug: string): boolean {
+    return this.readIndex(projectPath).sessions?.[slug]?.inactive === true;
+  }
+
+  setItemInactive(projectPath: string, slug: string, inactive: boolean): boolean {
+    return this._writeInactive(projectPath, this.readIndex(projectPath), slug, inactive);
+  }
+
+  toggleItemInactive(projectPath: string, slug: string): boolean {
+    const index = this.readIndex(projectPath);
+    const current = index.sessions?.[slug]?.inactive === true;
+    return this._writeInactive(projectPath, index, slug, !current);
+  }
+
+  private _writeInactive(projectPath: string, index: TrackerIndex, slug: string, inactive: boolean): boolean {
+    if (!this.createStageBySlug(index).has(slug)) return false;
+    const sessions = {...(index.sessions ?? {})};
+    const {inactive: _prev, ...rest} = sessions[slug] ?? {};
+    sessions[slug] = inactive ? {...rest, inactive: true} : rest;
+    index.sessions = sessions;
+    writeJSONAtomic(this.getIndexPath(projectPath), index);
+    return true;
   }
 
   slugify(title: string, maxLength = 20): string {
@@ -718,12 +743,12 @@ export class TrackerService {
       .slice(0, maxLines);
   }
 
-  private loadItems(project: string, projectPath: string, stageBySlug: Map<string, TrackerStage>): TrackerItem[] {
+  private loadItems(project: string, projectPath: string, stageBySlug: Map<string, TrackerStage>, index: TrackerIndex): TrackerItem[] {
     const items: TrackerItem[] = [];
     const seen = new Set<string>();
     for (const [slug, stage] of stageBySlug.entries()) {
       if (seen.has(slug)) continue;
-      const item = this.readItem(project, projectPath, this.bucketForStage(stage), stage, slug);
+      const item = this.readItem(project, projectPath, this.bucketForStage(stage), stage, slug, index);
       if (item) {
         items.push(item);
         seen.add(slug);
@@ -732,12 +757,19 @@ export class TrackerService {
     return items;
   }
 
+  private sortItemsForBoard(items: TrackerItem[]): TrackerItem[] {
+    const active = items.filter(item => !item.inactive);
+    const inactive = items.filter(item => item.inactive);
+    return [...active, ...inactive];
+  }
+
   private readItem(
     project: string,
     projectPath: string,
     bucket: TrackerBucket,
     stage: TrackerStage,
-    slug: string
+    slug: string,
+    index: TrackerIndex
   ): TrackerItem | null {
     // Item content lives in the worktree at `<wt>/tracker/items/<slug>/`. Archived
     // items live in the main project at `<projectPath>/tracker/archive/<slug>/`. We
@@ -779,6 +811,7 @@ export class TrackerService {
       hasNotes: fs.existsSync(notesPath),
       worktreePath,
       worktreeExists: fs.existsSync(worktreePath),
+      inactive: index.sessions?.[slug]?.inactive === true,
     };
   }
 
@@ -805,6 +838,7 @@ export class TrackerService {
         backlog: {backlog: [], discovery: [], requirements: []},
         implementation: {implement: [], cleanup: []},
         archive: [],
+        sessions: {},
       };
     }
   }

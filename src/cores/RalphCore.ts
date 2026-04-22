@@ -288,6 +288,7 @@ export class RalphCore implements CoreBase<State> {
     if (idleSince === null || nowMs - idleSince < config.idleThresholdMs) return next;
     if (fresh) return next;
     if (stage === 'archive') return next;
+    if (this.tracker.isItemInactive(projectPath, wt.feature)) return next;
     if (nudgesThisStage >= config.maxNudgesPerStage) {
       next.capped = true;
       return next;
