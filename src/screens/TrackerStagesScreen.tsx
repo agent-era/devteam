@@ -1,5 +1,4 @@
 import React from 'react';
-import fs from 'fs';
 import {Box, Text, useInput} from 'ink';
 import {TrackerService, StagesConfig, TrackerStage, WorkStyle, STAGE_LABELS} from '../services/TrackerService.js';
 import {RalphConfig, loadRalphConfig, saveRalphConfig} from '../cores/RalphCore.js';
@@ -290,12 +289,8 @@ export default function TrackerStagesScreen({projectPath, onBack}: TrackerStages
     const next = opt.choices[(idx + delta + opt.choices.length) % opt.choices.length].value;
     const newSettings = {...stageSettings, [opt.key]: next};
     service.saveStageSettings(projectPath, currentStage, newSettings);
-    // Write updated file to disk so the agent gets the new settings
-    const updatedContent = service.defaultStageFileContent(currentStage, newSettings, workStyle);
-    const filePath = service.getStageFilePath(projectPath, currentStage);
-    try { fs.writeFileSync(filePath, updatedContent, 'utf8'); } catch {}
     setConfig(service.loadStagesConfig(projectPath));
-  }, [currentStage, stageOpts, selectedRow, stageSettings, workStyle, service, projectPath]);
+  }, [currentStage, stageOpts, selectedRow, stageSettings, service, projectPath]);
 
   const cycleStyleOption = React.useCallback((delta: number) => {
     const opt = STYLE_OPTIONS[selectedRow];
@@ -306,19 +301,7 @@ export default function TrackerStagesScreen({projectPath, onBack}: TrackerStages
     const updated = {...workStyle, [opt.key]: next};
     setWorkStyle(updated);
     service.saveWorkStyle(projectPath, updated);
-    // inputMode changes affect the protocol tail in every stage guide, so
-    // regenerate all four files on disk. Other style fields only drive
-    // working-style.md (saveWorkStyle already rewrites that).
-    if (opt.key === 'inputMode') {
-      for (const stage of ['discovery', 'requirements', 'implement', 'cleanup'] as const) {
-        const stageSettings = config[stage]?.settings || {};
-        const filePath = service.getStageFilePath(projectPath, stage);
-        try {
-          fs.writeFileSync(filePath, service.defaultStageFileContent(stage, stageSettings, updated), 'utf8');
-        } catch {}
-      }
-    }
-  }, [selectedRow, workStyle, config, service, projectPath]);
+  }, [selectedRow, workStyle, service, projectPath]);
 
   const cycleRalphOption = React.useCallback((delta: number) => {
     const opt = RALPH_OPTIONS[selectedRow];
@@ -359,8 +342,7 @@ export default function TrackerStagesScreen({projectPath, onBack}: TrackerStages
         const result = await service.editStageFileWithAI(projectPath, currentStage, prompt);
         setLoading(false);
         if (!result.success) setError(result.error || 'AI edit failed');
-        // Force re-read by toggling tab
-        setSelectedTab(t => t);
+        else setConfig(service.loadStagesConfig(projectPath));
       })();
     }
   }, [editPrompt, isStyleTab, currentStage, service, projectPath]);
@@ -423,7 +405,7 @@ export default function TrackerStagesScreen({projectPath, onBack}: TrackerStages
     }
   });
 
-  const stageFilePath = currentStage ? service.getStageFilePath(projectPath, currentStage) : '';
+  const stageFilePath = currentStage ? service.getSharedSkillPath(projectPath) : '';
   const tabLabel =
     isStyleTab ? 'Style'
     : isRalphTab ? 'Ralph'

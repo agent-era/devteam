@@ -136,7 +136,7 @@ describe('buildNudgeText', () => {
   test('references stage guide path and output file', () => {
     const text = buildNudgeText({slug: 'abc', stage: 'discovery', inputMode: 'ask_questions', gateOnAdvance: 'none'});
     expect(text).toContain('discovery');
-    expect(text).toContain('stages/discovery.md');
+    expect(text).toContain('.agents/skills/stages-progression/SKILL.md');
     expect(text).toContain('notes.md');
   });
 

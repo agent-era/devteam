@@ -707,13 +707,19 @@ describe('loadWorkStyle / saveWorkStyle', () => {
     expect(reloaded.decisionStyle).toBe('decide');
   });
 
-  test('saveWorkStyle also writes working-style.md when stages dir exists', () => {
+  test('saveWorkStyle regenerates the generated skill file', () => {
     service.ensureStageFiles(tmpDir); // initialises stages dir
     service.saveWorkStyle(tmpDir, DEFAULT_WORK_STYLE);
-    const mdPath = service.getWorkStyleFilePath(tmpDir);
-    expect(fs.existsSync(mdPath)).toBe(true);
-    const content = fs.readFileSync(mdPath, 'utf8');
+    const content = fs.readFileSync(service.getSharedSkillPath(tmpDir), 'utf8');
     expect(content.length).toBeGreaterThan(50);
+  });
+
+  test('saveWorkStyle regenerates the shared skill file', () => {
+    service.ensureStageFiles(tmpDir);
+    const updated: WorkStyle = {...DEFAULT_WORK_STYLE, inputMode: 'doc_review'};
+    service.saveWorkStyle(tmpDir, updated);
+    const content = fs.readFileSync(service.getSharedSkillPath(tmpDir), 'utf8');
+    expect(content).toContain('Input mode: `doc_review`');
   });
 
   test('missing fields fall back to defaults', () => {
@@ -740,6 +746,14 @@ describe('loadStagesConfig / saveStageSettings', () => {
     const config = service.loadStagesConfig(tmpDir);
     expect(config.discovery.settings?.effort).toBe('deep');
     expect(config.discovery.settings?.report).toBe('always_confirm');
+  });
+
+  test('saveStageSettings regenerates stage docs and shared skill files', () => {
+    service.ensureStageFiles(tmpDir);
+    service.saveStageSettings(tmpDir, 'discovery', {effort: 'deep', report: 'always_confirm'});
+    const skill = fs.readFileSync(service.getSharedSkillPath(tmpDir), 'utf8');
+    expect(skill).toContain('Thorough codebase scan');
+    expect(skill).toContain('Summarise findings');
   });
 
   test('saveStageSettings merges without overwriting other keys', () => {
@@ -909,34 +923,24 @@ describe('defaultStageFileContent', () => {
 // ─── ensureStageFiles ────────────────────────────────────────────────────────
 
 describe('ensureStageFiles', () => {
-  test('creates all stage files and overview', () => {
+  test('creates generated skill files', () => {
     service.ensureStageFiles(tmpDir);
-    const stagesDir = service.getStagesDir(tmpDir);
-    expect(fs.existsSync(path.join(stagesDir, 'overview.md'))).toBe(true);
-    for (const stage of ['discovery', 'requirements', 'implement', 'cleanup'] as const) {
-      expect(fs.existsSync(service.getStageFilePath(tmpDir, stage))).toBe(true);
-    }
+    expect(fs.existsSync(service.getSharedSkillPath(tmpDir))).toBe(true);
+    expect(fs.existsSync(service.getClaudeSkillPath(tmpDir))).toBe(true);
   });
 
-  test('creates working-style.md', () => {
+  test('creates shared and Claude skill files', () => {
     service.ensureStageFiles(tmpDir);
-    expect(fs.existsSync(service.getWorkStyleFilePath(tmpDir))).toBe(true);
+    expect(fs.existsSync(service.getSharedSkillPath(tmpDir))).toBe(true);
+    expect(fs.existsSync(service.getClaudeSkillPath(tmpDir))).toBe(true);
   });
 
-  test('does not overwrite existing stage files', () => {
+  test('regenerates existing generated skill files from config', () => {
     service.ensureStageFiles(tmpDir);
-    const filePath = service.getStageFilePath(tmpDir, 'discovery');
+    const filePath = service.getSharedSkillPath(tmpDir);
     fs.writeFileSync(filePath, 'custom content');
     service.ensureStageFiles(tmpDir);
-    expect(fs.readFileSync(filePath, 'utf8')).toBe('custom content');
-  });
-
-  test('always regenerates working-style.md', () => {
-    service.ensureStageFiles(tmpDir);
-    const wsPath = service.getWorkStyleFilePath(tmpDir);
-    fs.writeFileSync(wsPath, 'stale content');
-    service.ensureStageFiles(tmpDir);
-    expect(fs.readFileSync(wsPath, 'utf8')).not.toBe('stale content');
+    expect(fs.readFileSync(filePath, 'utf8')).not.toBe('custom content');
   });
 });
 
@@ -976,11 +980,11 @@ describe('buildPlanningPrompt', () => {
     expect(prompt).not.toContain(`${tmpDir}/tracker/index.json`);
   });
 
-  test('includes guide file paths', () => {
+  test('includes generated skill file paths', () => {
     const item = makeItem();
     const prompt = service.buildPlanningPrompt(item, stageConf);
-    expect(prompt).toContain('tracker/stages');
-    expect(prompt).toContain('working-style.md');
+    expect(prompt).toContain('.agents/skills');
+    expect(prompt).toContain('stages-progression');
   });
 
   test('includes stage settings when present', () => {
@@ -1024,12 +1028,12 @@ describe('buildPlanningPrompt', () => {
     expect(reqLine).not.toContain(worktreeItemDir); // not absolute
   });
 
-  test('guide paths render as worktree-relative even when they point at the main project', () => {
+  test('skill path renders as worktree-relative even when it points at the main project', () => {
     const worktreeItemDir = path.join(tmpDir, 'worktree', 'tracker', 'items', 'test-feature');
     const item = makeItem({stage: 'implement'});
     const config = service.loadStagesConfig(tmpDir);
     const prompt = service.buildPlanningPrompt(item, config.implement, worktreeItemDir);
-    const stageLine = prompt.split('\n').find(l => l.includes('Stage:') && l.includes('tracker/stages'))!;
+    const stageLine = prompt.split('\n').find(l => l.includes('Skill:') && l.includes('.agents/skills'))!;
     // worktree at <tmpDir>/worktree, main project at <tmpDir>; relative path crosses up.
     expect(stageLine).toContain('..');
     expect(stageLine).not.toContain(tmpDir); // never absolute

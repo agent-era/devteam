@@ -1,0 +1,6 @@
+{
+  "stage": "cleanup",
+  "state": "waiting_for_approval",
+  "brief_description": "cleanup complete: one generated stages-progression skill now replaces tracker/stages behavior",
+  "timestamp": "2026-04-22T00:59:34Z"
+}

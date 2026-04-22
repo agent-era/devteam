@@ -88,6 +88,9 @@ export type ContextDepthStyle = 'light' | 'moderate' | 'deep';
 // preference; drives the "Input mode" block in every generated stage guide.
 export type InputModeStyle = 'ask_questions' | 'inline' | 'batch' | 'doc_review';
 
+const TRACKER_SKILL_NAME = 'stages-progression';
+export const TRACKER_SKILL_REL_PATH = `.agents/skills/${TRACKER_SKILL_NAME}/SKILL.md`;
+
 export interface WorkStyle {
   decisionStyle: DecisionStyle;
   verbosity: VerbosityStyle;
@@ -901,8 +904,12 @@ export class TrackerService {
     return path.join(this.getTrackerPath(projectPath), 'work-style.json');
   }
 
-  getWorkStyleFilePath(projectPath: string): string {
-    return path.join(this.getStagesDir(projectPath), 'working-style.md');
+  getSharedSkillPath(projectPath: string): string {
+    return path.join(projectPath, '.agents', 'skills', TRACKER_SKILL_NAME, 'SKILL.md');
+  }
+
+  getClaudeSkillPath(projectPath: string): string {
+    return path.join(projectPath, '.claude', 'skills', TRACKER_SKILL_NAME, 'SKILL.md');
   }
 
   private generateWorkStyleFileContent(workStyle: WorkStyle): string {
@@ -992,12 +999,6 @@ ${row('Input mode', INPUT_MODE_LABELS, workStyle.inputMode)}
 ${custom}`;
   }
 
-  writeWorkStyleFile(projectPath: string, workStyle: WorkStyle): void {
-    const dir = this.getStagesDir(projectPath);
-    if (!fs.existsSync(dir)) return; // stages dir not initialised yet — skip
-    fs.writeFileSync(this.getWorkStyleFilePath(projectPath), this.generateWorkStyleFileContent(workStyle), 'utf8');
-  }
-
   loadWorkStyle(projectPath: string): WorkStyle {
     const p = this.getWorkStylePath(projectPath);
     if (!fs.existsSync(p)) return {...DEFAULT_WORK_STYLE};
@@ -1011,7 +1012,7 @@ ${custom}`;
   saveWorkStyle(projectPath: string, workStyle: WorkStyle): void {
     this.ensureTracker(projectPath);
     writeJSONAtomic(this.getWorkStylePath(projectPath), workStyle);
-    this.writeWorkStyleFile(projectPath, workStyle);
+    this.writeStagesProgressionSkillFiles(projectPath, this.loadStagesConfig(projectPath), workStyle);
   }
 
   async editWorkStyleWithAI(projectPath: string, userPrompt: string): Promise<{success: boolean; workStyle?: WorkStyle; error?: string}> {
@@ -1068,8 +1069,8 @@ No markdown, no code fences, no extra keys.`;
 
     const workflowPath = path.join(this.getTrackerPath(item.projectPath), 'WORKFLOW.md');
     const workflowExists = fs.existsSync(workflowPath);
-    const stageFilePath = this.getStageFilePath(item.projectPath, stage);
-    const overviewPath = this.getOverviewFilePath(item.projectPath);
+    const sharedSkillPath = this.getSharedSkillPath(item.projectPath);
+    const claudeSkillPath = this.getClaudeSkillPath(item.projectPath);
 
     const indexPath = this.getIndexPath(item.projectPath);
     const fileLines = [
@@ -1079,12 +1080,9 @@ No markdown, no code fences, no extra keys.`;
       `  tracker/index.json  ${rel(indexPath)}`,
     ];
 
-    const workStyleFilePath = this.getWorkStyleFilePath(item.projectPath);
-
     const guideLines = [
-      `  Stage:         ${rel(stageFilePath)}`,
-      `  Overview:      ${rel(overviewPath)}`,
-      `  Working style: ${rel(workStyleFilePath)}`,
+      `  Skill:         ${rel(sharedSkillPath)}`,
+      ...(fs.existsSync(claudeSkillPath) ? [`  Claude skill:  ${rel(claudeSkillPath)}`] : []),
       ...(workflowExists ? [`  Workflow:      ${rel(workflowPath)}`] : []),
     ];
 
@@ -1103,7 +1101,7 @@ ${fileLines.join('\n')}
 Guides:
 ${guideLines.join('\n')}
 ${settingsStr ? `\nStage settings: ${settingsStr}` : ''}
-Use ask_questions tool when you need to ask the user. Read the stage guide and get started.`;
+Use ask_questions tool when you need to ask the user. Read the generated skill and follow the section for the current stage.`;
   }
 
   evaluateExitCriteria(item: TrackerItem, criteria: ExitCriterion[]): ExitCriterionResult[] {
@@ -1159,6 +1157,7 @@ Use ask_questions tool when you need to ask the user. Read the stage guide and g
   saveStagesConfig(projectPath: string, config: StagesConfig): void {
     this.ensureTracker(projectPath);
     writeJSONAtomic(this.getStagesConfigPath(projectPath), config);
+    this.writeStagesProgressionSkillFiles(projectPath, config as Required<StagesConfig>, this.loadWorkStyle(projectPath));
   }
 
   saveStageSettings(projectPath: string, stage: Exclude<TrackerStage, 'archive'>, settings: Record<string, string>): void {
@@ -1179,6 +1178,66 @@ Use ask_questions tool when you need to ask the user. Read the stage guide and g
 
   getOverviewFilePath(projectPath: string): string {
     return path.join(this.getStagesDir(projectPath), 'overview.md');
+  }
+
+  private generateStagesProgressionSkillContent(
+    stagesConfig: Required<StagesConfig>,
+    workStyle: WorkStyle,
+  ): string {
+    const stageSections = (['discovery', 'requirements', 'implement', 'cleanup'] as const).map(stage => {
+      const body = this.defaultStageFileContent(stage, stagesConfig[stage].settings, workStyle).trim();
+      return `## ${STAGE_LABELS[stage]}\n\n${body}`;
+    }).join('\n\n');
+
+    return `---
+name: ${TRACKER_SKILL_NAME}
+description: Guides agents through a devteam tracker item across discovery, requirements, implementation, and cleanup. Use when working on a tracked item and you need to follow stage files, keep status.json current, and advance tracker/index.json correctly.
+---
+
+# Stages Progression
+
+This skill is generated from tracker configuration. Treat \`tracker/stages.json\`, \`tracker/work-style.json\`, and this skill as the source of truth; do not hand-maintain this file.
+
+## Core Workflow
+
+1. Read the current item stage, item directory, and related files from the launch prompt.
+2. Read the matching stage section in this skill.
+3. Keep \`tracker/items/<slug>/status.json\` current at every meaningful transition.
+4. Write stage outputs in the item directory as directed by the current stage guide.
+5. Advance items by moving the slug in \`tracker/index.json\`, then read the next stage guide and continue.
+6. This skill is a generated artifact and may be overwritten from tracker config.
+
+## Working Style Snapshot
+
+- Decisions: \`${workStyle.decisionStyle}\`
+- Verbosity: \`${workStyle.verbosity}\`
+- Questions: \`${workStyle.questions}\`
+- Input mode: \`${workStyle.inputMode}\`
+- Code scope: \`${workStyle.codeScope}\`
+- Testing: \`${workStyle.testing}\`
+
+## Stage Playbooks
+
+${stageSections}
+`;
+  }
+
+  private writeStagesProgressionSkillFiles(
+    projectPath: string,
+    stagesConfig: Required<StagesConfig>,
+    workStyle: WorkStyle,
+  ): void {
+    const content = this.generateStagesProgressionSkillContent(stagesConfig, workStyle);
+    for (const skillPath of [this.getSharedSkillPath(projectPath), this.getClaudeSkillPath(projectPath)]) {
+      ensureDirectory(path.dirname(skillPath));
+      fs.writeFileSync(skillPath, content, 'utf8');
+    }
+  }
+
+  private syncGeneratedTrackerArtifacts(projectPath: string): void {
+    const workStyle = this.loadWorkStyle(projectPath);
+    const config = this.loadStagesConfig(projectPath);
+    this.writeStagesProgressionSkillFiles(projectPath, config, workStyle);
   }
 
   readStageFile(projectPath: string, stage: Exclude<TrackerStage, 'archive'>): string {
@@ -1241,7 +1300,7 @@ To advance: find the slug in its current array, remove it, add it to the next st
 
 ## Working Style
 
-Read \`tracker/stages/working-style.md\` for the project's preferred working style. Honour it throughout all stages.
+Read the generated stages progression skill for the project's preferred working style and stage behavior. Honour it throughout all stages.
 `;
   }
 
@@ -1509,7 +1568,7 @@ ${outputLines.join('\n')}
 
 ## Advancing
 
-When implementation is complete${tdd !== 'skip' ? ' and tests pass' : ''}: update the `+"`"+`tracker/index.json`+"`"+` (path is in the prompt, relative to cwd) slug to `+"`"+`implementation.cleanup`+"`"+`. Read `+"`"+`tracker/stages/cleanup.md`+"`"+` and continue.
+When implementation is complete${tdd !== 'skip' ? ' and tests pass' : ''}: update the `+"`"+`tracker/index.json`+"`"+` (path is in the prompt, relative to cwd) slug to `+"`"+`implementation.cleanup`+"`"+`. Then continue with the Cleanup and submit section in the stages progression skill.
 `;
       }
 
@@ -1563,40 +1622,50 @@ When cleanup is complete: update the `+"`"+`tracker/index.json`+"`"+` (path is i
   }
 
   ensureStageFiles(projectPath: string): void {
-    const dir = this.getStagesDir(projectPath);
-    ensureDirectory(dir);
-    const overviewPath = this.getOverviewFilePath(projectPath);
-    if (!fs.existsSync(overviewPath)) {
-      fs.writeFileSync(overviewPath, this.defaultOverviewFileContent(), 'utf8');
-    }
-    for (const stage of (['discovery', 'requirements', 'implement', 'cleanup'] as const)) {
-      const p = this.getStageFilePath(projectPath, stage);
-      if (!fs.existsSync(p)) {
-        fs.writeFileSync(p, this.defaultStageFileContent(stage), 'utf8');
-      }
-    }
-    // Always regenerate working-style.md so it stays in sync with work-style.json
-    this.writeWorkStyleFile(projectPath, this.loadWorkStyle(projectPath));
+    this.syncGeneratedTrackerArtifacts(projectPath);
   }
 
-  async editStageFileWithAI(projectPath: string, stage: Exclude<TrackerStage, 'archive'>, userPrompt: string): Promise<{success: boolean; error?: string}> {
-    this.ensureStageFiles(projectPath);
-    const filePath = this.getStageFilePath(projectPath, stage);
-    const current = fs.readFileSync(filePath, 'utf8');
-    const prompt = `You are editing a stage instruction file for a devteam tracker. This markdown file tells the AI agent what to do when working on items in this stage.
+  async editStageFileWithAI(projectPath: string, stage: Exclude<TrackerStage, 'archive' | 'backlog'>, userPrompt: string): Promise<{success: boolean; error?: string}> {
+    const current = this.loadStagesConfig(projectPath);
+    const stageConfig = current[stage];
+    const prompt = `You are editing one stage of a devteam tracker configuration. This config drives a generated shared skill file for agents.
 
-Current file content:
-${current}
+Current stage key: ${stage}
+
+Current stage config (JSON):
+${JSON.stringify(stageConfig, null, 2)}
+
+Current generated preview:
+${this.defaultStageFileContent(stage, stageConfig.settings, this.loadWorkStyle(projectPath))}
 
 User request: ${userPrompt}
 
-Return ONLY the updated file content as plain markdown. No explanation, no code fences.`;
+Return ONLY the complete updated JSON object for this one stage with keys:
+- actionLabel (string)
+- description (string)
+- checklist (string[])
+- agentPrompt (string)
+- exitCriteria (array, preserve existing unless intentionally changing)
+- settings (object)
+
+No markdown, no code fences, no explanation.`;
     const result = await runClaudeAsync(prompt, {cwd: projectPath, timeoutMs: 60000});
     if (!result.success) return {success: false, error: result.error || 'Claude failed'};
-    const updated = result.output.replace(/^```markdown\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim();
-    if (!updated) return {success: false, error: 'Empty response from AI'};
-    fs.writeFileSync(filePath, updated + '\n', 'utf8');
-    return {success: true};
+    const json = extractJsonObject(result.output);
+    if (!json) return {success: false, error: 'No JSON in response'};
+    try {
+      const parsed = JSON.parse(json) as StageConfig;
+      const next: Required<StagesConfig> = {...current};
+      next[stage] = {
+        ...current[stage],
+        ...parsed,
+        exitCriteria: parsed.exitCriteria ?? current[stage].exitCriteria,
+      };
+      this.saveStagesConfig(projectPath, next);
+      return {success: true};
+    } catch {
+      return {success: false, error: 'Failed to parse AI response'};
+    }
   }
 
   async editStagesConfigWithAI(projectPath: string, userPrompt: string): Promise<{success: boolean; config?: Required<StagesConfig>; error?: string}> {
