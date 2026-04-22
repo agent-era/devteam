@@ -26,6 +26,7 @@ export interface KeyboardActions {
   onUpdate?: () => void;
   onTracker?: () => void;
   onMoveItemNext?: () => void;
+  onToggleInactive?: () => void;
   onGenerateProposals?: () => void;
   onStagesConfig?: () => void;
   onAttach?: () => void;
@@ -105,6 +106,7 @@ export function useKeyboardShortcuts(
       else if (input === 't') actions.onTracker?.();
       else if (input === 'u') actions.onUpdate?.();
       else if (input === 'm') actions.onMoveItemNext?.();
+      else if (input === 'i') actions.onToggleInactive?.();
       else if (input === 'p') actions.onGenerateProposals?.();
       else if (input === 'e') actions.onStagesConfig?.();
       else if (input === 'P') actions.onPickProject?.();

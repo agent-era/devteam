@@ -19,6 +19,7 @@ function makeItem(stage: TrackerItem['stage'], bucket: TrackerItem['bucket']): T
     hasImplementationNotes: false,
     hasNotes: false,
     worktreeExists: false,
+    inactive: false,
   };
 }
 

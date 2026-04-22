@@ -36,6 +36,7 @@ function makeItem(overrides: Partial<TrackerItem> = {}): TrackerItem {
     worktreeExists: false,
     hasImplementationNotes: false,
     hasNotes: false,
+    inactive: false,
     ...overrides,
   };
 }
@@ -570,6 +571,32 @@ describe('moveItem', () => {
   });
 });
 
+describe('inactive item metadata', () => {
+  test('isItemInactive defaults to false', () => {
+    service.createItem(tmpDir, 'Feature A', 'discovery');
+    expect(service.isItemInactive(tmpDir, 'feature-a')).toBe(false);
+  });
+
+  test('toggleItemInactive persists the flag in tracker/index.json', () => {
+    service.createItem(tmpDir, 'Feature A', 'discovery');
+    expect(service.toggleItemInactive(tmpDir, 'feature-a')).toBe(true);
+    expect(service.isItemInactive(tmpDir, 'feature-a')).toBe(true);
+
+    const index = JSON.parse(fs.readFileSync(path.join(tmpDir, 'tracker', 'index.json'), 'utf8'));
+    expect(index.sessions['feature-a'].inactive).toBe(true);
+
+    expect(service.toggleItemInactive(tmpDir, 'feature-a')).toBe(true);
+    expect(service.isItemInactive(tmpDir, 'feature-a')).toBe(false);
+    const updated = JSON.parse(fs.readFileSync(path.join(tmpDir, 'tracker', 'index.json'), 'utf8'));
+    expect(updated.sessions['feature-a'].inactive).toBeUndefined();
+  });
+
+  test('toggleItemInactive returns false for unknown slugs', () => {
+    service.ensureTracker(tmpDir);
+    expect(service.toggleItemInactive(tmpDir, 'missing-item')).toBe(false);
+  });
+});
+
 // ─── loadBoard ──────────────────────────────────────────────────────────────
 
 describe('loadBoard', () => {
@@ -596,6 +623,18 @@ describe('loadBoard', () => {
     const col = board.columns.find(c => c.id === 'backlog')!;
     expect(col.items[0].slug).toBe('first-item');
     expect(col.items[1].slug).toBe('second-item');
+  });
+
+  test('inactive items sort to the bottom of their column while preserving relative order', () => {
+    service.createItem(tmpDir, 'Alpha', 'discovery');
+    service.createItem(tmpDir, 'Beta', 'discovery');
+    service.createItem(tmpDir, 'Gamma', 'discovery');
+    service.setItemInactive(tmpDir, 'beta', true);
+
+    const board = service.loadBoard('my-project', tmpDir);
+    const col = board.columns.find(c => c.id === 'backlog')!;
+    expect(col.items.map(i => i.slug)).toEqual(['alpha', 'gamma', 'beta']);
+    expect(col.items.map(i => i.inactive)).toEqual([false, false, true]);
   });
 });
 
