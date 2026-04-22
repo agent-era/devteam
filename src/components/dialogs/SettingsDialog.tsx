@@ -54,6 +54,7 @@ export default function SettingsDialog({
   // TextInput from @inkjs/ui is uncontrolled; bump key to remount-and-clear after submit.
   const [inputKey, setInputKey] = useState(0);
   const [showReapplyPrompt, setShowReapplyPrompt] = useState(false);
+  const [showRegeneratePrompt, setShowRegeneratePrompt] = useState(false);
   const [reapplyStatus, setReapplyStatus] = useState<string | null>(null);
   const {requestFocus, releaseFocus} = useInputFocus();
   const {columns} = useTerminalDimensions();
@@ -84,8 +85,17 @@ export default function SettingsDialog({
       setShowReapplyPrompt(false);
       return;
     }
+    if (showRegeneratePrompt) {
+      if (input === 'y' || input === 'Y') onGenerate();
+      setShowRegeneratePrompt(false);
+      return;
+    }
     if (key.escape) { onCancel(); return; }
-    if (!inPreview || !result) return;
+    if (!inPreview || !result) {
+      // Settings dialog without a pending AI proposal — allow triggering regenerate.
+      if (!loading && (input === 'R' || input === 'r')) setShowRegeneratePrompt(true);
+      return;
+    }
     if (result.success && result.content) {
       if (input === 'a' || input === 'A') {
         const worktreeSetupChanged = !sameValue(
@@ -105,8 +115,8 @@ export default function SettingsDialog({
   const handleSubmit = (value: string) => {
     if (loading) return;
     const trimmed = value.trim();
-    if (trimmed.length === 0) onGenerate();
-    else onEdit(trimmed);
+    if (trimmed.length === 0) return;
+    onEdit(trimmed);
     setInputKey((k) => k + 1);
   };
 
@@ -148,9 +158,16 @@ export default function SettingsDialog({
         </Box>
       ) : null}
 
-      {!inPreview && !showReapplyPrompt ? (
+      {showRegeneratePrompt ? (
+        <Box marginTop={1} flexDirection="column" borderStyle="single" borderColor="red" paddingX={1}>
+          <Text bold color="red">Discard current config and regenerate from scratch?</Text>
+          <Text color="gray">This asks Claude to write a fresh config without seeing your current one — any custom flags, commands, or env vars may be replaced by schema defaults. Review the diff before applying.</Text>
+        </Box>
+      ) : null}
+
+      {!inPreview && !showReapplyPrompt && !showRegeneratePrompt ? (
         <Box marginTop={1} flexDirection="column">
-          <Text>Ask Claude to update the config (empty prompt = regenerate from scratch):</Text>
+          <Text>Ask Claude to update the config:</Text>
           <Box borderStyle="single" borderColor="gray" paddingX={1}>
             <TextInput
               key={inputKey}
@@ -166,11 +183,13 @@ export default function SettingsDialog({
         <Text color="magenta">
           {showReapplyPrompt
             ? '[y] re-apply files  [any other key] skip'
-            : inPreview
-              ? (result?.success ? '[a] apply  [d] discard  [esc] back' : '[d] dismiss  [esc] back')
-              : loading
-                ? '[esc] back (AI keeps running)'
-                : '[enter] send prompt (empty = regenerate)  [esc] back'}
+            : showRegeneratePrompt
+              ? '[y] regenerate from scratch  [any other key] cancel'
+              : inPreview
+                ? (result?.success ? '[a] apply  [d] discard  [esc] back' : '[d] dismiss  [esc] back')
+                : loading
+                  ? '[esc] back (AI keeps running)'
+                  : '[enter] send prompt  [R] regenerate from scratch  [esc] back'}
         </Text>
       </Box>
     </Box>
@@ -204,29 +223,72 @@ function CompactTable({leaves, value, layout}: {leaves: Leaf[]; value: unknown; 
   );
 }
 
+export type ChangeKind = 'added' | 'changed' | 'removed';
+type Change = {leaf: Leaf; before: unknown; after: unknown; kind: ChangeKind};
+
+export function classifyChange(before: unknown, after: unknown): ChangeKind | null {
+  const beforeMissing = before === MISSING;
+  const afterMissing = after === MISSING;
+  if (beforeMissing && afterMissing) return null;
+  if (beforeMissing) return 'added';
+  if (afterMissing) return 'removed';
+  return sameValue(before, after) ? null : 'changed';
+}
+
+// Exported for tests.
+export const DIFF_MISSING = MISSING;
+
 function DiffView({leaves, current, proposed, layout}: {leaves: Leaf[]; current: unknown; proposed: unknown; layout: Layout}) {
-  const changed: Array<{leaf: Leaf; before: unknown; after: unknown}> = [];
+  const changes: Change[] = [];
   for (const leaf of leaves) {
     const before = resolveValue(current, leaf.dotPath);
     const after = resolveValue(proposed, leaf.dotPath);
-    if (!sameValue(before, after)) changed.push({leaf, before, after});
+    const kind = classifyChange(before, after);
+    if (kind) changes.push({leaf, before, after, kind});
   }
-  const unchangedCount = leaves.length - changed.length;
+  const unchangedCount = leaves.length - changes.length;
+  const removedCount = changes.filter(c => c.kind === 'removed').length;
 
-  if (changed.length === 0) {
+  if (changes.length === 0) {
     return <Text color="gray">(No changes — proposed config matches the current one.)</Text>;
   }
+
+  // Put removals first so they stand out; otherwise keep schema order.
+  const ordered = [...changes].sort((a, b) => {
+    if (a.kind === 'removed' && b.kind !== 'removed') return -1;
+    if (a.kind !== 'removed' && b.kind === 'removed') return 1;
+    return 0;
+  });
 
   return (
     <Box flexDirection="column">
       <Text bold color="green">Proposed changes:</Text>
-      {changed.map(({leaf, before, after}) => (
+      {removedCount > 0 ? (
+        <Text bold color="red">
+          ⚠ {removedCount} field{removedCount === 1 ? '' : 's'} will be REMOVED — review before applying
+        </Text>
+      ) : null}
+      {ordered.map(({leaf, before, after, kind}) => (
         <Box key={leaf.dotPath} flexDirection="column" marginTop={1}>
           <Box width={layout.inner}>
-            <Box width={KEY_WIDTH}><Text color="white">{leaf.displayKey}</Text></Box>
-            <Box width={VAL_WIDTH}><Text color="red" wrap="truncate">{formatMissingOr(before)}</Text></Box>
+            <Box width={KEY_WIDTH}>
+              <Text color={kind === 'removed' ? 'red' : 'white'}>
+                {kindPrefix(kind)}{leaf.displayKey}
+              </Text>
+            </Box>
+            <Box width={VAL_WIDTH}>
+              <Text color={kind === 'added' ? 'gray' : 'red'} wrap="truncate">
+                {kind === 'added' ? '(not set)' : formatMissingOr(before)}
+              </Text>
+            </Box>
             <Box width={ARROW_WIDTH}><Text color="gray">→</Text></Box>
-            <Box width={layout.diffRight}><Text color="green" wrap="truncate">{formatMissingOr(after)}</Text></Box>
+            <Box width={layout.diffRight}>
+              {kind === 'removed' ? (
+                <Text bold color="red" wrap="truncate">REMOVED</Text>
+              ) : (
+                <Text color="green" wrap="truncate">{formatValue(after)}</Text>
+              )}
+            </Box>
           </Box>
           <Box width={layout.inner}>
             <Text color="gray" wrap="truncate">{'  '}{leaf.node.description}</Text>
@@ -238,6 +300,12 @@ function DiffView({leaves, current, proposed, layout}: {leaves: Leaf[]; current:
       </Box>
     </Box>
   );
+}
+
+function kindPrefix(kind: ChangeKind): string {
+  if (kind === 'added') return '+ ';
+  if (kind === 'removed') return '- ';
+  return '~ ';
 }
 
 // Flatten the schema to leaf fields. Display keys drop the top-level section name so
