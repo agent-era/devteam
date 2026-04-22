@@ -2,7 +2,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import {CoreBase} from '../engine/core-types.js';
 import {TmuxService} from '../services/TmuxService.js';
-import {TrackerService, TrackerStage} from '../services/TrackerService.js';
+import {TrackerService, TrackerStage, TRACKER_SKILL_REL_PATH} from '../services/TrackerService.js';
 import {WorktreeInfo} from '../models.js';
 import {startIntervalIfEnabled} from '../shared/utils/intervals.js';
 import {logError, logInfo} from '../shared/utils/logger.js';
@@ -111,11 +111,11 @@ export function buildNudgeText(opts: {
     : opts.stage === 'implement' ? '`implementation.md`'
     : opts.stage === 'cleanup' ? 'the cleanup checklist (tests, review, PR prep)'
     : 'this stage';
-  const stageFile = `tracker/stages/${opts.stage}.md`;
+  const skillFile = TRACKER_SKILL_REL_PATH;
   const statusPath = `tracker/items/${opts.slug}/status.json`;
   return [
     `Quick check-in — this session has been idle for a while, so I wanted to make sure you're not stuck.`,
-    `Current stage is \`${opts.stage}\` (guide: ${stageFile}, gate: ${opts.gateOnAdvance}, input_mode: ${opts.inputMode}).`,
+    `Current stage is \`${opts.stage}\` (guide: ${skillFile}, gate: ${opts.gateOnAdvance}, input_mode: ${opts.inputMode}).`,
     `Please update \`${statusPath}\` so the kanban reflects where you are — the \`brief_description\` field is rendered directly on the card and should describe the *work* (what you're doing, or what you need), not the stage (that's already visible).`,
     `If you're blocked on a clarification, set \`state: "waiting_for_input"\` in \`status.json\` with a \`brief_description\` of the specific thing you need. If stage work is complete and you're waiting on my approval to advance, set \`state: "waiting_for_approval"\` instead (kanban renders those distinctly so I can approve them fast). Or use ask_questions if that's your input_mode.`,
     `Either waiting state stops these check-ins from firing. Otherwise please keep making progress on ${progressTarget} and advance when ready.`,
