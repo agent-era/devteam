@@ -1,0 +1,6 @@
+{
+  "stage": "cleanup",
+  "state": "waiting_for_approval",
+  "brief_description": "ready to submit — 2-line fix in TrackerBoardScreen.tsx suppresses green when worktree PR is merged",
+  "timestamp": "2026-04-25T16:52:00.000Z"
+}
