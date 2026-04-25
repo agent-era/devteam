@@ -1,31 +1,24 @@
 import {stringDisplayWidth} from '../formatting.js';
 import {computeBlockContext} from './blockContext.js';
 import {inlineToSpans} from './inline.js';
+import {getActiveMarkdownTheme, type MarkdownTheme} from './themes.js';
 import type {BlockContext, MdRow, Span} from './types.js';
 
 /**
- * Slightly darken plain (unstyled) inline spans so that bold / heading /
- * code / link spans pop visually. Spans that already carry a colour, bold,
- * or inverse flag keep their look — only neutral text gets dimmed.
+ * Apply the active theme's "plain text" style to inline spans that don't
+ * carry their own colour, bold, or inverse flag. Coloured spans (codespan,
+ * link, image fallback) keep their look so they still pop visually.
  */
-function dimPlain(spans: Span[]): Span[] {
-  return spans.map(s => (!s.bold && !s.color && !s.inverse) ? {...s, dim: true} : s);
+function applyPlainStyle(spans: Span[], theme: MarkdownTheme): Span[] {
+  return spans.map(s => {
+    if (s.bold || s.color || s.inverse) return s;
+    const next = {...s};
+    if (theme.plainDim) next.dim = true;
+    if (theme.plainColor) next.color = theme.plainColor;
+    return next;
+  });
 }
 
-const HEADING_COLORS: Record<number, string> = {
-  1: 'cyanBright',
-  2: 'greenBright',
-  3: 'yellowBright',
-  4: 'magentaBright',
-  5: 'blueBright',
-  6: 'whiteBright',
-};
-
-/**
- * Render a stream of styled spans into one or more visual rows that fit
- * within `width`. Subsequent rows reuse `continuation` as their leading
- * indent (so list bodies / blockquotes stay visually attached).
- */
 export function wrapSpans(spans: Span[], width: number, leading: Span[] = [], continuation: Span[] = []): MdRow[] {
   const safeWidth = Math.max(1, width);
   const leadingWidth = stringDisplayWidth(leading.map(s => s.text).join(''));
@@ -95,21 +88,21 @@ export interface LineParts {
  * which lets the diff view reuse the same span output without repeating
  * its own row geometry logic.
  */
-export function lineToParts(rawLine: string, ctx: BlockContext): LineParts {
+export function lineToParts(rawLine: string, ctx: BlockContext, theme: MarkdownTheme = getActiveMarkdownTheme()): LineParts {
   switch (ctx.kind) {
     case 'blank':
       return {leading: [], body: [], continuation: []};
 
     case 'code':
-      return {leading: [], body: [{text: rawLine || ' ', color: 'yellow', dim: true}], continuation: []};
+      return {leading: [], body: [{text: rawLine || ' ', color: theme.codeColor, dim: theme.codeDim || undefined}], continuation: []};
 
     case 'hr':
       return {leading: [], body: [], continuation: [], isHr: true};
 
     case 'heading': {
       const body = rawLine.slice(ctx.textStart).trim().replace(/\s*#+\s*$/, '');
-      const color = HEADING_COLORS[ctx.level] ?? 'white';
-      const spans = inlineToSpans(body, {bold: true, color});
+      const color = theme.heading[ctx.level] ?? 'white';
+      const spans = inlineToSpans(body, {bold: true, color}, theme);
       const leading: Span[] = [{text: '#'.repeat(ctx.level) + ' ', dim: true}];
       const continuation: Span[] = [{text: ' '.repeat(ctx.level + 1)}];
       return {leading, body: spans, continuation};
@@ -117,8 +110,8 @@ export function lineToParts(rawLine: string, ctx: BlockContext): LineParts {
 
     case 'blockquote': {
       const body = rawLine.slice(ctx.textStart);
-      const spans = inlineToSpans(body, {italic: true, dim: true});
-      const bar: Span[] = [{text: '│ ', dim: true, color: 'gray'}];
+      const spans = inlineToSpans(body, {italic: true, dim: !!theme.blockquoteDim}, theme);
+      const bar: Span[] = [{text: '│ ', color: theme.blockquoteBarColor, dim: !!theme.blockquoteDim}];
       return {leading: bar, body: spans, continuation: bar};
     }
 
@@ -126,29 +119,29 @@ export function lineToParts(rawLine: string, ctx: BlockContext): LineParts {
       const body = rawLine.slice(ctx.textStart);
       const indent = ' '.repeat(ctx.indent);
       const bullet = ctx.ordered ? `${ctx.bullet} ` : '• ';
-      const leading: Span[] = [{text: indent}, {text: bullet, color: 'cyan'}];
-      const spans = dimPlain(inlineToSpans(body));
+      const leading: Span[] = [{text: indent}, {text: bullet, color: theme.bulletColor}];
+      const spans = applyPlainStyle(inlineToSpans(body, {}, theme), theme);
       const continuation: Span[] = [{text: indent + ' '.repeat(stringDisplayWidth(bullet))}];
       return {leading, body: spans, continuation};
     }
 
     case 'para':
     default:
-      return {leading: [], body: dimPlain(inlineToSpans(rawLine)), continuation: []};
+      return {leading: [], body: applyPlainStyle(inlineToSpans(rawLine, {}, theme), theme), continuation: []};
   }
 }
 
 /**
  * Render a single source line according to its block context. The result
- * is one *or more* visual rows (when wrapping kicks in). Used by the full-
- * doc renderer; the diff view calls `lineToParts` directly so it can keep
- * its own gutter/padding geometry.
+ * is one *or more* visual rows (when wrapping kicks in). The diff view
+ * calls `lineToParts` directly so it can keep its own gutter/padding
+ * geometry; the full-doc renderer below uses this convenience wrapper.
  */
-export function renderLine(rawLine: string, ctx: BlockContext, width: number): MdRow[] {
+export function renderLine(rawLine: string, ctx: BlockContext, width: number, theme: MarkdownTheme = getActiveMarkdownTheme()): MdRow[] {
   const safeWidth = Math.max(1, width);
   if (ctx.kind === 'blank') return [{spans: [{text: ''}]}];
 
-  const parts = lineToParts(rawLine, ctx);
+  const parts = lineToParts(rawLine, ctx, theme);
   if (parts.isHr) return [{spans: [{text: '─'.repeat(safeWidth), dim: true}]}];
 
   return wrapSpans(parts.body, safeWidth, parts.leading, parts.continuation);
@@ -158,7 +151,7 @@ export function renderLine(rawLine: string, ctx: BlockContext, width: number): M
  * Render an entire markdown document into visual rows that fit within
  * `width`. The output is meant to be sliced by a viewport.
  */
-export function renderMarkdown(content: string, width: number): MdRow[] {
+export function renderMarkdown(content: string, width: number, theme: MarkdownTheme = getActiveMarkdownTheme()): MdRow[] {
   if (!content || !content.trim()) {
     return [{spans: [{text: '(empty)', dim: true}]}];
   }
@@ -168,9 +161,8 @@ export function renderMarkdown(content: string, width: number): MdRow[] {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const lineCtx = ctx[i + 1];
-    rows.push(...renderLine(line, lineCtx, width));
+    rows.push(...renderLine(line, lineCtx, width, theme));
   }
-  // Strip a trailing pure-blank row produced by the file's final newline.
   if (rows.length && rows[rows.length - 1].spans.every(s => !s.text)) rows.pop();
   return rows;
 }

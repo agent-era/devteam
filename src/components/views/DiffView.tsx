@@ -1,6 +1,8 @@
 import React, {useEffect, useMemo, useRef, useState} from 'react';
-import {Box, Text} from 'ink';
+import {Box, Text, useInput} from 'ink';
 import {useTerminalDimensions} from '../../hooks/useTerminalDimensions.js';
+import {useMarkdownTheme} from '../../hooks/useMarkdownTheme.js';
+import {cycleMarkdownTheme} from '../../shared/utils/markdown/themes.js';
 import CommentInputDialog from '../dialogs/CommentInputDialog.js';
 import SessionWaitingDialog from '../dialogs/SessionWaitingDialog.js';
 import UnsubmittedCommentsDialog from '../dialogs/UnsubmittedCommentsDialog.js';
@@ -32,6 +34,9 @@ type Props = {
 
 export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, diffType = 'full', onAttachToSession, workspaceFeature}: Props) {
   const {rows: terminalHeight, columns: terminalWidth} = useTerminalDimensions();
+  // Subscribe so theme cycles trigger a re-render; the value itself is consumed
+  // via getActiveMarkdownTheme() inside the row renderers.
+  useMarkdownTheme();
   const [lines, setLines] = useState<DiffLine[]>([]);
   const [sideBySideLines, setSideBySideLines] = useState<SideBySideLine[]>([]);
   const [mdContextMap, setMdContextMap] = useState<MdContextMap>(() => new Map());
@@ -61,6 +66,10 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
   const viewportRowsRef = useRef(0);
 
   const nav = useDiffNavigation({lines, sideBySideLines, viewportRowsRef, callbacksRef});
+
+  useInput((input) => {
+    if (input === 't') cycleMarkdownTheme();
+  });
 
   const comments = useDiffComments({
     worktreePath, diffType, workspaceFeature, onClose, onAttachToSession,

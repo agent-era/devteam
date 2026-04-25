@@ -1,5 +1,6 @@
 import {Lexer} from 'marked';
 import type {Span} from './types.js';
+import {getActiveMarkdownTheme, type MarkdownTheme} from './themes.js';
 
 const inlineLexer = new Lexer();
 
@@ -41,48 +42,45 @@ function pushText(spans: Span[], text: string, style: SpanStyle): void {
   });
 }
 
-function walk(token: any, style: SpanStyle, spans: Span[]): void {
+function walk(token: any, style: SpanStyle, spans: Span[], theme: MarkdownTheme): void {
   if (!token) return;
   if (Array.isArray(token)) {
-    for (const t of token) walk(t, style, spans);
+    for (const t of token) walk(t, style, spans, theme);
     return;
   }
   switch (token.type) {
     case 'text': {
-      // marked may produce a text token with nested inline tokens (e.g. inside a list_item).
       if (token.tokens && token.tokens.length > 0) {
-        walk(token.tokens, style, spans);
+        walk(token.tokens, style, spans, theme);
       } else {
         pushText(spans, token.text ?? token.raw ?? '', style);
       }
       return;
     }
-    case 'escape': {
+    case 'escape':
       pushText(spans, token.text ?? token.raw ?? '', style);
       return;
-    }
     case 'strong':
-      walk(token.tokens ?? [], combine(style, {bold: true}), spans);
+      walk(token.tokens ?? [], combine(style, {bold: true}), spans, theme);
       return;
     case 'em':
-      walk(token.tokens ?? [], combine(style, {italic: true}), spans);
+      walk(token.tokens ?? [], combine(style, {italic: true}), spans, theme);
       return;
     case 'codespan':
-      pushText(spans, token.text ?? '', combine(style, {color: 'yellow', dim: true}));
+      pushText(spans, token.text ?? '', combine(style, {color: theme.codeColor, dim: !!theme.codeDim}));
       return;
     case 'del':
-      walk(token.tokens ?? [], combine(style, {dim: true}), spans);
+      walk(token.tokens ?? [], combine(style, {dim: true}), spans, theme);
       return;
     case 'link': {
-      walk(token.tokens ?? [{type: 'text', text: token.text}], combine(style, {color: 'cyan'}), spans);
+      walk(token.tokens ?? [{type: 'text', text: token.text}], combine(style, {color: theme.linkColor}), spans, theme);
       const href = token.href ? ` (${token.href})` : '';
       if (href) pushText(spans, href, combine(style, {dim: true, color: undefined}));
       return;
     }
-    case 'image': {
+    case 'image':
       pushText(spans, `[image: ${token.text || token.href || ''}]`, combine(style, {dim: true}));
       return;
-    }
     case 'br':
       pushText(spans, ' ', style);
       return;
@@ -90,7 +88,7 @@ function walk(token: any, style: SpanStyle, spans: Span[]): void {
       pushText(spans, token.text ?? token.raw ?? '', combine(style, {dim: true}));
       return;
     default:
-      if (token.tokens) walk(token.tokens, style, spans);
+      if (token.tokens) walk(token.tokens, style, spans, theme);
       else if (typeof token.text === 'string') pushText(spans, token.text, style);
       else if (typeof token.raw === 'string') pushText(spans, token.raw, style);
   }
@@ -98,14 +96,14 @@ function walk(token: any, style: SpanStyle, spans: Span[]): void {
 
 /**
  * Tokenise a single line of markdown content (no block-level constructs)
- * and emit styled spans. The line is expected to already have any
- * block-level prefix (e.g. "# ", "- ", "> ") stripped — see callers in
- * `render.ts`.
+ * and emit styled spans, themed by the active markdown theme. The line is
+ * expected to already have any block-level prefix (e.g. "# ", "- ", "> ")
+ * stripped — see callers in `render.ts`.
  */
-export function inlineToSpans(text: string, baseStyle: SpanStyle = {}): Span[] {
+export function inlineToSpans(text: string, baseStyle: SpanStyle = {}, theme: MarkdownTheme = getActiveMarkdownTheme()): Span[] {
   if (!text) return [];
   const tokens = inlineLexer.inlineTokens(text, []);
   const spans: Span[] = [];
-  walk(tokens, baseStyle, spans);
+  walk(tokens, baseStyle, spans, theme);
   return spans;
 }
