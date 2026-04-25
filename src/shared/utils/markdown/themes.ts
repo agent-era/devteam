@@ -4,11 +4,18 @@ export interface MarkdownTheme {
   /** Color per heading depth (1–6). Multi-colour per level. */
   heading: Record<1 | 2 | 3 | 4 | 5 | 6, string>;
   /**
-   * Single hue for all body text — regular, bold, italic, inline code, links,
-   * blockquote bodies. Inline code adds `dim` on top via `codeDim`. Leave
-   * undefined to use the terminal's default foreground (e.g. `mono`).
+   * Single hue for body text — regular, italic, inline code, links, blockquote
+   * bodies. Inline code adds `dim` on top via `codeDim`. Leave undefined to
+   * use the terminal's default foreground (e.g. `mono`).
    */
   bodyColor?: string;
+  /**
+   * Brighter variant of `bodyColor` used for bold spans in body contexts so
+   * `**bold**` text pops slightly closer to white. Strong tokens nested
+   * inside headings keep the heading colour instead — only spans whose base
+   * style colour matches `bodyColor` get this override.
+   */
+  boldColor?: string;
   /** Whether inline + fenced code adds the Ink `dimColor` flag on top of `bodyColor`. */
   codeDim?: boolean;
   /** Color for the leading bullet on list items. */
@@ -42,6 +49,7 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     label: 'Bright — multi-colour headings, neutral body',
     heading: {1: '#00FFFF', 2: '#00FF7F', 3: '#FFFF66', 4: '#FF66FF', 5: '#66B3FF', 6: '#FFFFFF'},
     bodyColor: '#E8E8E8',
+    boldColor: '#FFFFFF',
     codeDim: true,
     bulletColor: '#00FFFF',
     blockquoteBarColor: '#888888',
@@ -57,6 +65,7 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     label: 'Forest — green body, multi-hue headings',
     heading: {1: '#ADFF2F', 2: '#7FFF00', 3: '#FFD700', 4: '#FFB347', 5: '#DA70D6', 6: '#F5F5DC'},
     bodyColor: '#A8E6A1',
+    boldColor: '#E8FFE0',
     codeDim: true,
     bulletColor: '#7CFC00',
     blockquoteBarColor: '#556B2F',
@@ -72,6 +81,7 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     label: 'Sunset — peach body, warm headings',
     heading: {1: '#FF8A80', 2: '#FFB347', 3: '#FFD966', 4: '#FF85C2', 5: '#DA70D6', 6: '#87CEEB'},
     bodyColor: '#FFD2B6',
+    boldColor: '#FFEDDF',
     codeDim: true,
     bulletColor: '#FFB347',
     blockquoteBarColor: '#8B4513',
@@ -87,6 +97,7 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     label: 'Ocean — sky-blue body, cyan/coral headings',
     heading: {1: '#66B3FF', 2: '#5EE8EB', 3: '#7FFFD4', 4: '#FFA07A', 5: '#FFD966', 6: '#DA70D6'},
     bodyColor: '#B6DCFF',
+    boldColor: '#E0F0FF',
     codeDim: true,
     bulletColor: '#00CED1',
     blockquoteBarColor: '#4682B4',
@@ -102,6 +113,7 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     label: 'Neon — pink body, neon headings',
     heading: {1: '#FF66B2', 2: '#00FFFF', 3: '#FFFF66', 4: '#DA70D6', 5: '#ADFF2F', 6: '#FFA94D'},
     bodyColor: '#FFB6E1',
+    boldColor: '#FFDBF0',
     codeDim: true,
     bulletColor: '#FFFF66',
     blockquoteBarColor: '#9370DB',
@@ -117,6 +129,7 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     label: 'Autumn — wheat body, warm headings',
     heading: {1: '#FF8A66', 2: '#FFA94D', 3: '#FFD966', 4: '#DA70D6', 5: '#98FB98', 6: '#DEB887'},
     bodyColor: '#F4A460',
+    boldColor: '#FFDDB0',
     codeDim: true,
     bulletColor: '#FFA94D',
     blockquoteBarColor: '#A0522D',
@@ -132,6 +145,7 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     label: 'Candy — pink body, pop headings',
     heading: {1: '#FF85C2', 2: '#ADFF2F', 3: '#FFD966', 4: '#5EE8EB', 5: '#DA70D6', 6: '#FFA94D'},
     bodyColor: '#FFB6D9',
+    boldColor: '#FFDBEC',
     codeDim: true,
     bulletColor: '#FF85C2',
     blockquoteBarColor: '#9370DB',
@@ -147,6 +161,7 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     label: 'Mono — black & white',
     heading: {1: '#FFFFFF', 2: '#F5F5F5', 3: '#E0E0E0', 4: '#CCCCCC', 5: '#B8B8B8', 6: '#A0A0A0'},
     bodyColor: undefined,
+    boldColor: '#FFFFFF',
     codeDim: true,
     bulletColor: 'white',
     blockquoteBarColor: 'gray',

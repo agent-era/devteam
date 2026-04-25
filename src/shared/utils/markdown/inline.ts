@@ -60,9 +60,19 @@ function walk(token: any, style: SpanStyle, spans: Span[], theme: MarkdownTheme)
     case 'escape':
       pushText(spans, token.text ?? token.raw ?? '', style);
       return;
-    case 'strong':
-      walk(token.tokens ?? [], combine(style, {bold: true}), spans, theme);
+    case 'strong': {
+      // In body contexts (where the surrounding colour matches bodyColor or
+      // is unset) we boost bold spans to the brighter `boldColor` so `**bold**`
+      // pops a little. Inside headings the surrounding colour is the heading
+      // hue — we leave that alone so bold-inside-heading keeps the level
+      // colour rather than shifting toward white.
+      const inBodyContext = style.color === undefined || style.color === theme.bodyColor;
+      const next = inBodyContext && theme.boldColor
+        ? combine(style, {bold: true, color: theme.boldColor})
+        : combine(style, {bold: true});
+      walk(token.tokens ?? [], next, spans, theme);
       return;
+    }
     case 'em':
       walk(token.tokens ?? [], combine(style, {italic: true}), spans, theme);
       return;
