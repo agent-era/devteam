@@ -211,7 +211,7 @@ function TabStrip({tabs, activeIndex, theme}: TabStripProps) {
         const marker = !t.exists ? '○ ' : t.isExtra ? '• ' : '';
         const label = ` ${marker}${t.label} `;
         const color = isActive
-          ? 'green'
+          ? theme.tabActiveColor
           : !t.enabled
           ? undefined
           : t.isExtra
