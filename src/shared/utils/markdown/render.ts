@@ -4,6 +4,49 @@ import {inlineToSpans} from './inline.js';
 import {getActiveMarkdownTheme, type MarkdownTheme} from './themes.js';
 import type {BlockContext, MdRow, Span} from './types.js';
 
+type SpanStyle = Omit<Span, 'text'>;
+
+interface WrapToken {
+  text: string;
+  style: SpanStyle;
+  isSpace: boolean;
+}
+
+/**
+ * Split styled spans into a stream of word / whitespace tokens, preserving
+ * each token's source style. Used by `wrapSpans` to wrap on word boundaries.
+ */
+function tokenizeForWrap(spans: Span[]): WrapToken[] {
+  const tokens: WrapToken[] = [];
+  for (const span of spans) {
+    if (!span.text) continue;
+    const {text, ...style} = span;
+    for (const m of text.matchAll(/(\s+|\S+)/g)) {
+      tokens.push({text: m[0], style, isSpace: /^\s/.test(m[0])});
+    }
+  }
+  return tokens;
+}
+
+function trimTrailingWhitespace(row: Span[], prefixCount: number): void {
+  while (row.length > prefixCount) {
+    const last = row[row.length - 1];
+    if (!last.text) { row.pop(); continue; }
+    const trimmed = last.text.replace(/\s+$/, '');
+    if (trimmed === last.text) return;
+    if (trimmed === '') { row.pop(); continue; }
+    last.text = trimmed;
+    return;
+  }
+}
+
+/**
+ * Wrap styled spans into one or more visual rows that fit within `width`.
+ * Wraps preferentially at whitespace (word boundaries); a word that's
+ * longer than the available content width falls back to character-level
+ * hard-break so it still fits. Leading whitespace at the start of a wrapped
+ * row is dropped; trailing whitespace at the end of a row is trimmed.
+ */
 export function wrapSpans(spans: Span[], width: number, leading: Span[] = [], continuation: Span[] = []): MdRow[] {
   const safeWidth = Math.max(1, width);
   const leadingWidth = stringDisplayWidth(leading.map(s => s.text).join(''));
@@ -11,38 +54,76 @@ export function wrapSpans(spans: Span[], width: number, leading: Span[] = [], co
 
   const rows: MdRow[] = [];
   let currentRow: Span[] = [...leading];
+  let prefixCount = leading.length;
   let prefixWidth = leadingWidth;
   let currentWidth = leadingWidth;
 
-  const startNewRow = (): void => {
+  const isAtPrefix = (): boolean => currentWidth === prefixWidth;
+
+  const flushRow = (): void => {
     rows.push({spans: currentRow.length ? currentRow : [{text: ''}]});
     currentRow = [...continuation];
+    prefixCount = continuation.length;
     prefixWidth = continuationWidth;
     currentWidth = continuationWidth;
   };
 
-  const pushChar = (ch: string, style: Span): void => {
-    const cw = stringDisplayWidth(ch);
-    if (currentWidth + cw > safeWidth && currentWidth > prefixWidth) {
-      startNewRow();
-    }
+  const append = (text: string, style: SpanStyle): void => {
+    if (!text) return;
+    const merged: Span = {...style, text};
     const last = currentRow[currentRow.length - 1];
-    if (last && stylesMatch(last, style)) {
-      last.text += ch;
+    if (last && stylesMatch(last, merged)) {
+      last.text += text;
     } else {
-      currentRow.push({...style, text: ch});
+      currentRow.push(merged);
     }
-    currentWidth += cw;
+    currentWidth += stringDisplayWidth(text);
   };
 
-  for (const span of spans) {
-    const {text} = span;
-    if (!text) continue;
+  const hardBreakWord = (text: string, style: SpanStyle): void => {
     for (const ch of text) {
-      pushChar(ch, span);
+      const cw = stringDisplayWidth(ch);
+      if (currentWidth + cw > safeWidth && !isAtPrefix()) {
+        flushRow();
+      }
+      append(ch, style);
+    }
+  };
+
+  for (const tok of tokenizeForWrap(spans)) {
+    const tw = stringDisplayWidth(tok.text);
+
+    if (tok.isSpace) {
+      if (isAtPrefix()) continue; // drop leading whitespace at the start of a row
+      if (currentWidth + tw > safeWidth) {
+        // Whitespace would push us over — treat it as the wrap point.
+        trimTrailingWhitespace(currentRow, prefixCount);
+        flushRow();
+        continue;
+      }
+      append(tok.text, tok.style);
+      continue;
+    }
+
+    if (currentWidth + tw <= safeWidth) {
+      append(tok.text, tok.style);
+      continue;
+    }
+
+    if (!isAtPrefix()) {
+      trimTrailingWhitespace(currentRow, prefixCount);
+      flushRow();
+    }
+
+    if (tw <= safeWidth - currentWidth) {
+      append(tok.text, tok.style);
+    } else {
+      // Word longer than a full line — hard-break so it still fits.
+      hardBreakWord(tok.text, tok.style);
     }
   }
 
+  trimTrailingWhitespace(currentRow, prefixCount);
   rows.push({spans: currentRow.length ? currentRow : [{text: ''}]});
   return rows;
 }

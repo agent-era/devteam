@@ -63,7 +63,7 @@ describe('lineToParts', () => {
 });
 
 describe('wrapSpans', () => {
-  test('wraps long content while keeping styles per span', () => {
+  test('hard-breaks a single long word when there is no whitespace to wrap on', () => {
     const spans: Span[] = [
       {text: 'aaaa', bold: true},
       {text: 'bbbb', color: 'cyan'},
@@ -76,7 +76,7 @@ describe('wrapSpans', () => {
     expect(rows[2].spans[0]).toMatchObject({text: 'cccc'});
   });
 
-  test('respects leading and continuation prefixes', () => {
+  test('respects leading and continuation prefixes when hard-breaking', () => {
     const spans: Span[] = [{text: 'wxyzwxyz'}];
     const rows = wrapSpans(spans, 6, [{text: '> '}], [{text: '  '}]);
     expect(rows.map(r => r.spans.map(s => s.text).join(''))).toEqual([
@@ -85,13 +85,38 @@ describe('wrapSpans', () => {
     ]);
   });
 
-  test('no row exceeds the target width measured by stringDisplayWidth', () => {
+  test('wraps on word boundaries when whitespace is present', () => {
     const spans: Span[] = [{text: 'one two three four five six seven eight nine ten'}];
     const rows = wrapSpans(spans, 12);
-    for (const row of rows) {
-      const w = stringDisplayWidth(row.spans.map(s => s.text).join(''));
-      expect(w).toBeLessThanOrEqual(12);
+    const lines = rows.map(r => r.spans.map(s => s.text).join(''));
+    // No row exceeds the width.
+    for (const line of lines) {
+      expect(stringDisplayWidth(line)).toBeLessThanOrEqual(12);
     }
+    // No row starts with whitespace (we drop leading whitespace on wrap).
+    for (const line of lines) {
+      expect(/^\s/.test(line)).toBe(false);
+    }
+    // No row ends with whitespace (we trim trailing whitespace on wrap).
+    for (const line of lines) {
+      expect(/\s$/.test(line)).toBe(false);
+    }
+    // Joined output preserves every word in order.
+    expect(lines.join(' ').split(/\s+/)).toEqual(['one','two','three','four','five','six','seven','eight','nine','ten']);
+  });
+
+  test('mid-word hard-break still kicks in for words longer than the line', () => {
+    const spans: Span[] = [{text: 'short supercalifragilisticexpialidocious end'}];
+    const rows = wrapSpans(spans, 10);
+    const lines = rows.map(r => r.spans.map(s => s.text).join(''));
+    for (const line of lines) {
+      expect(stringDisplayWidth(line)).toBeLessThanOrEqual(10);
+    }
+    // The leading short word wraps cleanly; the long word is hard-broken
+    // across multiple rows.
+    expect(lines[0]).toBe('short');
+    // All chars of the long word + trailing word are still preserved.
+    expect(lines.join('').replace(/\s/g, '')).toBe('shortsupercalifragilisticexpialidociousend');
   });
 });
 

@@ -48,9 +48,8 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     name: 'bright',
     label: 'Bright — multi-colour headings, neutral body',
     heading: {1: '#00FFFF', 2: '#00FF7F', 3: '#FFFF66', 4: '#FF66FF', 5: '#66B3FF', 6: '#FFFFFF'},
-    bodyColor: '#E8E8E8',
-    // Bold body text tinted slightly toward the h1 cyan to nod at the heading strip.
-    boldColor: '#E0FFFF',
+    bodyColor: '#B8B8B8',
+    boldColor: '#FFFFFF',
     codeDim: true,
     bulletColor: '#00FFFF',
     blockquoteBarColor: '#888888',
