@@ -79,7 +79,8 @@ export function lineToParts(rawLine: string, ctx: BlockContext, theme: MarkdownT
       return {leading: [], body: [], continuation: []};
 
     case 'code':
-      return {leading: [], body: [{text: rawLine || ' ', color: theme.codeColor, dim: theme.codeDim || undefined}], continuation: []};
+      // Fenced code lines: body colour with optional dim — same as inline code.
+      return {leading: [], body: [{text: rawLine || ' ', color: theme.bodyColor, dim: theme.codeDim || undefined}], continuation: []};
 
     case 'hr':
       return {leading: [], body: [], continuation: [], isHr: true};
@@ -102,7 +103,7 @@ export function lineToParts(rawLine: string, ctx: BlockContext, theme: MarkdownT
 
     case 'blockquote': {
       const body = rawLine.slice(ctx.textStart);
-      const spans = inlineToSpans(body, {italic: true, dim: !!theme.blockquoteDim}, theme);
+      const spans = inlineToSpans(body, {italic: true, dim: !!theme.blockquoteDim, color: theme.bodyColor}, theme);
       const bar: Span[] = [{text: '│ ', color: theme.blockquoteBarColor, dim: !!theme.blockquoteDim}];
       return {leading: bar, body: spans, continuation: bar};
     }
@@ -111,19 +112,20 @@ export function lineToParts(rawLine: string, ctx: BlockContext, theme: MarkdownT
       const body = rawLine.slice(ctx.textStart);
       const indent = ' '.repeat(ctx.indent);
       const bullet = ctx.ordered ? `${ctx.bullet} ` : '• ';
-      // Bullet keeps its theme colour; body text is uncoloured so it reads at
-      // the same brightness as any other body span on every terminal.
+      // Bullet keeps its theme colour. Body text uses the theme's bodyColor
+      // so all body spans share one hue (regular, bold, italic, code).
       const leading: Span[] = [{text: indent}, {text: bullet, color: theme.bulletColor}];
-      const spans = inlineToSpans(body, {}, theme);
+      const spans = inlineToSpans(body, {color: theme.bodyColor}, theme);
       const continuation: Span[] = [{text: indent + ' '.repeat(stringDisplayWidth(bullet))}];
       return {leading, body: spans, continuation};
     }
 
     case 'para':
     default:
-      // Body text is uncoloured (default fg) — only inline tokens that bring
-      // their own colour from the theme (codespan, link) keep it.
-      return {leading: [], body: inlineToSpans(rawLine, {}, theme), continuation: []};
+      // Paragraph body uses the theme's bodyColor for all inline spans; bold,
+      // italic, codespan, and link tokens all inherit it so the body is
+      // monochromatic per theme.
+      return {leading: [], body: inlineToSpans(rawLine, {color: theme.bodyColor}, theme), continuation: []};
   }
 }
 

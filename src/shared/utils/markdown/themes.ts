@@ -1,16 +1,16 @@
 export interface MarkdownTheme {
   name: string;
   label: string;
-  /** Color per heading depth (1–6). */
+  /** Color per heading depth (1–6). Multi-colour per level. */
   heading: Record<1 | 2 | 3 | 4 | 5 | 6, string>;
-  /** Color for plain (unstyled) inline text. `undefined` = default fg. */
-  plainColor?: string;
-  /** Whether plain text gets the Ink `dimColor` flag. */
-  plainDim?: boolean;
-  /** Color for fenced + inline code. */
-  codeColor: string;
+  /**
+   * Single hue for all body text — regular, bold, italic, inline code, links,
+   * blockquote bodies. Inline code adds `dim` on top via `codeDim`. Leave
+   * undefined to use the terminal's default foreground (e.g. `mono`).
+   */
+  bodyColor?: string;
+  /** Whether inline + fenced code adds the Ink `dimColor` flag on top of `bodyColor`. */
   codeDim?: boolean;
-  linkColor: string;
   /** Color for the leading bullet on list items. */
   bulletColor: string;
   /** Color for the leading "│ " bar on blockquotes. */
@@ -29,162 +29,125 @@ export interface MarkdownTheme {
   tabExtraColor: string;
 }
 
-// Palette guideline: every colour in a theme should sit at roughly the same
-// perceived brightness, so headings don't read darker than the surrounding
-// body / code / link spans. Heading colours are *always* explicit truecolor
-// hex values picked from the high-luminance band — both the named-bright and
-// named-standard ANSI variants render unpredictably on different dark-mode
-// palettes (sometimes mapping the *Bright variant darker than the standard
-// one), so we don't trust them for headings. Other roles (code, link, plain
-// text) keep their named colours where the existing tests rely on them.
+// Palette guideline: a theme's body text is monochromatic — bold, regular,
+// inline code, and links all share `bodyColor`. The heading strip is the
+// only multi-colour element. Heading colours are explicit truecolor hex
+// values picked from the high-luminance band; combined with FORCE_COLOR=3
+// at startup, they bypass the user's 256-colour palette and render at full
+// brightness on dark backgrounds.
 
 export const MARKDOWN_THEMES: MarkdownTheme[] = [
   {
-    // Default: balanced primaries — all at the same brightness as `cyan` and
-    // `yellow` (the link / code colours).
     name: 'bright',
-    label: 'Bright — balanced primaries',
+    label: 'Bright — multi-colour headings, neutral body',
     heading: {1: '#00FFFF', 2: '#00FF7F', 3: '#FFFF66', 4: '#FF66FF', 5: '#66B3FF', 6: '#FFFFFF'},
-    plainColor: 'gray',
-    plainDim: false,
-    codeColor: 'yellow',
+    bodyColor: '#E8E8E8',
     codeDim: true,
-    linkColor: 'cyan',
-    bulletColor: 'cyan',
-    blockquoteBarColor: 'gray',
+    bulletColor: '#00FFFF',
+    blockquoteBarColor: '#888888',
     blockquoteDim: true,
-    dividerColor: 'magenta',
-    tabActiveColor: 'cyan',
-    tabReadyColor: 'white',
-    tabPendingColor: 'yellow',
-    tabExtraColor: 'magenta',
+    dividerColor: '#FF66FF',
+    tabActiveColor: '#00FFFF',
+    tabReadyColor: '#E8E8E8',
+    tabPendingColor: '#FFFF66',
+    tabExtraColor: '#FF66FF',
   },
   {
-    // Greens dominant, but with gold + purple complements per heading level
-    // so the strip reads as a multi-colour gradient rather than monochrome.
     name: 'forest',
-    label: 'Forest — greens with gold + purple accents',
+    label: 'Forest — green body, multi-hue headings',
     heading: {1: '#ADFF2F', 2: '#7FFF00', 3: '#FFD700', 4: '#FFB347', 5: '#DA70D6', 6: '#F5F5DC'},
-    plainColor: '#B0B0B0',
-    plainDim: false,
-    codeColor: '#DAA520',
+    bodyColor: '#A8E6A1',
     codeDim: true,
-    linkColor: '#7FFFD4',
     bulletColor: '#7CFC00',
     blockquoteBarColor: '#556B2F',
     blockquoteDim: true,
     dividerColor: '#7FFFD4',
     tabActiveColor: '#7CFC00',
-    tabReadyColor: '#B0B0B0',
+    tabReadyColor: '#A8E6A1',
     tabPendingColor: '#FFD700',
-    tabExtraColor: '#9370DB',
+    tabExtraColor: '#DA70D6',
   },
   {
-    // Warm sunset: corals, oranges, golds, pink + purple highlight.
     name: 'sunset',
-    label: 'Sunset — corals, oranges, gold, pink',
+    label: 'Sunset — peach body, warm headings',
     heading: {1: '#FF8A80', 2: '#FFB347', 3: '#FFD966', 4: '#FF85C2', 5: '#DA70D6', 6: '#87CEEB'},
-    plainColor: '#D2B48C',
-    plainDim: false,
-    codeColor: '#FF8C00',
+    bodyColor: '#FFD2B6',
     codeDim: true,
-    linkColor: '#FFD700',
     bulletColor: '#FFB347',
     blockquoteBarColor: '#8B4513',
     blockquoteDim: true,
     dividerColor: '#FF6B6B',
     tabActiveColor: '#FFD700',
-    tabReadyColor: '#D2B48C',
+    tabReadyColor: '#FFD2B6',
     tabPendingColor: '#FF6B6B',
     tabExtraColor: '#FF69B4',
   },
   {
-    // Cool ocean: blues, cyans, teal — and a coral/gold accent so it isn't
-    // monochrome.
     name: 'ocean',
-    label: 'Ocean — blues, cyans, gold accents',
+    label: 'Ocean — sky-blue body, cyan/coral headings',
     heading: {1: '#66B3FF', 2: '#5EE8EB', 3: '#7FFFD4', 4: '#FFA07A', 5: '#FFD966', 6: '#DA70D6'},
-    plainColor: '#B0C4DE',
-    plainDim: false,
-    codeColor: '#48D1CC',
+    bodyColor: '#B6DCFF',
     codeDim: true,
-    linkColor: '#FFD700',
     bulletColor: '#00CED1',
     blockquoteBarColor: '#4682B4',
     blockquoteDim: true,
     dividerColor: '#1E90FF',
     tabActiveColor: '#00CED1',
-    tabReadyColor: '#B0C4DE',
+    tabReadyColor: '#B6DCFF',
     tabPendingColor: '#FFD700',
     tabExtraColor: '#FF7F50',
   },
   {
-    // Synthwave-ish: hot pink, cyan, lime, purple — saturated pop colours.
     name: 'neon',
-    label: 'Neon — pink, cyan, lime, purple',
+    label: 'Neon — pink body, neon headings',
     heading: {1: '#FF66B2', 2: '#00FFFF', 3: '#FFFF66', 4: '#DA70D6', 5: '#ADFF2F', 6: '#FFA94D'},
-    plainColor: '#E0E0E0',
-    plainDim: false,
-    codeColor: '#FF1493',
+    bodyColor: '#FFB6E1',
     codeDim: true,
-    linkColor: '#00FFFF',
-    bulletColor: '#FFFF00',
+    bulletColor: '#FFFF66',
     blockquoteBarColor: '#9370DB',
     blockquoteDim: true,
     dividerColor: '#FF1493',
     tabActiveColor: '#00FFFF',
-    tabReadyColor: '#E0E0E0',
+    tabReadyColor: '#FFB6E1',
     tabPendingColor: '#FF1493',
     tabExtraColor: '#7FFF00',
   },
   {
-    // Warm autumn — tomato, orange, gold, chocolate, olive, plum.
     name: 'autumn',
-    label: 'Autumn — tomato, gold, plum, olive',
+    label: 'Autumn — wheat body, warm headings',
     heading: {1: '#FF8A66', 2: '#FFA94D', 3: '#FFD966', 4: '#DA70D6', 5: '#98FB98', 6: '#DEB887'},
-    plainColor: '#DEB887',
-    plainDim: false,
-    codeColor: '#D2691E',
+    bodyColor: '#F4A460',
     codeDim: true,
-    linkColor: '#FFD700',
-    bulletColor: '#FF8C00',
+    bulletColor: '#FFA94D',
     blockquoteBarColor: '#A0522D',
     blockquoteDim: true,
     dividerColor: '#FF6347',
     tabActiveColor: '#FFD700',
-    tabReadyColor: '#DEB887',
+    tabReadyColor: '#F4A460',
     tabPendingColor: '#FF6347',
-    tabExtraColor: '#9370DB',
+    tabExtraColor: '#DA70D6',
   },
   {
-    // Candy / pop: pink, chartreuse, turquoise, purple, gold.
     name: 'candy',
-    label: 'Candy — pink, lime, turquoise, gold',
+    label: 'Candy — pink body, pop headings',
     heading: {1: '#FF85C2', 2: '#ADFF2F', 3: '#FFD966', 4: '#5EE8EB', 5: '#DA70D6', 6: '#FFA94D'},
-    plainColor: '#E6E6FA',
-    plainDim: false,
-    codeColor: '#FF69B4',
+    bodyColor: '#FFB6D9',
     codeDim: true,
-    linkColor: '#7FFF00',
-    bulletColor: '#FF69B4',
+    bulletColor: '#FF85C2',
     blockquoteBarColor: '#9370DB',
     blockquoteDim: true,
     dividerColor: '#FF69B4',
     tabActiveColor: '#7FFF00',
-    tabReadyColor: '#E6E6FA',
+    tabReadyColor: '#FFB6D9',
     tabPendingColor: '#FFD700',
-    tabExtraColor: '#00CED1',
+    tabExtraColor: '#5EE8EB',
   },
   {
-    // Black-and-white. Bold/italic/dim carry the hierarchy.
     name: 'mono',
     label: 'Mono — black & white',
     heading: {1: '#FFFFFF', 2: '#F5F5F5', 3: '#E0E0E0', 4: '#CCCCCC', 5: '#B8B8B8', 6: '#A0A0A0'},
-    plainColor: undefined,
-    plainDim: true,
-    codeColor: 'white',
+    bodyColor: undefined,
     codeDim: true,
-    linkColor: 'white',
     bulletColor: 'white',
     blockquoteBarColor: 'gray',
     blockquoteDim: true,

@@ -13,9 +13,12 @@ describe('inlineToSpans', () => {
     const find = (predicate: (s: Span) => boolean) => spans.find(predicate);
     expect(find(s => s.text === 'bold')?.bold).toBe(true);
     expect(find(s => s.text === 'it')?.italic).toBe(true);
-    expect(find(s => s.text === 'code')?.color).toBe('yellow');
+    // Codespan inherits the surrounding colour (so the body stays monochromatic)
+    // and adds `dim` for the slightly-darkened look.
     expect(find(s => s.text === 'code')?.dim).toBe(true);
-    expect(find(s => s.text === 'text')?.color).toBe('cyan');
+    // Link text inherits the surrounding colour rather than overriding it,
+    // so it merges into adjacent text spans — assert it appears anywhere.
+    expect(spans.some(s => s.text.includes('text'))).toBe(true);
     expect(spans.some(s => s.text.includes('http://x'))).toBe(true);
   });
 });
@@ -47,11 +50,14 @@ describe('lineToParts', () => {
     expect(parts.body.every(s => s.italic && s.dim)).toBe(true);
   });
 
-  test('code line passes content through verbatim', () => {
+  test('code line passes content through verbatim with bodyColor + dim', () => {
     const ctx = computeBlockContext('```\nconst x = 1;\n```')[2];
     const parts = lineToParts('const x = 1;', ctx);
     expect(parts.body[0].text).toBe('const x = 1;');
-    expect(parts.body[0].color).toBe('yellow');
+    // Active theme's bodyColor lands on fenced code lines (so the body is
+    // monochromatic). On themes with bodyColor=undefined (mono) it stays
+    // undefined; here we just assert it's the dim flag that distinguishes
+    // code from non-code.
     expect(parts.body[0].dim).toBe(true);
   });
 });

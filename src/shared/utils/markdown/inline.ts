@@ -67,15 +67,20 @@ function walk(token: any, style: SpanStyle, spans: Span[], theme: MarkdownTheme)
       walk(token.tokens ?? [], combine(style, {italic: true}), spans, theme);
       return;
     case 'codespan':
-      pushText(spans, token.text ?? '', combine(style, {color: theme.codeColor, dim: !!theme.codeDim}));
+      // Inherit the surrounding colour (heading colour inside a heading, body
+      // colour everywhere else) and only add `dim` for the slightly-darkened
+      // look — keeps the body monochromatic.
+      pushText(spans, token.text ?? '', combine(style, {dim: !!theme.codeDim}));
       return;
     case 'del':
       walk(token.tokens ?? [], combine(style, {dim: true}), spans, theme);
       return;
     case 'link': {
-      walk(token.tokens ?? [{type: 'text', text: token.text}], combine(style, {color: theme.linkColor}), spans, theme);
+      // Link text inherits the surrounding colour. The trailing " (URL)" is
+      // dimmed so the bare URL doesn't compete with the link text.
+      walk(token.tokens ?? [{type: 'text', text: token.text}], style, spans, theme);
       const href = token.href ? ` (${token.href})` : '';
-      if (href) pushText(spans, href, combine(style, {dim: true, color: undefined}));
+      if (href) pushText(spans, href, combine(style, {dim: true}));
       return;
     }
     case 'image':
