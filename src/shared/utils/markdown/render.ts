@@ -102,9 +102,19 @@ export function lineToParts(rawLine: string, ctx: BlockContext, theme: MarkdownT
     case 'heading': {
       const body = rawLine.slice(ctx.textStart).trim().replace(/\s*#+\s*$/, '');
       const color = theme.heading[ctx.level] ?? 'white';
-      const spans = inlineToSpans(body, {bold: true, color}, theme);
-      const leading: Span[] = [{text: '#'.repeat(ctx.level) + ' ', dim: true}];
-      const continuation: Span[] = [{text: ' '.repeat(ctx.level + 1)}];
+      // Heading body uses bold only — no colour override — so it renders at
+      // the same brightness as any other bold span. Terminals that downsample
+      // truecolor to a desaturated 256-colour palette were making coloured
+      // heading bodies appear darker than the surrounding bold body text.
+      // The level distinction is carried by the coloured leading marker
+      // (`#`, `##`, …) and a left bar; the bar ensures even a marker that
+      // gets desaturated by the palette still has visible weight.
+      const spans = inlineToSpans(body, {bold: true}, theme);
+      const leading: Span[] = [
+        {text: '▎ ', bold: true, color},
+        {text: '#'.repeat(ctx.level) + ' ', bold: true, color},
+      ];
+      const continuation: Span[] = [{text: ' '.repeat(ctx.level + 3)}];
       return {leading, body: spans, continuation};
     }
 

@@ -21,11 +21,15 @@ describe('inlineToSpans', () => {
 });
 
 describe('lineToParts', () => {
-  test('heading line produces leading "# " marker and bold body', () => {
+  test('heading line produces a coloured leading marker and a bold (uncoloured) body', () => {
     const ctx = computeBlockContext('## Hello')[1];
     const parts = lineToParts('## Hello', ctx);
-    expect(parts.leading[0].text).toBe('## ');
-    expect(parts.body.find(s => s.text === 'Hello')?.bold).toBe(true);
+    // Leading carries the level marker; body is bold but uncoloured so it
+    // renders at the same brightness as any other bold span.
+    expect(parts.leading.some(s => s.text.includes('##'))).toBe(true);
+    const bodySpan = parts.body.find(s => s.text === 'Hello');
+    expect(bodySpan?.bold).toBe(true);
+    expect(bodySpan?.color).toBeUndefined();
   });
 
   test('list item line produces bullet and body spans', () => {
@@ -94,7 +98,7 @@ describe('renderMarkdown', () => {
 
   test('renders headings with bold + leading marker', () => {
     const rows = renderMarkdown('# Title', 80);
-    expect(rows[0].spans[0].text).toBe('# ');
+    expect(rows[0].spans.some(s => s.text.includes('#'))).toBe(true);
     expect(rows[0].spans.some(s => s.text === 'Title' && s.bold)).toBe(true);
   });
 
