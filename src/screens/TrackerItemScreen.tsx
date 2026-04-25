@@ -194,47 +194,48 @@ function buildStatusSummary(
 interface TabStripProps {
   tabs: Tab[];
   activeIndex: number;
-  width: number;
   theme: MarkdownTheme;
 }
 
-function TabStrip({tabs, activeIndex, width, theme}: TabStripProps) {
-  const segments: React.ReactNode[] = [];
-  let used = 0;
-  for (let i = 0; i < tabs.length; i++) {
-    const t = tabs[i];
-    const isActive = i === activeIndex;
-    const sep = i === 0 ? '' : '  ';
-    const marker = !t.exists ? '○ ' : t.isExtra ? '• ' : '';
-    const label = `${sep}${marker}${t.label}`;
-    if (used + stringDisplayWidth(label) + 1 >= width) {
-      segments.push(<Text key={`more-${i}`} dimColor>…</Text>);
-      break;
-    }
-    used += stringDisplayWidth(label);
-    const color = isActive
-      ? theme.tabActiveColor
-      : !t.enabled
-      ? undefined
-      : t.isExtra
-      ? theme.tabExtraColor
-      : !t.exists
-      ? theme.tabPendingColor
-      : theme.tabReadyColor;
-    segments.push(
-      <Text
-        key={t.key}
-        bold={isActive}
-        underline={isActive}
-        italic={t.isExtra || undefined}
-        dimColor={!t.enabled || undefined}
-        color={color}
-      >
-        {label}
-      </Text>
-    );
-  }
-  return <Box flexDirection="row">{segments}</Box>;
+/**
+ * Tab strip styled to match the stages-configuration screen
+ * (`TrackerStagesScreen`): each tab is a padded label, the active one is
+ * shown with `inverse` + `bold` + green colour, with a trailing `← →` hint
+ * since left/right always navigates tabs in this view.
+ */
+function TabStrip({tabs, activeIndex, theme}: TabStripProps) {
+  return (
+    <Box flexDirection="row">
+      {tabs.map((t, i) => {
+        const isActive = i === activeIndex;
+        const marker = !t.exists ? '○ ' : t.isExtra ? '• ' : '';
+        const label = ` ${marker}${t.label} `;
+        const color = isActive
+          ? 'green'
+          : !t.enabled
+          ? undefined
+          : t.isExtra
+          ? theme.tabExtraColor
+          : !t.exists
+          ? theme.tabPendingColor
+          : undefined;
+        return (
+          <Box key={t.key} marginRight={2}>
+            <Text
+              bold={isActive}
+              inverse={isActive}
+              italic={t.isExtra || undefined}
+              dimColor={!t.enabled || undefined}
+              color={color}
+            >
+              {label}
+            </Text>
+          </Box>
+        );
+      })}
+      <Text dimColor> ← →</Text>
+    </Box>
+  );
 }
 
 export default function TrackerItemScreen({
@@ -364,7 +365,7 @@ export default function TrackerItemScreen({
       </Text>
 
       <Box marginTop={1}>
-        <TabStrip tabs={tabs} activeIndex={activeTab} width={width} theme={theme} />
+        <TabStrip tabs={tabs} activeIndex={activeTab} theme={theme} />
       </Box>
 
       <Box flexDirection="column" height={viewportHeight}>
