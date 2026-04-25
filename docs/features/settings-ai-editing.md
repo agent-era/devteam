@@ -10,8 +10,8 @@ Let users generate or modify the per-project `.devteam/config.json` using an AI 
 2. UIContext transitions to `settings` mode with `settingsProject` set.
 3. `SettingsDialog` shows current config content (read via `WorktreeCore.readConfigContent()`).
 4. User chooses:
-   - **Generate** — AI creates a new config from scratch
-   - **Edit** — User types instructions; AI edits the existing config
+   - **Edit** — User types instructions; AI edits the existing config. The edit prompt requires Claude to echo every existing field verbatim, so narrow edits can't silently drop sections.
+   - **Regenerate from scratch** — press `R` and confirm. The AI writes a fresh config without seeing the current one, so this is gated behind a destructive-action confirmation. There is no "empty Enter regenerates" shortcut.
 5. `WorktreeCore.generateConfigWithAI()` or `editConfigWithAI()` is called:
    - Opens a temporary tmux session
    - Sends a prompt to the AI agent
@@ -23,6 +23,10 @@ Let users generate or modify the per-project `.devteam/config.json` using an AI 
 ## Re-apply files
 
 After the AI edits config, the user can press **Re-apply** to copy the updated files from the main worktree into all feature worktrees. This is useful when `CLAUDE.md` or other shared files were also updated.
+
+## Diff review
+
+The AI's proposed config is shown as a diff against the current config before apply. Rows are classified as **added** (`+`), **changed** (`~`), or **removed** (`-`). Removed rows render in red with a prominent `REMOVED` label and are sorted to the top; a warning banner appears when any field will be removed, so a Claude response that silently drops a section is impossible to miss when the user presses `[a]` to apply.
 
 ## settingsAIResult persistence
 

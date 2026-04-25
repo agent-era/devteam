@@ -381,6 +381,10 @@ Current config on disk:
 
 The user requests: "{USER_PROMPT}"
 
-Output the complete updated JSON config. Preserve any fields you don't need to change. Only use the exact keys defined in the schema above — do not invent new fields.
+HARD RULES — your output replaces the current config on disk verbatim, so any field you omit is LOST:
+1. Your output MUST include every top-level key and every nested key that appears in the current config above, even the ones you are not changing. Echo unchanged values byte-for-byte from the current config.
+2. Change ONLY what the user asked for. Do not "tidy up", reorder, normalize, or drop fields that look empty or redundant — they are user-set values.
+3. You MAY add new fields from the schema if the user's request requires them; do not invent fields that are not in the schema.
+4. Omitting any field that is in the current config is a failure and will be rejected.
 
 CRITICAL: Your response must be ONLY the final JSON object — no markdown, no code fences, no comments, no explanations. Start with { and end with }.`;
