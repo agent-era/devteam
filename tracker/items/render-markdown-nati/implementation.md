@@ -44,3 +44,13 @@ Native markdown rendering in the terminal, wired into two surfaces:
 ## Stage review
 
 Built renderer + viewer + diff wiring + tests in one pass. Two style tweaks landed in response to mid-implementation feedback: bright (`*Bright`) heading colours and `yellow + dim` for code (so it sits visually with the dim body text rather than competing). Existing `buildActions` export and its test are unchanged; legacy `buildContentLines` was removed since the screen no longer assembles a content-line list.
+
+## Cleanup-stage additions (post-implement-advance)
+
+- **6 markdown themes** (`src/shared/utils/markdown/themes.ts`) with sharply different palettes: `bright`, `forest`, `sunset`, `ocean`, `neon`, `mono`. Hex colours used where chalk's named palette ran out (forest/sunset/ocean/neon). `[t]` cycles between them in both the tracker detail screen and the diff view; theme is held in module state with a subscribe/notify pattern, surfaced via the new `useMarkdownTheme` hook.
+- **Tab-based detail screen UX** (`src/screens/TrackerItemScreen.tsx`):
+  - Tab strip across the top, one tab per stage that has a canonical .md file (Discovery → notes.md, Requirements → requirements.md, Implement → implementation.md). Tabs that have content are styled "ready"; the first stage *without* a file is enabled and shows a "the agent hasn't done this stage yet — press [enter]" prompt; later stages without files are dimmed/disabled.
+  - Any *other* `.md` files in the item dir are appended as italic-styled "extra" tabs after the canonical stages, with a distinct dim divider banner and `tabExtraColor` accent.
+  - `←/→` moves between enabled tabs (skips disabled). `↑/↓ PgUp/PgDn g/G` scroll within the active tab (per-tab scroll position is preserved). `[t]` cycles theme. `[a]` attaches session, `[enter]` runs the primary stage action.
+  - The actions row is gone — keys are surfaced in the footer instead. `buildActions` stays exported (used by an existing test) and still drives footer label + warn state.
+- The renderer now reads its colour palette through the active theme: heading colours, code colour/dim, link colour, bullet/blockquote bar colours, and divider colour are all theme-driven, with the prior hard-coded values replaced.
