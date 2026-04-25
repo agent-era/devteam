@@ -652,7 +652,8 @@ export default function TrackerBoardScreen({
             // "ready to advance" treatment so it's spottable at a glance and
             // can be acted on with the `m` shortcut from the board.
             const itemStatus = service.getItemStatus(projectPath, item.slug);
-            const readyToAdvance = service.isItemReadyToAdvance(itemStatus);
+            const prMerged = getWorktreeForItem(item)?.pr?.is_merged === true;
+            const readyToAdvance = !prMerged && service.isItemReadyToAdvance(itemStatus);
             const ralphWaiting = !!itemStatus && !readyToAdvance && service.isItemWaiting(itemStatus);
             const isWaiting = aiWaiting || ralphWaiting;
 
