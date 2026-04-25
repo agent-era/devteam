@@ -11,7 +11,7 @@ export default {
     '^@inkjs/ui$': '<rootDir>/tests/__mocks__/@inkjs/ui.js'
   },
   transformIgnorePatterns: [
-    'node_modules/(?!(ink|ink-testing-library|ink-syntax-highlight)/)'
+    'node_modules/(?!(ink|ink-testing-library|ink-syntax-highlight|marked)/)'
   ],
   transform: {
     '^.+\\.tsx?$': ['ts-jest', {
@@ -20,6 +20,9 @@ export default {
         module: 'ES2022',
         target: 'ES2022'
       }
+    }],
+    '^.+\\.jsx?$': ['babel-jest', {
+      presets: [['@babel/preset-env', {targets: {node: 'current'}}]]
     }]
   },
   testEnvironment: 'node',

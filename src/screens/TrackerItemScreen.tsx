@@ -1,8 +1,13 @@
 import React from 'react';
+import fs from 'node:fs';
 import {Box, Text, useInput} from 'ink';
 import {TrackerItem, TrackerService, StagesConfig, ExitCriterionResult, STAGE_LABELS} from '../services/TrackerService.js';
 import {useKeyboardShortcuts} from '../hooks/useKeyboardShortcuts.js';
 import {useTerminalDimensions} from '../hooks/useTerminalDimensions.js';
+import MarkdownView from '../components/views/markdown/MarkdownView.js';
+import {renderMarkdown} from '../shared/utils/markdown/render.js';
+import {stringDisplayWidth} from '../shared/utils/formatting.js';
+import type {MdRow} from '../shared/utils/markdown/types.js';
 
 interface TrackerItemScreenProps {
   item: TrackerItem;
@@ -17,13 +22,13 @@ interface Action {
   warn?: boolean;
 }
 
-interface ContentLine {
-  key: string;
-  text: string;
-  bold?: boolean;
-  dimColor?: boolean;
-  color?: string;
-  indent?: number;
+type DocKey = 'requirements' | 'notes' | 'implementation';
+
+interface DocInfo {
+  key: DocKey;
+  title: string;
+  offset: number;
+  length: number;
 }
 
 export function buildActions(
@@ -49,61 +54,64 @@ export function buildActions(
   return actions;
 }
 
-function buildContentLines(
+function readBody(filePath: string | undefined, present: boolean): string {
+  if (!present || !filePath) return '';
+  try { return fs.readFileSync(filePath, 'utf8'); } catch { return ''; }
+}
+
+function buildDocRows(item: TrackerItem, width: number): {rows: MdRow[]; docs: DocInfo[]} {
+  const sources: Array<{key: DocKey; title: string; body: string}> = [];
+  if (item.requirementsBody && item.requirementsBody.trim()) {
+    sources.push({key: 'requirements', title: 'requirements.md', body: item.requirementsBody});
+  }
+  const notesBody = readBody(item.notesPath, item.hasNotes).trim();
+  if (notesBody) sources.push({key: 'notes', title: 'notes.md', body: notesBody});
+  const implBody = readBody(item.implementationPath, item.hasImplementationNotes).trim();
+  if (implBody) sources.push({key: 'implementation', title: 'implementation.md', body: implBody});
+
+  const rows: MdRow[] = [];
+  const docs: DocInfo[] = [];
+
+  if (sources.length === 0) {
+    rows.push({spans: [{text: '(no markdown yet — add requirements.md, notes.md, or implementation.md)', dim: true}]});
+    return {rows, docs};
+  }
+
+  for (let i = 0; i < sources.length; i++) {
+    const src = sources[i];
+    if (i > 0) rows.push({spans: [{text: ''}]});
+    const offset = rows.length;
+    const headerText = ` ${src.title} `;
+    const lead = '── ';
+    const used = stringDisplayWidth(lead) + stringDisplayWidth(headerText);
+    const trailing = Math.max(2, width - used);
+    rows.push({spans: [
+      {text: lead, color: 'magenta'},
+      {text: headerText, color: 'magenta', bold: true},
+      {text: '─'.repeat(trailing), color: 'magenta'},
+    ]});
+    rows.push({spans: [{text: ''}]});
+    const start = rows.length;
+    rows.push(...renderMarkdown(src.body, width));
+    docs.push({key: src.key, title: src.title, offset, length: rows.length - start + 2});
+  }
+
+  return {rows, docs};
+}
+
+function buildStatusSummary(
   item: TrackerItem,
-  stagesConfig: Required<StagesConfig>,
-  exitResults: ExitCriterionResult[],
-  preview: string[]
-): ContentLine[] {
-  const lines: ContentLine[] = [];
-  const stageConf = item.stage !== 'archive' ? stagesConfig[item.stage] : null;
-
-  if (stageConf) {
-    lines.push({key: 'desc', text: stageConf.description, dimColor: true});
-    lines.push({key: 'gap0', text: ''});
-  }
-
-  // Exit criteria — prominent
-  if (exitResults.length > 0) {
-    const allMet = exitResults.every(r => r.met);
-    lines.push({key: 'ec-hdr', text: allMet ? '✓ Ready to advance' : '! Exit criteria to advance:', bold: true, color: allMet ? 'green' : 'yellow'});
-    exitResults.forEach((r, i) => {
-      lines.push({
-        key: `ec-${i}`,
-        text: `${r.met ? '✓' : '✗'} ${r.criterion.description}`,
-        bold: !r.met,
-        color: r.met ? 'green' : 'red',
-        indent: 2,
-      });
-    });
-    lines.push({key: 'ec-gap', text: ''});
-  }
-
-  // Non-enforced checklist
-  if (stageConf && stageConf.checklist.length > 0) {
-    lines.push({key: 'chk-hdr', text: 'Checklist (guidance)', bold: true});
-    stageConf.checklist.forEach((step, i) => {
-      lines.push({key: `chk-${i}`, text: `○ ${step}`, dimColor: true, indent: 2});
-    });
-    lines.push({key: 'chk-gap', text: ''});
-  }
-
-  lines.push({key: 'req-hdr', text: 'Requirements Preview', bold: true});
-  if (preview.length > 0) {
-    preview.forEach((line, i) => {
-      lines.push({key: `req-${i}`, text: line || ' ', dimColor: true});
-    });
-  } else {
-    lines.push({key: 'req-none', text: '(stub — no requirements yet)', dimColor: true});
-  }
-  lines.push({key: 'req-gap', text: ''});
-
-  lines.push({key: 'sig-hdr', text: 'Signals', bold: true});
-  lines.push({key: 'sig-wt', text: item.worktreeExists ? `worktree: ${item.worktreePath}` : 'worktree: none', dimColor: true});
-  lines.push({key: 'sig-impl', text: item.hasImplementationNotes ? 'implementation notes: yes' : 'implementation notes: none', dimColor: true});
-  lines.push({key: 'sig-notes', text: item.hasNotes ? 'notes: yes' : 'notes: none', dimColor: true});
-
-  return lines;
+  exitResults: ExitCriterionResult[]
+): {label: string; tone: 'ok' | 'pending' | 'archive'} {
+  if (item.stage === 'archive') return {label: 'Archived', tone: 'archive'};
+  const stageLabel = STAGE_LABELS[item.stage];
+  if (exitResults.length === 0) return {label: `${stageLabel}`, tone: 'ok'};
+  const unmet = exitResults.filter(r => !r.met).length;
+  if (unmet === 0) return {label: `${stageLabel}  •  ✓ Ready to advance`, tone: 'ok'};
+  return {
+    label: `${stageLabel}  •  ✗ ${unmet} of ${exitResults.length} criteria pending`,
+    tone: 'pending',
+  };
 }
 
 export default function TrackerItemScreen({
@@ -112,10 +120,9 @@ export default function TrackerItemScreen({
   onAttachSession,
   onStageAction,
 }: TrackerItemScreenProps) {
-  const {rows} = useTerminalDimensions();
+  const {rows: termRows, columns: termCols} = useTerminalDimensions();
   const service = React.useMemo(() => new TrackerService(), []);
   const stagesConfig = React.useMemo(() => service.loadStagesConfig(item.projectPath), [item.projectPath, service]);
-  const preview = React.useMemo(() => service.readRequirementsPreview(item), [item, service]);
 
   const stageConf = item.stage !== 'archive' ? stagesConfig[item.stage] : null;
   const exitResults = React.useMemo(
@@ -127,19 +134,32 @@ export default function TrackerItemScreen({
     () => buildActions(item, stagesConfig, service, exitResults),
     [item, stagesConfig, service, exitResults]
   );
-  const contentLines = React.useMemo(
-    () => buildContentLines(item, stagesConfig, exitResults, preview),
-    [item, stagesConfig, exitResults, preview]
-  );
 
-  const [selectedAction, setSelectedAction] = React.useState(0);
-  const [scrollTop, setScrollTop] = React.useState(0);
+  const width = Math.max(20, termCols - 2);
+  const {rows: docRows, docs} = React.useMemo(() => buildDocRows(item, width), [item, width]);
 
-  // Fixed rows: header(3) + actions row(1) + gap(1) + footer(1)
+  const status = React.useMemo(() => buildStatusSummary(item, exitResults), [item, exitResults]);
+
+  // Fixed rows: title(1) + status(1) + viewport gap(1) + actions(1) + footer(1) + outer padding(1) = 6
   const fixedRows = 6;
-  const contentViewHeight = Math.max(3, rows - fixedRows);
-  const maxScroll = Math.max(0, contentLines.length - contentViewHeight);
-  const visibleLines = contentLines.slice(scrollTop, scrollTop + contentViewHeight);
+  const viewportHeight = Math.max(3, termRows - fixedRows);
+  const maxScroll = Math.max(0, docRows.length - viewportHeight);
+
+  const [scrollTop, setScrollTop] = React.useState(0);
+  const [selectedAction, setSelectedAction] = React.useState(0);
+
+  const clampScroll = (n: number) => Math.max(0, Math.min(maxScroll, n));
+
+  React.useEffect(() => {
+    setScrollTop(prev => clampScroll(prev));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [maxScroll]);
+
+  const jumpToDoc = (key: DocKey) => {
+    const d = docs.find(x => x.key === key);
+    if (!d) return;
+    setScrollTop(clampScroll(d.offset));
+  };
 
   const handleSelect = React.useCallback(() => {
     const action = actions[selectedAction];
@@ -152,8 +172,15 @@ export default function TrackerItemScreen({
   }, [actions, selectedAction, onAttachSession, onStageAction]);
 
   useInput((input, key) => {
-    if (key.upArrow) setScrollTop(prev => Math.max(0, prev - 1));
-    else if (key.downArrow) setScrollTop(prev => Math.min(maxScroll, prev + 1));
+    if (key.upArrow) setScrollTop(prev => clampScroll(prev - 1));
+    else if (key.downArrow) setScrollTop(prev => clampScroll(prev + 1));
+    else if (key.pageUp) setScrollTop(prev => clampScroll(prev - viewportHeight));
+    else if (key.pageDown) setScrollTop(prev => clampScroll(prev + viewportHeight));
+    else if (input === 'g') setScrollTop(0);
+    else if (input === 'G') setScrollTop(maxScroll);
+    else if (input === '1') jumpToDoc('requirements');
+    else if (input === '2') jumpToDoc('notes');
+    else if (input === '3') jumpToDoc('implementation');
   });
 
   useKeyboardShortcuts({
@@ -162,30 +189,28 @@ export default function TrackerItemScreen({
     onQuit: onBack,
   });
 
-  const scrollIndicator = maxScroll > 0 ? ` (↑↓ scroll)` : '';
-  const stageLabel = item.stage !== 'archive' ? STAGE_LABELS[item.stage] : item.stage;
+  const scrollHint = maxScroll > 0
+    ? `  ${Math.min(scrollTop + viewportHeight, docRows.length)}/${docRows.length}`
+    : '';
+
+  const docHints = docs.length > 1
+    ? `  ${docs.map((d, i) => `[${i + 1}] ${d.title.replace(/\.md$/, '')}`).join('  ')}`
+    : '';
 
   return (
     <Box flexDirection="column" flexGrow={1} paddingX={1}>
-      {/* Fixed header */}
-      <Text bold>{item.title}</Text>
-      <Text dimColor>{`${item.project}  •  ${stageLabel}`}{scrollIndicator}</Text>
+      <Text bold wrap="truncate">{item.title}</Text>
+      <Text
+        color={status.tone === 'ok' ? 'green' : status.tone === 'pending' ? 'yellow' : 'gray'}
+        wrap="truncate"
+      >
+        {`${item.project}  •  ${status.label}${scrollHint}`}
+      </Text>
 
-      {/* Scrollable content */}
-      <Box flexDirection="column" height={contentViewHeight} marginTop={1}>
-        {visibleLines.map(line => (
-          <Text
-            key={line.key}
-            bold={line.bold}
-            dimColor={line.dimColor}
-            color={line.color}
-          >
-            {line.indent ? ' '.repeat(line.indent) : ''}{line.text}
-          </Text>
-        ))}
+      <Box marginTop={1}>
+        <MarkdownView rows={docRows} width={width} height={viewportHeight} scrollTop={scrollTop} />
       </Box>
 
-      {/* Fixed actions */}
       <Box flexDirection="row" marginTop={1}>
         {actions.map((action, index) => (
           <Box key={action.id} marginRight={2}>
@@ -197,8 +222,10 @@ export default function TrackerItemScreen({
         {actions.length === 0 && <Text dimColor>(archived)</Text>}
       </Box>
 
-      <Box marginTop={1}>
-        <Text color="magenta">[h]/[l] select action  [↑]/[↓] scroll  [enter] run  [esc]/[q] back</Text>
+      <Box>
+        <Text color="magenta" wrap="truncate">
+          {`[h]/[l] action  [↑↓ PgUp/PgDn g/G] scroll${docHints}  [enter] run  [esc]/[q] back`}
+        </Text>
       </Box>
     </Box>
   );

@@ -15,6 +15,7 @@ import {getLanguageFromFileName} from '../../shared/utils/languageMapping.js';
 import {loadDiff} from '../../shared/utils/diff/loadDiff.js';
 import {convertToSideBySide} from '../../shared/utils/diff/convertToSideBySide.js';
 import type {DiffLine, SideBySideLine} from '../../shared/utils/diff/types.js';
+import {buildMdContextMap, type MdContextMap} from '../../shared/utils/markdown/diffPrepass.js';
 import UnifiedDiffRows from './diff/UnifiedDiffRows.js';
 import SideBySideDiffRows from './diff/SideBySideDiffRows.js';
 import {useDiffComments} from './diff/hooks/useDiffComments.js';
@@ -33,6 +34,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
   const {rows: terminalHeight, columns: terminalWidth} = useTerminalDimensions();
   const [lines, setLines] = useState<DiffLine[]>([]);
   const [sideBySideLines, setSideBySideLines] = useState<SideBySideLine[]>([]);
+  const [mdContextMap, setMdContextMap] = useState<MdContextMap>(() => new Map());
   const [currentFileHeader, setCurrentFileHeader] = useState<string>('');
   const [currentHunkHeader, setCurrentHunkHeader] = useState<string>('');
 
@@ -75,6 +77,11 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       nav.setScrollRow(0);
       nav.setTargetScrollRow(0);
       nav.setSelectedLine(0);
+      // Pre-rendering pass: scan each .md file's pre/post images so per-line
+      // styling later knows e.g. whether a line is inside a fenced code block.
+      const baseHash = diffType === 'uncommitted' ? '' : comments.baseCommitHash;
+      const map = await buildMdContextMap(worktreePath, lns, baseHash);
+      setMdContextMap(map);
     })();
   }, [worktreePath, diffType, comments.baseCommitHash, comments.baseHashReady]);
 
@@ -231,6 +238,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
             perFileIndex={unifiedPerFileIndex}
             commentStore={comments.commentStore}
             getLanguage={languageCache}
+            mdContextMap={mdContextMap}
           />
         ) : (
           <SideBySideDiffRows
@@ -242,6 +250,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
             perFileIndex={sideBySidePerFileIndex}
             commentStore={comments.commentStore}
             getLanguage={languageCache}
+            mdContextMap={mdContextMap}
           />
         )}
       </Box>
