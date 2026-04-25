@@ -4,21 +4,6 @@ import {inlineToSpans} from './inline.js';
 import {getActiveMarkdownTheme, type MarkdownTheme} from './themes.js';
 import type {BlockContext, MdRow, Span} from './types.js';
 
-/**
- * Apply the active theme's "plain text" style to inline spans that don't
- * carry their own colour, bold, or inverse flag. Coloured spans (codespan,
- * link, image fallback) keep their look so they still pop visually.
- */
-function applyPlainStyle(spans: Span[], theme: MarkdownTheme): Span[] {
-  return spans.map(s => {
-    if (s.bold || s.color || s.inverse) return s;
-    const next = {...s};
-    if (theme.plainDim) next.dim = true;
-    if (theme.plainColor) next.color = theme.plainColor;
-    return next;
-  });
-}
-
 export function wrapSpans(spans: Span[], width: number, leading: Span[] = [], continuation: Span[] = []): MdRow[] {
   const safeWidth = Math.max(1, width);
   const leadingWidth = stringDisplayWidth(leading.map(s => s.text).join(''));
@@ -102,14 +87,11 @@ export function lineToParts(rawLine: string, ctx: BlockContext, theme: MarkdownT
     case 'heading': {
       const body = rawLine.slice(ctx.textStart).trim().replace(/\s*#+\s*$/, '');
       const color = theme.heading[ctx.level] ?? 'white';
-      // Heading body uses bold only — no colour override — so it renders at
-      // the same brightness as any other bold span. Terminals that downsample
-      // truecolor to a desaturated 256-colour palette were making coloured
-      // heading bodies appear darker than the surrounding bold body text.
-      // The level distinction is carried by the coloured leading marker
-      // (`#`, `##`, …) and a left bar; the bar ensures even a marker that
-      // gets desaturated by the palette still has visible weight.
-      const spans = inlineToSpans(body, {bold: true}, theme);
+      // Marker and body both carry the level colour. With FORCE_COLOR=3 set
+      // by the bin script, hex theme colours render as truecolor RGB and
+      // appear at full brightness — matching the marker's brightness on
+      // terminals that pass truecolor through.
+      const spans = inlineToSpans(body, {bold: true, color}, theme);
       const leading: Span[] = [
         {text: '▎ ', bold: true, color},
         {text: '#'.repeat(ctx.level) + ' ', bold: true, color},
@@ -129,15 +111,19 @@ export function lineToParts(rawLine: string, ctx: BlockContext, theme: MarkdownT
       const body = rawLine.slice(ctx.textStart);
       const indent = ' '.repeat(ctx.indent);
       const bullet = ctx.ordered ? `${ctx.bullet} ` : '• ';
+      // Bullet keeps its theme colour; body text is uncoloured so it reads at
+      // the same brightness as any other body span on every terminal.
       const leading: Span[] = [{text: indent}, {text: bullet, color: theme.bulletColor}];
-      const spans = applyPlainStyle(inlineToSpans(body, {}, theme), theme);
+      const spans = inlineToSpans(body, {}, theme);
       const continuation: Span[] = [{text: indent + ' '.repeat(stringDisplayWidth(bullet))}];
       return {leading, body: spans, continuation};
     }
 
     case 'para':
     default:
-      return {leading: [], body: applyPlainStyle(inlineToSpans(rawLine, {}, theme), theme), continuation: []};
+      // Body text is uncoloured (default fg) — only inline tokens that bring
+      // their own colour from the theme (codespan, link) keep it.
+      return {leading: [], body: inlineToSpans(rawLine, {}, theme), continuation: []};
   }
 }
 

@@ -21,15 +21,16 @@ describe('inlineToSpans', () => {
 });
 
 describe('lineToParts', () => {
-  test('heading line produces a coloured leading marker and a bold (uncoloured) body', () => {
+  test('heading line carries the level colour on both the marker and the body', () => {
     const ctx = computeBlockContext('## Hello')[1];
     const parts = lineToParts('## Hello', ctx);
-    // Leading carries the level marker; body is bold but uncoloured so it
-    // renders at the same brightness as any other bold span.
     expect(parts.leading.some(s => s.text.includes('##'))).toBe(true);
     const bodySpan = parts.body.find(s => s.text === 'Hello');
     expect(bodySpan?.bold).toBe(true);
-    expect(bodySpan?.color).toBeUndefined();
+    expect(bodySpan?.color).toBeTruthy();
+    // Marker colour should match the body colour for visual consistency.
+    const markerColored = parts.leading.find(s => s.text.includes('##'));
+    expect(markerColored?.color).toBe(bodySpan?.color);
   });
 
   test('list item line produces bullet and body spans', () => {
@@ -99,7 +100,7 @@ describe('renderMarkdown', () => {
   test('renders headings with bold + leading marker', () => {
     const rows = renderMarkdown('# Title', 80);
     expect(rows[0].spans.some(s => s.text.includes('#'))).toBe(true);
-    expect(rows[0].spans.some(s => s.text === 'Title' && s.bold)).toBe(true);
+    expect(rows[0].spans.some(s => s.text.includes('Title') && s.bold)).toBe(true);
   });
 
   test('renders fenced code lines verbatim, not as headings', () => {
