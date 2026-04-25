@@ -31,10 +31,12 @@ export interface MarkdownTheme {
 
 // Palette guideline: every colour in a theme should sit at roughly the same
 // perceived brightness, so headings don't read darker than the surrounding
-// body / code / link spans. The original Ink "*Bright" variants render as a
-// *different shade* on some dark-mode terminals (sometimes darker than the
-// non-bright variant), which is why every theme below uses either named
-// non-bright colours or explicit truecolor hex values.
+// body / code / link spans. Heading colours are *always* explicit truecolor
+// hex values picked from the high-luminance band — both the named-bright and
+// named-standard ANSI variants render unpredictably on different dark-mode
+// palettes (sometimes mapping the *Bright variant darker than the standard
+// one), so we don't trust them for headings. Other roles (code, link, plain
+// text) keep their named colours where the existing tests rely on them.
 
 export const MARKDOWN_THEMES: MarkdownTheme[] = [
   {
@@ -42,7 +44,7 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     // `yellow` (the link / code colours).
     name: 'bright',
     label: 'Bright — balanced primaries',
-    heading: {1: 'cyan', 2: 'green', 3: 'yellow', 4: 'magenta', 5: 'blue', 6: 'white'},
+    heading: {1: '#00FFFF', 2: '#00FF7F', 3: '#FFFF66', 4: '#FF66FF', 5: '#66B3FF', 6: '#FFFFFF'},
     plainColor: 'gray',
     plainDim: false,
     codeColor: 'yellow',
@@ -62,7 +64,7 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     // so the strip reads as a multi-colour gradient rather than monochrome.
     name: 'forest',
     label: 'Forest — greens with gold + purple accents',
-    heading: {1: '#7CFC00', 2: '#32CD32', 3: '#FFD700', 4: '#FF8C00', 5: '#9370DB', 6: '#A9A9A9'},
+    heading: {1: '#ADFF2F', 2: '#7FFF00', 3: '#FFD700', 4: '#FFB347', 5: '#DA70D6', 6: '#F5F5DC'},
     plainColor: '#B0B0B0',
     plainDim: false,
     codeColor: '#DAA520',
@@ -81,7 +83,7 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     // Warm sunset: corals, oranges, golds, pink + purple highlight.
     name: 'sunset',
     label: 'Sunset — corals, oranges, gold, pink',
-    heading: {1: '#FF6B6B', 2: '#FFB347', 3: '#FFD700', 4: '#FF69B4', 5: '#9370DB', 6: '#5F9EA0'},
+    heading: {1: '#FF8A80', 2: '#FFB347', 3: '#FFD966', 4: '#FF85C2', 5: '#DA70D6', 6: '#87CEEB'},
     plainColor: '#D2B48C',
     plainDim: false,
     codeColor: '#FF8C00',
@@ -101,7 +103,7 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     // monochrome.
     name: 'ocean',
     label: 'Ocean — blues, cyans, gold accents',
-    heading: {1: '#1E90FF', 2: '#00CED1', 3: '#7FFFD4', 4: '#FF7F50', 5: '#FFD700', 6: '#9370DB'},
+    heading: {1: '#66B3FF', 2: '#5EE8EB', 3: '#7FFFD4', 4: '#FFA07A', 5: '#FFD966', 6: '#DA70D6'},
     plainColor: '#B0C4DE',
     plainDim: false,
     codeColor: '#48D1CC',
@@ -120,7 +122,7 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     // Synthwave-ish: hot pink, cyan, lime, purple — saturated pop colours.
     name: 'neon',
     label: 'Neon — pink, cyan, lime, purple',
-    heading: {1: '#FF1493', 2: '#00FFFF', 3: '#FFFF00', 4: '#9370DB', 5: '#7FFF00', 6: '#FF8C00'},
+    heading: {1: '#FF66B2', 2: '#00FFFF', 3: '#FFFF66', 4: '#DA70D6', 5: '#ADFF2F', 6: '#FFA94D'},
     plainColor: '#E0E0E0',
     plainDim: false,
     codeColor: '#FF1493',
@@ -139,7 +141,7 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     // Warm autumn — tomato, orange, gold, chocolate, olive, plum.
     name: 'autumn',
     label: 'Autumn — tomato, gold, plum, olive',
-    heading: {1: '#FF6347', 2: '#FF8C00', 3: '#FFD700', 4: '#9370DB', 5: '#8FBC8F', 6: '#A0522D'},
+    heading: {1: '#FF8A66', 2: '#FFA94D', 3: '#FFD966', 4: '#DA70D6', 5: '#98FB98', 6: '#DEB887'},
     plainColor: '#DEB887',
     plainDim: false,
     codeColor: '#D2691E',
@@ -158,7 +160,7 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     // Candy / pop: pink, chartreuse, turquoise, purple, gold.
     name: 'candy',
     label: 'Candy — pink, lime, turquoise, gold',
-    heading: {1: '#FF69B4', 2: '#7FFF00', 3: '#FFD700', 4: '#00CED1', 5: '#9370DB', 6: '#FF8C00'},
+    heading: {1: '#FF85C2', 2: '#ADFF2F', 3: '#FFD966', 4: '#5EE8EB', 5: '#DA70D6', 6: '#FFA94D'},
     plainColor: '#E6E6FA',
     plainDim: false,
     codeColor: '#FF69B4',
@@ -177,7 +179,7 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     // Black-and-white. Bold/italic/dim carry the hierarchy.
     name: 'mono',
     label: 'Mono — black & white',
-    heading: {1: 'white', 2: 'white', 3: 'white', 4: 'gray', 5: 'gray', 6: 'gray'},
+    heading: {1: '#FFFFFF', 2: '#F5F5F5', 3: '#E0E0E0', 4: '#CCCCCC', 5: '#B8B8B8', 6: '#A0A0A0'},
     plainColor: undefined,
     plainDim: true,
     codeColor: 'white',
