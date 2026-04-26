@@ -223,15 +223,20 @@ export function renderLine(rawLine: string, ctx: BlockContext, width: number, th
 
   const rows = wrapSpans(parts.body, safeWidth, parts.leading, parts.continuation);
 
-  if (ctx.kind === 'heading' && ctx.level === 1) {
-    const color = theme.heading[1] ?? 'white';
-    const bar: MdRow = {spans: [{text: '='.repeat(safeWidth), bold: true, color}]};
-    return [bar, ...rows, bar];
-  }
-  if (ctx.kind === 'heading' && ctx.level === 2) {
-    const color = theme.heading[2] ?? 'white';
-    const bar: MdRow = {spans: [{text: '-'.repeat(safeWidth), bold: true, color}]};
-    return [...rows, bar];
+  if (ctx.kind === 'heading' && (ctx.level === 1 || ctx.level === 2)) {
+    // Bar width matches the longest rendered heading row (including marker
+    // and any wrapped continuation), so the rule is only as wide as the
+    // actual heading text rather than the full viewport.
+    let barWidth = 0;
+    for (const row of rows) {
+      const w = stringDisplayWidth(row.spans.map(s => s.text).join(''));
+      if (w > barWidth) barWidth = w;
+    }
+    barWidth = Math.max(1, Math.min(safeWidth, barWidth));
+    const color = theme.heading[ctx.level] ?? 'white';
+    const ch = ctx.level === 1 ? '=' : '-';
+    const bar: MdRow = {spans: [{text: ch.repeat(barWidth), bold: true, color}]};
+    return ctx.level === 1 ? [bar, ...rows, bar] : [...rows, bar];
   }
 
   return rows;

@@ -131,17 +131,18 @@ describe('renderMarkdown', () => {
     const rows = renderMarkdown('# Title', 80);
     // H1 produces 3 rows: top "===" bar, the heading, bottom "===" bar.
     expect(rows.length).toBe(3);
-    expect(rows[0].spans[0].text).toBe('='.repeat(80));
-    expect(rows[2].spans[0].text).toBe('='.repeat(80));
+    // Bar width matches the heading text width (# + space + Title = 7 chars), not the viewport.
+    expect(rows[0].spans[0].text).toBe('='.repeat(7));
+    expect(rows[2].spans[0].text).toBe('='.repeat(7));
     expect(rows[1].spans.some(s => s.text.includes('#'))).toBe(true);
     expect(rows[1].spans.some(s => s.text.includes('Title') && s.bold)).toBe(true);
   });
 
-  test('H2 gets a "---" rule after the heading', () => {
+  test('H2 gets a "---" rule after the heading, sized to the heading width', () => {
     const rows = renderMarkdown('## Sub', 60);
-    // 2 rows: heading then bar.
+    // 2 rows: heading then bar. Bar = "## Sub" → 6 chars wide.
     expect(rows.length).toBe(2);
-    expect(rows[1].spans[0].text).toBe('-'.repeat(60));
+    expect(rows[1].spans[0].text).toBe('-'.repeat(6));
   });
 
   test('H3+ render without surrounding rules', () => {
