@@ -697,15 +697,20 @@ export default function TrackerBoardScreen({
     );
   }
 
-  // Read each item's status.json once per render and reuse for both the
-  // title-bar tally below and the per-card render loop. Cheap reads, but the
-  // kanban re-renders on every keystroke — paying twice would be silly.
-  const itemStatusBySlug = new Map<string, ReturnType<TrackerService['getItemStatus']>>();
-  for (const col of board.columns) {
-    for (const item of col.items) {
-      itemStatusBySlug.set(item.slug, service.getItemStatus(projectPath, item.slug));
+  // Read each item's status.json once per worktree refresh and reuse for both
+  // the title-bar tally and the per-card render loop. Memoized on
+  // `[board, worktrees]` so keystroke re-renders don't replay disk reads;
+  // status.json updates land on the next refresh tick, matching the rest of
+  // the kanban's refresh cadence.
+  const itemStatusBySlug = React.useMemo(() => {
+    const map = new Map<string, ReturnType<TrackerService['getItemStatus']>>();
+    for (const col of board.columns) {
+      for (const item of col.items) {
+        map.set(item.slug, service.getItemStatus(projectPath, item.slug));
+      }
     }
-  }
+    return map;
+  }, [board, worktrees, service, projectPath]);
 
   let waitingCount = 0;
   let workingCount = 0;
