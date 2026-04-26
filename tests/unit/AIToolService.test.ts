@@ -128,18 +128,18 @@ random-session:33333`);
         expect(aiToolService.getStatusForTool(workingText, 'codex')).toBe('working');
       });
 
-      test('detects waiting state (no send button)', () => {
-        const waitingText = '▌ What would you like me to help with?';
+      test('detects waiting state (permission picker on screen)', () => {
+        const waitingText = 'Would you like to run the following command?\n\n  $ git init\n\n› 1. Yes, proceed (y)\n  2. No (esc)\n\n  Press enter to confirm or esc to cancel';
         expect(aiToolService.getStatusForTool(waitingText, 'codex')).toBe('waiting');
       });
 
-      test('does not report waiting without an interactive cursor', () => {
+      test('does not report waiting without an active picker footer', () => {
         const idleLikeText = 'Session output without prompt affordances';
         expect(aiToolService.getStatusForTool(idleLikeText, 'codex')).toBe('idle');
       });
 
-      test('detects idle state (has send button)', () => {
-        const idleText = '▌ Ready to help\n⏎ send   Ctrl+J newline';
+      test('detects idle state', () => {
+        const idleText = '› Explain this codebase\n  gpt-5.4 low · Context 100% left';
         expect(aiToolService.getStatusForTool(idleText, 'codex')).toBe('idle');
       });
     });

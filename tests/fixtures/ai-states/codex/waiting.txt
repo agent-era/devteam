@@ -1,0 +1,62 @@
+codex -a untrusted
+mserv@userv:/tmp/ai-capture-codex-FD9F8m$ codex -a untrusted
+> You are in /tmp/ai-capture-codex-FD9F8m
+
+  Do you trust the contents of this directory? Working with untrusted contents comes with higher risk of prompt injection. Trusting the directory allows project-local config, hooks, and exec policies
+  to load.
+
+› 1. Yes, continue
+  2. No, quit
+
+  Press enter to continue
+
+⚠ Codex could not find bubblewrap on PATH. Install bubblewrap with your OS package manager. See the sandbox prerequisites: https://developers.openai.com/codex/concepts/sandboxing#prerequisites. Codex
+  will use the vendored bubblewrap in the meantime.
+
+╭───────────────────────────────────────────╮
+│ >_ OpenAI Codex (v0.125.0)                │
+│                                           │
+│ model:     gpt-5.4 low   /model to change │
+│ directory: /tmp/ai-capture-codex-FD9F8m   │
+╰───────────────────────────────────────────╯
+
+  Tip: Use /rename to rename your threads for easier thread resuming.
+
+
+› Please run the shell command `git init` in the current directory.
+
+
+• I’m initializing a Git repository in the current working directory and will report the result.
+
+◦ Running git init
+
+
+  Would you like to run the following command?
+
+  $ git init
+
+› 1. Yes, proceed (y)
+  2. Yes, and don't ask again for commands that start with `git init` (p)
+  3. No, and tell Codex what to do differently (esc)
+
+  Press enter to confirm or esc to cancel
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -5,6 +5,10 @@ import {setLastTool} from '../shared/utils/aiSessionMemory.js';
 
 // Matches ❯ immediately followed by a numbered option on the same line (e.g. "❯ 1. Accept")
 const CLAUDE_WAITING_RE = /❯\s+\d+\.\s+\w+/m;
+// Claude's "thinking" indicator: ellipsis + paren + duration in seconds. The bare substring
+// `… (` is too loose — transcript lines like `Reading 1 file… (ctrl+o to expand)` match it
+// even at idle/waiting, so we anchor on the duration that only the live spinner shows.
+const CLAUDE_WORKING_RE = /…\s*\(\d+s/;
 
 export class AIToolService {
   /**
@@ -99,27 +103,27 @@ export class AIToolService {
   getStatusForTool(text: string, tool: AITool): AIStatus {
     if (tool === 'none') return 'not_running';
     
-    const toolConfig = AI_TOOLS[tool];
-
-    // 1. Check for working state first (most specific)
-    if (this.isWorking(text, toolConfig.statusPatterns.working)) {
-      return 'working';
-    }
-
-    // 2. Check for waiting states (tool-specific logic)
-    if (this.isWaitingForTool(text, tool)) {
-      return 'waiting';
-    }
-    
-    // 3. Default to idle
+    // Waiting first: a permission/picker dialog is the user-actionable state and the
+    // transient "working" spinner can render alongside it (e.g. Claude shows
+    // "Reading 1 file… (ctrl+o to expand)" above its own permission picker).
+    if (this.isWaitingForTool(text, tool)) return 'waiting';
+    if (this.isWorking(text, tool)) return 'working';
     return 'idle';
   }
 
   /**
    * Check if AI tool is in working state
    */
-  private isWorking(text: string, pattern: string): boolean {
-    return text.toLowerCase().includes(pattern.toLowerCase());
+  private isWorking(text: string, tool: AITool): boolean {
+    switch (tool) {
+      case 'claude':
+        return CLAUDE_WORKING_RE.test(text);
+      case 'codex':
+      case 'gemini':
+        return text.toLowerCase().includes(AI_TOOLS[tool].statusPatterns.working.toLowerCase());
+      default:
+        return false;
+    }
   }
 
   /**
@@ -132,12 +136,15 @@ export class AIToolService {
         return lower.includes('waiting for user');
 
       case 'codex':
-        // Codex uses the block cursor for interactive prompts; idle restores the send hint.
-        return text.includes('▌') && !text.includes('⏎ send');
+        // Codex permission pickers show "Press enter to confirm or esc to cancel" plus a
+        // "Would you like to run the following command?" header.
+        return /press enter to confirm/i.test(text) || /would you like to run/i.test(text);
 
       case 'claude':
         // CLAUDE_WAITING_RE requires ❯ and the numbered option on the same line, preventing
         // false positives from scrollback ❯ (user prompts) + prior numbered Claude responses.
+        // It also matches the first-launch trust-folder dialog — intentional, the user does
+        // need to act on it.
         return CLAUDE_WAITING_RE.test(text) ||
           lower.includes('allow execution') ||
           lower.includes('needs permission') ||

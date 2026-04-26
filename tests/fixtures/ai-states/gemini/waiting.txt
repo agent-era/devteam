@@ -1,0 +1,15 @@
+ ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+ │ ?  Shell npm test ←                                                                                                                                                                          │
+ │                                                                                                                                                                                              │
+ │   npm test                                                                                                                                                                                   │
+ │                                                                                                                                                                                              │
+ │ Allow execution of: 'npm'?                                                                                                                                                                   │
+ │                                                                                                                                                                                              │
+ │ ● 1. Yes, allow once                                                                                                                                                                         │
+ │   2. Yes, allow always ...                                                                                                                                                                   │
+ │   3. No, suggest changes (esc)                                                                                                                                                               │
+ │                                                                                                                                                                                              │
+ ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+⠏ Waiting for user confirmation...
+
+~/projects/devteam-branches/terminal-ui-state-detection (terminal-ui-state-detection*)                no sandbox (see /docs)                                  gemini-2.5-pro (99% context left)
