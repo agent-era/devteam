@@ -56,10 +56,10 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     heading: {1: '#00FFFF', 2: '#00FF7F', 3: '#FFFF66', 4: '#FF66FF', 5: '#66B3FF', 6: '#FFFFFF'},
     bodyColor: '#E0E0E0',
     boldColor: '#FFFFFF',
-    // Light wheat for code — bright + distinct from body without using `dim`,
-    // which the terminal renders as ~50% intensity and was making code read
-    // way darker than the surrounding body.
-    codeColor: '#FFE4B5',
+    // Slightly darker gray than body, no `dim` flag — terminal-side `dim`
+    // was reducing code to ~50% intensity which read as way darker than
+    // intended. An explicit gray gives a controllable amount of contrast.
+    codeColor: '#B8B8B8',
     codeDim: false,
     bulletColor: '#00FFFF',
     blockquoteBarColor: '#888888',
