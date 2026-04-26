@@ -170,16 +170,9 @@ export function lineToParts(rawLine: string, ctx: BlockContext, theme: MarkdownT
     case 'heading': {
       const body = rawLine.slice(ctx.textStart).trim().replace(/\s*#+\s*$/, '');
       const color = theme.heading[ctx.level] ?? 'white';
-      // Marker and body both carry the level colour. With FORCE_COLOR=3 set
-      // by the bin script, hex theme colours render as truecolor RGB and
-      // appear at full brightness — matching the marker's brightness on
-      // terminals that pass truecolor through.
       const spans = inlineToSpans(body, {bold: true, color}, theme);
-      const leading: Span[] = [
-        {text: '▎ ', bold: true, color},
-        {text: '#'.repeat(ctx.level) + ' ', bold: true, color},
-      ];
-      const continuation: Span[] = [{text: ' '.repeat(ctx.level + 3)}];
+      const leading: Span[] = [{text: '#'.repeat(ctx.level) + ' ', bold: true, color}];
+      const continuation: Span[] = [{text: ' '.repeat(ctx.level + 1)}];
       return {leading, body: spans, continuation};
     }
 
