@@ -42,12 +42,15 @@ export default function TrackerProjectPickerDialog({
       let working = 0;
       for (const w of worktrees) {
         if (w.project !== p.name) continue;
-        const aiStatus = w.session?.ai_status;
         const itemStatus = w.feature && hasTracker
           ? service.getItemStatus(p.path, w.feature)
           : null;
-        const prMerged = isItemPRMerged(w, pullRequests);
-        const flags = computeCardStatusFlags({aiStatus, itemStatus, prMerged, service});
+        const flags = computeCardStatusFlags({
+          aiStatus: w.session?.ai_status,
+          prMerged: isItemPRMerged(w, pullRequests),
+          freshWaiting: service.isItemWaiting(itemStatus),
+          freshReady: service.isItemReadyToAdvance(itemStatus),
+        });
         if (flags.isWaiting) waiting++;
         else if (flags.isWorking) working++;
       }

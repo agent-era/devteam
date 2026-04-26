@@ -1,26 +1,6 @@
 import {describe, expect, test} from '@jest/globals';
 import {computeCardStatusFlags, getTrackerCardDisplayState, isItemPRMerged} from '../../src/screens/TrackerBoardScreen.js';
 import {PRStatus, WorktreeInfo} from '../../src/models.js';
-import {ItemStatus} from '../../src/services/TrackerService.js';
-
-type StubService = Parameters<typeof computeCardStatusFlags>[0]['service'];
-
-function makeFreshStatus(state: ItemStatus['state'], stage: ItemStatus['stage'] = 'requirements'): ItemStatus {
-  return {
-    stage,
-    state,
-    brief_description: 'doing things',
-    timestamp: new Date().toISOString(),
-  };
-}
-
-// Mirrors TrackerService.isItemWaiting / isItemReadyToAdvance without the
-// freshness check so tests stay deterministic — every status passed in is
-// treated as fresh, which is what we want when verifying precedence rules.
-const stubService: StubService = {
-  isItemWaiting: status => !!status && status.state !== 'working',
-  isItemReadyToAdvance: status => !!status && status.state === 'waiting_for_approval',
-};
 
 const baseFlags = {
   prMerged: false,
@@ -246,9 +226,9 @@ describe('computeCardStatusFlags', () => {
   test('live working overrides file-based waiting_for_input (yellow → cyan)', () => {
     const flags = computeCardStatusFlags({
       aiStatus: 'working',
-      itemStatus: makeFreshStatus('waiting_for_input'),
       prMerged: false,
-      service: stubService,
+      freshWaiting: true,
+      freshReady: false,
     });
 
     expect(flags).toEqual({
@@ -262,9 +242,9 @@ describe('computeCardStatusFlags', () => {
   test('live working overrides file-based waiting_for_approval (green → cyan, no [m] hint)', () => {
     const flags = computeCardStatusFlags({
       aiStatus: 'working',
-      itemStatus: makeFreshStatus('waiting_for_approval'),
       prMerged: false,
-      service: stubService,
+      freshWaiting: true,
+      freshReady: true,
     });
 
     expect(flags).toEqual({
@@ -278,9 +258,9 @@ describe('computeCardStatusFlags', () => {
   test('live "active" treated as working and overrides file waiting', () => {
     const flags = computeCardStatusFlags({
       aiStatus: 'active',
-      itemStatus: makeFreshStatus('waiting_for_input'),
       prMerged: false,
-      service: stubService,
+      freshWaiting: true,
+      freshReady: false,
     });
 
     expect(flags.isWorking).toBe(true);
@@ -291,9 +271,9 @@ describe('computeCardStatusFlags', () => {
   test('live "waiting" (consent gate) keeps card yellow regardless of file state', () => {
     const flags = computeCardStatusFlags({
       aiStatus: 'waiting',
-      itemStatus: makeFreshStatus('working'),
       prMerged: false,
-      service: stubService,
+      freshWaiting: false,
+      freshReady: false,
     });
 
     expect(flags).toEqual({
@@ -307,9 +287,9 @@ describe('computeCardStatusFlags', () => {
   test('no session + file waiting_for_input renders yellow', () => {
     const flags = computeCardStatusFlags({
       aiStatus: undefined,
-      itemStatus: makeFreshStatus('waiting_for_input'),
       prMerged: false,
-      service: stubService,
+      freshWaiting: true,
+      freshReady: false,
     });
 
     expect(flags).toEqual({
@@ -323,9 +303,9 @@ describe('computeCardStatusFlags', () => {
   test('no session + file waiting_for_approval renders green ready-to-advance', () => {
     const flags = computeCardStatusFlags({
       aiStatus: undefined,
-      itemStatus: makeFreshStatus('waiting_for_approval'),
       prMerged: false,
-      service: stubService,
+      freshWaiting: true,
+      freshReady: true,
     });
 
     expect(flags).toEqual({
@@ -339,9 +319,9 @@ describe('computeCardStatusFlags', () => {
   test('not_running session reports hasSession=false', () => {
     const flags = computeCardStatusFlags({
       aiStatus: 'not_running',
-      itemStatus: null,
       prMerged: false,
-      service: stubService,
+      freshWaiting: false,
+      freshReady: false,
     });
 
     expect(flags).toEqual({
@@ -355,9 +335,9 @@ describe('computeCardStatusFlags', () => {
   test('prMerged suppresses readyToAdvance even when file says waiting_for_approval', () => {
     const flags = computeCardStatusFlags({
       aiStatus: undefined,
-      itemStatus: makeFreshStatus('waiting_for_approval'),
       prMerged: true,
-      service: stubService,
+      freshWaiting: true,
+      freshReady: true,
     });
 
     expect(flags.readyToAdvance).toBe(false);
@@ -366,9 +346,9 @@ describe('computeCardStatusFlags', () => {
   test('idle session with no item status produces empty flags', () => {
     const flags = computeCardStatusFlags({
       aiStatus: 'idle',
-      itemStatus: null,
       prMerged: false,
-      service: stubService,
+      freshWaiting: false,
+      freshReady: false,
     });
 
     expect(flags).toEqual({

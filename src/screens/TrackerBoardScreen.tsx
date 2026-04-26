@@ -1,6 +1,6 @@
 import React from 'react';
 import {Box, Text, useInput} from 'ink';
-import {ItemStatus, TrackerBoard, TrackerItem, TrackerService, TrackerStage} from '../services/TrackerService.js';
+import {TrackerBoard, TrackerItem, TrackerService, TrackerStage} from '../services/TrackerService.js';
 import {useKeyboardShortcuts} from '../hooks/useKeyboardShortcuts.js';
 import {useTerminalDimensions} from '../hooks/useTerminalDimensions.js';
 import {useUIContext} from '../contexts/UIContext.js';
@@ -72,21 +72,21 @@ function wrapToLines(text: string, width: number, maxLines: number): string[] {
 // inter-row gap so we get one extra item per column.
 const COLUMN_CHROME_ROWS = 3;
 
-// Single source of truth for "what does this card mean" flags. Live tmux AI
-// status takes precedence over file-based status.json signals so a stale
-// `waiting_for_input` / `waiting_for_approval` doesn't paint an actively
-// running agent yellow or green. Used by the per-card render, the title-bar
-// counts, and the project-switcher counts so all three stay in sync.
+// Live tmux AI status takes precedence over file-based status.json signals so
+// a stale `waiting_for_input` / `waiting_for_approval` doesn't paint an
+// actively running agent yellow or green. `freshWaiting` / `freshReady` come
+// from `TrackerService.isItemWaiting` / `isItemReadyToAdvance` (already
+// staleness-filtered).
 export function computeCardStatusFlags({
   aiStatus,
-  itemStatus,
   prMerged,
-  service,
+  freshWaiting,
+  freshReady,
 }: {
   aiStatus: AIStatus | undefined;
-  itemStatus: ItemStatus | null;
   prMerged: boolean;
-  service: Pick<TrackerService, 'isItemWaiting' | 'isItemReadyToAdvance'>;
+  freshWaiting: boolean;
+  freshReady: boolean;
 }): {
   readyToAdvance: boolean;
   isWaiting: boolean;
@@ -97,10 +97,8 @@ export function computeCardStatusFlags({
   const isWorking = aiStatus === 'working' || aiStatus === 'active';
   const hasSession = !!aiStatus && aiStatus !== 'not_running';
 
-  const readyToAdvance =
-    !prMerged && !isWorking && service.isItemReadyToAdvance(itemStatus);
-  const ralphWaiting =
-    !isWorking && !!itemStatus && !readyToAdvance && service.isItemWaiting(itemStatus);
+  const readyToAdvance = !prMerged && !isWorking && freshReady;
+  const ralphWaiting = !isWorking && !readyToAdvance && freshWaiting;
   const isWaiting = aiWaiting || ralphWaiting;
 
   return {readyToAdvance, isWaiting, isWorking, hasSession};
@@ -699,19 +697,28 @@ export default function TrackerBoardScreen({
     );
   }
 
-  // Count waiting / working items across all columns. Mirrors the per-card
-  // precedence so the title-bar tally agrees with what the cards show: live
-  // tmux state beats a stale status.json, but a fresh status.json still
-  // counts when there's no active session signal.
+  // Read each item's status.json once per render and reuse for both the
+  // title-bar tally below and the per-card render loop. Cheap reads, but the
+  // kanban re-renders on every keystroke — paying twice would be silly.
+  const itemStatusBySlug = new Map<string, ReturnType<TrackerService['getItemStatus']>>();
+  for (const col of board.columns) {
+    for (const item of col.items) {
+      itemStatusBySlug.set(item.slug, service.getItemStatus(projectPath, item.slug));
+    }
+  }
+
   let waitingCount = 0;
   let workingCount = 0;
   for (const col of board.columns) {
     for (const item of col.items) {
       const wt = getWorktreeForItem(item);
-      const aiStatus = wt?.session?.ai_status;
-      const itemStatus = service.getItemStatus(projectPath, item.slug);
-      const prMerged = isItemPRMerged(wt, pullRequests);
-      const flags = computeCardStatusFlags({aiStatus, itemStatus, prMerged, service});
+      const itemStatus = itemStatusBySlug.get(item.slug) ?? null;
+      const flags = computeCardStatusFlags({
+        aiStatus: wt?.session?.ai_status,
+        prMerged: isItemPRMerged(wt, pullRequests),
+        freshWaiting: service.isItemWaiting(itemStatus),
+        freshReady: service.isItemReadyToAdvance(itemStatus),
+      });
       if (flags.isWaiting) waitingCount++;
       else if (flags.isWorking) workingCount++;
     }
@@ -807,10 +814,15 @@ export default function TrackerBoardScreen({
             const isSelected = isActiveColumn && selectedRow === itemIndex;
             const wt = getWorktreeForItem(item);
             const aiStatus: AIStatus | undefined = wt?.session?.ai_status;
-            const itemStatus = service.getItemStatus(projectPath, item.slug);
+            const itemStatus = itemStatusBySlug.get(item.slug) ?? null;
             const prMerged = isItemPRMerged(wt, pullRequests);
             const {readyToAdvance, isWaiting, isWorking, hasSession} =
-              computeCardStatusFlags({aiStatus, itemStatus, prMerged, service});
+              computeCardStatusFlags({
+                aiStatus,
+                prMerged,
+                freshWaiting: service.isItemWaiting(itemStatus),
+                freshReady: service.isItemReadyToAdvance(itemStatus),
+              });
 
             // Session presence is now signalled by the running-status chip row
             // (rendered separately below); the ◆ branch in
