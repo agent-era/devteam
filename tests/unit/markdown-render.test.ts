@@ -129,8 +129,25 @@ describe('renderMarkdown', () => {
 
   test('renders headings with bold + leading marker', () => {
     const rows = renderMarkdown('# Title', 80);
-    expect(rows[0].spans.some(s => s.text.includes('#'))).toBe(true);
-    expect(rows[0].spans.some(s => s.text.includes('Title') && s.bold)).toBe(true);
+    // H1 produces 3 rows: top "===" bar, the heading, bottom "===" bar.
+    expect(rows.length).toBe(3);
+    expect(rows[0].spans[0].text).toBe('='.repeat(80));
+    expect(rows[2].spans[0].text).toBe('='.repeat(80));
+    expect(rows[1].spans.some(s => s.text.includes('#'))).toBe(true);
+    expect(rows[1].spans.some(s => s.text.includes('Title') && s.bold)).toBe(true);
+  });
+
+  test('H2 gets a "---" rule after the heading', () => {
+    const rows = renderMarkdown('## Sub', 60);
+    // 2 rows: heading then bar.
+    expect(rows.length).toBe(2);
+    expect(rows[1].spans[0].text).toBe('-'.repeat(60));
+  });
+
+  test('H3+ render without surrounding rules', () => {
+    const rows = renderMarkdown('### Deeper', 40);
+    expect(rows.length).toBe(1);
+    expect(rows[0].spans.every(s => !/^[=-]+$/.test(s.text))).toBe(true);
   });
 
   test('renders fenced code lines verbatim, not as headings', () => {
