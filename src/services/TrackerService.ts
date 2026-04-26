@@ -681,8 +681,7 @@ export class TrackerService {
   // old behaviour. No requirements.md stub is created — that file only appears
   // once the requirements stage produces real content. Commits to the worktree
   // branch so the seed survives a future worktree obliteration.
-  ensureItemFiles(mainProjectPath: string, slug: string, worktreePath: string, item?: TrackerItem): void {
-    void item; // signature retained for callers; title fallback now reads from the index
+  ensureItemFiles(mainProjectPath: string, slug: string, worktreePath: string, _item?: TrackerItem): void {
     const destDir = path.join(worktreePath, 'tracker', 'items', slug);
     ensureDirectory(destDir);
 
@@ -741,8 +740,7 @@ export class TrackerService {
     const index = this.readIndex(projectPath);
     const entry = index.sessions?.[slug];
     if (!entry || entry.description === undefined) return;
-    const {description: _drop, ...rest} = entry;
-    void _drop;
+    const {description: _, ...rest} = entry;
     const sessions = {...(index.sessions ?? {})};
     sessions[slug] = rest;
     index.sessions = sessions;
