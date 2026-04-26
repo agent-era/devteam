@@ -74,12 +74,11 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     name: 'forest',
     label: 'Forest — green body, multi-hue headings',
     heading: {1: '#ADFF2F', 2: '#7FFF00', 3: '#FFD700', 4: '#FFB347', 5: '#DA70D6', 6: '#F5F5DC'},
-    bodyColor: '#9CB59C',
-    // Bold near white with a faint green tint toward h1.
+    bodyColor: '#C8DDC0',
     boldColor: '#F0FFE8',
-    // Same brightness band as bodyColor, hue nudged slightly toward
-    // yellow-olive so code reads distinct from the green body.
-    codeColor: '#B0B594',
+    // Distinct gold/wheat hue at body brightness — clearly different from
+    // the green body without using `dim`.
+    codeColor: '#DDD0A0',
     codeDim: false,
     bulletColor: '#7CFC00',
     blockquoteBarColor: '#556B2F',
@@ -94,11 +93,10 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     name: 'sunset',
     label: 'Sunset — peach body, warm headings',
     heading: {1: '#FF8A80', 2: '#FFB347', 3: '#FFD966', 4: '#FF85C2', 5: '#DA70D6', 6: '#87CEEB'},
-    bodyColor: '#B5A89C',
-    // Bold near white with a warm peach hint.
+    bodyColor: '#E0CCB5',
     boldColor: '#FFF0E5',
-    // Same brightness, slight rose shift away from peach.
-    codeColor: '#B59CA0',
+    // Cool blue/lavender accent against the warm peach body.
+    codeColor: '#B5C5E0',
     codeDim: false,
     bulletColor: '#FFB347',
     blockquoteBarColor: '#8B4513',
@@ -113,11 +111,10 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     name: 'ocean',
     label: 'Ocean — sky-blue body, cyan/coral headings',
     heading: {1: '#66B3FF', 2: '#5EE8EB', 3: '#7FFFD4', 4: '#FFA07A', 5: '#FFD966', 6: '#DA70D6'},
-    bodyColor: '#9CACB5',
-    // Bold near white with a faint blue tint.
+    bodyColor: '#C0D5DD',
     boldColor: '#EDF5FF',
-    // Same brightness, hue nudged toward teal away from the blue body.
-    codeColor: '#9CB5AC',
+    // Warm coral/peach accent against the cool blue body.
+    codeColor: '#DDC5B0',
     codeDim: false,
     bulletColor: '#00CED1',
     blockquoteBarColor: '#4682B4',
@@ -132,11 +129,10 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     name: 'neon',
     label: 'Neon — pink body, neon headings',
     heading: {1: '#FF66B2', 2: '#00FFFF', 3: '#FFFF66', 4: '#DA70D6', 5: '#ADFF2F', 6: '#FFA94D'},
-    bodyColor: '#B59CAC',
-    // Bold near white with a faint pink tint.
+    bodyColor: '#DDC0D0',
     boldColor: '#FFE8F4',
-    // Same brightness, hue nudged toward coral away from the pink body.
-    codeColor: '#B5A09C',
+    // Mint/cyan accent against the pink body.
+    codeColor: '#B0DDC8',
     codeDim: false,
     bulletColor: '#FFFF66',
     blockquoteBarColor: '#9370DB',
@@ -151,11 +147,10 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     name: 'autumn',
     label: 'Autumn — wheat body, warm headings',
     heading: {1: '#FF8A66', 2: '#FFA94D', 3: '#FFD966', 4: '#DA70D6', 5: '#98FB98', 6: '#DEB887'},
-    bodyColor: '#B5A48A',
-    // Bold near white with a faint wheat / salmon tint.
+    bodyColor: '#DDC4A0',
     boldColor: '#FFEDD8',
-    // Same brightness, hue nudged warmer toward salmon away from the wheat body.
-    codeColor: '#B59A8A',
+    // Sage green accent against the warm wheat body.
+    codeColor: '#A8C8A8',
     codeDim: false,
     bulletColor: '#FFA94D',
     blockquoteBarColor: '#A0522D',
@@ -170,11 +165,10 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     name: 'candy',
     label: 'Candy — pink body, pop headings',
     heading: {1: '#FF85C2', 2: '#ADFF2F', 3: '#FFD966', 4: '#5EE8EB', 5: '#DA70D6', 6: '#FFA94D'},
-    bodyColor: '#B59CAA',
-    // Bold near white with a faint pink tint.
+    bodyColor: '#DDC0D5',
     boldColor: '#FFE8F0',
-    // Same brightness, hue nudged toward purple away from the pink body.
-    codeColor: '#A89CB5',
+    // Teal accent against the pink body.
+    codeColor: '#B0DDD0',
     codeDim: false,
     bulletColor: '#FF85C2',
     blockquoteBarColor: '#9370DB',
@@ -189,10 +183,10 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     name: 'mono',
     label: 'Mono — black & white',
     heading: {1: '#FFFFFF', 2: '#F5F5F5', 3: '#E0E0E0', 4: '#CCCCCC', 5: '#B8B8B8', 6: '#A0A0A0'},
-    bodyColor: undefined,
+    bodyColor: '#E0E0E0',
     boldColor: '#FFFFFF',
-    // Mono has no hue — give code a slightly darker neutral gray so it's
-    // still distinct without colour.
+    // Neutral gray for code — slightly darker than the body but still
+    // bright enough to read at the same band.
     codeColor: '#B0B0B0',
     codeDim: false,
     bulletColor: 'white',
