@@ -77,9 +77,6 @@ export interface StageConfig {
 
 export type DecisionStyle = 'ask' | 'recommend' | 'decide';
 export type VerbosityStyle = 'brief' | 'detailed';
-export type PlanningStyle = 'dive_in' | 'plan_first' | 'plan_approval';
-export type QuestionsStyle = 'minimal' | 'one_at_a_time' | 'batch';
-export type CodeScopeStyle = 'minimal' | 'clean_as_go' | 'thorough';
 export type BlockerStyle = 'ask' | 'try_first' | 'continue';
 // How the agent should deliver questions/requests for review. Project-wide
 // preference; drives the "Input mode" block in every generated stage guide.
@@ -91,10 +88,6 @@ export const TRACKER_SKILL_REL_PATH = `.agents/skills/${TRACKER_SKILL_NAME}/SKIL
 export interface WorkStyle {
   decisionStyle: DecisionStyle;
   verbosity: VerbosityStyle;
-  planning: PlanningStyle;
-  questions: QuestionsStyle;
-  codeScope: CodeScopeStyle;
-  onBlockers: BlockerStyle;
   inputMode: InputModeStyle;
   customInstructions: string;
 }
@@ -102,10 +95,6 @@ export interface WorkStyle {
 export const DEFAULT_WORK_STYLE: WorkStyle = {
   decisionStyle: 'recommend',
   verbosity: 'brief',
-  planning: 'dive_in',
-  questions: 'batch',
-  codeScope: 'minimal',
-  onBlockers: 'ask',
   inputMode: 'ask_questions',
   customInstructions: '',
 };
@@ -913,26 +902,6 @@ export class TrackerService {
       brief: ['Brief', 'Be brief and concise. Skip preamble. Get to the point immediately.'],
       detailed: ['Detailed', 'Be thorough. Explain your reasoning and walk through your thinking.'],
     };
-    const PLANNING_LABELS: Record<string, [string, string]> = {
-      dive_in: ['Dive in', 'Start working immediately. No upfront plan needed unless the task is genuinely complex.'],
-      plan_first: ['Show plan first', 'Always present a plan of what you will do before starting work.'],
-      plan_approval: ['Plan + approval', 'Present a plan and wait for explicit approval before proceeding.'],
-    };
-    const QUESTIONS_LABELS: Record<string, [string, string]> = {
-      minimal: ['Minimal', 'Minimise questions. Infer intent and make reasonable assumptions. Only ask when truly blocked.'],
-      batch: ['Batch together', 'When you have multiple questions, ask them all in one message.'],
-      one_at_a_time: ['One at a time', 'Ask one question at a time, wait for the answer before asking the next.'],
-    };
-    const SCOPE_LABELS: Record<string, [string, string]> = {
-      minimal: ['Minimal', 'Change only what is necessary. Avoid scope creep and opportunistic cleanup.'],
-      clean_as_go: ['Clean as you go', 'Fix small nearby issues when you encounter them, but stay close to the task.'],
-      thorough: ['Thorough', 'Improve code quality proactively — refactor, clean up patterns, improve structure when relevant.'],
-    };
-    const BLOCKERS_LABELS: Record<string, [string, string]> = {
-      ask: ['Stop & ask', 'When blocked, stop and ask the user how to proceed.'],
-      try_first: ['Try alternatives first', 'Try reasonable alternatives before asking. Ask only if exhausted.'],
-      continue: ['Note & continue', 'Note the issue clearly and continue with the rest of the work.'],
-    };
     const INPUT_MODE_LABELS: Record<string, [string, string]> = {
       ask_questions: ['ask_questions tool', 'Use the ask_questions tool whenever you need input. Produces a detectable numbered prompt in the terminal.'],
       inline: ['Inline chat', 'Ask questions inline in the conversation. Before pausing, set state: "waiting_for_input" in status.json with a brief_description; set it back to "working" on resume.'],
@@ -956,14 +925,6 @@ export class TrackerService {
 ${row('Decisions', DECISION_LABELS, workStyle.decisionStyle)}
 
 ${row('Verbosity', VERBOSITY_LABELS, workStyle.verbosity)}
-
-${row('Before starting', PLANNING_LABELS, workStyle.planning)}
-
-${row('Questions', QUESTIONS_LABELS, workStyle.questions)}
-
-${row('Code scope', SCOPE_LABELS, workStyle.codeScope)}
-
-${row('On blockers', BLOCKERS_LABELS, workStyle.onBlockers)}
 
 ${row('Input mode', INPUT_MODE_LABELS, workStyle.inputMode)}
 ${custom}`;
