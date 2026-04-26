@@ -4,7 +4,7 @@ import {TrackerService} from '../../services/TrackerService.js';
 import {useTerminalDimensions} from '../../hooks/useTerminalDimensions.js';
 import {useGitHubContext} from '../../contexts/GitHubContext.js';
 import {WorktreeInfo} from '../../models.js';
-import {computeCardStatusFlags, isItemPRMerged} from '../../screens/TrackerBoardScreen.js';
+import {computeCardStatusFlags, isItemPRMerged} from '../../shared/utils/trackerCardStatus.js';
 
 type ProjectRow = {
   name: string;

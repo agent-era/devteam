@@ -1,5 +1,6 @@
 import {describe, expect, test} from '@jest/globals';
-import {computeCardStatusFlags, getTrackerCardDisplayState, isItemPRMerged} from '../../src/screens/TrackerBoardScreen.js';
+import {getTrackerCardDisplayState} from '../../src/screens/TrackerBoardScreen.js';
+import {computeCardStatusFlags, isItemPRMerged} from '../../src/shared/utils/trackerCardStatus.js';
 import {PRStatus, WorktreeInfo} from '../../src/models.js';
 
 const baseFlags = {
@@ -274,6 +275,22 @@ describe('computeCardStatusFlags', () => {
       prMerged: false,
       freshWaiting: false,
       freshReady: false,
+    });
+
+    expect(flags).toEqual({
+      readyToAdvance: false,
+      isWaiting: true,
+      isWorking: false,
+      hasSession: true,
+    });
+  });
+
+  test('live "waiting" beats stale waiting_for_approval — yellow consent gate, not green Ready', () => {
+    const flags = computeCardStatusFlags({
+      aiStatus: 'waiting',
+      prMerged: false,
+      freshWaiting: true,
+      freshReady: true,
     });
 
     expect(flags).toEqual({

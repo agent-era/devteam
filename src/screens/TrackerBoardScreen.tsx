@@ -7,8 +7,9 @@ import {useUIContext} from '../contexts/UIContext.js';
 import {useWorktreeContext} from '../contexts/WorktreeContext.js';
 import {useGitHubContext} from '../contexts/GitHubContext.js';
 import {WorktreeInfo} from '../models.js';
-import type {AIStatus, AITool, PRStatus} from '../models.js';
+import type {AIStatus, AITool} from '../models.js';
 import {truncateDisplay} from '../shared/utils/formatting.js';
+import {computeCardStatusFlags, isItemPRMerged} from '../shared/utils/trackerCardStatus.js';
 import {logError} from '../shared/utils/logger.js';
 import {startIntervalIfEnabled} from '../shared/utils/intervals.js';
 import {VISIBLE_STATUS_REFRESH_DURATION} from '../constants.js';
@@ -71,38 +72,6 @@ function wrapToLines(text: string, width: number, maxLines: number): string[] {
 // 2 borders + 1 header. Items area starts on the row directly below the title — no
 // inter-row gap so we get one extra item per column.
 const COLUMN_CHROME_ROWS = 3;
-
-// Live tmux AI status takes precedence over file-based status.json signals so
-// a stale `waiting_for_input` / `waiting_for_approval` doesn't paint an
-// actively running agent yellow or green. `freshWaiting` / `freshReady` come
-// from `TrackerService.isItemWaiting` / `isItemReadyToAdvance` (already
-// staleness-filtered).
-export function computeCardStatusFlags({
-  aiStatus,
-  prMerged,
-  freshWaiting,
-  freshReady,
-}: {
-  aiStatus: AIStatus | undefined;
-  prMerged: boolean;
-  freshWaiting: boolean;
-  freshReady: boolean;
-}): {
-  readyToAdvance: boolean;
-  isWaiting: boolean;
-  isWorking: boolean;
-  hasSession: boolean;
-} {
-  const aiWaiting = aiStatus === 'waiting';
-  const isWorking = aiStatus === 'working' || aiStatus === 'active';
-  const hasSession = !!aiStatus && aiStatus !== 'not_running';
-
-  const readyToAdvance = !prMerged && !isWorking && freshReady;
-  const ralphWaiting = !isWorking && !readyToAdvance && freshWaiting;
-  const isWaiting = aiWaiting || ralphWaiting;
-
-  return {readyToAdvance, isWaiting, isWorking, hasSession};
-}
 
 export function getTrackerCardDisplayState({
   prMerged,
@@ -205,15 +174,6 @@ function computeColumnScroll(selected: number, total: number, visible: number): 
   const max = total - visible;
   const top = selected - Math.floor((visible - 1) / 2);
   return Math.max(0, Math.min(max, top));
-}
-
-// Reads from GitHubContext (keyed by path), not wt.pr — which is never assigned in prod.
-export function isItemPRMerged(
-  worktree: WorktreeInfo | null,
-  pullRequests: Record<string, PRStatus>,
-): boolean {
-  if (!worktree) return false;
-  return pullRequests[worktree.path]?.is_merged === true;
 }
 
 function findSlugPosition(board: TrackerBoard, slug: string): {column: number; row: number} | null {
