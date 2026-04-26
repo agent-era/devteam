@@ -56,9 +56,6 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     heading: {1: '#00FFFF', 2: '#00FF7F', 3: '#FFFF66', 4: '#FF66FF', 5: '#66B3FF', 6: '#FFFFFF'},
     bodyColor: '#ECECEC',
     boldColor: '#FFFFFF',
-    // Subtle warm-grey wheat tint — same overall brightness band as a plain
-    // gray, just shifted slightly toward yellow/red so code reads as a hint
-    // distinct from the near-white body without being heavy-handed.
     codeColor: '#B0A488',
     codeDim: false,
     bulletColor: '#00FFFF',
@@ -76,8 +73,6 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     heading: {1: '#ADFF2F', 2: '#7FFF00', 3: '#FFD700', 4: '#FFB347', 5: '#DA70D6', 6: '#F5F5DC'},
     bodyColor: '#C8DDC0',
     boldColor: '#F0FFE8',
-    // Distinct gold/wheat hue at body brightness — clearly different from
-    // the green body without using `dim`.
     codeColor: '#DDD0A0',
     codeDim: false,
     bulletColor: '#7CFC00',
@@ -95,7 +90,6 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     heading: {1: '#FF8A80', 2: '#FFB347', 3: '#FFD966', 4: '#FF85C2', 5: '#DA70D6', 6: '#87CEEB'},
     bodyColor: '#E0CCB5',
     boldColor: '#FFF0E5',
-    // Cool blue/lavender accent against the warm peach body.
     codeColor: '#B5C5E0',
     codeDim: false,
     bulletColor: '#FFB347',
@@ -113,7 +107,6 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     heading: {1: '#66B3FF', 2: '#5EE8EB', 3: '#7FFFD4', 4: '#FFA07A', 5: '#FFD966', 6: '#DA70D6'},
     bodyColor: '#C0D5DD',
     boldColor: '#EDF5FF',
-    // Warm coral/peach accent against the cool blue body.
     codeColor: '#DDC5B0',
     codeDim: false,
     bulletColor: '#00CED1',
@@ -131,7 +124,6 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     heading: {1: '#FF66B2', 2: '#00FFFF', 3: '#FFFF66', 4: '#DA70D6', 5: '#ADFF2F', 6: '#FFA94D'},
     bodyColor: '#DDC0D0',
     boldColor: '#FFE8F4',
-    // Mint/cyan accent against the pink body.
     codeColor: '#B0DDC8',
     codeDim: false,
     bulletColor: '#FFFF66',
@@ -149,7 +141,6 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     heading: {1: '#FF8A66', 2: '#FFA94D', 3: '#FFD966', 4: '#DA70D6', 5: '#98FB98', 6: '#DEB887'},
     bodyColor: '#DDC4A0',
     boldColor: '#FFEDD8',
-    // Sage green accent against the warm wheat body.
     codeColor: '#A8C8A8',
     codeDim: false,
     bulletColor: '#FFA94D',
@@ -167,7 +158,6 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     heading: {1: '#FF85C2', 2: '#ADFF2F', 3: '#FFD966', 4: '#5EE8EB', 5: '#DA70D6', 6: '#FFA94D'},
     bodyColor: '#DDC0D5',
     boldColor: '#FFE8F0',
-    // Teal accent against the pink body.
     codeColor: '#B0DDD0',
     codeDim: false,
     bulletColor: '#FF85C2',
@@ -185,8 +175,6 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     heading: {1: '#FFFFFF', 2: '#F5F5F5', 3: '#E0E0E0', 4: '#CCCCCC', 5: '#B8B8B8', 6: '#A0A0A0'},
     bodyColor: '#E0E0E0',
     boldColor: '#FFFFFF',
-    // Neutral gray for code — slightly darker than the body but still
-    // bright enough to read at the same band.
     codeColor: '#B0B0B0',
     codeDim: false,
     bulletColor: 'white',

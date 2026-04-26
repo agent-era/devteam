@@ -4,6 +4,12 @@ import {inlineToSpans} from './inline.js';
 import {getActiveMarkdownTheme, type MarkdownTheme} from './themes.js';
 import type {BlockContext, MdRow, Span} from './types.js';
 
+export function spansDisplayWidth(spans: Span[]): number {
+  let w = 0;
+  for (const s of spans) w += stringDisplayWidth(s.text);
+  return w;
+}
+
 type SpanStyle = Omit<Span, 'text'>;
 
 interface WrapToken {

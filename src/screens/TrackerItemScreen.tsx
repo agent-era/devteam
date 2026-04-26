@@ -11,6 +11,7 @@ import {renderMarkdown} from '../shared/utils/markdown/render.js';
 import {cycleMarkdownTheme} from '../shared/utils/markdown/themes.js';
 import type {MarkdownTheme} from '../shared/utils/markdown/themes.js';
 import {stringDisplayWidth, truncateDisplay} from '../shared/utils/formatting.js';
+import {readFileOrNull} from '../shared/utils/fileSystem.js';
 import type {MdRow} from '../shared/utils/markdown/types.js';
 
 interface TrackerItemScreenProps {
@@ -31,15 +32,16 @@ type CanonicalStage = Exclude<TrackerStage, 'archive' | 'backlog'>;
 interface StageMeta {
   stage: CanonicalStage;
   label: string;
-  /** Canonical .md file for the stage. `null` for stages with no canonical file (e.g. cleanup). */
-  fileName: string | null;
+  /** Path to the stage's canonical .md file on the item. Returns `null` when
+   *  the stage has no canonical file (e.g. cleanup). */
+  pathFor: (item: TrackerItem) => string | null;
 }
 
 const STAGE_TABS: StageMeta[] = [
-  {stage: 'discovery', label: 'Discovery', fileName: 'notes.md'},
-  {stage: 'requirements', label: 'Requirements', fileName: 'requirements.md'},
-  {stage: 'implement', label: 'Implement', fileName: 'implementation.md'},
-  {stage: 'cleanup', label: 'Cleanup', fileName: null},
+  {stage: 'discovery', label: 'Discovery', pathFor: (it) => it.notesPath},
+  {stage: 'requirements', label: 'Requirements', pathFor: (it) => it.requirementsPath},
+  {stage: 'implement', label: 'Implement', pathFor: (it) => it.implementationPath},
+  {stage: 'cleanup', label: 'Cleanup', pathFor: () => null},
 ];
 
 type TabState = 'ready' | 'pending' | 'future' | 'extra';
@@ -77,10 +79,6 @@ export function buildActions(
   return actions;
 }
 
-function readBody(filePath: string): string {
-  try { return fs.readFileSync(filePath, 'utf8'); } catch { return ''; }
-}
-
 function listExtraMdFiles(itemDir: string): string[] {
   try {
     const entries = fs.readdirSync(itemDir);
@@ -108,29 +106,14 @@ function listExtraMdFiles(itemDir: string): string[] {
 function buildTabs(item: TrackerItem): Tab[] {
   const tabs: Tab[] = [];
 
-  const itemStageIdx = STAGE_TABS.findIndex(t => t.stage === item.stage);
-  // For items in 'backlog' or 'archive' (not in STAGE_TABS), itemStageIdx === -1
-  // so the next stage is at index 0 (Discovery).
-  const nextStageIdx = itemStageIdx + 1;
+  // For items in 'backlog' or 'archive' (not in STAGE_TABS), findIndex returns
+  // -1 and the "next" stage to advance into lands at index 0 (Discovery).
+  const nextStageIdx = STAGE_TABS.findIndex(t => t.stage === item.stage) + 1;
 
-  for (let i = 0; i < STAGE_TABS.length; i++) {
-    const meta = STAGE_TABS[i];
-    let filePath: string | null = null;
-    if (meta.fileName === 'notes.md') filePath = item.notesPath;
-    else if (meta.fileName === 'requirements.md') filePath = item.requirementsPath;
-    else if (meta.fileName === 'implementation.md') filePath = item.implementationPath;
-
-    const exists = filePath ? fs.existsSync(filePath) : false;
-    const body = exists && filePath ? readBody(filePath) : '';
-
-    let state: TabState;
-    if (body.trim()) {
-      state = 'ready';
-    } else if (i <= nextStageIdx) {
-      state = 'pending';
-    } else {
-      state = 'future';
-    }
+  STAGE_TABS.forEach((meta, i) => {
+    const filePath = meta.pathFor(item);
+    const body = filePath ? (readFileOrNull(filePath) ?? '') : '';
+    const state: TabState = body.trim() ? 'ready' : (i <= nextStageIdx ? 'pending' : 'future');
 
     tabs.push({
       key: meta.stage,
@@ -140,7 +123,7 @@ function buildTabs(item: TrackerItem): Tab[] {
       state,
       stage: meta.stage,
     });
-  }
+  });
 
   for (const fname of listExtraMdFiles(item.itemDir)) {
     const filePath = path.join(item.itemDir, fname);
@@ -148,7 +131,7 @@ function buildTabs(item: TrackerItem): Tab[] {
       key: `extra:${fname}`,
       label: fname,
       filePath,
-      body: readBody(filePath),
+      body: readFileOrNull(filePath) ?? '',
       state: 'extra',
     });
   }
@@ -219,33 +202,30 @@ interface TabStripProps {
  * tabs are dim, pending tabs use `theme.tabPendingColor`, extras use
  * `theme.tabExtraColor` + italic.
  */
+const TAB_MARKER: Record<TabState, string> = {ready: '', pending: '○ ', future: '○ ', extra: '• '};
+
+function tabColor(state: TabState, isActive: boolean, theme: MarkdownTheme): string | undefined {
+  if (isActive) return theme.tabActiveColor;
+  if (state === 'pending') return theme.tabPendingColor;
+  if (state === 'extra') return theme.tabExtraColor;
+  return undefined;
+}
+
 function TabStrip({tabs, activeIndex, theme}: TabStripProps) {
   return (
     <Box flexDirection="row">
       {tabs.map((t, i) => {
         const isActive = i === activeIndex;
-        const marker =
-          t.state === 'extra' ? '• '
-          : t.state === 'ready' ? ''
-          : '○ ';
-        const label = ` ${marker}${t.label} `;
-        const color = isActive
-          ? theme.tabActiveColor
-          : t.state === 'pending'
-          ? theme.tabPendingColor
-          : t.state === 'extra'
-          ? theme.tabExtraColor
-          : undefined;
         return (
           <Box key={t.key} marginRight={2}>
             <Text
               bold={isActive}
               inverse={isActive}
               italic={t.state === 'extra' || undefined}
-              dimColor={t.state === 'future' && !isActive || undefined}
-              color={color}
+              dimColor={(t.state === 'future' && !isActive) || undefined}
+              color={tabColor(t.state, isActive, theme)}
             >
-              {label}
+              {` ${TAB_MARKER[t.state]}${t.label} `}
             </Text>
           </Box>
         );
@@ -311,8 +291,11 @@ export default function TrackerItemScreen({
 
   const setActiveScroll = React.useCallback((updater: (n: number) => number) => {
     setScrollByTab(prev => {
+      const current = prev[activeTab] ?? 0;
+      const clamped = Math.max(0, Math.min(maxScroll, updater(current)));
+      if (clamped === current) return prev;
       const next = prev.slice();
-      next[activeTab] = Math.max(0, Math.min(maxScroll, updater(prev[activeTab] ?? 0)));
+      next[activeTab] = clamped;
       return next;
     });
   }, [activeTab, maxScroll]);

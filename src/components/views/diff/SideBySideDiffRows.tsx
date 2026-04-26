@@ -1,13 +1,13 @@
 import React from 'react';
 import {Box, Text} from 'ink';
 import SyntaxHighlight from 'ink-syntax-highlight';
-import {padEndDisplay, truncateDisplay, stringDisplayWidth} from '../../../shared/utils/formatting.js';
+import {padEndDisplay, truncateDisplay} from '../../../shared/utils/formatting.js';
 import {LineWrapper} from '../../../shared/utils/lineWrapper.js';
 import type {CommentStore} from '../../../models.js';
 import type {DiffLine, SideBySideLine, WrapMode} from '../../../shared/utils/diff/types.js';
-import {lineToParts, wrapSpans} from '../../../shared/utils/markdown/render.js';
 import {isMarkdownFile, lookupBlockContext, type MdContextMap} from '../../../shared/utils/markdown/diffPrepass.js';
 import type {Span} from '../../../shared/utils/markdown/types.js';
+import {buildMdRows, MdLine} from './mdRowHelpers.js';
 
 type Props = {
   lines: SideBySideLine[];
@@ -32,52 +32,6 @@ type PaneRender = {
   language?: string;
   backgroundColor?: string;
 };
-
-function buildMdRows(
-  text: string,
-  ctx: ReturnType<typeof lookupBlockContext>,
-  paneWidth: number,
-  isWrap: boolean,
-  prefixSpans: Span[],
-): Span[][] {
-  if (!ctx) return [];
-  if (ctx.kind === 'hr') {
-    const remaining = Math.max(0, paneWidth - stringDisplayWidth(prefixSpans.map(s => s.text).join('')));
-    return [[...prefixSpans, {text: '─'.repeat(remaining), dim: true}]];
-  }
-  const parts = lineToParts(text, ctx);
-  const leading = [...prefixSpans, ...parts.leading];
-  const continuation = [...prefixSpans.map(s => ({...s, text: ' '.repeat(stringDisplayWidth(s.text))})), ...parts.continuation];
-  const rows = wrapSpans(parts.body, paneWidth, leading, continuation);
-  return (isWrap ? rows : rows.slice(0, 1)).map(r => r.spans);
-}
-
-function MdPane({spans, width, bg, isCurrentLine}: {spans: Span[]; width: number; bg: string | undefined; isCurrentLine: boolean}) {
-  let used = 0;
-  for (const s of spans) used += stringDisplayWidth(s.text);
-  const padCount = Math.max(0, width - used);
-  return (
-    <>
-      {spans.map((s, i) => (
-        <Text
-          key={i}
-          bold={isCurrentLine || s.bold || undefined}
-          italic={s.italic || undefined}
-          dimColor={s.dim || undefined}
-          color={s.color}
-          backgroundColor={bg}
-          inverse={s.inverse || undefined}
-          wrap="truncate"
-        >
-          {s.text}
-        </Text>
-      ))}
-      {padCount > 0 && (
-        <Text backgroundColor={bg} wrap="truncate">{' '.repeat(padCount)}</Text>
-      )}
-    </>
-  );
-}
 
 export default function SideBySideDiffRows({
   lines,
@@ -164,7 +118,7 @@ export default function SideBySideDiffRows({
         return Array.from({length: numRows}, (_, rowIdx) => (
           <Box key={`line-${actualLineIndex}-${rowIdx}`} flexDirection="row" height={1} flexShrink={0}>
             {leftPane.spanRows ? (
-              <MdPane spans={leftPane.spanRows[rowIdx] ?? []} width={paneWidth} bg={rowBackground ?? leftPane.backgroundColor} isCurrentLine={isCurrentLine} />
+              <MdLine spans={leftPane.spanRows[rowIdx] ?? []} width={paneWidth} background={rowBackground ?? leftPane.backgroundColor} bold={isCurrentLine} />
             ) : leftPane.useSyntax ? (
               <SyntaxHighlight code={leftPane.segments[rowIdx] ?? emptyLeft} language={leftPane.language} />
             ) : (
@@ -179,7 +133,7 @@ export default function SideBySideDiffRows({
               </Text>
             )}
             {rightPane.spanRows ? (
-              <MdPane spans={rightPane.spanRows[rowIdx] ?? []} width={paneWidth} bg={rowBackground ?? rightPane.backgroundColor} isCurrentLine={isCurrentLine} />
+              <MdLine spans={rightPane.spanRows[rowIdx] ?? []} width={paneWidth} background={rowBackground ?? rightPane.backgroundColor} bold={isCurrentLine} />
             ) : rightPane.useSyntax ? (
               <SyntaxHighlight code={rightPane.segments[rowIdx] ?? emptyRight} language={rightPane.language} />
             ) : (

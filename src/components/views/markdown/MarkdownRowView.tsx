@@ -1,6 +1,7 @@
 import React from 'react';
 import {Box, Text} from 'ink';
-import {padEndDisplay, stringDisplayWidth} from '../../../shared/utils/formatting.js';
+import {padEndDisplay} from '../../../shared/utils/formatting.js';
+import {spansDisplayWidth} from '../../../shared/utils/markdown/render.js';
 import type {MdRow} from '../../../shared/utils/markdown/types.js';
 
 interface Props {
@@ -17,9 +18,7 @@ interface Props {
  * (when used) extend to the right edge.
  */
 export default function MarkdownRowView({row, width}: Props) {
-  let used = 0;
-  for (const s of row.spans) used += stringDisplayWidth(s.text);
-  const trailing = Math.max(0, width - used);
+  const trailing = Math.max(0, width - spansDisplayWidth(row.spans));
 
   return (
     <Box flexDirection="row" height={1} flexShrink={0}>

@@ -1,6 +1,6 @@
-import fs from 'node:fs';
 import path from 'node:path';
 import {runCommandAsync} from '../commandExecutor.js';
+import {readFileOrNull} from '../fileSystem.js';
 import {computeBlockContext} from './blockContext.js';
 import type {BlockContext} from './types.js';
 import type {DiffLine} from '../diff/types.js';
@@ -18,14 +18,6 @@ export function isMarkdownFile(fileName: string | undefined): boolean {
   if (!fileName) return false;
   const lower = fileName.toLowerCase();
   return lower.endsWith('.md') || lower.endsWith('.markdown');
-}
-
-async function readPostImage(worktreePath: string, fileName: string): Promise<string | null> {
-  try {
-    return fs.readFileSync(path.join(worktreePath, fileName), 'utf8');
-  } catch {
-    return null;
-  }
 }
 
 async function readPreImage(worktreePath: string, fileName: string, baseHash: string): Promise<string | null> {
@@ -60,7 +52,7 @@ export async function buildMdContextMap(
 
   await Promise.all(Array.from(seen).map(async (fileName) => {
     const [postRaw, preRaw] = await Promise.all([
-      readPostImage(worktreePath, fileName),
+      Promise.resolve(readFileOrNull(path.join(worktreePath, fileName))),
       readPreImage(worktreePath, fileName, baseHash || ''),
     ]);
     map.set(fileName, {
