@@ -48,7 +48,7 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     name: 'bright',
     label: 'Bright — multi-colour headings, neutral body',
     heading: {1: '#00FFFF', 2: '#00FF7F', 3: '#FFFF66', 4: '#FF66FF', 5: '#66B3FF', 6: '#FFFFFF'},
-    bodyColor: '#CCCCCC',
+    bodyColor: '#AAAAAA',
     boldColor: '#FFFFFF',
     codeDim: true,
     bulletColor: '#00FFFF',
@@ -64,7 +64,7 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     name: 'forest',
     label: 'Forest — green body, multi-hue headings',
     heading: {1: '#ADFF2F', 2: '#7FFF00', 3: '#FFD700', 4: '#FFB347', 5: '#DA70D6', 6: '#F5F5DC'},
-    bodyColor: '#A8E6A1',
+    bodyColor: '#9CB59C',
     // Bold near white with a faint green tint toward h1.
     boldColor: '#F0FFE8',
     codeDim: true,
@@ -81,7 +81,7 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     name: 'sunset',
     label: 'Sunset — peach body, warm headings',
     heading: {1: '#FF8A80', 2: '#FFB347', 3: '#FFD966', 4: '#FF85C2', 5: '#DA70D6', 6: '#87CEEB'},
-    bodyColor: '#FFD2B6',
+    bodyColor: '#B5A89C',
     // Bold near white with a warm peach hint.
     boldColor: '#FFF0E5',
     codeDim: true,
@@ -98,7 +98,7 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     name: 'ocean',
     label: 'Ocean — sky-blue body, cyan/coral headings',
     heading: {1: '#66B3FF', 2: '#5EE8EB', 3: '#7FFFD4', 4: '#FFA07A', 5: '#FFD966', 6: '#DA70D6'},
-    bodyColor: '#B6DCFF',
+    bodyColor: '#9CACB5',
     // Bold near white with a faint blue tint.
     boldColor: '#EDF5FF',
     codeDim: true,
@@ -115,7 +115,7 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     name: 'neon',
     label: 'Neon — pink body, neon headings',
     heading: {1: '#FF66B2', 2: '#00FFFF', 3: '#FFFF66', 4: '#DA70D6', 5: '#ADFF2F', 6: '#FFA94D'},
-    bodyColor: '#FFB6E1',
+    bodyColor: '#B59CAC',
     // Bold near white with a faint pink tint.
     boldColor: '#FFE8F4',
     codeDim: true,
@@ -132,7 +132,7 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     name: 'autumn',
     label: 'Autumn — wheat body, warm headings',
     heading: {1: '#FF8A66', 2: '#FFA94D', 3: '#FFD966', 4: '#DA70D6', 5: '#98FB98', 6: '#DEB887'},
-    bodyColor: '#F4A460',
+    bodyColor: '#B5A48A',
     // Bold near white with a faint wheat / salmon tint.
     boldColor: '#FFEDD8',
     codeDim: true,
@@ -149,7 +149,7 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     name: 'candy',
     label: 'Candy — pink body, pop headings',
     heading: {1: '#FF85C2', 2: '#ADFF2F', 3: '#FFD966', 4: '#5EE8EB', 5: '#DA70D6', 6: '#FFA94D'},
-    bodyColor: '#FFB6D9',
+    bodyColor: '#B59CAA',
     // Bold near white with a faint pink tint.
     boldColor: '#FFE8F0',
     codeDim: true,
