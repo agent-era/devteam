@@ -77,13 +77,7 @@ export interface StageConfig {
 
 export type DecisionStyle = 'ask' | 'recommend' | 'decide';
 export type VerbosityStyle = 'brief' | 'detailed';
-export type PlanningStyle = 'dive_in' | 'plan_first' | 'plan_approval';
-export type QuestionsStyle = 'minimal' | 'one_at_a_time' | 'batch';
-export type CodeScopeStyle = 'minimal' | 'clean_as_go' | 'thorough';
-export type TestingStyle = 'always' | 'suggest' | 'skip';
-export type CommitStyle = 'never' | 'milestones' | 'often';
 export type BlockerStyle = 'ask' | 'try_first' | 'continue';
-export type ContextDepthStyle = 'light' | 'moderate' | 'deep';
 // How the agent should deliver questions/requests for review. Project-wide
 // preference; drives the "Input mode" block in every generated stage guide.
 export type InputModeStyle = 'ask_questions' | 'inline' | 'batch' | 'doc_review';
@@ -94,13 +88,6 @@ export const TRACKER_SKILL_REL_PATH = `.agents/skills/${TRACKER_SKILL_NAME}/SKIL
 export interface WorkStyle {
   decisionStyle: DecisionStyle;
   verbosity: VerbosityStyle;
-  planning: PlanningStyle;
-  questions: QuestionsStyle;
-  codeScope: CodeScopeStyle;
-  testing: TestingStyle;
-  commits: CommitStyle;
-  onBlockers: BlockerStyle;
-  contextDepth: ContextDepthStyle;
   inputMode: InputModeStyle;
   customInstructions: string;
 }
@@ -108,13 +95,6 @@ export interface WorkStyle {
 export const DEFAULT_WORK_STYLE: WorkStyle = {
   decisionStyle: 'recommend',
   verbosity: 'brief',
-  planning: 'dive_in',
-  questions: 'batch',
-  codeScope: 'minimal',
-  testing: 'suggest',
-  commits: 'never',
-  onBlockers: 'ask',
-  contextDepth: 'moderate',
   inputMode: 'ask_questions',
   customInstructions: '',
 };
@@ -922,41 +902,6 @@ export class TrackerService {
       brief: ['Brief', 'Be brief and concise. Skip preamble. Get to the point immediately.'],
       detailed: ['Detailed', 'Be thorough. Explain your reasoning and walk through your thinking.'],
     };
-    const PLANNING_LABELS: Record<string, [string, string]> = {
-      dive_in: ['Dive in', 'Start working immediately. No upfront plan needed unless the task is genuinely complex.'],
-      plan_first: ['Show plan first', 'Always present a plan of what you will do before starting work.'],
-      plan_approval: ['Plan + approval', 'Present a plan and wait for explicit approval before proceeding.'],
-    };
-    const QUESTIONS_LABELS: Record<string, [string, string]> = {
-      minimal: ['Minimal', 'Minimise questions. Infer intent and make reasonable assumptions. Only ask when truly blocked.'],
-      batch: ['Batch together', 'When you have multiple questions, ask them all in one message.'],
-      one_at_a_time: ['One at a time', 'Ask one question at a time, wait for the answer before asking the next.'],
-    };
-    const RESEARCH_LABELS: Record<string, [string, string]> = {
-      light: ['Light', 'Read only what is directly relevant to the task. Minimal upfront research.'],
-      moderate: ['Moderate', 'Read relevant files and a few related ones for context before acting.'],
-      deep: ['Deep', 'Explore the codebase broadly, read related files, and understand the full picture before acting.'],
-    };
-    const SCOPE_LABELS: Record<string, [string, string]> = {
-      minimal: ['Minimal', 'Change only what is necessary. Avoid scope creep and opportunistic cleanup.'],
-      clean_as_go: ['Clean as you go', 'Fix small nearby issues when you encounter them, but stay close to the task.'],
-      thorough: ['Thorough', 'Improve code quality proactively — refactor, clean up patterns, improve structure when relevant.'],
-    };
-    const TESTS_LABELS: Record<string, [string, string]> = {
-      skip: ['Skip', 'Do not write tests unless explicitly asked.'],
-      suggest: ['Suggest', 'Recommend tests where valuable, but do not write them unless asked.'],
-      always: ['Always write', 'Write tests for every meaningful change. Tests are required.'],
-    };
-    const COMMITS_LABELS: Record<string, [string, string]> = {
-      never: ['Never', 'Do not commit. The user handles commits.'],
-      milestones: ['At milestones', 'Commit when a coherent chunk of work is complete.'],
-      often: ['Frequently', 'Commit frequently with small focused commits after each meaningful change.'],
-    };
-    const BLOCKERS_LABELS: Record<string, [string, string]> = {
-      ask: ['Stop & ask', 'When blocked, stop and ask the user how to proceed.'],
-      try_first: ['Try alternatives first', 'Try reasonable alternatives before asking. Ask only if exhausted.'],
-      continue: ['Note & continue', 'Note the issue clearly and continue with the rest of the work.'],
-    };
     const INPUT_MODE_LABELS: Record<string, [string, string]> = {
       ask_questions: ['ask_questions tool', 'Use the ask_questions tool whenever you need input. Produces a detectable numbered prompt in the terminal.'],
       inline: ['Inline chat', 'Ask questions inline in the conversation. Before pausing, set state: "waiting_for_input" in status.json with a brief_description; set it back to "working" on resume.'],
@@ -980,20 +925,6 @@ export class TrackerService {
 ${row('Decisions', DECISION_LABELS, workStyle.decisionStyle)}
 
 ${row('Verbosity', VERBOSITY_LABELS, workStyle.verbosity)}
-
-${row('Before starting', PLANNING_LABELS, workStyle.planning)}
-
-${row('Questions', QUESTIONS_LABELS, workStyle.questions)}
-
-${row('Research depth', RESEARCH_LABELS, workStyle.contextDepth)}
-
-${row('Code scope', SCOPE_LABELS, workStyle.codeScope)}
-
-${row('Tests', TESTS_LABELS, workStyle.testing)}
-
-${row('Commits', COMMITS_LABELS, workStyle.commits)}
-
-${row('On blockers', BLOCKERS_LABELS, workStyle.onBlockers)}
 
 ${row('Input mode', INPUT_MODE_LABELS, workStyle.inputMode)}
 ${custom}`;
@@ -1211,10 +1142,7 @@ This skill is generated from tracker configuration. Treat \`tracker/stages.json\
 
 - Decisions: \`${workStyle.decisionStyle}\`
 - Verbosity: \`${workStyle.verbosity}\`
-- Questions: \`${workStyle.questions}\`
 - Input mode: \`${workStyle.inputMode}\`
-- Code scope: \`${workStyle.codeScope}\`
-- Testing: \`${workStyle.testing}\`
 
 ## Stage Playbooks
 
