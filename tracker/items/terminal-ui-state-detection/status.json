@@ -1,6 +1,0 @@
-{
-  "stage": "cleanup",
-  "is_waiting_for_user": true,
-  "brief_description": "skill + 9 fixtures + detector fixes done; tests/typecheck/build all pass. Awaiting your sign-off before opening PR.",
-  "timestamp": "2026-04-26T03:55:00Z"
-}
