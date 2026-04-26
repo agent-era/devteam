@@ -52,4 +52,21 @@ describe('AIToolService.getStatusForTool — invariants', () => {
     ].join('\n');
     expect(service.getStatusForTool(trust, 'claude')).toBe('waiting');
   });
+
+  test('Claude with working spinner AND a permission picker on screen classifies as waiting', () => {
+    // Real frame from the bash-permission flow: the "Reading 1 file… (2s)" spinner is still
+    // visible above the picker. Without waiting-before-working order, this would mis-classify.
+    const mixed = [
+      '● Reading 1 file… (2s)',
+      '  ⎿  $ head -1 /etc/passwd',
+      '',
+      ' Bash command',
+      '   head -1 /etc/passwd',
+      '',
+      ' Do you want to proceed?',
+      ' ❯ 1. Yes',
+      '   2. No',
+    ].join('\n');
+    expect(service.getStatusForTool(mixed, 'claude')).toBe('waiting');
+  });
 });

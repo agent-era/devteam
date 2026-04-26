@@ -80,8 +80,9 @@ export const AI_TOOLS = {
     command: 'claude',
     resumeArgs: '--continue',
     processPatterns: ['claude'],
+    // Claude's working detection lives in AIToolService.isWorking (CLAUDE_WORKING_RE)
+    // because the bare `… (` substring matches transcript lines too.
     statusPatterns: {
-      working: '… (',
       idle_prompt: ['│ >', '│']
     }
   },

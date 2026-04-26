@@ -8,6 +8,8 @@ const CLAUDE_WAITING_RE = /❯\s+\d+\.\s+\w+/m;
 // Claude's "thinking" indicator: ellipsis + paren + duration in seconds. The bare substring
 // `… (` is too loose — transcript lines like `Reading 1 file… (ctrl+o to expand)` match it
 // even at idle/waiting, so we anchor on the duration that only the live spinner shows.
+// Note: this assumes the spinner always reports seconds. If Claude ever switches to `(2m 30s`
+// for long-running operations, broaden to `/…\s*\(\d+(s|m)/`.
 const CLAUDE_WORKING_RE = /…\s*\(\d+s/;
 
 export class AIToolService {
@@ -122,6 +124,8 @@ export class AIToolService {
       case 'gemini':
         return text.toLowerCase().includes(AI_TOOLS[tool].statusPatterns.working.toLowerCase());
       default:
+        // A new tool added to AITool must be added here too — falling through reports
+        // permanent idle on the kanban with no warning.
         return false;
     }
   }
