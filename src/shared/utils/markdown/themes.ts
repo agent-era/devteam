@@ -59,7 +59,7 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     // Subtle warm-grey wheat tint — same overall brightness band as a plain
     // gray, just shifted slightly toward yellow/red so code reads as a hint
     // distinct from the near-white body without being heavy-handed.
-    codeColor: '#BCB4A8',
+    codeColor: '#B0A488',
     codeDim: false,
     bulletColor: '#00FFFF',
     blockquoteBarColor: '#888888',
