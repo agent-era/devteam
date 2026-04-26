@@ -1142,10 +1142,7 @@ This skill is generated from tracker configuration. Treat \`tracker/stages.json\
 
 - Decisions: \`${workStyle.decisionStyle}\`
 - Verbosity: \`${workStyle.verbosity}\`
-- Questions: \`${workStyle.questions}\`
 - Input mode: \`${workStyle.inputMode}\`
-- Code scope: \`${workStyle.codeScope}\`
-- Testing: \`${workStyle.testing}\`
 
 ## Stage Playbooks
 
