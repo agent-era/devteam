@@ -79,6 +79,7 @@ function AppContent() {
     diffType,
     pendingWorktree,
     pendingWorktreePrompt,
+    pendingWorktreeFresh,
     pendingWorktreeReturn,
     archiveReturn,
     diffReturn,
@@ -290,7 +291,7 @@ function AppContent() {
     if (!prepared) { showTracker(project); return; }
     const needsSelection = await needsToolSelection(prepared.worktree);
     if (needsSelection) {
-      showAIToolSelection(prepared.worktree, {initialPrompt: prepared.prompt, onReturn: () => showTracker(project)});
+      showAIToolSelection(prepared.worktree, {initialPrompt: prepared.prompt, onReturn: () => showTracker(project), freshWorktree: prepared.fresh});
     } else {
       await attachSession(prepared.worktree, undefined, prepared.prompt, {freshWorktree: prepared.fresh});
       showTracker(project);
@@ -316,7 +317,7 @@ function AppContent() {
       if (!ensured) { showTracker(project); return; }
       const needsSelection = await needsToolSelection(ensured.worktree);
       if (needsSelection) {
-        showAIToolSelection(ensured.worktree, {onReturn: () => showTracker(project)});
+        showAIToolSelection(ensured.worktree, {onReturn: () => showTracker(project), freshWorktree: ensured.fresh});
       } else {
         await attachSession(ensured.worktree, undefined, undefined, {freshWorktree: ensured.fresh});
         showTracker(project);
@@ -557,6 +558,7 @@ function AppContent() {
   if (!content && mode === 'selectAITool' && pendingWorktree) {
     const returnFn = pendingWorktreeReturn ?? showList;
     const prompt = pendingWorktreePrompt ?? undefined;
+    const fresh = pendingWorktreeFresh;
     content = (
       <Box flexGrow={1} alignItems="center" justifyContent="center">
         <AIToolDialog
@@ -565,7 +567,7 @@ function AppContent() {
           onSelect={async (tool) => {
             const wt = pendingWorktree;
             try {
-              runWithLoading(() => attachSession(wt, tool, prompt), {onReturn: returnFn});
+              runWithLoading(() => attachSession(wt, tool, prompt, {freshWorktree: fresh}), {onReturn: returnFn});
             } catch (error) {
               console.error('Failed to attach session with selected tool:', error);
             }

@@ -600,6 +600,9 @@ export class TrackerService {
   // Replace the `slug:` frontmatter field in every .md file under itemDir.
   // Only touches the exact line `slug: <oldSlug>` so unrelated mentions of the
   // old slug elsewhere in the body are preserved.
+  // `oldSlug` is interpolated into a regex unescaped — `isValidSlug` constrains
+  // slugs to `[a-z0-9-]`, all of which are regex-safe. Caller paths (`renameItem`,
+  // `createItem`) only accept slugs that pass that validator.
   private rewriteSlugFrontmatter(itemDir: string, oldSlug: string, newSlug: string): void {
     let entries: string[];
     try { entries = fs.readdirSync(itemDir); } catch { return; }

@@ -28,6 +28,7 @@ interface UIContextType {
   diffType: 'full' | 'uncommitted';
   pendingWorktree: WorktreeInfo | null;
   pendingWorktreePrompt: string | null;
+  pendingWorktreeFresh: boolean;
   pendingWorktreeReturn: (() => void) | null;
   info: {title?: string; message: string; onClose?: () => void} | null;
   settingsProject: string | null;
@@ -51,7 +52,7 @@ interface UIContextType {
   showBranchPicker: (projects: any[], defaultProject?: string) => void;
   showBranchListForProject: (project: string, branches: any[]) => void;
   showDiffView: (worktreePath: string, type: 'full' | 'uncommitted', options?: {onReturn?: () => void}) => void;
-  showAIToolSelection: (worktree: WorktreeInfo, options?: {initialPrompt?: string; onReturn?: () => void}) => void;
+  showAIToolSelection: (worktree: WorktreeInfo, options?: {initialPrompt?: string; onReturn?: () => void; freshWorktree?: boolean}) => void;
   showNoProjectsDialog: () => void;
   showInfo: (message: string, options?: {title?: string; onClose?: () => void; onReturn?: () => void}) => void;
   showSettings: (project: string, options?: {onReturn?: () => void}) => void;
@@ -94,6 +95,7 @@ export function UIProvider({children}: UIProviderProps) {
   const [diffType, setDiffType] = useState<'full' | 'uncommitted'>('full');
   const [pendingWorktree, setPendingWorktree] = useState<WorktreeInfo | null>(null);
   const [pendingWorktreePrompt, setPendingWorktreePrompt] = useState<string | null>(null);
+  const [pendingWorktreeFresh, setPendingWorktreeFresh] = useState<boolean>(false);
   const [pendingWorktreeReturn, setPendingWorktreeReturn] = useState<(() => void) | null>(null);
   const [info, setInfo] = useState<{title?: string; message: string; onClose?: () => void} | null>(null);
   const [settingsProject, setSettingsProject] = useState<string | null>(null);
@@ -191,10 +193,11 @@ export function UIProvider({children}: UIProviderProps) {
     setDiffReturn(options?.onReturn ? () => options.onReturn! : null);
   };
 
-  const showAIToolSelection = (worktree: WorktreeInfo, options?: {initialPrompt?: string; onReturn?: () => void}) => {
+  const showAIToolSelection = (worktree: WorktreeInfo, options?: {initialPrompt?: string; onReturn?: () => void; freshWorktree?: boolean}) => {
     setMode('selectAITool');
     setPendingWorktree(worktree);
     setPendingWorktreePrompt(options?.initialPrompt ?? null);
+    setPendingWorktreeFresh(!!options?.freshWorktree);
     setPendingWorktreeReturn(options?.onReturn ? () => options.onReturn! : null);
   };
 
@@ -310,6 +313,7 @@ export function UIProvider({children}: UIProviderProps) {
     diffType,
     pendingWorktree,
     pendingWorktreePrompt,
+    pendingWorktreeFresh,
     pendingWorktreeReturn,
     info,
     settingsProject,

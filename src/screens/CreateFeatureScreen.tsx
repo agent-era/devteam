@@ -53,7 +53,7 @@ export default function CreateFeatureScreen({
           const proceedWithSession = async () => {
             const needsSelection = await needsToolSelection(created);
             if (needsSelection) {
-              showAIToolSelection(created);
+              showAIToolSelection(created, {freshWorktree: true});
             } else {
               await attachSession(created, undefined, undefined, {freshWorktree: true});
             }
