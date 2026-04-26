@@ -1,0 +1,62 @@
+codex -a untrusted
+mserv@userv:/tmp/ai-capture-codex-jEHq6h$ codex -a untrusted
+> You are in /tmp/ai-capture-codex-jEHq6h
+
+  Do you trust the contents of this directory? Working with untrusted contents comes with higher risk of prompt injection. Trusting the directory allows project-local config, hooks, and exec policies
+  to load.
+
+› 1. Yes, continue
+  2. No, quit
+
+  Press enter to continue
+
+⚠ Codex could not find bubblewrap on PATH. Install bubblewrap with your OS package manager. See the sandbox prerequisites: https://developers.openai.com/codex/concepts/sandboxing#prerequisites. Codex
+  will use the vendored bubblewrap in the meantime.
+
+╭───────────────────────────────────────────╮
+│ >_ OpenAI Codex (v0.125.0)                │
+│                                           │
+│ model:     gpt-5.4 low   /model to change │
+│ directory: /tmp/ai-capture-codex-jEHq6h   │
+╰───────────────────────────────────────────╯
+
+  Tip: New Use /fast to enable our fastest inference with increased plan usage.
+
+
+› Explain this codebase
+
+  gpt-5.4 low · Context 100% left · 5h 69% · weekly 77%
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

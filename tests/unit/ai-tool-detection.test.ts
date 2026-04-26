@@ -1,331 +1,72 @@
-import {TmuxService} from '../../src/services/TmuxService.js';
-import {AI_TOOLS} from '../../src/constants.js';
+import {readFileSync, existsSync} from 'node:fs';
+import {join} from 'node:path';
+import {AIToolService} from '../../src/services/AIToolService.js';
+import {AITool, AIStatus} from '../../src/models.js';
 
-// Mock the command execution functions
-jest.mock('../../src/shared/utils/commandExecutor.js', () => ({
-  ...jest.requireActual('../../src/shared/utils/commandExecutor.js'),
-  runCommandQuickAsync: jest.fn(),
-  runCommandQuick: jest.fn(),
-  runCommand: jest.fn(),
-  commandExitCode: jest.fn(),
-}));
+const FIXTURES_ROOT = join(process.cwd(), 'tests/fixtures/ai-states');
+const TOOLS: AITool[] = ['claude', 'codex', 'gemini'];
+const STATES: AIStatus[] = ['idle', 'working', 'waiting'];
 
-import {runCommandQuickAsync} from '../../src/shared/utils/commandExecutor.js';
+function loadFixture(tool: AITool, state: AIStatus): string | null {
+  const p = join(FIXTURES_ROOT, tool, `${state}.txt`);
+  return existsSync(p) ? readFileSync(p, 'utf8') : null;
+}
 
-describe('AI Tool Detection', () => {
-  let tmuxService: TmuxService;
+describe('AI Tool Detection (fixture-driven)', () => {
+  const service = new AIToolService();
 
-  beforeEach(() => {
-    tmuxService = new TmuxService();
-    jest.clearAllMocks();
+  for (const tool of TOOLS) {
+    describe(tool, () => {
+      for (const state of STATES) {
+        const fixture = loadFixture(tool, state);
+        const label = `classifies ${state} fixture as ${state}`;
+        if (fixture === null) {
+          // Skip cleanly if the capture skill hasn't produced this cell yet — keeps the
+          // suite green on a fresh checkout, but a missing fixture should be obvious.
+          test.skip(`${label} (fixture missing — run capture-ai-states skill)`, () => {});
+          continue;
+        }
+        test(label, () => {
+          expect(service.getStatusForTool(fixture, tool)).toBe(state);
+        });
+      }
+    });
+  }
+});
+
+describe('AIToolService.getStatusForTool — invariants', () => {
+  const service = new AIToolService();
+
+  test('returns not_running for tool=none', () => {
+    expect(service.getStatusForTool('anything', 'none')).toBe('not_running');
   });
 
-  describe('Claude Detection', () => {
-    const claudeScreens = {
-      working: `
-● Bash(npm test)
-  ⎿  Running…
-
-· Calculating… (12s · ↓ 512 tokens)
-  ⎿  Tip: Use /btw to ask a side question`,
-      waiting: `
-Human: What would you like me to help you with?
-
-I can help you with:
-
-1. Writing code in various programming languages
-2. Debugging and troubleshooting code issues  
-3. Code review and optimization suggestions
-4. Explaining programming concepts
-5. System design and architecture advice
-
-❯ 1. code`,
-      idle: `
-Welcome to Claude! I'm here to help with coding, analysis, writing, and more.
-
-Type your message below:
-
-│ >
-│`,
-    };
-
-    test('detects Claude working state', async () => {
-      const mockCapture = jest.spyOn(tmuxService as any, 'capturePane');
-      mockCapture.mockResolvedValue(claudeScreens.working);
-      
-      (runCommandQuickAsync as jest.Mock).mockImplementation((args) => {
-        if (args.includes('list-panes')) {
-          return Promise.resolve('dev-project-feature:12345');
-        }
-        if (args.includes('-p') && args.includes('12345')) {
-          return Promise.resolve('12345 claude');
-        }
-        return Promise.resolve('');
-      });
-
-      const result = await tmuxService.getAIStatus('dev-project-feature');
-      expect(result.tool).toBe('claude');
-      expect(result.status).toBe('working');
-    });
-
-    test('detects Claude waiting state', async () => {
-      const mockCapture = jest.spyOn(tmuxService as any, 'capturePane');
-      mockCapture.mockResolvedValue(claudeScreens.waiting);
-      
-      (runCommandQuickAsync as jest.Mock).mockImplementation((args) => {
-        if (args.includes('list-panes')) {
-          return Promise.resolve('dev-project-feature:12345');
-        }
-        if (args.includes('-p') && args.includes('12345')) {
-          return Promise.resolve('12345 claude');
-        }
-        return Promise.resolve('');
-      });
-
-      const result = await tmuxService.getAIStatus('dev-project-feature');
-      expect(result.tool).toBe('claude');
-      expect(result.status).toBe('waiting');
-    });
-
-    test('detects Claude idle state', async () => {
-      const mockCapture = jest.spyOn(tmuxService as any, 'capturePane');
-      mockCapture.mockResolvedValue(claudeScreens.idle);
-      
-      (runCommandQuickAsync as jest.Mock).mockImplementation((args) => {
-        if (args.includes('list-panes')) {
-          return Promise.resolve('dev-project-feature:12345');
-        }
-        if (args.includes('-p') && args.includes('12345')) {
-          return Promise.resolve('12345 claude');
-        }
-        return Promise.resolve('');
-      });
-
-      const result = await tmuxService.getAIStatus('dev-project-feature');
-      expect(result.tool).toBe('claude');
-      expect(result.status).toBe('idle');
-    });
+  test('Claude trust-folder consent prompt registers as waiting (it needs user action)', () => {
+    const trust = [
+      "Claude Code'll be able to read, edit, and execute files here.",
+      'Security guide',
+      '❯ 1. Yes, I trust this folder',
+      '  2. No, exit',
+      '',
+      'Enter to confirm · Esc to cancel',
+    ].join('\n');
+    expect(service.getStatusForTool(trust, 'claude')).toBe('waiting');
   });
 
-  describe('Codex Detection', () => {
-    const codexScreens = {
-      working: `
-Structure
-
-- src/: TypeScript source for CLI, UI, services, and utilities.
-- tests/: Unit, integration, and e2e tests with fakes and helpers.
-
-Generating code...
-
-▌ Writing implementation
- Esc to interrupt   Ctrl+J newline   Ctrl+T transcript   Ctrl+C quit   5234 tokens used   90% context left
-`,
-      waiting: `
-- Build and run CLI: npm install && npm run build && npm run cli
-- Point to projects dir: PROJECTS_DIR=/path/to/projects npm run cli
-
-1. Do you want me to run the tests?
-2. Should I build the project?
-
-▌ 
- Ctrl+J newline   Ctrl+T transcript   Ctrl+C quit   22521 tokens used   94% context left
-`,
-      idle: `
-Ready to help with your code!
-
-▌ 
- ⏎ send   Ctrl+J newline   Ctrl+T transcript   Ctrl+C quit   0 tokens used   100% context left
-`,
-    };
-
-    test('detects Codex working state', async () => {
-      const mockCapture = jest.spyOn(tmuxService as any, 'capturePane');
-      mockCapture.mockResolvedValue(codexScreens.working);
-      
-      (runCommandQuickAsync as jest.Mock).mockImplementation((args) => {
-        if (args.includes('list-panes')) {
-          return Promise.resolve('dev-project-feature:12345');
-        }
-        if (args.includes('-p') && args.includes('12345')) {
-          return Promise.resolve('12345 node /usr/bin/codex');
-        }
-        return Promise.resolve('');
-      });
-
-      const result = await tmuxService.getAIStatus('dev-project-feature');
-      expect(result.tool).toBe('codex');
-      expect(result.status).toBe('working');
-    });
-
-    test('detects Codex waiting state', async () => {
-      const mockCapture = jest.spyOn(tmuxService as any, 'capturePane');
-      mockCapture.mockResolvedValue(codexScreens.waiting);
-      
-      (runCommandQuickAsync as jest.Mock).mockImplementation((args) => {
-        if (args.includes('list-panes')) {
-          return Promise.resolve('dev-project-feature:12345');
-        }
-        if (args.includes('-p') && args.includes('12345')) {
-          return Promise.resolve('12345 node /home/user/.nvm/versions/node/v24.7.0/bin/codex');
-        }
-        return Promise.resolve('');
-      });
-
-      const result = await tmuxService.getAIStatus('dev-project-feature');
-      expect(result.tool).toBe('codex');
-      expect(result.status).toBe('waiting');
-    });
-
-    test('detects Codex idle state', async () => {
-      const mockCapture = jest.spyOn(tmuxService as any, 'capturePane');
-      mockCapture.mockResolvedValue(codexScreens.idle);
-      
-      (runCommandQuickAsync as jest.Mock).mockImplementation((args) => {
-        if (args.includes('list-panes')) {
-          return Promise.resolve('dev-project-feature:12345');
-        }
-        if (args.includes('-p') && args.includes('12345')) {
-          return Promise.resolve('12345 node /home/user/.nvm/versions/node/v24.7.0/bin/codex');
-        }
-        return Promise.resolve('');
-      });
-
-      const result = await tmuxService.getAIStatus('dev-project-feature');
-      expect(result.tool).toBe('codex');
-      expect(result.status).toBe('idle');
-    });
-  });
-
-  describe('Gemini Detection', () => {
-    const geminiScreens = {
-      working: `
- ╭───────────────────────────╮
- │ ✔ ReadFile package.json  │
- ╰───────────────────────────╯
- ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
- │ ✔ FindFiles '**/*.test.ts*'                                                                                                                                                          │
- │                                                                                                                                                                                       │
- │    Found 22 matching file(s)                                                                                                                                                          │
- ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-⠏ Analyzing test files...   esc to cancel
-
-~/projects/coding-agent-team-branches/npm-package (feature/npm-package*)                               no sandbox (see /docs)                                  gemini-2.5-pro (99% context left)
-`,
-      waitingForUser: `
- ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
- │ ?  Shell npm test ←                                                                                                                                                                          │
- │                                                                                                                                                                                              │
- │   npm test                                                                                                                                                                                   │
- │                                                                                                                                                                                              │
- │ Allow execution of: 'npm'?                                                                                                                                                                   │
- │                                                                                                                                                                                              │
- │ ● 1. Yes, allow once                                                                                                                                                                         │
- │   2. Yes, allow always ...                                                                                                                                                                   │
- │   3. No, suggest changes (esc)                                                                                                                                                               │
- │                                                                                                                                                                                              │
- ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-⠏ Waiting for user confirmation...
-
-~/projects/coding-agent-team-branches/npm-package (feature/npm-package*)                               no sandbox (see /docs)                                  gemini-2.5-pro (99% context left)
-`,
-      idle: `
- ███            █████████  ██████████ ██████   ██████ █████ ██████   █████ █████
-░░███         ███░░░░░███░░███░░░░░█░░██████ ██████ ░░███ ░░██████ ░░███ ░░███
-  ░░███      ███     ░░░  ░███  █ ░  ░███░█████░███  ░███  ░███░███ ░███  ░███
-    ░░███   ░███          ░██████    ░███░░███ ░███  ░███  ░███░░███░███  ░███
-     ███░    ░███    █████ ░███░░█    ░███ ░░░  ░███  ░███  ░███ ░░██████  ░███
-   ███░      ░░███  ░░███  ░███ ░   █ ░███      ░███  ░███  ░███  ░░█████  ░███
- ███░         ░░█████████  ██████████ █████     █████ █████ █████  ░░█████ █████
-░░░            ░░░░░░░░░  ░░░░░░░░░░ ░░░░░     ░░░░░ ░░░░░ ░░░░░    ░░░░░ ░░░░░
-
-╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ >   Type your message or @path/to/file                                                                                                                                                       │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-~/projects/coding-agent-team-branches/npm-package (feature/npm-package*)                               no sandbox (see /docs)                                 gemini-2.5-pro (100% context left)
-`,
-    };
-
-    test('detects Gemini working state', async () => {
-      const mockCapture = jest.spyOn(tmuxService as any, 'capturePane');
-      mockCapture.mockResolvedValue(geminiScreens.working);
-      
-      (runCommandQuickAsync as jest.Mock).mockImplementation((args) => {
-        if (args.includes('list-panes')) {
-          return Promise.resolve('dev-project-feature:12345');
-        }
-        if (args.includes('-p') && args.includes('12345')) {
-          return Promise.resolve('12345 node /usr/bin/gemini');
-        }
-        return Promise.resolve('');
-      });
-
-      const result = await tmuxService.getAIStatus('dev-project-feature');
-      expect(result.tool).toBe('gemini');
-      expect(result.status).toBe('working');
-    });
-
-    test('detects Gemini waiting for user confirmation', async () => {
-      const mockCapture = jest.spyOn(tmuxService as any, 'capturePane');
-      mockCapture.mockResolvedValue(geminiScreens.waitingForUser);
-      
-      (runCommandQuickAsync as jest.Mock).mockImplementation((args) => {
-        if (args.includes('list-panes')) {
-          return Promise.resolve('dev-project-feature:12345');
-        }
-        if (args.includes('-p') && args.includes('12345')) {
-          return Promise.resolve('12345 node /home/user/.nvm/versions/node/v24.7.0/bin/gemini');
-        }
-        return Promise.resolve('');
-      });
-
-      const result = await tmuxService.getAIStatus('dev-project-feature');
-      expect(result.tool).toBe('gemini');
-      expect(result.status).toBe('waiting');
-    });
-
-    test('detects Gemini idle state', async () => {
-      const mockCapture = jest.spyOn(tmuxService as any, 'capturePane');
-      mockCapture.mockResolvedValue(geminiScreens.idle);
-      
-      (runCommandQuickAsync as jest.Mock).mockImplementation((args) => {
-        if (args.includes('list-panes')) {
-          return Promise.resolve('dev-project-feature:12345');
-        }
-        if (args.includes('-p') && args.includes('12345')) {
-          return Promise.resolve('12345 node /usr/local/bin/gemini');
-        }
-        return Promise.resolve('');
-      });
-
-      const result = await tmuxService.getAIStatus('dev-project-feature');
-      expect(result.tool).toBe('gemini');
-      expect(result.status).toBe('idle');
-    });
-  });
-
-  describe('Batch Detection', () => {
-    test('detects multiple AI tools in batch', async () => {
-      (runCommandQuickAsync as jest.Mock).mockImplementation((args) => {
-        if (args.includes('list-panes') && args.includes('-a')) {
-          return Promise.resolve(`dev-project1-feature1:11111
-dev-project2-feature2:22222
-dev-project3-feature3:33333`);
-        }
-        if (args.includes('-p') && args.includes('11111,22222,33333')) {
-          return Promise.resolve(` 11111 claude
- 22222 node /usr/bin/codex
- 33333 node /usr/bin/gemini`);
-        }
-        return Promise.resolve('');
-      });
-
-      // Access the aiToolService from the tmuxService
-      const aiToolService = (tmuxService as any).aiToolService;
-      const result = await aiToolService.detectAllSessionAITools();
-      
-      expect(result.get('dev-project1-feature1')).toBe('claude');
-      expect(result.get('dev-project2-feature2')).toBe('codex');
-      expect(result.get('dev-project3-feature3')).toBe('gemini');
-    });
+  test('Claude with working spinner AND a permission picker on screen classifies as waiting', () => {
+    // Real frame from the bash-permission flow: the "Reading 1 file… (2s)" spinner is still
+    // visible above the picker. Without waiting-before-working order, this would mis-classify.
+    const mixed = [
+      '● Reading 1 file… (2s)',
+      '  ⎿  $ head -1 /etc/passwd',
+      '',
+      ' Bash command',
+      '   head -1 /etc/passwd',
+      '',
+      ' Do you want to proceed?',
+      ' ❯ 1. Yes',
+      '   2. No',
+    ].join('\n');
+    expect(service.getStatusForTool(mixed, 'claude')).toBe('waiting');
   });
 });

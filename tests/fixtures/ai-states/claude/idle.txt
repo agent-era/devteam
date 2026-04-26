@@ -1,0 +1,50 @@
+claude
+mserv@userv:/tmp/ai-capture-claude-5eg1ok$ claude
+╭─── Claude Code v2.1.119 ──────────────────────────────────────────────────────────────────────────────────╮
+│                                                    │ Tips for getting started                             │
+│                 Welcome back Mueez!                │ Ask Claude to create a new app or clone a repository │
+│                                                    │ ──────────────────────────────────────────────────── │
+│                       ▐▛███▜▌                      │ Recent activity                                      │
+│                      ▝▜█████▛▘                     │ No recent activity                                   │
+│                        ▘▘ ▝▝                       │                                                      │
+│        Opus 4.7 (1M context) · Claude Max ·        │                                                      │
+│        mueezs@gmail.com's Organization             │                                                      │
+│            /tmp/ai-capture-claude-5eg1ok           │                                                      │
+╰───────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+  /remote-control is active · Code in CLI or at https://claude.ai/code/session_01C1evCw3JzRXtuQ7RK7D57D
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  userv:ai-capture-claude-5eg1ok 0/1.0M Opus 4.7 (1M context)
+  ⏵⏵ auto mode on (shift+tab to cycle)                                                                                                                                               ◉ xhigh · /effort
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
