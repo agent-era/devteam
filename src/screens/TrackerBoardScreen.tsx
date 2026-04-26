@@ -797,21 +797,6 @@ export default function TrackerBoardScreen({
                     {slug}
                   </Text>
                 </Box>
-                {/* Running-status chips: one per active tmux session. Indented
-                    to match the secondary text gutter. Eats one of the four
-                    rows budgeted per item, so secondary maxLines drops by 1
-                    when chips render to keep scroll math intact. */}
-                {runningChips.length > 0 && (
-                  <Box>
-                    <Text>{'    '}</Text>
-                    {runningChips.map((chip, idx) => (
-                      <React.Fragment key={chip.label}>
-                        {idx > 0 && <Text> </Text>}
-                        <StatusChip label={chip.label} color={chip.color} fg="white" />
-                      </React.Fragment>
-                    ))}
-                  </Box>
-                )}
                 {/* Status / secondary text — wraps to SECONDARY_MAX_LINES so
                     long brief_descriptions from the agent stay readable. */}
                 {(() => {
@@ -844,6 +829,23 @@ export default function TrackerBoardScreen({
                   <Text color="green" bold>
                     {`    press [m] to approve and advance`}
                   </Text>
+                )}
+                {/* Running-status chips: one per active tmux session, rendered
+                    last so the card's textual signals (ready/waiting/working)
+                    stay above. Indented to match the secondary-text gutter.
+                    Eats one of the four rows budgeted per item, so secondary
+                    maxLines drops by 1 when chips render to keep scroll math
+                    intact. */}
+                {runningChips.length > 0 && (
+                  <Box>
+                    <Text>{'    '}</Text>
+                    {runningChips.map((chip, idx) => (
+                      <React.Fragment key={chip.label}>
+                        {idx > 0 && <Text> </Text>}
+                        <StatusChip label={chip.label} color={chip.color} fg="white" />
+                      </React.Fragment>
+                    ))}
+                  </Box>
                 )}
               </Box>
             );
