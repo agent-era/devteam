@@ -744,7 +744,8 @@ export default function TrackerBoardScreen({
           {visibleItems.map((item, sliceIndex) => {
             const itemIndex = scrollTop + sliceIndex;
             const isSelected = isActiveColumn && selectedRow === itemIndex;
-            const sessWt = getSessionForItem(item);
+            const wt = getWorktreeForItem(item);
+            const sessWt = (wt?.session?.ai_status && wt.session.ai_status !== 'not_running') ? wt : null;
             const aiStatus: AIStatus | undefined = sessWt?.session?.ai_status;
             const aiWaiting = aiStatus === 'waiting';
             const isWorking = aiStatus === 'working' || aiStatus === 'active';
@@ -755,7 +756,7 @@ export default function TrackerBoardScreen({
             // "ready to advance" treatment so it's spottable at a glance and
             // can be acted on with the `m` shortcut from the board.
             const itemStatus = service.getItemStatus(projectPath, item.slug);
-            const prMerged = getWorktreeForItem(item)?.pr?.is_merged === true;
+            const prMerged = wt?.pr?.is_merged === true;
             const readyToAdvance = !prMerged && service.isItemReadyToAdvance(itemStatus);
             const ralphWaiting = !!itemStatus && !readyToAdvance && service.isItemWaiting(itemStatus);
             const isWaiting = aiWaiting || ralphWaiting;
@@ -773,7 +774,7 @@ export default function TrackerBoardScreen({
               inactive: item.inactive,
               itemStatusDescription: itemStatus?.brief_description,
             });
-            const runningChips = computeRunningChips(getWorktreeForItem(item));
+            const runningChips = computeRunningChips(wt);
 
             // Slug row eats: 2 (border) + 2 (paddingX) + 2 (cursor) + 2 (status glyph) = 8 chars
             const slug = truncateDisplay(item.slug, Math.max(4, colWidth - 8));
@@ -837,8 +838,7 @@ export default function TrackerBoardScreen({
                     maxLines drops by 1 when chips render to keep scroll math
                     intact. */}
                 {runningChips.length > 0 && (
-                  <Box>
-                    <Text>{'    '}</Text>
+                  <Box marginLeft={4}>
                     {runningChips.map((chip, idx) => (
                       <React.Fragment key={chip.label}>
                         {idx > 0 && <Text> </Text>}
