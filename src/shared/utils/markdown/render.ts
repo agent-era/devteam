@@ -160,8 +160,9 @@ export function lineToParts(rawLine: string, ctx: BlockContext, theme: MarkdownT
       return {leading: [], body: [], continuation: []};
 
     case 'code':
-      // Fenced code lines: body colour with optional dim — same as inline code.
-      return {leading: [], body: [{text: rawLine || ' ', color: theme.bodyColor, dim: theme.codeDim || undefined}], continuation: []};
+      // Fenced code lines: theme's codeColor (or bodyColor as fallback) with
+      // optional dim. Same colour rule as inline code in inline.ts.
+      return {leading: [], body: [{text: rawLine || ' ', color: theme.codeColor ?? theme.bodyColor, dim: theme.codeDim || undefined}], continuation: []};
 
     case 'hr':
       return {leading: [], body: [], continuation: [], isHr: true};

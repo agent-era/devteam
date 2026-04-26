@@ -16,7 +16,13 @@ export interface MarkdownTheme {
    * style colour matches `bodyColor` get this override.
    */
   boldColor?: string;
-  /** Whether inline + fenced code adds the Ink `dimColor` flag on top of `bodyColor`. */
+  /**
+   * Optional override for inline + fenced code spans. When set, code uses
+   * this colour instead of the surrounding body colour. When undefined,
+   * code inherits whichever colour is already in scope (body or heading).
+   */
+  codeColor?: string;
+  /** Whether inline + fenced code adds the Ink `dimColor` flag. */
   codeDim?: boolean;
   /** Color for the leading bullet on list items. */
   bulletColor: string;
@@ -48,9 +54,13 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     name: 'bright',
     label: 'Bright — multi-colour headings, neutral body',
     heading: {1: '#00FFFF', 2: '#00FF7F', 3: '#FFFF66', 4: '#FF66FF', 5: '#66B3FF', 6: '#FFFFFF'},
-    bodyColor: '#C0C0C0',
+    bodyColor: '#E0E0E0',
     boldColor: '#FFFFFF',
-    codeDim: true,
+    // Light wheat for code — bright + distinct from body without using `dim`,
+    // which the terminal renders as ~50% intensity and was making code read
+    // way darker than the surrounding body.
+    codeColor: '#FFE4B5',
+    codeDim: false,
     bulletColor: '#00FFFF',
     blockquoteBarColor: '#888888',
     blockquoteDim: true,

@@ -76,12 +76,19 @@ function walk(token: any, style: SpanStyle, spans: Span[], theme: MarkdownTheme)
     case 'em':
       walk(token.tokens ?? [], combine(style, {italic: true}), spans, theme);
       return;
-    case 'codespan':
-      // Inherit the surrounding colour (heading colour inside a heading, body
-      // colour everywhere else) and only add `dim` for the slightly-darkened
-      // look — keeps the body monochromatic.
-      pushText(spans, token.text ?? '', combine(style, {dim: !!theme.codeDim}));
+    case 'codespan': {
+      // In body contexts: use theme.codeColor if set (gives code a distinct
+      // tint like a wheat/yellow accent without relying on `dim`), else
+      // inherit the body colour. Inside headings, keep the heading colour
+      // so codespans-in-headings don't suddenly switch to the code accent.
+      const inBodyContext = style.color === undefined || style.color === theme.bodyColor;
+      const overrideColor = inBodyContext ? theme.codeColor : undefined;
+      const next = overrideColor
+        ? combine(style, {color: overrideColor, dim: !!theme.codeDim})
+        : combine(style, {dim: !!theme.codeDim});
+      pushText(spans, token.text ?? '', next);
       return;
+    }
     case 'del':
       walk(token.tokens ?? [], combine(style, {dim: true}), spans, theme);
       return;
