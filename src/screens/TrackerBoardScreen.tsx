@@ -13,6 +13,8 @@ import {startIntervalIfEnabled} from '../shared/utils/intervals.js';
 import {VISIBLE_STATUS_REFRESH_DURATION} from '../constants.js';
 import TrackerProjectPickerDialog from '../components/dialogs/TrackerProjectPickerDialog.js';
 import AIToolDialog from '../components/dialogs/AIToolDialog.js';
+import StatusChip from '../components/common/StatusChip.js';
+import {computeRunningChips} from './runningChips.js';
 
 interface TrackerBoardScreenProps {
   project: string;
@@ -148,20 +150,6 @@ export function getTrackerCardDisplayState({
       secondaryColor: inactive ? 'gray' : 'cyan',
       secondaryBold: false,
       secondaryDim: inactive,
-      showApproveHint: false,
-    };
-  }
-
-  if (hasSession) {
-    return {
-      statusGlyph: '◆',
-      statusColor: 'gray',
-      titleColor: inactive ? 'gray' : undefined,
-      titleBold: false,
-      secondaryText: itemStatusDescription || 'session idle',
-      secondaryColor: inactive ? 'gray' : undefined,
-      secondaryBold: false,
-      secondaryDim: true,
       showApproveHint: false,
     };
   }
@@ -772,6 +760,10 @@ export default function TrackerBoardScreen({
             const ralphWaiting = !!itemStatus && !readyToAdvance && service.isItemWaiting(itemStatus);
             const isWaiting = aiWaiting || ralphWaiting;
 
+            // Session presence is now signalled by the running-status chip row
+            // (rendered separately below); the ◆ branch in
+            // getTrackerCardDisplayState is dropped to avoid duplicating that
+            // signal.
             const display = getTrackerCardDisplayState({
               prMerged,
               readyToAdvance,
@@ -781,6 +773,7 @@ export default function TrackerBoardScreen({
               inactive: item.inactive,
               itemStatusDescription: itemStatus?.brief_description,
             });
+            const runningChips = computeRunningChips(getWorktreeForItem(item));
 
             // Slug row eats: 2 (border) + 2 (paddingX) + 2 (cursor) + 2 (status glyph) = 8 chars
             const slug = truncateDisplay(item.slug, Math.max(4, colWidth - 8));
@@ -804,6 +797,21 @@ export default function TrackerBoardScreen({
                     {slug}
                   </Text>
                 </Box>
+                {/* Running-status chips: one per active tmux session. Indented
+                    to match the secondary text gutter. Eats one of the four
+                    rows budgeted per item, so secondary maxLines drops by 1
+                    when chips render to keep scroll math intact. */}
+                {runningChips.length > 0 && (
+                  <Box>
+                    <Text>{'    '}</Text>
+                    {runningChips.map((chip, idx) => (
+                      <React.Fragment key={chip.label}>
+                        {idx > 0 && <Text> </Text>}
+                        <StatusChip label={chip.label} color={chip.color} fg="white" />
+                      </React.Fragment>
+                    ))}
+                  </Box>
+                )}
                 {/* Status / secondary text — wraps to SECONDARY_MAX_LINES so
                     long brief_descriptions from the agent stay readable. */}
                 {(() => {
@@ -811,7 +819,9 @@ export default function TrackerBoardScreen({
                   if (!text) return null;
                   // Focused card gets more lines so the full (up to 200-char)
                   // brief_description is readable; other cards stay compact.
-                  const maxLines = isSelected ? 4 : SECONDARY_MAX_LINES;
+                  // Chip row eats one of those lines when present.
+                  const baseMax = isSelected ? 4 : SECONDARY_MAX_LINES;
+                  const maxLines = Math.max(1, baseMax - (runningChips.length > 0 ? 1 : 0));
                   const lines = wrapToLines(text, secMax, maxLines);
                   return lines.map((line, lineIdx) => (
                     <Text
