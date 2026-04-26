@@ -40,31 +40,38 @@ describe('proposal acceptance: slug and description', () => {
     expect(index.backlog.backlog ?? []).not.toContain('oauth-login'.replace('-', '')); // not re-slugified
   });
 
-  test('proposal description is written to notes.md (discovery output)', () => {
+  test('proposal description is stashed on sessions[slug].description for the worktree to drain', () => {
     acceptProposals(tmpDir, proposals, new Set([0]));
-    const notesPath = path.join(tmpDir, 'tracker', 'items', 'oauth-login', 'notes.md');
-    expect(fs.existsSync(notesPath)).toBe(true);
-    expect(fs.readFileSync(notesPath, 'utf8')).toContain('Implement Google and GitHub OAuth2 sign-in flows.');
-    const reqPath = path.join(tmpDir, 'tracker', 'items', 'oauth-login', 'requirements.md');
-    const reqContent = fs.readFileSync(reqPath, 'utf8');
-    expect(reqContent).toMatch(/^title: "OAuth Login"$/m);
-    expect(reqContent).toMatch(/^slug: oauth-login$/m);
-    expect(reqContent).not.toContain('Implement Google and GitHub OAuth2 sign-in flows.');
+    const itemDir = path.join(tmpDir, 'tracker', 'items', 'oauth-login');
+    expect(fs.existsSync(itemDir)).toBe(false);
+
+    const index = JSON.parse(fs.readFileSync(path.join(tmpDir, 'tracker', 'index.json'), 'utf8'));
+    expect(index.sessions['oauth-login'].title).toBe('OAuth Login');
+    expect(index.sessions['oauth-login'].description).toBe('Implement Google and GitHub OAuth2 sign-in flows.');
+
+    const worktreeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'proposal-wt-'));
+    try {
+      service.ensureItemFiles(tmpDir, 'oauth-login', worktreeDir);
+      const notesPath = path.join(worktreeDir, 'tracker', 'items', 'oauth-login', 'notes.md');
+      expect(fs.readFileSync(notesPath, 'utf8')).toContain('Implement Google and GitHub OAuth2 sign-in flows.');
+      expect(fs.existsSync(path.join(worktreeDir, 'tracker', 'items', 'oauth-login', 'requirements.md'))).toBe(false);
+    } finally {
+      fs.rmSync(worktreeDir, {recursive: true, force: true});
+    }
   });
 
-  test('accepting multiple proposals creates notes.md for each with its description', () => {
+  test('accepting multiple proposals stashes a description for each on the index', () => {
     acceptProposals(tmpDir, proposals, new Set([0, 1]));
     const index = JSON.parse(fs.readFileSync(path.join(tmpDir, 'tracker', 'index.json'), 'utf8'));
     expect(index.backlog.backlog).toContain('oauth-login');
     expect(index.backlog.backlog).toContain('dark-mode');
-
-    const notesDark = path.join(tmpDir, 'tracker', 'items', 'dark-mode', 'notes.md');
-    expect(fs.readFileSync(notesDark, 'utf8')).toContain('Add a dark color scheme toggle to settings.');
+    expect(index.sessions['dark-mode'].description).toBe('Add a dark color scheme toggle to settings.');
   });
 
-  test('unaccepted proposals are not created', () => {
+  test('unaccepted proposals are not added to the index', () => {
     acceptProposals(tmpDir, proposals, new Set([0]));
-    const darkDir = path.join(tmpDir, 'tracker', 'items', 'dark-mode');
-    expect(fs.existsSync(darkDir)).toBe(false);
+    const index = JSON.parse(fs.readFileSync(path.join(tmpDir, 'tracker', 'index.json'), 'utf8'));
+    expect(index.backlog.backlog ?? []).not.toContain('dark-mode');
+    expect(index.sessions?.['dark-mode']).toBeUndefined();
   });
 });

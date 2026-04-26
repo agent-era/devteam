@@ -475,16 +475,15 @@ describe('defaultStageFileContent renders status + gate protocol', () => {
 // ─── createItem ─────────────────────────────────────────────────────────────
 
 describe('createItem', () => {
-  test('adds slug to index.json and writes requirements stub to main project', () => {
+  test('adds slug to index.json and stores the title in sessions; writes no files to the project root', () => {
     service.createItem(tmpDir, 'Add user auth', 'discovery');
 
     const indexPath = path.join(tmpDir, 'tracker', 'index.json');
     const index = JSON.parse(fs.readFileSync(indexPath, 'utf8'));
     expect(index.backlog.discovery).toContain('add-user-auth');
     expect(index.sessions['add-user-auth'].title).toBe('Add user auth');
-    const reqPath = path.join(tmpDir, 'tracker', 'items', 'add-user-auth', 'requirements.md');
-    expect(fs.existsSync(reqPath)).toBe(true);
-    expect(fs.readFileSync(reqPath, 'utf8')).toContain('Add user auth');
+    const itemDir = path.join(tmpDir, 'tracker', 'items', 'add-user-auth');
+    expect(fs.existsSync(itemDir)).toBe(false);
   });
 
   test('adds slug to index.json in correct stage', () => {
@@ -501,30 +500,38 @@ describe('createItem', () => {
     expect(index.implementation.implement).toContain('build-api');
   });
 
-  test('writes provided body to notes.md (discovery output), keeping requirements.md as a title stub', () => {
-    service.createItem(tmpDir, 'Add auth', 'discovery', undefined, 'Implement OAuth2 login with Google and GitHub providers.');
-    const notesPath = path.join(tmpDir, 'tracker', 'items', 'add-auth', 'notes.md');
-    expect(fs.readFileSync(notesPath, 'utf8')).toContain('Implement OAuth2 login with Google and GitHub providers.');
-    const reqContent = fs.readFileSync(path.join(tmpDir, 'tracker', 'items', 'add-auth', 'requirements.md'), 'utf8');
-    expect(reqContent).not.toContain('Implement OAuth2 login with Google and GitHub providers.');
+  test('stashes a provided body on sessions[slug].description for ensureItemFiles to drain into the worktree', () => {
+    const description = 'Implement OAuth2 login with Google and GitHub providers.';
+    service.createItem(tmpDir, 'Add auth', 'discovery', undefined, description);
+
+    const index = JSON.parse(fs.readFileSync(path.join(tmpDir, 'tracker', 'index.json'), 'utf8'));
+    expect(index.sessions['add-auth'].description).toBe(description);
+    const itemDir = path.join(tmpDir, 'tracker', 'items', 'add-auth');
+    expect(fs.existsSync(itemDir)).toBe(false);
   });
 
-  test('does not create notes.md when body is omitted', () => {
+  test('does not stash a description when body is omitted', () => {
     service.createItem(tmpDir, 'My Feature', 'discovery');
-    const notesPath = path.join(tmpDir, 'tracker', 'items', 'my-feature', 'notes.md');
-    expect(fs.existsSync(notesPath)).toBe(false);
-    const reqContent = fs.readFileSync(path.join(tmpDir, 'tracker', 'items', 'my-feature', 'requirements.md'), 'utf8');
-    expect(reqContent).toMatch(/\nMy Feature\n/);
+    const index = JSON.parse(fs.readFileSync(path.join(tmpDir, 'tracker', 'index.json'), 'utf8'));
+    expect(index.sessions['my-feature'].description).toBeUndefined();
+    const itemDir = path.join(tmpDir, 'tracker', 'items', 'my-feature');
+    expect(fs.existsSync(itemDir)).toBe(false);
+  });
+
+  test('does not stash a description when body is identical to the title (avoids the duplicate-of-title placeholder)', () => {
+    service.createItem(tmpDir, 'Same Body', 'discovery', undefined, 'Same Body');
+    const index = JSON.parse(fs.readFileSync(path.join(tmpDir, 'tracker', 'index.json'), 'utf8'));
+    expect(index.sessions['same-body'].description).toBeUndefined();
   });
 
   test('uses explicit slug when provided alongside body', () => {
-    service.createItem(tmpDir, 'Proposal Title', 'backlog', 'ai-derived-slug', 'Detailed description from proposal.');
-    const reqPath = path.join(tmpDir, 'tracker', 'items', 'ai-derived-slug', 'requirements.md');
-    expect(fs.existsSync(reqPath)).toBe(true);
-    const notesPath = path.join(tmpDir, 'tracker', 'items', 'ai-derived-slug', 'notes.md');
-    expect(fs.readFileSync(notesPath, 'utf8')).toContain('Detailed description from proposal.');
-    const reqContent = fs.readFileSync(reqPath, 'utf8');
-    expect(reqContent).toMatch(/^slug: ai-derived-slug$/m);
+    const description = 'Detailed description from proposal.';
+    service.createItem(tmpDir, 'Proposal Title', 'backlog', 'ai-derived-slug', description);
+    const index = JSON.parse(fs.readFileSync(path.join(tmpDir, 'tracker', 'index.json'), 'utf8'));
+    expect(index.sessions['ai-derived-slug'].title).toBe('Proposal Title');
+    expect(index.sessions['ai-derived-slug'].description).toBe(description);
+    const itemDir = path.join(tmpDir, 'tracker', 'items', 'ai-derived-slug');
+    expect(fs.existsSync(itemDir)).toBe(false);
   });
 });
 
@@ -1060,13 +1067,28 @@ describe('ensureItemFiles', () => {
     fs.rmSync(worktreeDir, {recursive: true, force: true});
   });
 
-  test('creates a fresh requirements.md in the worktree at tracker/items/<slug>/', () => {
-    service.ensureItemFiles(tmpDir, 'my-feature', worktreeDir, {title: 'My Feature'} as any);
+  test('writes notes.md (no requirements.md stub) when sessions[slug].description is set', () => {
+    const description = 'Build the thing the way the user described it.';
+    service.createItem(tmpDir, 'My Feature', 'implement', 'with-body', description);
+    service.ensureItemFiles(tmpDir, 'with-body', worktreeDir);
+    const destDir = path.join(worktreeDir, 'tracker', 'items', 'with-body');
+    expect(fs.readFileSync(path.join(destDir, 'notes.md'), 'utf8')).toBe(`${description}\n`);
+    expect(fs.existsSync(path.join(destDir, 'requirements.md'))).toBe(false);
+  });
+
+  test('clears sessions[slug].description from the index after draining it into the worktree', () => {
+    service.createItem(tmpDir, 'My Feature', 'implement', 'drain-once', 'one-shot description');
+    service.ensureItemFiles(tmpDir, 'drain-once', worktreeDir);
+    const index = JSON.parse(fs.readFileSync(service.getIndexPath(tmpDir), 'utf8'));
+    expect(index.sessions['drain-once'].description).toBeUndefined();
+    expect(index.sessions['drain-once'].title).toBe('My Feature');
+  });
+
+  test('writes nothing when there is no description and no legacy source', () => {
+    service.ensureItemFiles(tmpDir, 'my-feature', worktreeDir);
     const destDir = path.join(worktreeDir, 'tracker', 'items', 'my-feature');
-    expect(fs.existsSync(destDir)).toBe(true);
-    const reqPath = path.join(destDir, 'requirements.md');
-    expect(fs.existsSync(reqPath)).toBe(true);
-    expect(fs.readFileSync(reqPath, 'utf8')).toContain('title: "My Feature"');
+    expect(fs.existsSync(path.join(destDir, 'requirements.md'))).toBe(false);
+    expect(fs.existsSync(path.join(destDir, 'notes.md'))).toBe(false);
   });
 
   test('does NOT create tracker/index.json in the worktree', () => {
@@ -1074,15 +1096,16 @@ describe('ensureItemFiles', () => {
     expect(fs.existsSync(path.join(worktreeDir, 'tracker', 'index.json'))).toBe(false);
   });
 
-  test('does not overwrite existing files in worktree', () => {
-    const destDir = path.join(worktreeDir, 'tracker', 'items', 'my-feature');
+  test('does not overwrite existing notes.md in worktree', () => {
+    service.createItem(tmpDir, 'Existing', 'implement', 'existing-notes', 'fresh description');
+    const destDir = path.join(worktreeDir, 'tracker', 'items', 'existing-notes');
     fs.mkdirSync(destDir, {recursive: true});
-    fs.writeFileSync(path.join(destDir, 'requirements.md'), 'existing content');
-    service.ensureItemFiles(tmpDir, 'my-feature', worktreeDir);
-    expect(fs.readFileSync(path.join(destDir, 'requirements.md'), 'utf8')).toBe('existing content');
+    fs.writeFileSync(path.join(destDir, 'notes.md'), 'pre-existing notes');
+    service.ensureItemFiles(tmpDir, 'existing-notes', worktreeDir);
+    expect(fs.readFileSync(path.join(destDir, 'notes.md'), 'utf8')).toBe('pre-existing notes');
   });
 
-  test('migrates legacy main-project bucket files into the worktree', () => {
+  test('migrates legacy main-project bucket files into the worktree and deletes the source dir', () => {
     // Simulate a pre-refactor item with files in the main project tracker dir.
     const legacyDir = path.join(tmpDir, 'tracker', 'implementation', 'my-feature');
     fs.mkdirSync(legacyDir, {recursive: true});
@@ -1093,12 +1116,17 @@ describe('ensureItemFiles', () => {
     const destDir = path.join(worktreeDir, 'tracker', 'items', 'my-feature');
     expect(fs.readFileSync(path.join(destDir, 'requirements.md'), 'utf8')).toContain('Legacy');
     expect(fs.readFileSync(path.join(destDir, 'notes.md'), 'utf8')).toBe('legacy notes');
+    expect(fs.existsSync(legacyDir)).toBe(false);
   });
 
-  test('main project index.json is unchanged by seeding', () => {
-    const indexBefore = fs.readFileSync(service.getIndexPath(tmpDir), 'utf8');
+  test('migrates a legacy main-project items dir and deletes the source dir', () => {
+    const legacyItemsDir = path.join(tmpDir, 'tracker', 'items', 'my-feature');
+    fs.mkdirSync(legacyItemsDir, {recursive: true});
+    fs.writeFileSync(path.join(legacyItemsDir, 'requirements.md'), '---\ntitle: From Main\n---\nlegacy body');
+
     service.ensureItemFiles(tmpDir, 'my-feature', worktreeDir);
-    const indexAfter = fs.readFileSync(service.getIndexPath(tmpDir), 'utf8');
-    expect(indexAfter).toBe(indexBefore);
+    const destDir = path.join(worktreeDir, 'tracker', 'items', 'my-feature');
+    expect(fs.readFileSync(path.join(destDir, 'requirements.md'), 'utf8')).toContain('From Main');
+    expect(fs.existsSync(legacyItemsDir)).toBe(false);
   });
 });
