@@ -5,6 +5,9 @@ import {padEndDisplay, fitDisplay} from '../../../shared/utils/formatting.js';
 import {LineWrapper} from '../../../shared/utils/lineWrapper.js';
 import type {CommentStore} from '../../../models.js';
 import type {DiffLine, WrapMode} from '../../../shared/utils/diff/types.js';
+import {isMarkdownFile, lookupBlockContext, type MdContextMap} from '../../../shared/utils/markdown/diffPrepass.js';
+import type {Span} from '../../../shared/utils/markdown/types.js';
+import {buildMdRows, MdLine} from './mdRowHelpers.js';
 
 type Props = {
   lines: DiffLine[];
@@ -15,6 +18,7 @@ type Props = {
   perFileIndex: (number | undefined)[];
   commentStore: CommentStore;
   getLanguage: (fileName: string | undefined) => string;
+  mdContextMap: MdContextMap;
 };
 
 export default function UnifiedDiffRows({
@@ -26,6 +30,7 @@ export default function UnifiedDiffRows({
   perFileIndex,
   commentStore,
   getLanguage,
+  mdContextMap,
 }: Props) {
   const bodyWidth = Math.max(1, terminalWidth - 4);
   const isWrap = wrapMode === 'wrap';
@@ -50,6 +55,23 @@ export default function UnifiedDiffRows({
         const useSyntax = (unifiedLine.type === 'added' || unifiedLine.type === 'removed') && !isCurrentLine;
         const lineTint = useSyntax ? (unifiedLine.type === 'added' ? 'green' : 'red') : undefined;
         const lineBackground = isFileHeader ? (rowBackground ?? 'gray') : (rowBackground ?? lineTint);
+
+        const isMd = isMarkdownFile(unifiedLine.fileName) && unifiedLine.type !== 'header';
+        const mdCtx = isMd ? lookupBlockContext(unifiedLine, 'unified', mdContextMap) : null;
+
+        if (mdCtx) {
+          const prefixSpans: Span[] = [{text: bodyPrefix}];
+          const rowsSpans = buildMdRows(unifiedLine.text || ' ', mdCtx, bodyWidth, isWrap, prefixSpans);
+          return rowsSpans.map((spans, rowIdx) => (
+            <Box key={`line-${actualLineIndex}-${rowIdx}`} flexDirection="row" height={1} flexShrink={0}>
+              <Text color={gutterColor} backgroundColor={lineBackground} bold={isCurrentLine}>
+                {rowIdx === 0 ? gutterSymbol : '  '}
+              </Text>
+              <MdLine spans={spans} width={bodyWidth} background={lineBackground} bold={isCurrentLine} />
+            </Box>
+          ));
+        }
+
         const rawBody = `${bodyPrefix}${unifiedLine.text || ' '}`;
 
         if (isWrap) {

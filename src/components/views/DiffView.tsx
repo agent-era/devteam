@@ -1,6 +1,8 @@
 import React, {useEffect, useMemo, useRef, useState} from 'react';
-import {Box, Text} from 'ink';
+import {Box, Text, useInput} from 'ink';
 import {useTerminalDimensions} from '../../hooks/useTerminalDimensions.js';
+import {useMarkdownTheme} from '../../hooks/useMarkdownTheme.js';
+import {cycleMarkdownTheme} from '../../shared/utils/markdown/themes.js';
 import CommentInputDialog from '../dialogs/CommentInputDialog.js';
 import SessionWaitingDialog from '../dialogs/SessionWaitingDialog.js';
 import UnsubmittedCommentsDialog from '../dialogs/UnsubmittedCommentsDialog.js';
@@ -15,6 +17,7 @@ import {getLanguageFromFileName} from '../../shared/utils/languageMapping.js';
 import {loadDiff} from '../../shared/utils/diff/loadDiff.js';
 import {convertToSideBySide} from '../../shared/utils/diff/convertToSideBySide.js';
 import type {DiffLine, SideBySideLine} from '../../shared/utils/diff/types.js';
+import {buildMdContextMap, type MdContextMap} from '../../shared/utils/markdown/diffPrepass.js';
 import UnifiedDiffRows from './diff/UnifiedDiffRows.js';
 import SideBySideDiffRows from './diff/SideBySideDiffRows.js';
 import {useDiffComments} from './diff/hooks/useDiffComments.js';
@@ -31,8 +34,12 @@ type Props = {
 
 export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, diffType = 'full', onAttachToSession, workspaceFeature}: Props) {
   const {rows: terminalHeight, columns: terminalWidth} = useTerminalDimensions();
+  // Subscribe so theme cycles trigger a re-render; the value itself is consumed
+  // via getActiveMarkdownTheme() inside the row renderers.
+  useMarkdownTheme();
   const [lines, setLines] = useState<DiffLine[]>([]);
   const [sideBySideLines, setSideBySideLines] = useState<SideBySideLine[]>([]);
+  const [mdContextMap, setMdContextMap] = useState<MdContextMap>(() => new Map());
   const [currentFileHeader, setCurrentFileHeader] = useState<string>('');
   const [currentHunkHeader, setCurrentHunkHeader] = useState<string>('');
 
@@ -60,6 +67,10 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
 
   const nav = useDiffNavigation({lines, sideBySideLines, viewportRowsRef, callbacksRef});
 
+  useInput((input) => {
+    if (input === 't') cycleMarkdownTheme();
+  });
+
   const comments = useDiffComments({
     worktreePath, diffType, workspaceFeature, onClose, onAttachToSession,
     viewMode: nav.viewMode, lines, sideBySideLines, selectedLine: nav.selectedLine,
@@ -68,14 +79,23 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
 
   useEffect(() => {
     if (!comments.baseHashReady) return;
+    let cancelled = false;
     (async () => {
       const lns = await loadDiff(worktreePath, diffType, diffType === 'full' ? comments.baseCommitHash : undefined);
+      if (cancelled) return;
       setLines(lns);
       setSideBySideLines(convertToSideBySide(lns));
       nav.setScrollRow(0);
       nav.setTargetScrollRow(0);
       nav.setSelectedLine(0);
+      // Pre-rendering pass: scan each .md file's pre/post images so per-line
+      // styling later knows e.g. whether a line is inside a fenced code block.
+      const baseHash = diffType === 'uncommitted' ? '' : comments.baseCommitHash;
+      const map = await buildMdContextMap(worktreePath, lns, baseHash);
+      if (cancelled) return;
+      setMdContextMap(map);
     })();
+    return () => { cancelled = true; };
   }, [worktreePath, diffType, comments.baseCommitHash, comments.baseHashReady]);
 
   const overlayAreaHeight = nav.showFileTreeOverlay ? Math.max(6, Math.floor(terminalHeight / 2)) : 0;
@@ -231,6 +251,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
             perFileIndex={unifiedPerFileIndex}
             commentStore={comments.commentStore}
             getLanguage={languageCache}
+            mdContextMap={mdContextMap}
           />
         ) : (
           <SideBySideDiffRows
@@ -242,6 +263,7 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
             perFileIndex={sideBySidePerFileIndex}
             commentStore={comments.commentStore}
             getLanguage={languageCache}
+            mdContextMap={mdContextMap}
           />
         )}
       </Box>
