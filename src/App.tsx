@@ -249,16 +249,25 @@ function AppContent() {
   const ensureItemWorktree = async (
     project: {name: string; path: string},
     item: TrackerItem,
-  ): Promise<{worktree: WorktreeInfo; fresh: boolean} | null> => {
+  ): Promise<{worktree: WorktreeInfo; item: TrackerItem; fresh: boolean} | null> => {
     const existing = worktrees.find(wt => wt.project === project.name && wt.feature === item.slug) || null;
     if (existing) {
       tracker.ensureItemFiles(project.path, item.slug, existing.path);
-      return {worktree: existing, fresh: false};
+      return {worktree: existing, item, fresh: false};
     }
     const created = await recreateImplementWorktree(project.name, item.slug);
     if (!created) return null;
-    tracker.ensureItemFiles(project.path, item.slug, created.path);
-    return {worktree: created, fresh: true};
+    // GitService suffixes the worktree name (foo → foo-2) when a branch with the
+    // requested name already exists. Without propagating that back to the tracker,
+    // the slug, worktree dir, and tmux session name silently drift apart. Adopt
+    // the suffixed name as the canonical slug so they stay in lockstep.
+    let activeItem = item;
+    if (created.feature !== item.slug) {
+      const renamed = tracker.renameItem(project.path, item.slug, created.feature);
+      if (renamed) activeItem = {...item, slug: created.feature};
+    }
+    tracker.ensureItemFiles(project.path, activeItem.slug, created.path);
+    return {worktree: created, item: activeItem, fresh: true};
   };
 
   const prepareItemSession = async (
@@ -268,8 +277,8 @@ function AppContent() {
   ) => {
     const ensured = await ensureItemWorktree(project, item);
     if (!ensured) return null;
-    const worktreeItemDir = path.join(ensured.worktree.path, 'tracker', 'items', item.slug);
-    return {worktree: ensured.worktree, fresh: ensured.fresh, prompt: buildPromptForItem(item, stage, worktreeItemDir)};
+    const worktreeItemDir = path.join(ensured.worktree.path, 'tracker', 'items', ensured.item.slug);
+    return {worktree: ensured.worktree, fresh: ensured.fresh, prompt: buildPromptForItem(ensured.item, stage, worktreeItemDir)};
   };
 
   const launchSessionForItem = async (
