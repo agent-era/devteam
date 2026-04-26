@@ -46,8 +46,7 @@ export class TestScenarioBuilder {
       }
       
       if (options?.pr) {
-        const pr = setupTestPRStatus(worktree.path, options.pr);
-        worktree.pr = pr;
+        setupTestPRStatus(worktree.path, options.pr);
       }
       
       memoryStore.worktrees.set(worktree.path, worktree);
@@ -185,7 +184,6 @@ export function createArchivedFeatures(project: string, features: string[]) {
     branch: `feature/${feature}`,
     is_archived: true,
     git: new GitStatus(),
-    pr: new PRStatus(),
     session: new SessionInfo()
   }));
   

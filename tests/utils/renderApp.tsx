@@ -316,16 +316,19 @@ function generateArchivedOutput(): string {
   for (const [project, worktrees] of archived) {
     for (const worktree of worktrees) {
       let line = `› ${project}/${worktree.feature}`;
-      
-      // Add PR information if available
-      if (worktree.pr && worktree.pr.number) {
-        line += ` (PR #${worktree.pr.number}`;
-        if (worktree.pr.state) {
-          line += ` - ${worktree.pr.state}`;
+
+      // PR data lives in memoryStore.prStatus keyed by worktree path (mirroring
+      // production: GitHubContext.pullRequests is keyed by path, not stored on
+      // WorktreeInfo).
+      const pr = memoryStore.prStatus.get(worktree.path);
+      if (pr && pr.number) {
+        line += ` (PR #${pr.number}`;
+        if (pr.state) {
+          line += ` - ${pr.state}`;
         }
         line += ')';
       }
-      
+
       output += line + '\n';
     }
   }

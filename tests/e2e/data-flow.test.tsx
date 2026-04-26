@@ -73,7 +73,6 @@ describe('Data Flow E2E', () => {
         branch: mergedWorktree.branch,
         is_archived: true,
         git: new GitStatus(),
-        pr: new PRStatus(),
         session: new SessionInfo()
       });
       
@@ -239,7 +238,6 @@ describe('Data Flow E2E', () => {
         branch: baseWorktree.branch,
         is_archived: true,
         git: new GitStatus(),
-        pr: new PRStatus(),
         session: new SessionInfo()
       });
       

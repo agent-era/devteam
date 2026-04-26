@@ -1,4 +1,4 @@
-import type {WorktreeInfo} from '../../../models.js';
+import type {PRStatus, WorktreeInfo} from '../../../models.js';
 import {
   GIT_AHEAD,
   GIT_BEHIND,
@@ -32,7 +32,7 @@ export function formatPushStatus(worktree: WorktreeInfo): string {
 }
 
 
-export function formatPRStatus(pr: WorktreeInfo['pr']): string {
+export function formatPRStatus(pr: PRStatus | undefined | null): string {
   if (!pr || pr.isNotChecked) return '';
   if (pr.isLoading) return '*';
   if (pr.noPR) return '-';
@@ -51,7 +51,7 @@ export function formatPRStatus(pr: WorktreeInfo['pr']): string {
   return '';
 }
 
-export function shouldDimRow(pr: WorktreeInfo['pr']): boolean {
+export function shouldDimRow(pr: PRStatus | undefined | null): boolean {
   return pr?.is_merged === true || pr?.state === 'MERGED';
 }
 

@@ -1,5 +1,6 @@
 import {describe, expect, test} from '@jest/globals';
-import {getTrackerCardDisplayState} from '../../src/screens/TrackerBoardScreen.js';
+import {getTrackerCardDisplayState, isItemPRMerged} from '../../src/screens/TrackerBoardScreen.js';
+import {PRStatus, WorktreeInfo} from '../../src/models.js';
 
 const baseFlags = {
   prMerged: false,
@@ -179,5 +180,44 @@ describe('getTrackerCardDisplayState', () => {
       secondaryBold: false,
       secondaryDim: true,
     });
+  });
+});
+
+describe('isItemPRMerged', () => {
+  // PR data is keyed by worktree path on GitHubContext.pullRequests, NOT on the
+  // WorktreeInfo object. Two prior fixes (PR #221, PR #224) shipped reading
+  // wt.pr.is_merged and silently failed because that field was never assigned.
+  // These tests pin the lookup path so it can't drift back.
+  const wt = new WorktreeInfo({
+    project: 'demo',
+    feature: 'login-flow',
+    path: '/fake/projects/demo-branches/login-flow',
+  });
+
+  test('returns true when GitHubContext has a merged PR for the worktree path', () => {
+    const prs = {[wt.path]: new PRStatus({state: 'MERGED'})};
+    expect(isItemPRMerged(wt, prs)).toBe(true);
+  });
+
+  test('returns false when the matching PR is open', () => {
+    const prs = {[wt.path]: new PRStatus({state: 'OPEN'})};
+    expect(isItemPRMerged(wt, prs)).toBe(false);
+  });
+
+  test('returns false when no PR entry exists for the worktree path', () => {
+    expect(isItemPRMerged(wt, {})).toBe(false);
+  });
+
+  test('returns false when the worktree itself is null (orphan/missing)', () => {
+    const prs = {[wt.path]: new PRStatus({state: 'MERGED'})};
+    expect(isItemPRMerged(null, prs)).toBe(false);
+  });
+
+  test('does not consult WorktreeInfo for PR data — only the pullRequests map', () => {
+    // Sanity check: even if someone later re-introduces a `pr` field by mistake,
+    // this helper must keep reading from the map.
+    const wtWithStrayPr = new WorktreeInfo({...wt});
+    (wtWithStrayPr as any).pr = new PRStatus({state: 'MERGED'});
+    expect(isItemPRMerged(wtWithStrayPr, {})).toBe(false);
   });
 });
