@@ -1,0 +1,6 @@
+{
+  "stage": "cleanup",
+  "state": "waiting_for_approval",
+  "brief_description": "cleanup complete: merged cards now show subdued Merged text, tests are green, ready for PR approval",
+  "timestamp": "2026-04-26T03:31:33Z"
+}
