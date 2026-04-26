@@ -55,7 +55,7 @@ export default function CreateFeatureScreen({
             if (needsSelection) {
               showAIToolSelection(created);
             } else {
-              await attachSession(created);
+              await attachSession(created, undefined, undefined, {freshWorktree: true});
             }
           };
           if (created.feature !== safeFeature) {
