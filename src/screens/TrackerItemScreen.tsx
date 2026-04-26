@@ -329,7 +329,7 @@ export default function TrackerItemScreen({
     else if (key.upArrow) setActiveScroll(n => n - 1);
     else if (key.downArrow) setActiveScroll(n => n + 1);
     else if (key.pageUp) setActiveScroll(n => n - viewportHeight);
-    else if (key.pageDown) setActiveScroll(n => n + viewportHeight);
+    else if (key.pageDown || input === ' ') setActiveScroll(n => n + viewportHeight);
     else if (input === 'g') setActiveScroll(() => 0);
     else if (input === 'G') setActiveScroll(() => maxScroll);
     else if (input === 't') cycleMarkdownTheme();
