@@ -3,6 +3,8 @@ import {findBaseBranch} from '../gitHelpers.js';
 import {BASE_BRANCH_CANDIDATES} from '../../../constants.js';
 import type {DiffLine, DiffType} from './types.js';
 
+const BINARY_FILE_PLACEHOLDER = 'Binary file not shown';
+
 export function parseUnifiedDiff(diff: string): Map<string, DiffLine[]> {
   const fileContents = new Map<string, DiffLine[]>();
   if (!diff || !diff.trim()) return fileContents;
@@ -74,6 +76,23 @@ export async function resolveBaseCommitHash(worktreePath: string, diffType: Diff
   }
 }
 
+async function isBinaryUntrackedFile(worktreePath: string, filePath: string): Promise<boolean> {
+  try {
+    const numstat = await runCommandAsync([
+      'bash',
+      '-lc',
+      `cd ${JSON.stringify(worktreePath)} && git diff --no-index --numstat -- /dev/null ${JSON.stringify(filePath)} || true`,
+    ]);
+
+    if (!numstat.trim()) return true;
+
+    const firstLine = numstat.split('\n').find(Boolean) || '';
+    return firstLine.startsWith('-\t-\t');
+  } catch {
+    return true;
+  }
+}
+
 export async function loadDiff(worktreePath: string, diffType: DiffType = 'full', baseCommitHash?: string): Promise<DiffLine[]> {
   let diff: string | null = null;
 
@@ -91,6 +110,11 @@ export async function loadDiff(worktreePath: string, diffType: DiffType = 'full'
     for (const fp of untracked.split('\n').filter(Boolean)) {
       const fileLines: DiffLine[] = [];
       fileLines.push({type: 'header', text: `📁 ${fp} (new file)`, fileName: fp, headerType: 'file'});
+      if (await isBinaryUntrackedFile(worktreePath, fp)) {
+        fileLines.push({type: 'context', text: BINARY_FILE_PLACEHOLDER, fileName: fp});
+        fileContents.set(fp, fileLines);
+        continue;
+      }
       try {
         const cat = await runCommandAsync(['bash', '-lc', `cd ${JSON.stringify(worktreePath)} && sed -n '1,200p' ${JSON.stringify(fp)}`]);
         for (const l of (cat || '').split('\n')) {
