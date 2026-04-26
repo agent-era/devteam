@@ -1312,7 +1312,7 @@ Read the generated stages progression skill for the project's preferred working 
 
 You must keep \`tracker/items/<slug>/status.json\` current. It's the canonical live state for this item and ralph reads it to decide whether you're stuck or legitimately waiting. The kanban renders \`brief_description\` directly on the card, so write about *substance*, not stage identity.
 
-**Never commit or stage \`status.json\`** — it's gitignored runtime state. Each write rewrites the timestamp, so committing it bakes wall-clock churn into history.
+**Never commit or stage \`status.json\`** — it's gitignored runtime state that rewrites on every update.
 
 Schema:
 \`\`\`json

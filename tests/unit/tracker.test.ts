@@ -351,7 +351,6 @@ describe('defaultStageFileContent renders status + gate protocol', () => {
     // The three-state enum is the canonical waiting signal.
     expect(content).toContain('waiting_for_input');
     expect(content).toContain('waiting_for_approval');
-    // Agents must be told not to commit the runtime file.
     expect(content).toContain('Never commit or stage `status.json`');
   });
 

@@ -147,8 +147,5 @@ vite.config.ts.timestamp-*
 .devteam
 .cpuprofile
 
-# Per-item agent runtime state. Rewritten on every stage transition by ralph
-# and the stages-progression skill — committing it produces diff noise and
-# bakes wall-clock timestamps into history. Read locally; gitignoring does
-# not affect runtime.
+# Per-item agent runtime state (rewritten on every stage transition)
 tracker/items/*/status.json
