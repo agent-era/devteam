@@ -221,9 +221,12 @@ export interface TrackerIndex {
   backlog?: Partial<Record<TrackerBacklogStage, string[]>>;
   implementation?: Partial<Record<TrackerImplementationStage, string[]>>;
   archive?: string[];
-  // Sidecar metadata keyed by slug (currently just the title, used to display items
-  // on the board before their requirements file is materialised).
-  sessions?: Record<string, {title?: string; inactive?: boolean}>;
+  // Sidecar metadata keyed by slug. `title` is used to display items on the board
+  // before their requirements file is materialised. `description` is the user-typed
+  // body captured at item creation; ensureItemFiles drains it into notes.md inside
+  // the worktree the first time one exists, so the body lands in the worktree (not
+  // in the project root) without leaving a staging file behind.
+  sessions?: Record<string, {title?: string; inactive?: boolean; description?: string}>;
 }
 
 export interface TrackerFrontmatter {
@@ -553,30 +556,15 @@ export class TrackerService {
     this.removeSlugFromIndexObj(index, slug);
     this.addSlugToIndexObj(index, slug, stage);
     const sessions = (index.sessions ?? {}) as NonNullable<TrackerIndex['sessions']>;
-    sessions[slug] = {...sessions[slug], title};
+    const entry: NonNullable<TrackerIndex['sessions']>[string] = {...sessions[slug], title};
+    // The user's initial description (the "what / why" they had in mind when they
+    // created the item) is the discovery stage's notes.md content. We can't write
+    // notes.md here because no worktree exists yet — stash it on the index and let
+    // ensureItemFiles drain it into the worktree once one is created.
+    if (body && body !== title) entry.description = body;
+    sessions[slug] = entry;
     index.sessions = sessions;
     writeJSONAtomic(this.getIndexPath(projectPath), index);
-    const mainItemDir = path.join(projectPath, 'tracker', 'items', slug);
-    ensureDirectory(mainItemDir);
-    // Requirements is just a stub with the title — it's written for real during
-    // the requirements stage. The user's initial description (the "what / why"
-    // they had in mind when they created the item) goes into notes.md, which is
-    // the discovery stage's output file.
-    this.writeRequirementsStub(path.join(mainItemDir, 'requirements.md'), title, slug, title);
-    if (body && body !== title) {
-      const notesPath = path.join(mainItemDir, 'notes.md');
-      if (!fs.existsSync(notesPath)) fs.writeFileSync(notesPath, `${body}\n`);
-    }
-  }
-
-  private writeRequirementsStub(reqPath: string, title: string, slug: string, body: string): boolean {
-    if (fs.existsSync(reqPath)) return false;
-    const today = new Date().toISOString().slice(0, 10);
-    // Strip newlines and quote the title so YAML-significant characters (":",
-    // "'", "[", "!") in user-typed titles can't forge frontmatter keys.
-    const yamlTitle = JSON.stringify(title.replace(/[\r\n]+/g, ' ').trim());
-    fs.writeFileSync(reqPath, `---\ntitle: ${yamlTitle}\nslug: ${slug}\nupdated: ${today}\n---\n\n${body}\n`);
-    return true;
   }
 
   async deriveSlug(title: string, existingSlugs: string[]): Promise<string> {
@@ -685,19 +673,23 @@ export class TrackerService {
   }
 
   // Ensures the item's content files exist inside the worktree at
-  // <wt>/tracker/items/<slug>/. Migrates files from any legacy location (older
-  // `<wt>/tracker/<slug>/` layout, or pre-refactor main-project bucket dirs) if
-  // present, otherwise creates a fresh requirements.md stub. Commits to the worktree
+  // <wt>/tracker/items/<slug>/. New items don't have any files yet; this is where
+  // the user-typed description (stashed on `index.sessions[slug].description` by
+  // createItem) gets drained into notes.md so the body lands in the worktree, not
+  // the project root. Pre-existing legacy main-project layouts are migrated and
+  // then the source dir is deleted to clean up project-root pollution from the
+  // old behaviour. No requirements.md stub is created — that file only appears
+  // once the requirements stage produces real content. Commits to the worktree
   // branch so the seed survives a future worktree obliteration.
   ensureItemFiles(mainProjectPath: string, slug: string, worktreePath: string, item?: TrackerItem): void {
+    void item; // signature retained for callers; title fallback now reads from the index
     const destDir = path.join(worktreePath, 'tracker', 'items', slug);
     ensureDirectory(destDir);
-    const reqPath = path.join(destDir, 'requirements.md');
 
     let wroteAnything = false;
 
-    // 1) Migrate from legacy locations (highest priority first), then the main-project
-    // stub written by createItem as a last resort.
+    // 1) Migrate from legacy locations into the worktree, then delete the source dir
+    // so the main project tree gets cleaned up. Highest-priority sources first.
     const legacySources = [
       path.join(worktreePath, 'tracker', slug),
       ...this.findLegacyMainProjectDirs(mainProjectPath, slug),
@@ -710,13 +702,26 @@ export class TrackerService {
         fs.copyFileSync(path.join(src, file), destFile);
         wroteAnything = true;
       }
+      // The legacy worktree-internal source (`<wt>/tracker/<slug>/`) sits inside the
+      // worktree itself; deleting it is the same act as moving its contents up. The
+      // main-project legacy sources are real project-root pollution that we want gone.
+      fs.rmSync(src, {recursive: true, force: true});
     }
 
-    // 2) If we still have no requirements.md, write a fresh stub.
-    const stubTitle = item?.title || slug;
-    if (this.writeRequirementsStub(reqPath, stubTitle, slug, stubTitle)) {
-      wroteAnything = true;
+    // 2) Drain a user-typed description from the index into notes.md. createItem
+    // stashes the body here when no worktree exists; we only get to write it once.
+    const notesPath = path.join(destDir, 'notes.md');
+    if (!fs.existsSync(notesPath)) {
+      const description = this.readSessionDescription(mainProjectPath, slug);
+      if (description) {
+        fs.writeFileSync(notesPath, `${description}\n`);
+        wroteAnything = true;
+      }
     }
+    // Always clear the field once we've reached the worktree — even if notes.md
+    // already existed (e.g. legacy migration produced one), the description has
+    // served its purpose and shouldn't linger on the index.
+    this.clearSessionDescription(mainProjectPath, slug);
 
     // 3) Commit the seeded files only if we actually wrote something. Skipping the
     // empty-commit attempt avoids a couple of git fork+exec calls on every reattach.
@@ -724,6 +729,24 @@ export class TrackerService {
     const relativeDestDir = path.relative(worktreePath, destDir);
     runCommandQuick(['git', '-C', worktreePath, 'add', relativeDestDir]);
     runCommandQuick(['git', '-C', worktreePath, 'commit', '-m', `tracker: seed item files for ${slug}`]);
+  }
+
+  private readSessionDescription(projectPath: string, slug: string): string | undefined {
+    if (!this.hasTracker(projectPath)) return undefined;
+    return this.readIndex(projectPath).sessions?.[slug]?.description;
+  }
+
+  private clearSessionDescription(projectPath: string, slug: string): void {
+    if (!this.hasTracker(projectPath)) return;
+    const index = this.readIndex(projectPath);
+    const entry = index.sessions?.[slug];
+    if (!entry || entry.description === undefined) return;
+    const {description: _drop, ...rest} = entry;
+    void _drop;
+    const sessions = {...(index.sessions ?? {})};
+    sessions[slug] = rest;
+    index.sessions = sessions;
+    writeJSONAtomic(this.getIndexPath(projectPath), index);
   }
 
   private findLegacyMainProjectDirs(projectPath: string, slug: string): string[] {
@@ -794,7 +817,7 @@ export class TrackerService {
       body = parsed.body;
     }
     const resolvedSlug = frontmatter.slug || slug;
-    const title = frontmatter.title || firstNonEmptyLine(body) || resolvedSlug;
+    const title = frontmatter.title || index.sessions?.[slug]?.title || firstNonEmptyLine(body) || resolvedSlug;
     const implementationPath = path.join(itemDir, 'implementation.md');
     const notesPath = path.join(itemDir, 'notes.md');
     return {

@@ -29,13 +29,29 @@ describe('board create-item flow (derive-first, no rename)', () => {
     expect(col.items.map(i => i.slug)).not.toContain('add-oauth-login-for'); // no temp slug
   });
 
-  test('user-typed description is written to notes.md (discovery output), not requirements.md', () => {
+  test('user-typed description is stashed on the index for the worktree to drain, not written to the project root', () => {
     const description = 'Allow users to sign in with Google and GitHub via OAuth2.';
     service.createItem(tmpDir, 'OAuth Login', 'backlog', 'oauth-login', description);
-    const notesPath = path.join(tmpDir, 'tracker', 'items', 'oauth-login', 'notes.md');
-    expect(fs.readFileSync(notesPath, 'utf8')).toContain(description);
-    const reqPath = path.join(tmpDir, 'tracker', 'items', 'oauth-login', 'requirements.md');
-    expect(fs.readFileSync(reqPath, 'utf8')).not.toContain(description);
+
+    const itemDir = path.join(tmpDir, 'tracker', 'items', 'oauth-login');
+    expect(fs.existsSync(itemDir)).toBe(false);
+
+    const index = JSON.parse(fs.readFileSync(path.join(tmpDir, 'tracker', 'index.json'), 'utf8'));
+    expect(index.sessions['oauth-login'].description).toBe(description);
+
+    const worktreeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'board-create-wt-'));
+    try {
+      service.ensureItemFiles(tmpDir, 'oauth-login', worktreeDir);
+      const wtItemDir = path.join(worktreeDir, 'tracker', 'items', 'oauth-login');
+      const notesPath = path.join(wtItemDir, 'notes.md');
+      expect(fs.readFileSync(notesPath, 'utf8')).toContain(description);
+      expect(fs.existsSync(path.join(wtItemDir, 'requirements.md'))).toBe(false);
+
+      const after = JSON.parse(fs.readFileSync(path.join(tmpDir, 'tracker', 'index.json'), 'utf8'));
+      expect(after.sessions['oauth-login'].description).toBeUndefined();
+    } finally {
+      fs.rmSync(worktreeDir, {recursive: true, force: true});
+    }
   });
 
   test('single-tool path calls onLaunchItemBackground immediately after slug derivation', async () => {
