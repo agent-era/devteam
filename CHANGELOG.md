@@ -8,7 +8,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - Native markdown rendering in the tracker item detail view and the diff view
 - Tracker detail view: tab strip across the top (Discovery / Requirements / Implement plus any extra `.md` files in the item dir); ←/→ moves tabs, ↑/↓ PgUp/PgDn g/G scroll. The first stage without an `.md` file shows a “press [enter] to advance” prompt; later empty stages are dimmed
 - Diff view: `.md` lines render as styled markdown (headings/bold/italic/code/lists/blockquotes/HRs) instead of raw source. A pre-rendering pass scans each `.md` file’s pre/post images so per-line styling has full block context (e.g. lines inside fenced code render verbatim)
-- 6 markdown themes (`bright`, `forest`, `sunset`, `ocean`, `neon`, `mono`) with distinct colour palettes; press `[t]` to cycle
+- 8 markdown themes (`bright`, `forest`, `sunset`, `ocean`, `neon`, `autumn`, `candy`, `mono`) with distinct colour palettes; press `[t]` to cycle
 - Add changes here. The first bullet under each release is used as the short “what’s new” message in the app’s update notice.
 
 ## 1.1.2 - 2026-04-19

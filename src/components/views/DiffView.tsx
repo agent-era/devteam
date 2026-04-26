@@ -79,8 +79,10 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
 
   useEffect(() => {
     if (!comments.baseHashReady) return;
+    let cancelled = false;
     (async () => {
       const lns = await loadDiff(worktreePath, diffType, diffType === 'full' ? comments.baseCommitHash : undefined);
+      if (cancelled) return;
       setLines(lns);
       setSideBySideLines(convertToSideBySide(lns));
       nav.setScrollRow(0);
@@ -90,8 +92,10 @@ export default function DiffView({worktreePath, title = 'Diff Viewer', onClose, 
       // styling later knows e.g. whether a line is inside a fenced code block.
       const baseHash = diffType === 'uncommitted' ? '' : comments.baseCommitHash;
       const map = await buildMdContextMap(worktreePath, lns, baseHash);
+      if (cancelled) return;
       setMdContextMap(map);
     })();
+    return () => { cancelled = true; };
   }, [worktreePath, diffType, comments.baseCommitHash, comments.baseHashReady]);
 
   const overlayAreaHeight = nav.showFileTreeOverlay ? Math.max(6, Math.floor(terminalHeight / 2)) : 0;

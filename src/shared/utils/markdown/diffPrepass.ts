@@ -51,10 +51,8 @@ export async function buildMdContextMap(
   }
 
   await Promise.all(Array.from(seen).map(async (fileName) => {
-    const [postRaw, preRaw] = await Promise.all([
-      Promise.resolve(readFileOrNull(path.join(worktreePath, fileName))),
-      readPreImage(worktreePath, fileName, baseHash || ''),
-    ]);
+    const postRaw = readFileOrNull(path.join(worktreePath, fileName));
+    const preRaw = await readPreImage(worktreePath, fileName, baseHash || '');
     map.set(fileName, {
       post: postRaw !== null ? computeBlockContext(postRaw) : null,
       pre: preRaw !== null ? computeBlockContext(preRaw) : null,
@@ -64,6 +62,15 @@ export async function buildMdContextMap(
   return map;
 }
 
+/** Minimal fields lookupBlockContext needs — accepts a DiffLine or a
+ *  side-by-side pane without forcing callers to construct a full DiffLine. */
+export interface BlockContextLookupRef {
+  type: DiffLine['type'] | 'empty';
+  fileName?: string;
+  oldLineIndex?: number;
+  newLineIndex?: number;
+}
+
 /**
  * Look up the block context for a single diff line. Added/context lines
  * are read from the post-image; removed lines from the pre-image. Falls
@@ -71,29 +78,29 @@ export async function buildMdContextMap(
  * the file couldn't be read), so the line still gets inline styling.
  */
 export function lookupBlockContext(
-  line: DiffLine,
+  ref: BlockContextLookupRef,
   side: 'left' | 'right' | 'unified',
   mdMap: MdContextMap
 ): BlockContext | null {
-  if (!line.fileName || !isMarkdownFile(line.fileName)) return null;
-  if (line.type === 'header') return null;
+  if (!ref.fileName || !isMarkdownFile(ref.fileName)) return null;
+  if (ref.type === 'header' || ref.type === 'empty') return null;
 
-  const entry = mdMap.get(line.fileName);
+  const entry = mdMap.get(ref.fileName);
   if (!entry) return {kind: 'para'};
 
-  if (line.type === 'removed' || side === 'left') {
-    if (entry.pre && line.oldLineIndex !== undefined && entry.pre[line.oldLineIndex]) {
-      return entry.pre[line.oldLineIndex];
+  if (ref.type === 'removed' || side === 'left') {
+    if (entry.pre && ref.oldLineIndex !== undefined && entry.pre[ref.oldLineIndex]) {
+      return entry.pre[ref.oldLineIndex];
     }
     return {kind: 'para'};
   }
 
-  if (entry.post && line.newLineIndex !== undefined && entry.post[line.newLineIndex]) {
-    return entry.post[line.newLineIndex];
+  if (entry.post && ref.newLineIndex !== undefined && entry.post[ref.newLineIndex]) {
+    return entry.post[ref.newLineIndex];
   }
   // For untracked / new files where pre is missing but post exists, try post.
-  if (entry.post && line.oldLineIndex !== undefined && entry.post[line.oldLineIndex]) {
-    return entry.post[line.oldLineIndex];
+  if (entry.post && ref.oldLineIndex !== undefined && entry.post[ref.oldLineIndex]) {
+    return entry.post[ref.oldLineIndex];
   }
   return {kind: 'para'};
 }

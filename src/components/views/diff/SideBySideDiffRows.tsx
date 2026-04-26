@@ -4,7 +4,7 @@ import SyntaxHighlight from 'ink-syntax-highlight';
 import {padEndDisplay, truncateDisplay} from '../../../shared/utils/formatting.js';
 import {LineWrapper} from '../../../shared/utils/lineWrapper.js';
 import type {CommentStore} from '../../../models.js';
-import type {DiffLine, SideBySideLine, WrapMode} from '../../../shared/utils/diff/types.js';
+import type {SideBySideLine, WrapMode} from '../../../shared/utils/diff/types.js';
 import {isMarkdownFile, lookupBlockContext, type MdContextMap} from '../../../shared/utils/markdown/diffPrepass.js';
 import type {Span} from '../../../shared/utils/markdown/types.js';
 import {buildMdRows, MdLine} from './mdRowHelpers.js';
@@ -58,14 +58,15 @@ export default function SideBySideDiffRows({
     }
 
     if (pane.type !== 'header' && pane.type !== 'empty' && isMarkdownFile(pane.fileName)) {
-      const fakeLine: DiffLine = {
-        type: pane.type === 'context' ? 'context' : (side === 'left' ? 'removed' : 'added'),
-        text: pane.text,
+      const refType = pane.type === 'context'
+        ? 'context'
+        : (side === 'left' ? 'removed' : 'added');
+      const ctx = lookupBlockContext({
+        type: refType,
         fileName: pane.fileName,
         oldLineIndex: pane.oldLineIndex,
         newLineIndex: pane.newLineIndex,
-      };
-      const ctx = lookupBlockContext(fakeLine, side, mdContextMap);
+      }, side, mdContextMap);
       if (ctx) {
         const prefixSpans: Span[] = [{text: prefix}];
         const spanRows = buildMdRows(pane.text || ' ', ctx, paneWidth, isWrap, prefixSpans);

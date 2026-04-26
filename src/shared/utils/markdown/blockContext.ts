@@ -20,23 +20,18 @@ export function computeBlockContext(content: string): BlockContext[] {
   const out: BlockContext[] = new Array(lines.length + 1);
   out[0] = {kind: 'blank'};
 
-  let inFence = false;
-  let fenceChar = '';
-  let fenceLen = 0;
+  let closeRe: RegExp | null = null;
   let fenceLang: string | undefined;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const idx = i + 1;
 
-    if (inFence) {
-      const closeRe = new RegExp(`^\\s*${fenceChar === '\`' ? '`' : '~'}{${fenceLen},}\\s*$`);
+    if (closeRe) {
       const close = closeRe.test(line);
       out[idx] = {kind: 'code', lang: fenceLang, isFenceMarker: close};
       if (close) {
-        inFence = false;
-        fenceChar = '';
-        fenceLen = 0;
+        closeRe = null;
         fenceLang = undefined;
       }
       continue;
@@ -44,10 +39,10 @@ export function computeBlockContext(content: string): BlockContext[] {
 
     const open = line.match(FENCE_OPEN);
     if (open) {
-      inFence = true;
       const marker = open[2];
-      fenceChar = marker[0];
-      fenceLen = marker.length;
+      // Compile the matching close regex once when the fence opens, instead
+      // of re-compiling on every line inside the fenced block.
+      closeRe = new RegExp(`^\\s*${marker[0] === '\`' ? '`' : '~'}{${marker.length},}\\s*$`);
       fenceLang = open[3] || undefined;
       out[idx] = {kind: 'code', lang: fenceLang, isFenceMarker: true};
       continue;

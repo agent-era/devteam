@@ -34,8 +34,6 @@ export interface MarkdownTheme {
   dividerColor: string;
   /** Color for the active tab label. */
   tabActiveColor: string;
-  /** Color for tabs that have content available. */
-  tabReadyColor: string;
   /** Color for tabs whose content hasn't been written yet. */
   tabPendingColor: string;
   /** Color for "extra" markdown files appended after the canonical stages. */
@@ -63,7 +61,6 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     blockquoteDim: true,
     dividerColor: '#FF66FF',
     tabActiveColor: '#00FFFF',
-    tabReadyColor: '#E8E8E8',
     tabPendingColor: '#FFFF66',
     tabExtraColor: '#FF66FF',
   },
@@ -80,7 +77,6 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     blockquoteDim: true,
     dividerColor: '#7FFFD4',
     tabActiveColor: '#7CFC00',
-    tabReadyColor: '#A8E6A1',
     tabPendingColor: '#FFD700',
     tabExtraColor: '#DA70D6',
   },
@@ -97,7 +93,6 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     blockquoteDim: true,
     dividerColor: '#FF6B6B',
     tabActiveColor: '#FFD700',
-    tabReadyColor: '#FFD2B6',
     tabPendingColor: '#FF6B6B',
     tabExtraColor: '#FF69B4',
   },
@@ -114,7 +109,6 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     blockquoteDim: true,
     dividerColor: '#1E90FF',
     tabActiveColor: '#00CED1',
-    tabReadyColor: '#B6DCFF',
     tabPendingColor: '#FFD700',
     tabExtraColor: '#FF7F50',
   },
@@ -131,7 +125,6 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     blockquoteDim: true,
     dividerColor: '#FF1493',
     tabActiveColor: '#00FFFF',
-    tabReadyColor: '#FFB6E1',
     tabPendingColor: '#FF1493',
     tabExtraColor: '#7FFF00',
   },
@@ -148,7 +141,6 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     blockquoteDim: true,
     dividerColor: '#FF6347',
     tabActiveColor: '#FFD700',
-    tabReadyColor: '#F4A460',
     tabPendingColor: '#FF6347',
     tabExtraColor: '#DA70D6',
   },
@@ -165,7 +157,6 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     blockquoteDim: true,
     dividerColor: '#FF69B4',
     tabActiveColor: '#7FFF00',
-    tabReadyColor: '#FFB6D9',
     tabPendingColor: '#FFD700',
     tabExtraColor: '#5EE8EB',
   },
@@ -182,7 +173,6 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     blockquoteDim: true,
     dividerColor: 'gray',
     tabActiveColor: 'white',
-    tabReadyColor: 'white',
     tabPendingColor: 'gray',
     tabExtraColor: 'gray',
   },
