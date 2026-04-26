@@ -26,28 +26,32 @@ interface Action {
   warn?: boolean;
 }
 
+type CanonicalStage = Exclude<TrackerStage, 'archive' | 'backlog'>;
+
 interface StageMeta {
-  stage: Exclude<TrackerStage, 'archive' | 'backlog'>;
+  stage: CanonicalStage;
   label: string;
-  fileName: string;
+  /** Canonical .md file for the stage. `null` for stages with no canonical file (e.g. cleanup). */
+  fileName: string | null;
 }
 
 const STAGE_TABS: StageMeta[] = [
   {stage: 'discovery', label: 'Discovery', fileName: 'notes.md'},
   {stage: 'requirements', label: 'Requirements', fileName: 'requirements.md'},
   {stage: 'implement', label: 'Implement', fileName: 'implementation.md'},
+  {stage: 'cleanup', label: 'Cleanup', fileName: null},
 ];
+
+type TabState = 'ready' | 'pending' | 'future' | 'extra';
 
 interface Tab {
   key: string;
   label: string;
-  filePath: string;
+  filePath: string | null;
   body: string;
-  exists: boolean;
-  enabled: boolean;
-  isExtra: boolean;
+  state: TabState;
   /** Stage this tab represents (for canonical stage tabs only). */
-  stage?: TrackerStage;
+  stage?: CanonicalStage;
 }
 
 export function buildActions(
@@ -89,27 +93,43 @@ function listExtraMdFiles(itemDir: string): string[] {
   }
 }
 
+/**
+ * Build the tab list for an item. All four canonical stage tabs are always
+ * present (even Cleanup, which has no canonical .md file). Tab `state` is:
+ *
+ * - `ready`   — has body content; renders the rendered markdown
+ * - `pending` — at-or-before the item's next stage; shows a "press [enter]
+ *               to move to <stage>" prompt and pressing [enter] advances
+ * - `future`  — past the item's next stage; greyed; pressing [enter] still
+ *               advances (one step at a time toward the tab's stage)
+ * - `extra`   — extra `.md` files in the item dir, appended after the
+ *               stage tabs with a distinct italic accent.
+ */
 function buildTabs(item: TrackerItem): Tab[] {
   const tabs: Tab[] = [];
-  let firstGapMarked = false;
 
-  for (const meta of STAGE_TABS) {
-    const filePath = meta.fileName === 'requirements.md'
-      ? item.requirementsPath
-      : meta.fileName === 'notes.md'
-      ? item.notesPath
-      : item.implementationPath;
-    const exists = fs.existsSync(filePath);
-    const body = exists ? readBody(filePath) : '';
+  const itemStageIdx = STAGE_TABS.findIndex(t => t.stage === item.stage);
+  // For items in 'backlog' or 'archive' (not in STAGE_TABS), itemStageIdx === -1
+  // so the next stage is at index 0 (Discovery).
+  const nextStageIdx = itemStageIdx + 1;
 
-    let enabled: boolean;
-    if (exists) {
-      enabled = true;
-    } else if (!firstGapMarked) {
-      enabled = true;
-      firstGapMarked = true;
+  for (let i = 0; i < STAGE_TABS.length; i++) {
+    const meta = STAGE_TABS[i];
+    let filePath: string | null = null;
+    if (meta.fileName === 'notes.md') filePath = item.notesPath;
+    else if (meta.fileName === 'requirements.md') filePath = item.requirementsPath;
+    else if (meta.fileName === 'implementation.md') filePath = item.implementationPath;
+
+    const exists = filePath ? fs.existsSync(filePath) : false;
+    const body = exists && filePath ? readBody(filePath) : '';
+
+    let state: TabState;
+    if (body.trim()) {
+      state = 'ready';
+    } else if (i <= nextStageIdx) {
+      state = 'pending';
     } else {
-      enabled = false;
+      state = 'future';
     }
 
     tabs.push({
@@ -117,36 +137,33 @@ function buildTabs(item: TrackerItem): Tab[] {
       label: meta.label,
       filePath,
       body,
-      exists,
-      enabled,
-      isExtra: false,
+      state,
       stage: meta.stage,
     });
   }
 
   for (const fname of listExtraMdFiles(item.itemDir)) {
     const filePath = path.join(item.itemDir, fname);
-    const body = readBody(filePath);
     tabs.push({
       key: `extra:${fname}`,
       label: fname,
       filePath,
-      body,
-      exists: true,
-      enabled: true,
-      isExtra: true,
+      body: readBody(filePath),
+      state: 'extra',
     });
   }
 
   return tabs;
 }
 
-function buildPendingMessage(stageLabel: string, theme: MarkdownTheme): MdRow[] {
+function buildPendingMessage(tab: Tab, theme: MarkdownTheme): MdRow[] {
+  const verb = tab.state === 'future' ? 'move to' : 'work on';
+  const accent = tab.state === 'future' ? theme.tabExtraColor : theme.tabPendingColor;
   return [
     {spans: [{text: ''}]},
-    {spans: [{text: `The agent hasn't done the ${stageLabel} stage yet.`, color: theme.tabPendingColor, bold: true}]},
+    {spans: [{text: `Press [enter] to ${verb} ${tab.label}.`, color: accent, bold: true}]},
     {spans: [{text: ''}]},
-    {spans: [{text: 'Press [enter] to advance the item and launch a session for this stage.', dim: true}]},
+    {spans: [{text: 'Each press advances the item one stage and launches a session for that stage.', dim: true}]},
     {spans: [{text: 'Press [a] to just attach to the existing session.', dim: true}]},
   ];
 }
@@ -167,16 +184,15 @@ function buildExtraHeader(label: string, width: number, theme: MarkdownTheme): M
 }
 
 function buildTabContent(tab: Tab, width: number, theme: MarkdownTheme): MdRow[] {
-  if (!tab.exists && tab.enabled) {
-    return buildPendingMessage(tab.label, theme);
-  }
-  if (!tab.body.trim()) {
-    return [{spans: [{text: '(empty file)', dim: true}]}];
-  }
-  if (tab.isExtra) {
+  if (tab.state === 'extra') {
+    if (!tab.body.trim()) return [{spans: [{text: '(empty file)', dim: true}]}];
     return [...buildExtraHeader(tab.label, width, theme), ...renderMarkdown(tab.body, width, theme)];
   }
-  return renderMarkdown(tab.body, width, theme);
+  if (tab.state === 'ready') {
+    return renderMarkdown(tab.body, width, theme);
+  }
+  // pending or future — show the "press enter to advance" prompt.
+  return buildPendingMessage(tab, theme);
 }
 
 function buildStatusSummary(
@@ -198,34 +214,35 @@ interface TabStripProps {
 }
 
 /**
- * Tab strip styled to match the stages-configuration screen
- * (`TrackerStagesScreen`): each tab is a padded label, the active one is
- * shown with `inverse` + `bold` + green colour, with a trailing `← →` hint
- * since left/right always navigates tabs in this view.
+ * Tab strip styled to match the stages-configuration screen — padded
+ * labels, active tab in `inverse + bold + theme.tabActiveColor`. Future
+ * tabs are dim, pending tabs use `theme.tabPendingColor`, extras use
+ * `theme.tabExtraColor` + italic.
  */
 function TabStrip({tabs, activeIndex, theme}: TabStripProps) {
   return (
     <Box flexDirection="row">
       {tabs.map((t, i) => {
         const isActive = i === activeIndex;
-        const marker = !t.exists ? '○ ' : t.isExtra ? '• ' : '';
+        const marker =
+          t.state === 'extra' ? '• '
+          : t.state === 'ready' ? ''
+          : '○ ';
         const label = ` ${marker}${t.label} `;
         const color = isActive
           ? theme.tabActiveColor
-          : !t.enabled
-          ? undefined
-          : t.isExtra
-          ? theme.tabExtraColor
-          : !t.exists
+          : t.state === 'pending'
           ? theme.tabPendingColor
+          : t.state === 'extra'
+          ? theme.tabExtraColor
           : undefined;
         return (
           <Box key={t.key} marginRight={2}>
             <Text
               bold={isActive}
               inverse={isActive}
-              italic={t.isExtra || undefined}
-              dimColor={!t.enabled || undefined}
+              italic={t.state === 'extra' || undefined}
+              dimColor={t.state === 'future' && !isActive || undefined}
               color={color}
             >
               {label}
@@ -265,11 +282,11 @@ export default function TrackerItemScreen({
   const tabs = React.useMemo(() => buildTabs(item), [item]);
 
   const initialTabIndex = React.useMemo(() => {
-    const currentStage = item.stage;
-    const byStage = tabs.findIndex(t => t.stage === currentStage);
-    if (byStage >= 0 && tabs[byStage].enabled) return byStage;
-    const firstEnabled = tabs.findIndex(t => t.enabled);
-    return firstEnabled >= 0 ? firstEnabled : 0;
+    // Prefer the tab matching the item's current stage; fall back to first ready tab.
+    const byStage = tabs.findIndex(t => t.stage === item.stage);
+    if (byStage >= 0) return byStage;
+    const firstReady = tabs.findIndex(t => t.state === 'ready');
+    return firstReady >= 0 ? firstReady : 0;
   }, [tabs, item.stage]);
 
   const [activeTab, setActiveTab] = React.useState(initialTabIndex);
@@ -302,26 +319,24 @@ export default function TrackerItemScreen({
 
   const moveTab = React.useCallback((delta: number) => {
     setActiveTab(prev => {
-      let i = prev;
       const len = tabs.length;
-      for (let step = 0; step < len; step++) {
-        i = (i + delta + len) % len;
-        if (tabs[i]?.enabled) return i;
-      }
-      return prev;
+      if (len === 0) return prev;
+      return (prev + delta + len) % len;
     });
-  }, [tabs]);
+  }, [tabs.length]);
 
   const stageActionAction = actions.find(a => a.id === 'stage-action');
   const attachAction = actions.find(a => a.id === 'attach-session');
 
+  // [enter] only triggers the stage advance when the active tab is a
+  // non-ready stage tab (pending or future) — so "move to cleanup" only
+  // fires when the user is actually on the cleanup tab. Ready tabs and
+  // extra-file tabs treat [enter] as a no-op; [a] is the dedicated attach.
+  const enterAdvances = !!(stageActionAction && tab && (tab.state === 'pending' || tab.state === 'future'));
+
   const handlePrimary = React.useCallback(() => {
-    // On a "pending" tab — or whenever we have a stage-advance action — pressing
-    // enter triggers it. Otherwise fall back to attach.
-    if (tab && !tab.exists && stageActionAction) { onStageAction(); return; }
-    if (stageActionAction) { onStageAction(); return; }
-    if (attachAction) { onAttachSession(); return; }
-  }, [tab, stageActionAction, attachAction, onStageAction, onAttachSession]);
+    if (enterAdvances) onStageAction();
+  }, [enterAdvances, onStageAction]);
 
   useInput((input, key) => {
     if (key.leftArrow) moveTab(-1);
@@ -345,11 +360,15 @@ export default function TrackerItemScreen({
     ? `  ${Math.min(scrollTop + viewportHeight, tabContent.length)}/${tabContent.length}`
     : '';
 
+  const enterHint = enterAdvances && tab
+    ? `[enter] ${tab.state === 'future' ? 'move to' : 'work on'} ${tab.label}${stageActionAction?.warn ? ' (!)' : ''}`
+    : null;
+
   const footerKeys = [
     '[←/→] tabs',
-    '[↑↓ PgUp/PgDn g/G] scroll',
+    '[↑↓ PgUp/PgDn space g/G] scroll',
     `[t] theme: ${theme.name}`,
-    stageActionAction ? `[enter] ${stageActionAction.label}${stageActionAction.warn ? ' (!)' : ''}` : null,
+    enterHint,
     attachAction ? '[a] attach' : null,
     '[esc]/[q] back',
   ].filter(Boolean).join('  ');
