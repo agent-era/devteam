@@ -579,7 +579,7 @@ export class WorktreeCore implements CoreBase<State> {
     return Array.isArray(flags) ? flags.filter((f) => typeof f === 'string' && f.length > 0) : [];
   }
 
-  private async terminateFeatureSessions(projectName: string, featureName: string): Promise<void> {
+  async terminateFeatureSessions(projectName: string, featureName: string): Promise<void> {
     const s = this.tmux.sessionName(projectName, featureName);
     const sh = this.tmux.shellSessionName(projectName, featureName);
     const rn = this.tmux.runSessionName(projectName, featureName);
