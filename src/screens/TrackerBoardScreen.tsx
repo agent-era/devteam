@@ -175,9 +175,7 @@ function computeColumnScroll(selected: number, total: number, visible: number): 
   return Math.max(0, Math.min(max, top));
 }
 
-// PRs are keyed by worktree path in GitHubContext, never on WorktreeInfo.
-// Exported + unit-tested because the obvious-looking `wt.pr.is_merged` spelling
-// silently returns undefined and has bitten two prior fixes.
+// Reads from GitHubContext (keyed by path), not wt.pr — which is never assigned in prod.
 export function isItemPRMerged(
   worktree: WorktreeInfo | null,
   pullRequests: Record<string, PRStatus>,
