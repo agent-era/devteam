@@ -216,6 +216,10 @@ export function lineToParts(rawLine: string, ctx: BlockContext, theme: MarkdownT
  * is one *or more* visual rows (when wrapping kicks in). The diff view
  * calls `lineToParts` directly so it can keep its own gutter/padding
  * geometry; the full-doc renderer below uses this convenience wrapper.
+ *
+ * H1 lines additionally get a full-width `===` rule before and after, and
+ * H2 lines get a `---` rule after — typographic decoration to match
+ * common written-markdown setext hierarchies. H3+ render plain.
  */
 export function renderLine(rawLine: string, ctx: BlockContext, width: number, theme: MarkdownTheme = getActiveMarkdownTheme()): MdRow[] {
   const safeWidth = Math.max(1, width);
@@ -224,7 +228,20 @@ export function renderLine(rawLine: string, ctx: BlockContext, width: number, th
   const parts = lineToParts(rawLine, ctx, theme);
   if (parts.isHr) return [{spans: [{text: '─'.repeat(safeWidth), dim: true}]}];
 
-  return wrapSpans(parts.body, safeWidth, parts.leading, parts.continuation);
+  const rows = wrapSpans(parts.body, safeWidth, parts.leading, parts.continuation);
+
+  if (ctx.kind === 'heading' && ctx.level === 1) {
+    const color = theme.heading[1] ?? 'white';
+    const bar: MdRow = {spans: [{text: '='.repeat(safeWidth), bold: true, color}]};
+    return [bar, ...rows, bar];
+  }
+  if (ctx.kind === 'heading' && ctx.level === 2) {
+    const color = theme.heading[2] ?? 'white';
+    const bar: MdRow = {spans: [{text: '-'.repeat(safeWidth), bold: true, color}]};
+    return [...rows, bar];
+  }
+
+  return rows;
 }
 
 /**
