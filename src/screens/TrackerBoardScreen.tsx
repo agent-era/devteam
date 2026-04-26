@@ -130,6 +130,7 @@ export default function TrackerBoardScreen({
     discoverProjects,
     getAvailableAITools,
     refreshProjectWorktrees,
+    terminateFeatureSessions,
   } = useWorktreeContext();
   const availableTools = React.useMemo(() => getAvailableAITools(), [getAvailableAITools]);
   const {columns: termCols, rows: termRows} = useTerminalDimensions();
@@ -356,12 +357,16 @@ export default function TrackerBoardScreen({
     });
   }, [currentItem, getWorktreeForItem, showArchiveConfirmation, backToTracker]);
 
-  const handleToggleInactive = React.useCallback(() => {
+  const handleToggleInactive = React.useCallback(async () => {
     if (!currentItem) return;
     if (!currentItem.requirementsPath) {
       service.createItem(projectPath, currentItem.title || currentItem.slug, 'implement', currentItem.slug);
     }
+    const shouldDeactivate = !currentItem.inactive;
     service.toggleItemInactive(projectPath, currentItem.slug);
+    if (shouldDeactivate) {
+      await terminateFeatureSessions(currentItem.project, currentItem.slug);
+    }
     const newBoard = service.loadBoard(project, projectPath);
     setBoard(newBoard);
     const pos = findSlugPosition(newBoard, currentItem.slug);
@@ -369,7 +374,7 @@ export default function TrackerBoardScreen({
       setSelectedColumn(pos.column);
       setSelectedRowByColumn(prev => ({...prev, [pos.column]: pos.row}));
     }
-  }, [currentItem, service, projectPath, project]);
+  }, [currentItem, service, projectPath, project, terminateFeatureSessions]);
 
   const unmountedRef = React.useRef(false);
   React.useEffect(() => () => { unmountedRef.current = true; }, []);
