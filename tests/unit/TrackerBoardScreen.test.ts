@@ -333,6 +333,22 @@ describe('computeCardStatusFlags', () => {
     });
   });
 
+  test('readyToAdvance fires on freshReady alone (no freshWaiting required)', () => {
+    const flags = computeCardStatusFlags({
+      aiStatus: undefined,
+      prMerged: false,
+      freshWaiting: false,
+      freshReady: true,
+    });
+
+    expect(flags).toEqual({
+      readyToAdvance: true,
+      isWaiting: false,
+      isWorking: false,
+      hasSession: false,
+    });
+  });
+
   test('not_running session reports hasSession=false', () => {
     const flags = computeCardStatusFlags({
       aiStatus: 'not_running',

@@ -670,6 +670,8 @@ export default function TrackerBoardScreen({
       }
     }
     return map;
+    // `worktrees` isn't read inside the memo body — it's the refresh tick we
+    // re-run on, since session state changes alongside it.
   }, [board, worktrees, service, projectPath]);
 
   let waitingCount = 0;

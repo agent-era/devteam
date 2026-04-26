@@ -37,7 +37,7 @@ export function computeCardStatusFlags({
   const hasSession = !!aiStatus && aiStatus !== 'not_running';
 
   const readyToAdvance = !prMerged && !isWorking && !aiWaiting && freshReady;
-  const ralphWaiting = !isWorking && !readyToAdvance && freshWaiting;
+  const ralphWaiting = !isWorking && !aiWaiting && !readyToAdvance && freshWaiting;
   const isWaiting = aiWaiting || ralphWaiting;
 
   return {readyToAdvance, isWaiting, isWorking, hasSession};
