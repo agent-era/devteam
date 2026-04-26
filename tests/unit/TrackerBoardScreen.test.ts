@@ -51,6 +51,39 @@ describe('getTrackerCardDisplayState', () => {
     });
   });
 
+  test('waiting item uses yellow throughout', () => {
+    const display = getTrackerCardDisplayState({
+      ...baseFlags,
+      isWaiting: true,
+      itemStatusDescription: 'needs your input',
+    });
+
+    expect(display).toMatchObject({
+      statusGlyph: '!',
+      statusColor: 'yellow',
+      titleColor: 'yellow',
+      titleBold: true,
+      secondaryText: 'needs your input',
+      secondaryColor: 'yellow',
+      secondaryBold: true,
+      secondaryDim: false,
+      showApproveHint: false,
+    });
+  });
+
+  test('merged state takes precedence over ready-to-advance', () => {
+    const display = getTrackerCardDisplayState({
+      ...baseFlags,
+      prMerged: true,
+      readyToAdvance: true,
+      itemStatusDescription: 'should be ignored',
+    });
+
+    expect(display.secondaryText).toBe('Merged');
+    expect(display.statusColor).toBe('gray');
+    expect(display.showApproveHint).toBe(false);
+  });
+
   test('working item uses cyan with no title color', () => {
     const display = getTrackerCardDisplayState({
       ...baseFlags,
@@ -115,6 +148,36 @@ describe('getTrackerCardDisplayState', () => {
       secondaryBold: false,
       secondaryDim: true,
       showApproveHint: true,
+    });
+  });
+
+  test('inactive working item is gray and dim', () => {
+    const display = getTrackerCardDisplayState({
+      ...baseFlags,
+      isWorking: true,
+      inactive: true,
+    });
+
+    expect(display).toMatchObject({
+      statusColor: 'cyan',
+      titleColor: 'gray',
+      secondaryColor: 'gray',
+      secondaryDim: true,
+    });
+  });
+
+  test('inactive waiting item is gray and dim', () => {
+    const display = getTrackerCardDisplayState({
+      ...baseFlags,
+      isWaiting: true,
+      inactive: true,
+    });
+
+    expect(display).toMatchObject({
+      titleColor: 'yellow',
+      secondaryColor: 'gray',
+      secondaryBold: false,
+      secondaryDim: true,
     });
   });
 });
