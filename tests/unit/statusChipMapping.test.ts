@@ -7,7 +7,7 @@ function wt(init?: Partial<WorktreeInfo>): WorktreeInfo {
     project: 'proj',
     feature: 'feat',
     path: '/proj/feat',
-    git: {has_remote: true, ahead: 0, behind: 0, is_pushed: true, has_changes: false, base_added_lines: 0, base_deleted_lines: 0, added_lines: 0, deleted_lines: 0, modified_files: 0, untracked_lines: 0},
+    git: {has_remote: true, ahead: 0, behind: 0, is_pushed: true, has_changes: false, base_added_lines: 0, base_deleted_lines: 0, base_added_lines_excl_tracker: 0, base_deleted_lines_excl_tracker: 0, added_lines: 0, deleted_lines: 0, modified_files: 0, untracked_lines: 0},
     session: new SessionInfo({attached: true, session_name: 's', ai_status: 'idle', ai_tool: 'none'}),
     ...init,
   });
