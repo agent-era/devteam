@@ -149,25 +149,10 @@ const STYLE_OPTIONS: StyleOptionDef[] = [
     {value: 'batch', label: 'Batch together'},
     {value: 'one_at_a_time', label: 'One at a time'},
   ]},
-  {key: 'contextDepth', label: 'Research depth', choices: [
-    {value: 'light', label: 'Light'},
-    {value: 'moderate', label: 'Moderate'},
-    {value: 'deep', label: 'Deep'},
-  ]},
   {key: 'codeScope', label: 'Code scope', choices: [
     {value: 'minimal', label: 'Minimal'},
     {value: 'clean_as_go', label: 'Clean as you go'},
     {value: 'thorough', label: 'Thorough'},
-  ]},
-  {key: 'testing', label: 'Tests', choices: [
-    {value: 'skip', label: 'Skip'},
-    {value: 'suggest', label: 'Suggest'},
-    {value: 'always', label: 'Always write'},
-  ]},
-  {key: 'commits', label: 'Commits', choices: [
-    {value: 'never', label: 'Never'},
-    {value: 'milestones', label: 'At milestones'},
-    {value: 'often', label: 'Frequently'},
   ]},
   {key: 'onBlockers', label: 'On blockers', choices: [
     {value: 'ask', label: 'Stop & ask'},
