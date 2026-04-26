@@ -1,6 +1,0 @@
-{
-  "stage": "cleanup",
-  "state": "waiting_for_approval",
-  "brief_description": "feature shipped on commit e7bdaa1; 702 tests pass; awaiting approval to archive + open PR",
-  "timestamp": "2026-04-26T00:40:00Z"
-}
