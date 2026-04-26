@@ -1,5 +1,6 @@
-import {describe, test, expect} from '@jest/globals';
-import {parseUnifiedDiff} from '../../src/shared/utils/diff/loadDiff.js';
+import {describe, test, expect, jest, beforeEach, afterEach} from '@jest/globals';
+import * as commandExecutor from '../../src/shared/utils/commandExecutor.js';
+import {loadDiff, parseUnifiedDiff} from '../../src/shared/utils/diff/loadDiff.js';
 
 describe('parseUnifiedDiff', () => {
   test('returns an empty map for empty input', () => {
@@ -102,5 +103,53 @@ describe('parseUnifiedDiff', () => {
     const lines = parseUnifiedDiff(diff).get('x.ts')!;
     const blank = lines.find(l => l.type === 'context' && l.text === ' ');
     expect(blank).toBeDefined();
+  });
+});
+
+describe('loadDiff', () => {
+  beforeEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  test('shows a placeholder for untracked binary files', async () => {
+    const runCommandAsync = jest.spyOn(commandExecutor, 'runCommandAsync').mockImplementation(async (args) => {
+      const command = args.join(' ');
+      if (command.includes('git diff --no-color --no-ext-diff')) return '';
+      if (command.includes('ls-files --others --exclude-standard')) return 'image.png';
+      if (command.includes('git diff --no-index --numstat -- /dev/null "image.png"')) return '-\t-\timage.png';
+      if (command.includes('sed -n')) return 'PNG_BINARY_CONTENT';
+      return '';
+    });
+
+    const lines = await loadDiff('/tmp/worktree', 'uncommitted');
+
+    expect(runCommandAsync).toHaveBeenCalled();
+    expect(lines).toEqual([
+      {type: 'header', text: '📁 image.png (new file)', fileName: 'image.png', headerType: 'file'},
+      {type: 'context', text: 'Binary file not shown', fileName: 'image.png'},
+    ]);
+  });
+
+  test('keeps preview lines for untracked text files', async () => {
+    jest.spyOn(commandExecutor, 'runCommandAsync').mockImplementation(async (args) => {
+      const command = args.join(' ');
+      if (command.includes('git diff --no-color --no-ext-diff')) return '';
+      if (command.includes('ls-files --others --exclude-standard')) return 'notes.txt';
+      if (command.includes('git diff --no-index --numstat -- /dev/null "notes.txt"')) return '2\t0\tnotes.txt';
+      if (command.includes('sed -n')) return 'hello\nworld';
+      return '';
+    });
+
+    const lines = await loadDiff('/tmp/worktree', 'uncommitted');
+
+    expect(lines).toEqual([
+      {type: 'header', text: '📁 notes.txt (new file)', fileName: 'notes.txt', headerType: 'file'},
+      {type: 'added', text: 'hello', fileName: 'notes.txt'},
+      {type: 'added', text: 'world', fileName: 'notes.txt'},
+    ]);
   });
 });
