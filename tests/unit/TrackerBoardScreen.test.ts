@@ -104,17 +104,17 @@ describe('getTrackerCardDisplayState', () => {
     });
   });
 
-  test('session-only item is dim with no secondary color', () => {
+  test('session-only item collapses to the idle/empty branch (chips below the card carry the session signal)', () => {
     const display = getTrackerCardDisplayState({
       ...baseFlags,
       hasSession: true,
     });
 
     expect(display).toMatchObject({
-      statusGlyph: '◆',
-      statusColor: 'gray',
+      statusGlyph: ' ',
+      statusColor: undefined,
       titleColor: undefined,
-      secondaryText: 'session idle',
+      secondaryText: '',
       secondaryColor: undefined,
       secondaryDim: true,
       showApproveHint: false,
