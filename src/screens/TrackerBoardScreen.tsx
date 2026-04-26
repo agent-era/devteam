@@ -96,13 +96,6 @@ export function getTrackerCardDisplayState({
   secondaryDim: boolean;
   showApproveHint: boolean;
 } {
-  const waitingLabel = itemStatusDescription || 'waiting for you';
-  const readyLabel = itemStatusDescription
-    ? `Ready — ${itemStatusDescription}`
-    : 'Ready';
-  const workingLabel = itemStatusDescription || 'running';
-  const sessionIdleLabel = itemStatusDescription || 'session idle';
-
   if (prMerged) {
     return {
       statusGlyph: '◆',
@@ -117,44 +110,72 @@ export function getTrackerCardDisplayState({
     };
   }
 
-  const statusGlyph =
-    readyToAdvance ? '✓' :
-    isWaiting ? '!' :
-    isWorking ? '⟳' :
-    hasSession ? '◆' : ' ';
-  const statusColor =
-    readyToAdvance ? 'green' :
-    isWaiting ? 'yellow' :
-    isWorking ? 'cyan' :
-    hasSession ? 'gray' :
-    inactive ? 'gray' : undefined;
-  const titleColor =
-    readyToAdvance ? 'green' :
-    isWaiting ? 'yellow' :
-    inactive ? 'gray' : undefined;
-  const secondaryText =
-    readyToAdvance ? readyLabel
-    : isWaiting ? waitingLabel
-    : isWorking ? workingLabel
-    : hasSession ? sessionIdleLabel
-    : '';
-  const secondaryColor =
-    inactive ? 'gray'
-    : readyToAdvance ? 'green'
-    : isWaiting ? 'yellow'
-    : isWorking ? 'cyan'
-    : undefined;
+  if (readyToAdvance) {
+    return {
+      statusGlyph: '✓',
+      statusColor: 'green',
+      titleColor: 'green',
+      titleBold: true,
+      secondaryText: itemStatusDescription ? `Ready — ${itemStatusDescription}` : 'Ready',
+      secondaryColor: inactive ? 'gray' : 'green',
+      secondaryBold: !inactive,
+      secondaryDim: inactive,
+      showApproveHint: true,
+    };
+  }
+
+  if (isWaiting) {
+    return {
+      statusGlyph: '!',
+      statusColor: 'yellow',
+      titleColor: 'yellow',
+      titleBold: true,
+      secondaryText: itemStatusDescription || 'waiting for you',
+      secondaryColor: inactive ? 'gray' : 'yellow',
+      secondaryBold: !inactive,
+      secondaryDim: inactive,
+      showApproveHint: false,
+    };
+  }
+
+  if (isWorking) {
+    return {
+      statusGlyph: '⟳',
+      statusColor: 'cyan',
+      titleColor: inactive ? 'gray' : undefined,
+      titleBold: false,
+      secondaryText: itemStatusDescription || 'running',
+      secondaryColor: inactive ? 'gray' : 'cyan',
+      secondaryBold: false,
+      secondaryDim: inactive,
+      showApproveHint: false,
+    };
+  }
+
+  if (hasSession) {
+    return {
+      statusGlyph: '◆',
+      statusColor: 'gray',
+      titleColor: inactive ? 'gray' : undefined,
+      titleBold: false,
+      secondaryText: itemStatusDescription || 'session idle',
+      secondaryColor: inactive ? 'gray' : undefined,
+      secondaryBold: false,
+      secondaryDim: true,
+      showApproveHint: false,
+    };
+  }
 
   return {
-    statusGlyph,
-    statusColor,
-    titleColor,
-    titleBold: isWaiting || readyToAdvance,
-    secondaryText,
-    secondaryColor,
-    secondaryBold: !inactive && (isWaiting || readyToAdvance),
-    secondaryDim: inactive || (!readyToAdvance && !isWaiting && !isWorking),
-    showApproveHint: readyToAdvance,
+    statusGlyph: ' ',
+    statusColor: inactive ? 'gray' : undefined,
+    titleColor: inactive ? 'gray' : undefined,
+    titleBold: false,
+    secondaryText: '',
+    secondaryColor: inactive ? 'gray' : undefined,
+    secondaryBold: false,
+    secondaryDim: true,
+    showApproveHint: false,
   };
 }
 
