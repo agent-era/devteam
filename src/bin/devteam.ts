@@ -8,12 +8,15 @@ import {fileURLToPath} from 'node:url';
 // bold default-fg text. Honour an explicit FORCE_COLOR (incl. 0) and skip
 // when the terminal is dumb / not a TTY so we don't poison non-interactive
 // pipelines.
-if (
-  process.env.FORCE_COLOR === undefined &&
-  process.env.TERM !== 'dumb' &&
-  process.stdout.isTTY
-) {
-  process.env.FORCE_COLOR = '3';
+//
+// Note: setting just FORCE_COLOR=3 isn't enough when TERM matches `*-256color`
+// — `supports-color` v7 (used by chalk 4) hits its `-256(color)?$` branch
+// before consulting the FORCE_COLOR minimum and returns level 2. Setting
+// COLORTERM=truecolor short-circuits that earlier in the detection chain
+// and gives us level 3. Modern terminals + tmux pass RGB escapes through.
+if (process.env.TERM !== 'dumb' && process.stdout.isTTY) {
+  if (process.env.FORCE_COLOR === undefined) process.env.FORCE_COLOR = '3';
+  if (process.env.COLORTERM === undefined) process.env.COLORTERM = 'truecolor';
 }
 
 // Resolve project root relative to this file
