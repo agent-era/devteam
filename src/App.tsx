@@ -253,7 +253,7 @@ function AppContent() {
     let worktree = worktrees.find(wt => wt.project === project.name && wt.feature === item.slug) || null;
     if (!worktree) worktree = await recreateImplementWorktree(project.name, item.slug);
     if (!worktree) return null;
-    tracker.ensureItemFiles(project.path, item.slug, worktree.path, item);
+    tracker.ensureItemFiles(project.path, item.slug, worktree.path);
     return worktree;
   };
 

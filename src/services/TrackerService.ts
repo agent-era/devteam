@@ -673,22 +673,19 @@ export class TrackerService {
   }
 
   // Ensures the item's content files exist inside the worktree at
-  // <wt>/tracker/items/<slug>/. New items don't have any files yet; this is where
-  // the user-typed description (stashed on `index.sessions[slug].description` by
-  // createItem) gets drained into notes.md so the body lands in the worktree, not
-  // the project root. Pre-existing legacy main-project layouts are migrated and
-  // then the source dir is deleted to clean up project-root pollution from the
-  // old behaviour. No requirements.md stub is created — that file only appears
-  // once the requirements stage produces real content. Commits to the worktree
-  // branch so the seed survives a future worktree obliteration.
-  ensureItemFiles(mainProjectPath: string, slug: string, worktreePath: string, _item?: TrackerItem): void {
+  // <wt>/tracker/items/<slug>/. New items have no files yet; this is where the
+  // user-typed description (stashed on `index.sessions[slug].description` by
+  // createItem) drains into notes.md so the body lands in the worktree, not the
+  // project root. Pre-existing legacy main-project layouts are migrated and the
+  // source dir is removed to clean up project-root pollution from the old
+  // behaviour. Commits to the worktree branch so the seed survives a future
+  // worktree obliteration.
+  ensureItemFiles(mainProjectPath: string, slug: string, worktreePath: string): void {
     const destDir = path.join(worktreePath, 'tracker', 'items', slug);
     ensureDirectory(destDir);
 
     let wroteAnything = false;
 
-    // 1) Migrate from legacy locations into the worktree, then delete the source dir
-    // so the main project tree gets cleaned up. Highest-priority sources first.
     const legacySources = [
       path.join(worktreePath, 'tracker', slug),
       ...this.findLegacyMainProjectDirs(mainProjectPath, slug),
@@ -701,50 +698,36 @@ export class TrackerService {
         fs.copyFileSync(path.join(src, file), destFile);
         wroteAnything = true;
       }
-      // The legacy worktree-internal source (`<wt>/tracker/<slug>/`) sits inside the
-      // worktree itself; deleting it is the same act as moving its contents up. The
-      // main-project legacy sources are real project-root pollution that we want gone.
       fs.rmSync(src, {recursive: true, force: true});
     }
 
-    // 2) Drain a user-typed description from the index into notes.md. createItem
-    // stashes the body here when no worktree exists; we only get to write it once.
-    const notesPath = path.join(destDir, 'notes.md');
-    if (!fs.existsSync(notesPath)) {
-      const description = this.readSessionDescription(mainProjectPath, slug);
-      if (description) {
-        fs.writeFileSync(notesPath, `${description}\n`);
-        wroteAnything = true;
+    // Drain (and clear) any stashed description from the index in a single
+    // read-modify-write. We always clear it once a worktree exists — even if
+    // notes.md already came from legacy migration, the description has served
+    // its purpose and shouldn't linger.
+    if (this.hasTracker(mainProjectPath)) {
+      const index = this.readIndex(mainProjectPath);
+      const entry = index.sessions?.[slug];
+      if (entry?.description !== undefined) {
+        const notesPath = path.join(destDir, 'notes.md');
+        if (!fs.existsSync(notesPath)) {
+          fs.writeFileSync(notesPath, `${entry.description}\n`);
+          wroteAnything = true;
+        }
+        const {description: _, ...rest} = entry;
+        const sessions = {...(index.sessions ?? {})};
+        sessions[slug] = rest;
+        index.sessions = sessions;
+        writeJSONAtomic(this.getIndexPath(mainProjectPath), index);
       }
     }
-    // Always clear the field once we've reached the worktree — even if notes.md
-    // already existed (e.g. legacy migration produced one), the description has
-    // served its purpose and shouldn't linger on the index.
-    this.clearSessionDescription(mainProjectPath, slug);
 
-    // 3) Commit the seeded files only if we actually wrote something. Skipping the
+    // Commit the seeded files only if we actually wrote something. Skipping the
     // empty-commit attempt avoids a couple of git fork+exec calls on every reattach.
     if (!wroteAnything) return;
     const relativeDestDir = path.relative(worktreePath, destDir);
     runCommandQuick(['git', '-C', worktreePath, 'add', relativeDestDir]);
     runCommandQuick(['git', '-C', worktreePath, 'commit', '-m', `tracker: seed item files for ${slug}`]);
-  }
-
-  private readSessionDescription(projectPath: string, slug: string): string | undefined {
-    if (!this.hasTracker(projectPath)) return undefined;
-    return this.readIndex(projectPath).sessions?.[slug]?.description;
-  }
-
-  private clearSessionDescription(projectPath: string, slug: string): void {
-    if (!this.hasTracker(projectPath)) return;
-    const index = this.readIndex(projectPath);
-    const entry = index.sessions?.[slug];
-    if (!entry || entry.description === undefined) return;
-    const {description: _, ...rest} = entry;
-    const sessions = {...(index.sessions ?? {})};
-    sessions[slug] = rest;
-    index.sessions = sessions;
-    writeJSONAtomic(this.getIndexPath(projectPath), index);
   }
 
   private findLegacyMainProjectDirs(projectPath: string, slug: string): string[] {
