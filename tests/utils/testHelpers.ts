@@ -50,12 +50,10 @@ export function setupWorktreeWithPR(
   prOverrides: Partial<PRStatus> = {}
 ) {
   const worktree = setupTestWorktree(project, feature);
+  // PR data is read by FakeGitHubService from memoryStore.prStatus (keyed by
+  // worktree path), then surfaced through GitHubContext.pullRequests. There is
+  // no field on WorktreeInfo to mirror it onto.
   const pr = setupTestPRStatus(worktree.path, prOverrides);
-  
-  // Link them together
-  worktree.pr = pr;
-  memoryStore.worktrees.set(worktree.path, worktree);
-  
   return {worktree, pr};
 }
 
@@ -91,8 +89,7 @@ export function setupFullWorktree(
   }
   
   if (options.prOverrides) {
-    const pr = setupTestPRStatus(worktree.path, options.prOverrides);
-    worktree.pr = pr;
+    setupTestPRStatus(worktree.path, options.prOverrides);
   }
   
   if (options.gitOverrides) {

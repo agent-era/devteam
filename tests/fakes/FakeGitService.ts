@@ -32,7 +32,6 @@ export class FakeGitService extends GitService {
       branch: overrides.branch || `feature/${featureName}`,
       git: new GitStatus(),
       session: new SessionInfo({session_name: `dev-${project}-${featureName}`, attached: false, claude_status: 'not_running'}),
-      pr: new PRStatus(),
       ...overrides,
     });
     this.worktrees.set(worktreePath, wt);

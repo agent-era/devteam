@@ -87,7 +87,6 @@ describe('Archive Management E2E', () => {
         branch: worktree.branch,
         is_archived: true,
         git: new GitStatus(),
-        pr: new PRStatus(),
         session: new SessionInfo()
       });
       
@@ -163,10 +162,10 @@ describe('Archive Management E2E', () => {
         branch: 'feature/completed-feature-1',
         is_archived: true,
         git: new GitStatus(),
-        pr: new PRStatus({number: 100, state: 'MERGED'}),
         session: new SessionInfo()
       });
-      
+      memoryStore.prStatus.set(archived1.path, new PRStatus({number: 100, state: 'MERGED'}));
+
       const archived2 = new WorktreeInfo({
         project: 'archived-project',
         feature: 'old-feature-2',
@@ -174,10 +173,10 @@ describe('Archive Management E2E', () => {
         branch: 'feature/old-feature-2',
         is_archived: true,
         git: new GitStatus(),
-        pr: new PRStatus({number: 85, state: 'CLOSED'}),
         session: new SessionInfo()
       });
-      
+      memoryStore.prStatus.set(archived2.path, new PRStatus({number: 85, state: 'CLOSED'}));
+
       memoryStore.archivedWorktrees.set('archived-project', [archived1, archived2]);
       
       const {setUIMode, lastFrame} = renderTestApp();
@@ -206,15 +205,15 @@ describe('Archive Management E2E', () => {
         branch: 'feature/merged-feature',
         is_archived: true,
         git: new GitStatus(),
-        pr: new PRStatus({
-          number: 200,
-          state: 'MERGED',
-          title: 'Add new feature',
-          checks: 'passing'
-        }),
         session: new SessionInfo()
       });
-      
+      memoryStore.prStatus.set(archivedWithPR.path, new PRStatus({
+        number: 200,
+        state: 'MERGED',
+        title: 'Add new feature',
+        checks: 'passing'
+      }));
+
       memoryStore.archivedWorktrees.set('pr-archived', [archivedWithPR]);
       
       const {setUIMode, lastFrame} = renderTestApp();
@@ -243,7 +242,6 @@ describe('Archive Management E2E', () => {
           branch: 'feature/first-archived',
           is_archived: true,
           git: new GitStatus(),
-          pr: new PRStatus(),
           session: new SessionInfo()
         }),
         new WorktreeInfo({
@@ -253,7 +251,6 @@ describe('Archive Management E2E', () => {
           branch: 'feature/second-archived',
           is_archived: true,
           git: new GitStatus(),
-          pr: new PRStatus(),
           session: new SessionInfo()
         }),
         new WorktreeInfo({
@@ -263,7 +260,6 @@ describe('Archive Management E2E', () => {
           branch: 'feature/third-archived',
           is_archived: true,
           git: new GitStatus(),
-          pr: new PRStatus(),
           session: new SessionInfo()
         })
       ];
@@ -304,7 +300,6 @@ describe('Archive Management E2E', () => {
         branch: 'feature/old-feature',
         is_archived: true,
         git: new GitStatus(),
-        pr: new PRStatus(),
         session: new SessionInfo()
       })];
       
@@ -342,7 +337,6 @@ describe('Archive Management E2E', () => {
         branch: 'feature/archived-feature',
         is_archived: true,
         git: new GitStatus(),
-        pr: new PRStatus(),
         session: new SessionInfo()
       })];
       
@@ -393,7 +387,6 @@ describe('Archive Management E2E', () => {
         branch: 'feature/delete-me',
         is_archived: true,
         git: new GitStatus(),
-        pr: new PRStatus(),
         session: new SessionInfo()
       });
       
@@ -428,7 +421,6 @@ describe('Archive Management E2E', () => {
         branch: 'feature/keep-me',
         is_archived: true,
         git: new GitStatus(),
-        pr: new PRStatus(),
         session: new SessionInfo()
       });
       
@@ -439,7 +431,6 @@ describe('Archive Management E2E', () => {
         branch: 'feature/delete-me',
         is_archived: true,
         git: new GitStatus(),
-        pr: new PRStatus(),
         session: new SessionInfo()
       });
       
@@ -472,7 +463,6 @@ describe('Archive Management E2E', () => {
         branch: 'feature/cant-delete',
         is_archived: true,
         git: new GitStatus(),
-        pr: new PRStatus(),
         session: new SessionInfo()
       });
       
@@ -509,7 +499,6 @@ describe('Archive Management E2E', () => {
         branch: 'feature/alpha-feature',
         is_archived: true,
         git: new GitStatus(),
-        pr: new PRStatus(),
         session: new SessionInfo()
       });
       
@@ -520,7 +509,6 @@ describe('Archive Management E2E', () => {
         branch: 'feature/beta-feature',
         is_archived: true,
         git: new GitStatus(),
-        pr: new PRStatus(),
         session: new SessionInfo()
       });
       
@@ -554,7 +542,6 @@ describe('Archive Management E2E', () => {
         is_archived: true,
         mtime: Date.now() - 86400000, // 1 day ago
         git: new GitStatus(),
-        pr: new PRStatus(),
         session: new SessionInfo()
       });
       
@@ -566,7 +553,6 @@ describe('Archive Management E2E', () => {
         is_archived: true,
         mtime: Date.now(), // Now
         git: new GitStatus(),
-        pr: new PRStatus(),
         session: new SessionInfo()
       });
       
@@ -600,7 +586,6 @@ describe('Archive Management E2E', () => {
         branch: 'feature/archived-feature',
         is_archived: true,
         git: new GitStatus(),
-        pr: new PRStatus(),
         session: new SessionInfo()
       });
       

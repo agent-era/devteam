@@ -5,8 +5,9 @@ import {useKeyboardShortcuts} from '../hooks/useKeyboardShortcuts.js';
 import {useTerminalDimensions} from '../hooks/useTerminalDimensions.js';
 import {useUIContext} from '../contexts/UIContext.js';
 import {useWorktreeContext} from '../contexts/WorktreeContext.js';
+import {useGitHubContext} from '../contexts/GitHubContext.js';
 import {WorktreeInfo} from '../models.js';
-import type {AIStatus, AITool} from '../models.js';
+import type {AIStatus, AITool, PRStatus} from '../models.js';
 import {truncateDisplay} from '../shared/utils/formatting.js';
 import {logError} from '../shared/utils/logger.js';
 import {startIntervalIfEnabled} from '../shared/utils/intervals.js';
@@ -174,6 +175,17 @@ function computeColumnScroll(selected: number, total: number, visible: number): 
   return Math.max(0, Math.min(max, top));
 }
 
+// PRs are keyed by worktree path in GitHubContext, never on WorktreeInfo.
+// Exported + unit-tested because the obvious-looking `wt.pr.is_merged` spelling
+// silently returns undefined and has bitten two prior fixes.
+export function isItemPRMerged(
+  worktree: WorktreeInfo | null,
+  pullRequests: Record<string, PRStatus>,
+): boolean {
+  if (!worktree) return false;
+  return pullRequests[worktree.path]?.is_merged === true;
+}
+
 function findSlugPosition(board: TrackerBoard, slug: string): {column: number; row: number} | null {
   for (let ci = 0; ci < board.columns.length; ci++) {
     const ri = board.columns[ci].items.findIndex(it => it.slug === slug);
@@ -230,6 +242,7 @@ export default function TrackerBoardScreen({
     refreshProjectWorktrees,
     terminateFeatureSessions,
   } = useWorktreeContext();
+  const {pullRequests, setVisibleWorktrees} = useGitHubContext();
   const availableTools = React.useMemo(() => getAvailableAITools(), [getAvailableAITools]);
   const {columns: termCols, rows: termRows} = useTerminalDimensions();
 
@@ -348,6 +361,15 @@ export default function TrackerBoardScreen({
       refreshProjectWorktrees(project).catch(() => {});
     }, VISIBLE_STATUS_REFRESH_DURATION);
   }, [project, refreshProjectWorktrees]);
+
+  // Scope PR auto-refresh to this project's currently-visible worktrees.
+  const kanbanWorktreePaths = React.useMemo(
+    () => Array.from(sessionMap.values(), w => w.path).sort(),
+    [sessionMap],
+  );
+  React.useEffect(() => {
+    setVisibleWorktrees(kanbanWorktreePaths);
+  }, [kanbanWorktreePaths, setVisibleWorktrees]);
 
   // Mount-only: matches against `board` (not rawBoard) so worktree-only orphan items
   // can be restored too.
@@ -756,7 +778,7 @@ export default function TrackerBoardScreen({
             // "ready to advance" treatment so it's spottable at a glance and
             // can be acted on with the `m` shortcut from the board.
             const itemStatus = service.getItemStatus(projectPath, item.slug);
-            const prMerged = wt?.pr?.is_merged === true;
+            const prMerged = isItemPRMerged(wt, pullRequests);
             const readyToAdvance = !prMerged && service.isItemReadyToAdvance(itemStatus);
             const ralphWaiting = !!itemStatus && !readyToAdvance && service.isItemWaiting(itemStatus);
             const isWaiting = aiWaiting || ralphWaiting;

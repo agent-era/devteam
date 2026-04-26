@@ -75,7 +75,6 @@ export function setupTestWorktree(
     branch: `feature/${feature}`,
     git: new GitStatus(),
     session: new SessionInfo(),
-    pr: new PRStatus(),
     ...overrides,
   });
   

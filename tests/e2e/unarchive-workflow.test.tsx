@@ -146,8 +146,8 @@ describe('Unarchive Workflow E2E', () => {
     originalWorktree.branch = 'feature/preserve-feature';
     originalWorktree.path = '/fake/projects/preserve-test-branches/preserve-feature';
     originalWorktree.git = new GitStatus({modified_files: 5, added_lines: 10, deleted_lines: 2});
-    originalWorktree.pr = new PRStatus({number: 123, state: 'OPEN', title: 'Test PR'});
-    
+    memoryStore.prStatus.set(originalWorktree.path, new PRStatus({number: 123, state: 'OPEN', title: 'Test PR'}));
+
     // Update in memory store
     memoryStore.worktrees.set(originalWorktree.path, originalWorktree);
     

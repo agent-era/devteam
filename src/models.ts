@@ -124,7 +124,6 @@ export class WorktreeInfo {
   branch: string;
   git: GitStatus;
   session: SessionInfo;
-  pr?: PRStatus;
   is_archived?: boolean;
   mtime?: number;
   last_commit_ts?: number;
@@ -164,29 +163,6 @@ export class WorktreeInfo {
 
   get display_name(): string {
     return `${this.project}/${this.feature}`;
-  }
-
-  get needs_attention(): boolean {
-    const aiStatus = this.session?.ai_status || 'not_running';
-    if (aiStatus === 'waiting') return true;
-    if (aiStatus === 'working') return false;
-    if (this.git?.has_changes) return true;
-    if ((this.git?.ahead || 0) > 0) return true;
-    if (this.pr?.needs_attention) return true;
-    if (this.pr?.number && this.pr?.is_open) return true;
-    return false;
-  }
-
-  get action_priority(): number {
-    const aiStatus = this.session?.ai_status || 'not_running';
-    if (aiStatus === 'waiting') return 0;
-    if (aiStatus === 'working') return 10;
-    if (this.git?.has_changes) return 1;
-    if ((this.git?.ahead || 0) > 0) return 2;
-    if (this.pr?.needs_attention) return 3;
-    if (this.pr?.is_ready_to_merge) return 4;
-    if (this.pr?.number && this.pr?.is_open) return 5;
-    return 10;
   }
 }
 
