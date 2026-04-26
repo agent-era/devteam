@@ -69,6 +69,95 @@ function wrapToLines(text: string, width: number, maxLines: number): string[] {
 // inter-row gap so we get one extra item per column.
 const COLUMN_CHROME_ROWS = 3;
 
+export function getTrackerCardDisplayState({
+  prMerged,
+  readyToAdvance,
+  isWaiting,
+  isWorking,
+  hasSession,
+  inactive,
+  itemStatusDescription,
+}: {
+  prMerged: boolean;
+  readyToAdvance: boolean;
+  isWaiting: boolean;
+  isWorking: boolean;
+  hasSession: boolean;
+  inactive: boolean;
+  itemStatusDescription?: string;
+}): {
+  statusGlyph: string;
+  statusColor?: string;
+  titleColor?: string;
+  titleBold: boolean;
+  secondaryText: string;
+  secondaryColor?: string;
+  secondaryBold: boolean;
+  secondaryDim: boolean;
+  showApproveHint: boolean;
+} {
+  const waitingLabel = itemStatusDescription || 'waiting for you';
+  const readyLabel = itemStatusDescription
+    ? `Ready — ${itemStatusDescription}`
+    : 'Ready';
+  const workingLabel = itemStatusDescription || 'running';
+  const sessionIdleLabel = itemStatusDescription || 'session idle';
+
+  if (prMerged) {
+    return {
+      statusGlyph: '◆',
+      statusColor: 'gray',
+      titleColor: 'gray',
+      titleBold: false,
+      secondaryText: 'Merged',
+      secondaryColor: 'gray',
+      secondaryBold: false,
+      secondaryDim: true,
+      showApproveHint: false,
+    };
+  }
+
+  const statusGlyph =
+    readyToAdvance ? '✓' :
+    isWaiting ? '!' :
+    isWorking ? '⟳' :
+    hasSession ? '◆' : ' ';
+  const statusColor =
+    readyToAdvance ? 'green' :
+    isWaiting ? 'yellow' :
+    isWorking ? 'cyan' :
+    hasSession ? 'gray' :
+    inactive ? 'gray' : undefined;
+  const titleColor =
+    readyToAdvance ? 'green' :
+    isWaiting ? 'yellow' :
+    inactive ? 'gray' : undefined;
+  const secondaryText =
+    readyToAdvance ? readyLabel
+    : isWaiting ? waitingLabel
+    : isWorking ? workingLabel
+    : hasSession ? sessionIdleLabel
+    : '';
+  const secondaryColor =
+    inactive ? 'gray'
+    : readyToAdvance ? 'green'
+    : isWaiting ? 'yellow'
+    : isWorking ? 'cyan'
+    : undefined;
+
+  return {
+    statusGlyph,
+    statusColor,
+    titleColor,
+    titleBold: isWaiting || readyToAdvance,
+    secondaryText,
+    secondaryColor,
+    secondaryBold: !inactive && (isWaiting || readyToAdvance),
+    secondaryDim: inactive || (!readyToAdvance && !isWaiting && !isWorking),
+    showApproveHint: readyToAdvance,
+  };
+}
+
 function computeColumnScroll(selected: number, total: number, visible: number): number {
   if (total <= visible) return 0;
   const max = total - visible;
@@ -662,17 +751,15 @@ export default function TrackerBoardScreen({
             const ralphWaiting = !!itemStatus && !readyToAdvance && service.isItemWaiting(itemStatus);
             const isWaiting = aiWaiting || ralphWaiting;
 
-            const statusGlyph =
-              readyToAdvance ? '✓' :
-              isWaiting ? '!' :
-              isWorking ? '⟳' :
-              hasSession ? '◆' : ' ';
-            const statusColor =
-              readyToAdvance ? 'green' :
-              isWaiting ? 'yellow' :
-              isWorking ? 'cyan' :
-              hasSession ? 'gray' :
-              item.inactive ? 'gray' : undefined;
+            const display = getTrackerCardDisplayState({
+              prMerged,
+              readyToAdvance,
+              isWaiting,
+              isWorking,
+              hasSession,
+              inactive: item.inactive,
+              itemStatusDescription: itemStatus?.brief_description,
+            });
 
             // Slug row eats: 2 (border) + 2 (paddingX) + 2 (cursor) + 2 (status glyph) = 8 chars
             const slug = truncateDisplay(item.slug, Math.max(4, colWidth - 8));
@@ -680,25 +767,16 @@ export default function TrackerBoardScreen({
             const secMax = Math.max(4, colWidth - 8);
             const secondary = !hasSession ? renderSecondary(item) : '';
 
-            const waitingLabel = ralphWaiting && itemStatus?.brief_description
-              ? itemStatus.brief_description
-              : 'waiting for you';
-            const readyLabel = itemStatus?.brief_description
-              ? `Ready — ${itemStatus.brief_description}`
-              : 'Ready';
-
             return (
               <Box key={item.slug} flexDirection="column" marginBottom={1} flexShrink={0}>
                 {/* Slug row: cursor + status + name */}
                 <Box>
                   <Text color={accent} bold>{isSelected ? '▸ ' : '  '}</Text>
-                  <Text color={statusColor} bold={isWaiting || readyToAdvance}>{statusGlyph} </Text>
+                  <Text color={display.statusColor} bold={display.titleBold}>{display.statusGlyph} </Text>
                   <Text
                     inverse={isSelected}
-                    color={!isSelected
-                      ? (readyToAdvance ? 'green' : isWaiting ? 'yellow' : item.inactive ? 'gray' : undefined)
-                      : undefined}
-                    bold={isWaiting || readyToAdvance || isSelected}
+                    color={!isSelected ? display.titleColor : undefined}
+                    bold={display.titleBold || isSelected}
                     dimColor={item.inactive && !isSelected}
                     wrap="truncate"
                   >
@@ -708,30 +786,18 @@ export default function TrackerBoardScreen({
                 {/* Status / secondary text — wraps to SECONDARY_MAX_LINES so
                     long brief_descriptions from the agent stay readable. */}
                 {(() => {
-                  const text =
-                    readyToAdvance ? readyLabel
-                    : isWaiting ? waitingLabel
-                    : isWorking ? (itemStatus?.brief_description || 'running')
-                    : hasSession ? (itemStatus?.brief_description || 'session idle')
-                    : secondary || '';
+                  const text = display.secondaryText || secondary || '';
                   if (!text) return null;
                   // Focused card gets more lines so the full (up to 200-char)
                   // brief_description is readable; other cards stay compact.
                   const maxLines = isSelected ? 4 : SECONDARY_MAX_LINES;
                   const lines = wrapToLines(text, secMax, maxLines);
-                  const color =
-                    item.inactive ? 'gray'
-                    : readyToAdvance ? 'green'
-                    : isWaiting ? 'yellow'
-                    : isWorking ? 'cyan'
-                    : undefined;
-                  const dim = item.inactive || (!readyToAdvance && !isWaiting && !isWorking);
                   return lines.map((line, lineIdx) => (
                     <Text
                       key={lineIdx}
-                      color={color}
-                      bold={!item.inactive && (isWaiting || readyToAdvance)}
-                      dimColor={dim}
+                      color={display.secondaryColor}
+                      bold={display.secondaryBold}
+                      dimColor={display.secondaryDim}
                       wrap="truncate"
                     >
                       {`    ${line}`}
@@ -743,7 +809,7 @@ export default function TrackerBoardScreen({
                     own line (rather than suffixing the brief_description)
                     makes the shortcut visible even when the description
                     wraps to two lines. */}
-                {readyToAdvance && isSelected && (
+                {display.showApproveHint && isSelected && (
                   <Text color="green" bold>
                     {`    press [m] to approve and advance`}
                   </Text>
