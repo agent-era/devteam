@@ -54,11 +54,11 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     name: 'bright',
     label: 'Bright — multi-colour headings, neutral body',
     heading: {1: '#00FFFF', 2: '#00FF7F', 3: '#FFFF66', 4: '#FF66FF', 5: '#66B3FF', 6: '#FFFFFF'},
-    bodyColor: '#E0E0E0',
+    bodyColor: '#FFFFFF',
     boldColor: '#FFFFFF',
     // Slightly darker gray than body, no `dim` flag — terminal-side `dim`
-    // was reducing code to ~50% intensity which read as way darker than
-    // intended. An explicit gray gives a controllable amount of contrast.
+    // reduced code to ~50% intensity which read as way too dark. An explicit
+    // gray gives a controllable amount of contrast against a white body.
     codeColor: '#B8B8B8',
     codeDim: false,
     bulletColor: '#00FFFF',
