@@ -77,7 +77,10 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     bodyColor: '#9CB59C',
     // Bold near white with a faint green tint toward h1.
     boldColor: '#F0FFE8',
-    codeDim: true,
+    // Same brightness band as bodyColor, hue nudged slightly toward
+    // yellow-olive so code reads distinct from the green body.
+    codeColor: '#B0B594',
+    codeDim: false,
     bulletColor: '#7CFC00',
     blockquoteBarColor: '#556B2F',
     blockquoteDim: true,
@@ -94,7 +97,9 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     bodyColor: '#B5A89C',
     // Bold near white with a warm peach hint.
     boldColor: '#FFF0E5',
-    codeDim: true,
+    // Same brightness, slight rose shift away from peach.
+    codeColor: '#B59CA0',
+    codeDim: false,
     bulletColor: '#FFB347',
     blockquoteBarColor: '#8B4513',
     blockquoteDim: true,
@@ -111,7 +116,9 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     bodyColor: '#9CACB5',
     // Bold near white with a faint blue tint.
     boldColor: '#EDF5FF',
-    codeDim: true,
+    // Same brightness, hue nudged toward teal away from the blue body.
+    codeColor: '#9CB5AC',
+    codeDim: false,
     bulletColor: '#00CED1',
     blockquoteBarColor: '#4682B4',
     blockquoteDim: true,
@@ -128,7 +135,9 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     bodyColor: '#B59CAC',
     // Bold near white with a faint pink tint.
     boldColor: '#FFE8F4',
-    codeDim: true,
+    // Same brightness, hue nudged toward coral away from the pink body.
+    codeColor: '#B5A09C',
+    codeDim: false,
     bulletColor: '#FFFF66',
     blockquoteBarColor: '#9370DB',
     blockquoteDim: true,
@@ -145,7 +154,9 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     bodyColor: '#B5A48A',
     // Bold near white with a faint wheat / salmon tint.
     boldColor: '#FFEDD8',
-    codeDim: true,
+    // Same brightness, hue nudged warmer toward salmon away from the wheat body.
+    codeColor: '#B59A8A',
+    codeDim: false,
     bulletColor: '#FFA94D',
     blockquoteBarColor: '#A0522D',
     blockquoteDim: true,
@@ -162,7 +173,9 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     bodyColor: '#B59CAA',
     // Bold near white with a faint pink tint.
     boldColor: '#FFE8F0',
-    codeDim: true,
+    // Same brightness, hue nudged toward purple away from the pink body.
+    codeColor: '#A89CB5',
+    codeDim: false,
     bulletColor: '#FF85C2',
     blockquoteBarColor: '#9370DB',
     blockquoteDim: true,
@@ -178,7 +191,10 @@ export const MARKDOWN_THEMES: MarkdownTheme[] = [
     heading: {1: '#FFFFFF', 2: '#F5F5F5', 3: '#E0E0E0', 4: '#CCCCCC', 5: '#B8B8B8', 6: '#A0A0A0'},
     bodyColor: undefined,
     boldColor: '#FFFFFF',
-    codeDim: true,
+    // Mono has no hue — give code a slightly darker neutral gray so it's
+    // still distinct without colour.
+    codeColor: '#B0B0B0',
+    codeDim: false,
     bulletColor: 'white',
     blockquoteBarColor: 'gray',
     blockquoteDim: true,
