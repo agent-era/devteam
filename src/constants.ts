@@ -134,7 +134,10 @@ export const TMUX_DISPLAY_TIME = 0;
 // Kept long to minimize GitHub API rate limit usage. Commit-hash-based invalidation
 // handles freshness on push; create/merge events trigger immediate targeted refreshes.
 export const PR_TTL_MERGED_MS = 365 * DAY_MS;
-export const PR_TTL_NO_PR_MS = 7 * DAY_MS;
+// Pre-push entries have no remote-commit-hash to invalidate against, so the
+// only freshness signal is TTL. 15m matches the rest of the table; 7d (the
+// previous value) made the kanban miss PRs opened after the worktree existed.
+export const PR_TTL_NO_PR_MS = 15 * MINUTE_MS;
 export const PR_TTL_ERROR_MS = 10 * MINUTE_MS;
 export const PR_TTL_CHECKS_FAIL_MS = 30 * MINUTE_MS;
 export const PR_TTL_CHECKS_PENDING_MS = 5 * MINUTE_MS; // matches PR_REFRESH_DURATION — no benefit going shorter
