@@ -627,6 +627,23 @@ export default function TrackerBoardScreen({
     return null;
   })();
 
+  // Read each item's status.json once per worktree refresh and reuse for both
+  // the title-bar tally and the per-card render loop. Memoized on
+  // `[board, worktrees]` so keystroke re-renders don't replay disk reads;
+  // status.json updates land on the next refresh tick, matching the rest of
+  // the kanban's refresh cadence.
+  const itemStatusBySlug = React.useMemo(() => {
+    const map = new Map<string, ReturnType<TrackerService['getItemStatus']>>();
+    for (const col of board.columns) {
+      for (const item of col.items) {
+        map.set(item.slug, service.getItemStatus(projectPath, item.slug));
+      }
+    }
+    return map;
+    // `worktrees` isn't read inside the memo body — it's the refresh tick we
+    // re-run on, since session state changes alongside it.
+  }, [board, worktrees, service, projectPath]);
+
   // When the picker is open, render it full-screen instead of the board. The board
   // fills terminal height with its columns, so anything rendered below gets clipped.
   // discoverProjects does sync filesystem work; cache it across re-renders.
@@ -656,23 +673,6 @@ export default function TrackerBoardScreen({
       </Box>
     );
   }
-
-  // Read each item's status.json once per worktree refresh and reuse for both
-  // the title-bar tally and the per-card render loop. Memoized on
-  // `[board, worktrees]` so keystroke re-renders don't replay disk reads;
-  // status.json updates land on the next refresh tick, matching the rest of
-  // the kanban's refresh cadence.
-  const itemStatusBySlug = React.useMemo(() => {
-    const map = new Map<string, ReturnType<TrackerService['getItemStatus']>>();
-    for (const col of board.columns) {
-      for (const item of col.items) {
-        map.set(item.slug, service.getItemStatus(projectPath, item.slug));
-      }
-    }
-    return map;
-    // `worktrees` isn't read inside the memo body — it's the refresh tick we
-    // re-run on, since session state changes alongside it.
-  }, [board, worktrees, service, projectPath]);
 
   let waitingCount = 0;
   let workingCount = 0;
