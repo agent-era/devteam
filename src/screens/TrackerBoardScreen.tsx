@@ -806,7 +806,9 @@ export default function TrackerBoardScreen({
               itemStatusDescription: itemStatus?.brief_description,
             });
             const runningChips = computeRunningChips(wt);
-            const codeStateChips = computeCodeStateChips(wt);
+            // PR data is on GitHubContext.pullRequests, keyed by worktree path —
+            // not on wt.pr (which is unassigned in prod). See PR #229.
+            const codeStateChips = computeCodeStateChips(wt, wt ? pullRequests[wt.path] : undefined);
             // Each chip row eats one of the per-card budgeted rows (see
             // ROWS_PER_ITEM). Both rows can render simultaneously when the
             // worktree has live sessions AND meaningful git/PR state.

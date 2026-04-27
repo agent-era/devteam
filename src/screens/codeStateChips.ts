@@ -1,4 +1,4 @@
-import type {WorktreeInfo} from '../models.js';
+import type {PRStatus, WorktreeInfo} from '../models.js';
 import {formatDiffStats, formatGitChanges, formatPRStatus} from '../components/views/MainView/utils.js';
 
 export interface CodeStateChip {
@@ -12,7 +12,7 @@ export interface CodeStateChip {
 const DIFF_COLOR = 'blue';
 const CHANGES_COLOR = 'cyan';
 
-function prChipColor(pr: NonNullable<WorktreeInfo['pr']>): string {
+function prChipColor(pr: PRStatus): string {
   if (pr.has_conflicts || pr.checks === 'failing') return 'red';
   if (pr.checks === 'pending' || pr.isLoading) return 'yellow';
   if (pr.checks === 'passing') return 'green';
@@ -24,7 +24,14 @@ function prChipColor(pr: NonNullable<WorktreeInfo['pr']>): string {
 // number + check badge. Each chip is omitted when its underlying value is
 // quiet (zero diff, no divergent commits, no live PR), so the row stays
 // invisible for clean worktrees.
-export function computeCodeStateChips(worktree: WorktreeInfo | null | undefined): CodeStateChip[] {
+//
+// PR data is passed separately because WorktreeInfo.pr is never assigned in
+// production — PR status lives on GitHubContext.pullRequests, keyed by
+// worktree path. Callers should look it up there.
+export function computeCodeStateChips(
+  worktree: WorktreeInfo | null | undefined,
+  pr?: PRStatus | null,
+): CodeStateChip[] {
   if (!worktree) return [];
   const chips: CodeStateChip[] = [];
 
@@ -40,7 +47,6 @@ export function computeCodeStateChips(worktree: WorktreeInfo | null | undefined)
     }
   }
 
-  const pr = worktree.pr;
   // Suppress while the PR check is mid-flight or unresolved — formatPRStatus
   // would emit '*' or '' and the chip would be misleading. Merged PRs use the
   // gray "Merged" secondary text on the card itself, so the chip stays off.

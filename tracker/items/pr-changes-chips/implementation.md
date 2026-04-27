@@ -82,6 +82,12 @@ clean worktrees stay visually quiet.
 - **PR chip suppression is broad.** Hidden when merged (gray "Merged"
   secondary already covers it), `loading`, or `not_checked`. The chip
   only appears when there's a real number AND a real status to show.
+- **PR data is sourced from `GitHubContext.pullRequests[wt.path]`**, not
+  from `WorktreeInfo.pr`. Followup after rebasing on PR #229: that PR
+  pointed out `wt.pr` was always unset, so the original implementation's
+  PR chip never rendered. `computeCodeStateChips` now takes `pr` as a
+  separate argument; the call site in `TrackerBoardScreen.tsx` looks it
+  up from the GitHub context (already wired for `isItemPRMerged`).
 
 # Notes for cleanup
 
