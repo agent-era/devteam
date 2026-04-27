@@ -42,8 +42,6 @@ function worktreeStatusEquals(a: WorktreeInfo | undefined, b: WorktreeInfo): boo
     && ga.untracked_lines === gb.untracked_lines
     && ga.base_added_lines === gb.base_added_lines
     && ga.base_deleted_lines === gb.base_deleted_lines
-    && ga.base_added_lines_excl_tracker === gb.base_added_lines_excl_tracker
-    && ga.base_deleted_lines_excl_tracker === gb.base_deleted_lines_excl_tracker
     && ga.has_remote === gb.has_remote
     && ga.ahead === gb.ahead
     && ga.behind === gb.behind

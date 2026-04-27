@@ -13,12 +13,6 @@ export class GitStatus {
   untracked_lines: number;
   base_added_lines: number;
   base_deleted_lines: number;
-  // Committed-against-base diff size with `tracker/**` excluded. Used by the
-  // tracker board's diff chip so per-item status.json/notes/requirements
-  // churn doesn't dominate the "non-tracker changes" signal. Mainview keeps
-  // using the full counts above.
-  base_added_lines_excl_tracker: number;
-  base_deleted_lines_excl_tracker: number;
   has_remote: boolean;
   ahead: number;
   behind: number;
@@ -31,8 +25,6 @@ export class GitStatus {
     this.untracked_lines = 0;
     this.base_added_lines = 0;
     this.base_deleted_lines = 0;
-    this.base_added_lines_excl_tracker = 0;
-    this.base_deleted_lines_excl_tracker = 0;
     this.has_remote = false;
     this.ahead = 0;
     this.behind = 0;

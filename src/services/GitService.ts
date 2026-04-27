@@ -19,12 +19,6 @@ interface GitSlowMetrics {
   timestamp: number;
   committedAdded: number;
   committedDeleted: number;
-  // Committed-vs-base diff with `tracker/**` excluded. Powers the tracker
-  // board's "non-tracker changes" diff chip. Computed alongside the full
-  // shortstat so the second `git diff` call piggybacks on the slow-cache
-  // refresh and stays cheap.
-  committedAddedExclTracker: number;
-  committedDeletedExclTracker: number;
   ahead: number;
   behind: number;
   hasRemote: boolean;
@@ -182,11 +176,6 @@ export class GitService {
 
     status.base_added_lines = slow.committedAdded + status.added_lines + status.untracked_lines;
     status.base_deleted_lines = slow.committedDeleted + status.deleted_lines;
-    // Tracker-excluded counts use committed diff only — including working-tree
-    // adds would re-introduce the per-item status.json churn the chip is meant
-    // to filter out.
-    status.base_added_lines_excl_tracker = slow.committedAddedExclTracker;
-    status.base_deleted_lines_excl_tracker = slow.committedDeletedExclTracker;
     status.ahead = slow.ahead;
     status.behind = slow.behind;
     status.has_remote = slow.hasRemote;
@@ -202,18 +191,11 @@ export class GitService {
 
   private async computeAndCacheSlowMetrics(worktreePath: string, base: string): Promise<GitSlowMetrics> {
     let committedAdded = 0, committedDeleted = 0;
-    let committedAddedExclTracker = 0, committedDeletedExclTracker = 0;
     if (base) {
       const mergeBase = await runCommandQuickAsync(['git', '-C', worktreePath, 'merge-base', 'HEAD', base]);
       if (mergeBase) {
-        const baseRev = mergeBase.trim();
-        const committed = await runCommandQuickAsync(['git', '-C', worktreePath, 'diff', '--shortstat', baseRev, 'HEAD']);
+        const committed = await runCommandQuickAsync(['git', '-C', worktreePath, 'diff', '--shortstat', mergeBase.trim(), 'HEAD']);
         [committedAdded, committedDeleted] = committed ? parseGitShortstat(committed) : [0, 0];
-        // Second shortstat with the tracker tree excluded via pathspec. `:!tracker`
-        // is the magic-pathspec exclude syntax; the trailing `--` keeps git from
-        // confusing it with a rev.
-        const committedExcl = await runCommandQuickAsync(['git', '-C', worktreePath, 'diff', '--shortstat', baseRev, 'HEAD', '--', ':!tracker']);
-        [committedAddedExclTracker, committedDeletedExclTracker] = committedExcl ? parseGitShortstat(committedExcl) : [0, 0];
       }
     }
 
@@ -239,12 +221,7 @@ export class GitService {
       }
     } catch {}
 
-    const slow: GitSlowMetrics = {
-      timestamp: Date.now(),
-      committedAdded, committedDeleted,
-      committedAddedExclTracker, committedDeletedExclTracker,
-      ahead, behind, hasRemote, upstreamAhead,
-    };
+    const slow: GitSlowMetrics = {timestamp: Date.now(), committedAdded, committedDeleted, ahead, behind, hasRemote, upstreamAhead};
     this.gitSlowCache.set(worktreePath, slow);
     return slow;
   }

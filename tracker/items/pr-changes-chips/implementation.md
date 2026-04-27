@@ -138,3 +138,30 @@ The codeStateChips function mirrors runningChips exactly in shape and
 testing pattern, so the two stay easy to reason about as a pair. The
 GitService change adds one bounded extra git call per worktree on the
 slow-cache path; no API churn beyond the two new GitStatus fields.
+
+## Removal — code-state chips dropped
+
+After iterating on color/visibility (selected-only, plain-vs-filled,
+pending-vs-clean, merged gray-out, ordering above the running row),
+the user opted to drop the diff/changes/PR chips entirely from the
+tracker board. They didn't earn their place visually next to the
+existing agent/shell/run row.
+
+What's gone:
+- `src/screens/codeStateChips.ts` (deleted)
+- `tests/unit/codeStateChips.test.ts` (deleted)
+- `GitStatus.base_added_lines_excl_tracker` / `base_deleted_lines_excl_tracker`
+- The second `git diff --shortstat … -- ':!tracker'` in `GitService`
+- The corresponding `committedAddedExclTracker` / `committedDeletedExclTracker`
+  on `GitSlowMetrics`
+- The two new equality-check fields on `WorktreeCore`
+- Inline test fixture entry in `tests/unit/statusChipMapping.test.ts`
+
+What's kept (useful side-effects of this work):
+- Inactive cards render the running chips in plain text mode
+  (chip color as fg, no bg) instead of with bright filled pills.
+- Merged cards render the running chips in a gray-bg pill instead of
+  the original color, so the row reads as "done, archived".
+
+Final state vs origin/main: only the inactive/merged styling tweak on
+the pre-existing running-chip row in `TrackerBoardScreen.tsx`.

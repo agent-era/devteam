@@ -17,7 +17,6 @@ import TrackerProjectPickerDialog from '../components/dialogs/TrackerProjectPick
 import AIToolDialog from '../components/dialogs/AIToolDialog.js';
 import StatusChip from '../components/common/StatusChip.js';
 import {computeRunningChips} from './runningChips.js';
-import {computeCodeStateChips} from './codeStateChips.js';
 
 interface TrackerBoardScreenProps {
   project: string;
@@ -806,19 +805,6 @@ export default function TrackerBoardScreen({
               itemStatusDescription: itemStatus?.brief_description,
             });
             const runningChips = computeRunningChips(wt);
-            // Code-state chips are detail data for the focused card only —
-            // showing them on every card crowded the board and made the
-            // running-chip row hard to scan. PR data lives on
-            // GitHubContext.pullRequests, keyed by path (not wt.pr — see PR #229).
-            const codeStateChips = isSelected
-              ? computeCodeStateChips(wt, wt ? pullRequests[wt.path] : undefined)
-              : [];
-            // Each chip row eats one of the per-card budgeted rows (see
-            // ROWS_PER_ITEM). Both rows can render simultaneously on the
-            // selected card when it has live sessions AND meaningful git/PR
-            // state; non-selected cards only ever render the running row.
-            const chipRowCount =
-              (runningChips.length > 0 ? 1 : 0) + (codeStateChips.length > 0 ? 1 : 0);
 
             // Slug row eats: 2 (border) + 2 (paddingX) + 2 (cursor) + 2 (status glyph) = 8 chars
             const slug = truncateDisplay(item.slug, Math.max(4, colWidth - 8));
@@ -849,9 +835,9 @@ export default function TrackerBoardScreen({
                   if (!text) return null;
                   // Focused card gets more lines so the full (up to 200-char)
                   // brief_description is readable; other cards stay compact.
-                  // Each present chip row eats one of those lines.
+                  // Chip row eats one of those lines when present.
                   const baseMax = isSelected ? 4 : SECONDARY_MAX_LINES;
-                  const maxLines = Math.max(1, baseMax - chipRowCount);
+                  const maxLines = Math.max(1, baseMax - (runningChips.length > 0 ? 1 : 0));
                   const lines = wrapToLines(text, secMax, maxLines);
                   return lines.map((line, lineIdx) => (
                     <Text
@@ -875,40 +861,15 @@ export default function TrackerBoardScreen({
                     {`    press [m] to approve and advance`}
                   </Text>
                 )}
-                {/* Code-state chips: diff bulk (excluding tracker churn), commits
-                    ahead/behind, PR number + check badge. Mirror the mainview's
-                    diff/changes/PR cells so the focused card conveys real code
-                    state without bouncing to the worktree list. Selected-card
-                    only — non-selected cards skip this row to keep the board
-                    scannable and the running-chip row prominent. Rendered
-                    ABOVE running chips so the more-detailed signals sit
-                    closer to the slug, with running chips as the row footer.
-                    Diff and changes chips render plain (color as fg, no bg);
-                    only the PR chip keeps a filled pill. */}
-                {codeStateChips.length > 0 && (
-                  <Box marginLeft={4} flexWrap="wrap">
-                    {codeStateChips.map((chip, idx) => (
-                      <React.Fragment key={chip.label}>
-                        {idx > 0 && <Text> </Text>}
-                        {prMerged
-                          ? (chip.plain
-                              ? <StatusChip label={chip.label} color={undefined} fg="gray" />
-                              : <StatusChip label={chip.label} color="gray" fg="white" />)
-                          : item.inactive || chip.plain
-                            ? <StatusChip label={chip.label} color={undefined} fg={chip.color} />
-                            : <StatusChip label={chip.label} color={chip.color} fg="white" />}
-                      </React.Fragment>
-                    ))}
-                  </Box>
-                )}
-                {/* Running-status chips: one per active tmux session. Indented
-                    to match the secondary-text gutter. Eats one of the budgeted
-                    rows per item; secondary maxLines drops by 1 when chips
-                    render to keep scroll math intact. Inactive cards drop the
-                    bg pill and use the chip color as plain text. Merged cards
-                    drop the color too — every chip on a merged card renders
-                    gray so the whole row reads as "done, archived" instead
-                    of competing for attention. */}
+                {/* Running-status chips: one per active tmux session, rendered
+                    last so the card's textual signals (ready/waiting/working)
+                    stay above. Indented to match the secondary-text gutter.
+                    Eats one of the budgeted rows per item; secondary maxLines
+                    drops by 1 when chips render to keep scroll math intact.
+                    Inactive cards drop the bg pill and use the chip color as
+                    plain text. Merged cards drop the color too — every chip
+                    on a merged card renders gray so the whole row reads as
+                    "done, archived" instead of competing for attention. */}
                 {runningChips.length > 0 && (
                   <Box marginLeft={4}>
                     {runningChips.map((chip, idx) => (
