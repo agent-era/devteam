@@ -97,13 +97,12 @@ clean worktrees stay visually quiet.
   changes or unpushed commits. When everything is committed and pushed
   the chips still render (the diff against base is real information),
   but in gray so the eye isn't drawn to a clean state.
-- **Merged cards render every chip as gray-bg pills.** Both rows drop
-  their semantic colors when `prMerged` is true, but keep the filled
-  pill shape (gray background, white fg) so the row still reads as a
-  cohesive chip strip — just colorless. The merged card is "done,
-  archived" and shouldn't compete with active work for attention, but
-  fully unstyled chips look like a layout glitch. Precedence in the
-  renderer is `merged > inactive > active`.
+- **Merged cards keep each chip's shape, just colorless.** When
+  `prMerged` is true: chips that normally fill (agent/shell/run, PR)
+  stay filled but with a gray bg + white fg; chips that normally render
+  plain (diff, changes) stay plain but with a gray fg. So the chip's
+  silhouette is unchanged across active/merged transitions — only its
+  color drops out. Renderer precedence is `merged > inactive > active`.
 - **PR data is sourced from `GitHubContext.pullRequests[wt.path]`**, not
   from `WorktreeInfo.pr`. Followup after rebasing on PR #229: that PR
   pointed out `wt.pr` was always unset, so the original implementation's
