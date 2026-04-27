@@ -139,13 +139,15 @@ testing pattern, so the two stay easy to reason about as a pair. The
 GitService change adds one bounded extra git call per worktree on the
 slow-cache path; no API churn beyond the two new GitStatus fields.
 
-## Removal — code-state chips dropped
+## Removal — diff/changes chips dropped, PR chip kept
 
 After iterating on color/visibility (selected-only, plain-vs-filled,
 pending-vs-clean, merged gray-out, ordering above the running row),
-the user opted to drop the diff/changes/PR chips entirely from the
-tracker board. They didn't earn their place visually next to the
-existing agent/shell/run row.
+the user opted to drop the diff and changes chips from the tracker
+board — they didn't earn their place visually next to the existing
+agent/shell/run row. The PR chip stayed: it's the most actionable
+signal in the row (number + check state at a glance, plus merged
+status).
 
 What's gone:
 - `src/screens/codeStateChips.ts` (deleted)
@@ -157,11 +159,20 @@ What's gone:
 - The two new equality-check fields on `WorktreeCore`
 - Inline test fixture entry in `tests/unit/statusChipMapping.test.ts`
 
-What's kept (useful side-effects of this work):
-- Inactive cards render the running chips in plain text mode
-  (chip color as fg, no bg) instead of with bright filled pills.
-- Merged cards render the running chips in a gray-bg pill instead of
-  the original color, so the row reads as "done, archived".
+What's kept:
+- `src/screens/prChip.ts` — `computePRChip(pr)` returns a single chip
+  with semantic color (green/red/yellow/gray) or null when the PR fetch
+  is unresolved. PR data sourced from `GitHubContext.pullRequests`
+  (per PR #229).
+- The PR chip renders on the same row as the agent/shell/run chips,
+  appended after them with a single-space separator. Same render
+  branch handles inactive (plain text) and merged (gray-bg pill).
+- Inactive cards render running chips in plain text mode (chip color
+  as fg, no bg) instead of with bright filled pills.
+- Merged cards render running + PR chips in a gray-bg pill instead of
+  their original color, so the row reads as "done, archived".
 
-Final state vs origin/main: only the inactive/merged styling tweak on
-the pre-existing running-chip row in `TrackerBoardScreen.tsx`.
+`hasChipRow = runningChips.length > 0 || !!prChip` controls whether
+the row renders and whether secondary `maxLines` drops by 1, so the
+per-card 4-row scroll budget is unchanged from the running-chips-only
+baseline.
