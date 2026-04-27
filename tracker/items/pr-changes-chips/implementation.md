@@ -176,3 +176,24 @@ What's kept:
 the row renders and whether secondary `maxLines` drops by 1, so the
 per-card 4-row scroll budget is unchanged from the running-chips-only
 baseline.
+
+## Followup — PR cache invalidation gap
+
+While debugging "the PR chip isn't showing for hide-binary-diff-content"
+we found a stale cache hit. Root cause was in `PRStatusCacheService`,
+not in the chip code:
+
+`isValid()` checked `entry.remoteCommitHash && !isRemoteCommitHashValid(...)`.
+The `&&` short-circuited when the cached remote hash was empty, which
+happens when the entry was first cached before the branch had a
+remote (typical: `no_pr` cached on a freshly-created worktree, then
+the user pushes and opens a PR later). Without the remote-hash check,
+the entry stayed valid for the full `PR_TTL_NO_PR_MS` (7 days) even
+though the local branch was now backed by an upstream PR.
+
+Fix: when the cached `remoteCommitHash` is empty, still call
+`getRemoteCommitHash(worktreePath)` — if a remote now exists, treat
+the entry as invalid so the next visible-worktree refresh re-fetches.
+Added a regression test in `tests/unit/PRStatusCacheService.test.ts`
+that uses `jest.spyOn` to flip the remote-hash result between
+`set()` and `isValid()` calls.

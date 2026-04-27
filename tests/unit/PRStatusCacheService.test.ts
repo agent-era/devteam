@@ -157,6 +157,33 @@ describe('PRStatusCacheService', () => {
     expect(cacheService.getCachedPaths()).not.toContain(worktreePath);
   });
 
+  test('invalidates a no-remote cache entry once the branch acquires a remote', () => {
+    // Repro: 'no_pr' was cached when the branch had no remote; later the user
+    // pushed and opened a PR. Without this invalidation, the 7-day no_pr TTL
+    // kept the cache stuck on no_pr indefinitely (commitHash unchanged,
+    // remoteCommitHash check skipped because the cached value was empty).
+    const worktreePath = '/test/path';
+    const noPR = new PRStatus({loadingStatus: 'no_pr'});
+
+    // Stub hash lookups: at set() time, no remote; at isValid() time, a remote exists.
+    const getRemoteHash = jest.spyOn<any, any>(cacheService as any, 'getRemoteCommitHash');
+    const getCommitHash = jest.spyOn<any, any>(cacheService as any, 'getCurrentCommitHash');
+    getCommitHash.mockReturnValue('abc123');
+    getRemoteHash.mockReturnValueOnce(undefined); // first call: set()
+    cacheService.set(worktreePath, noPR);
+
+    // Sanity: cache is valid right after being set with no remote.
+    getRemoteHash.mockReturnValueOnce(undefined);
+    expect(cacheService.isValid(worktreePath)).toBe(true);
+
+    // Branch is now pushed → remote hash exists. Cache should invalidate.
+    getRemoteHash.mockReturnValueOnce('def456');
+    expect(cacheService.isValid(worktreePath)).toBe(false);
+
+    getRemoteHash.mockRestore();
+    getCommitHash.mockRestore();
+  });
+
   test('should invalidate multiple cache entries', () => {
     const paths = ['/test/path1', '/test/path2', '/test/path3'];
     const prStatus = new PRStatus({loadingStatus: 'exists', number: 123});
