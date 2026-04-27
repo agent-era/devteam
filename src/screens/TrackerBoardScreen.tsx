@@ -885,7 +885,7 @@ export default function TrackerBoardScreen({
                       <React.Fragment key={chip.label}>
                         {idx > 0 && <Text> </Text>}
                         {prMerged
-                          ? <StatusChip label={chip.label} color={undefined} fg="gray" />
+                          ? <StatusChip label={chip.label} color="gray" fg="white" />
                           : item.inactive
                             ? <StatusChip label={chip.label} color={undefined} fg={chip.color} />
                             : <StatusChip label={chip.label} color={chip.color} fg="white" />}
@@ -909,7 +909,7 @@ export default function TrackerBoardScreen({
                       <React.Fragment key={chip.label}>
                         {idx > 0 && <Text> </Text>}
                         {prMerged
-                          ? <StatusChip label={chip.label} color={undefined} fg="gray" />
+                          ? <StatusChip label={chip.label} color="gray" fg="white" />
                           : item.inactive || chip.plain
                             ? <StatusChip label={chip.label} color={undefined} fg={chip.color} />
                             : <StatusChip label={chip.label} color={chip.color} fg="white" />}
