@@ -103,6 +103,14 @@ clean worktrees stay visually quiet.
   plain (diff, changes) stay plain but with a gray fg. So the chip's
   silhouette is unchanged across active/merged transitions — only its
   color drops out. Renderer precedence is `merged > inactive > active`.
+- **Code-state chips are selected-card only, and rendered above the
+  running chips.** Showing diff/changes/PR on every card crowded the
+  board and made the running-chip row hard to scan; the row carries
+  detail data that's only relevant for the focused item. Order is
+  code-state row → running-chips row, so the more-specific signals sit
+  closer to the slug and the running chips read as the card footer.
+  `chipRowCount` for the secondary maxLines budget naturally collapses
+  to "running only" on non-selected cards.
 - **PR data is sourced from `GitHubContext.pullRequests[wt.path]`**, not
   from `WorktreeInfo.pr`. Followup after rebasing on PR #229: that PR
   pointed out `wt.pr` was always unset, so the original implementation's

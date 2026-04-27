@@ -806,12 +806,17 @@ export default function TrackerBoardScreen({
               itemStatusDescription: itemStatus?.brief_description,
             });
             const runningChips = computeRunningChips(wt);
-            // PR data is on GitHubContext.pullRequests, keyed by worktree path —
-            // not on wt.pr (which is unassigned in prod). See PR #229.
-            const codeStateChips = computeCodeStateChips(wt, wt ? pullRequests[wt.path] : undefined);
+            // Code-state chips are detail data for the focused card only —
+            // showing them on every card crowded the board and made the
+            // running-chip row hard to scan. PR data lives on
+            // GitHubContext.pullRequests, keyed by path (not wt.pr — see PR #229).
+            const codeStateChips = isSelected
+              ? computeCodeStateChips(wt, wt ? pullRequests[wt.path] : undefined)
+              : [];
             // Each chip row eats one of the per-card budgeted rows (see
-            // ROWS_PER_ITEM). Both rows can render simultaneously when the
-            // worktree has live sessions AND meaningful git/PR state.
+            // ROWS_PER_ITEM). Both rows can render simultaneously on the
+            // selected card when it has live sessions AND meaningful git/PR
+            // state; non-selected cards only ever render the running row.
             const chipRowCount =
               (runningChips.length > 0 ? 1 : 0) + (codeStateChips.length > 0 ? 1 : 0);
 
@@ -870,39 +875,16 @@ export default function TrackerBoardScreen({
                     {`    press [m] to approve and advance`}
                   </Text>
                 )}
-                {/* Running-status chips: one per active tmux session, rendered
-                    last so the card's textual signals (ready/waiting/working)
-                    stay above. Indented to match the secondary-text gutter.
-                    Eats one of the budgeted rows per item; secondary maxLines
-                    drops by 1 when chips render to keep scroll math intact.
-                    Inactive cards drop the bg pill and use the chip color as
-                    plain text. Merged cards drop the color too — every chip
-                    on a merged card renders gray so the whole row reads as
-                    "done, archived" instead of competing for attention. */}
-                {runningChips.length > 0 && (
-                  <Box marginLeft={4}>
-                    {runningChips.map((chip, idx) => (
-                      <React.Fragment key={chip.label}>
-                        {idx > 0 && <Text> </Text>}
-                        {prMerged
-                          ? <StatusChip label={chip.label} color="gray" fg="white" />
-                          : item.inactive
-                            ? <StatusChip label={chip.label} color={undefined} fg={chip.color} />
-                            : <StatusChip label={chip.label} color={chip.color} fg="white" />}
-                      </React.Fragment>
-                    ))}
-                  </Box>
-                )}
                 {/* Code-state chips: diff bulk (excluding tracker churn), commits
                     ahead/behind, PR number + check badge. Mirror the mainview's
-                    diff/changes/PR cells so this view conveys real code state
-                    without bouncing to the worktree list. flexWrap lets the row
-                    spill onto a second line on narrow columns instead of
-                    truncating chips mid-label. Diff and changes chips render
-                    plain (color as fg, no bg) so the row doesn't read like a
-                    badge dump alongside the agent/shell/run row; only the PR
-                    chip keeps a filled pill (and only when the card is active
-                    and not merged). */}
+                    diff/changes/PR cells so the focused card conveys real code
+                    state without bouncing to the worktree list. Selected-card
+                    only — non-selected cards skip this row to keep the board
+                    scannable and the running-chip row prominent. Rendered
+                    ABOVE running chips so the more-detailed signals sit
+                    closer to the slug, with running chips as the row footer.
+                    Diff and changes chips render plain (color as fg, no bg);
+                    only the PR chip keeps a filled pill. */}
                 {codeStateChips.length > 0 && (
                   <Box marginLeft={4} flexWrap="wrap">
                     {codeStateChips.map((chip, idx) => (
@@ -913,6 +895,28 @@ export default function TrackerBoardScreen({
                               ? <StatusChip label={chip.label} color={undefined} fg="gray" />
                               : <StatusChip label={chip.label} color="gray" fg="white" />)
                           : item.inactive || chip.plain
+                            ? <StatusChip label={chip.label} color={undefined} fg={chip.color} />
+                            : <StatusChip label={chip.label} color={chip.color} fg="white" />}
+                      </React.Fragment>
+                    ))}
+                  </Box>
+                )}
+                {/* Running-status chips: one per active tmux session. Indented
+                    to match the secondary-text gutter. Eats one of the budgeted
+                    rows per item; secondary maxLines drops by 1 when chips
+                    render to keep scroll math intact. Inactive cards drop the
+                    bg pill and use the chip color as plain text. Merged cards
+                    drop the color too — every chip on a merged card renders
+                    gray so the whole row reads as "done, archived" instead
+                    of competing for attention. */}
+                {runningChips.length > 0 && (
+                  <Box marginLeft={4}>
+                    {runningChips.map((chip, idx) => (
+                      <React.Fragment key={chip.label}>
+                        {idx > 0 && <Text> </Text>}
+                        {prMerged
+                          ? <StatusChip label={chip.label} color="gray" fg="white" />
+                          : item.inactive
                             ? <StatusChip label={chip.label} color={undefined} fg={chip.color} />
                             : <StatusChip label={chip.label} color={chip.color} fg="white" />}
                       </React.Fragment>
