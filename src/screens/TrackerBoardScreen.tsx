@@ -872,13 +872,17 @@ export default function TrackerBoardScreen({
                     last so the card's textual signals (ready/waiting/working)
                     stay above. Indented to match the secondary-text gutter.
                     Eats one of the budgeted rows per item; secondary maxLines
-                    drops by 1 when chips render to keep scroll math intact. */}
+                    drops by 1 when chips render to keep scroll math intact.
+                    Inactive items render chips in plain-text mode (chip color
+                    as fg, no background) so the card stays visually quiet. */}
                 {runningChips.length > 0 && (
                   <Box marginLeft={4}>
                     {runningChips.map((chip, idx) => (
                       <React.Fragment key={chip.label}>
                         {idx > 0 && <Text> </Text>}
-                        <StatusChip label={chip.label} color={chip.color} fg="white" />
+                        {item.inactive
+                          ? <StatusChip label={chip.label} color={undefined} fg={chip.color} />
+                          : <StatusChip label={chip.label} color={chip.color} fg="white" />}
                       </React.Fragment>
                     ))}
                   </Box>
@@ -894,7 +898,9 @@ export default function TrackerBoardScreen({
                     {codeStateChips.map((chip, idx) => (
                       <React.Fragment key={chip.label}>
                         {idx > 0 && <Text> </Text>}
-                        <StatusChip label={chip.label} color={chip.color} fg="white" />
+                        {item.inactive
+                          ? <StatusChip label={chip.label} color={undefined} fg={chip.color} />
+                          : <StatusChip label={chip.label} color={chip.color} fg="white" />}
                       </React.Fragment>
                     ))}
                   </Box>

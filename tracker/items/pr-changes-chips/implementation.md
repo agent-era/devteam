@@ -72,9 +72,13 @@ clean worktrees stay visually quiet.
   `ROWS_PER_ITEM` stayed at 4; the per-card budget holds because secondary
   `maxLines` drops by `chipRowCount` (0, 1, or 2) instead of the previous
   binary "running chips present? -1".
-- **Inactive items keep colored chips.** Per requirements — visibility
-  for cleanup decisions ("this inactive item still has unmerged commits")
-  outweighs the tidiness of de-emphasizing them.
+- **Inactive items render chips in plain-text mode.** Followup: the
+  initial implementation kept colored backgrounds on inactive cards, but
+  user feedback was that bright pills on dimmed cards read as too loud.
+  Fix: when `item.inactive` is true, render via `StatusChip` with
+  `color={undefined}` and `fg={chip.color}` so the same semantic color
+  shows up as text instead of a background. Applied to both running and
+  code-state chip rows.
 - **PR chip suppression is broad.** Hidden when merged (gray "Merged"
   secondary already covers it), `loading`, or `not_checked`. The chip
   only appears when there's a real number AND a real status to show.
