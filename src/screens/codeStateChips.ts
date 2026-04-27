@@ -13,6 +13,7 @@ const DIFF_COLOR = 'blue';
 const CHANGES_COLOR = 'cyan';
 
 function prChipColor(pr: PRStatus): string {
+  if (pr.is_merged) return 'gray';
   if (pr.has_conflicts || pr.checks === 'failing') return 'red';
   if (pr.checks === 'pending' || pr.isLoading) return 'yellow';
   if (pr.checks === 'passing') return 'green';
@@ -48,9 +49,11 @@ export function computeCodeStateChips(
   }
 
   // Suppress while the PR check is mid-flight or unresolved — formatPRStatus
-  // would emit '*' or '' and the chip would be misleading. Merged PRs use the
-  // gray "Merged" secondary text on the card itself, so the chip stays off.
-  if (pr && pr.exists && pr.number && !pr.is_merged && !pr.isLoading) {
+  // would emit '*' or '' and the chip would be misleading. Merged PRs DO get
+  // a chip (gray, with the '⟫' badge from formatPRStatus) so the merged state
+  // is visible alongside the PR number, not just signalled by the secondary
+  // "Merged" label.
+  if (pr && pr.exists && pr.number && !pr.isLoading) {
     const label = formatPRStatus(pr);
     if (label) chips.push({label, color: prChipColor(pr)});
   }

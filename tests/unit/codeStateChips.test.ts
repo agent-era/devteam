@@ -69,9 +69,9 @@ describe('computeCodeStateChips', () => {
     expect(chips).toEqual([{label: '#8*', color: 'yellow'}]);
   });
 
-  test('PR merged → no PR chip (gray "Merged" secondary covers it)', () => {
+  test('PR merged → gray chip with merged badge', () => {
     const chips = computeCodeStateChips(wt(), pr({loadingStatus: 'exists', number: 5, state: 'MERGED', checks: 'passing'}));
-    expect(chips).toEqual([]);
+    expect(chips).toEqual([{label: '#5⟫', color: 'gray'}]);
   });
 
   test('PR loading → no PR chip', () => {

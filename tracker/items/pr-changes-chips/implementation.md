@@ -79,9 +79,12 @@ clean worktrees stay visually quiet.
   `color={undefined}` and `fg={chip.color}` so the same semantic color
   shows up as text instead of a background. Applied to both running and
   code-state chip rows.
-- **PR chip suppression is broad.** Hidden when merged (gray "Merged"
-  secondary already covers it), `loading`, or `not_checked`. The chip
-  only appears when there's a real number AND a real status to show.
+- **PR chip suppression is narrow.** Hidden only while the PR fetch is
+  unresolved (`loading` / `not_checked`) or when there's no PR number.
+  Merged PRs DO get a chip (gray, `#NNN⟫`) so the merged state is
+  visible alongside the PR number, not just via the secondary "Merged"
+  label — useful when scanning the board for which merged item belongs
+  to which upstream PR.
 - **PR data is sourced from `GitHubContext.pullRequests[wt.path]`**, not
   from `WorktreeInfo.pr`. Followup after rebasing on PR #229: that PR
   pointed out `wt.pr` was always unset, so the original implementation's
