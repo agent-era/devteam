@@ -4,13 +4,22 @@ import {formatDiffStats, formatGitChanges, formatPRStatus} from '../components/v
 export interface CodeStateChip {
   label: string;
   color: string;
+  // When true, render as plain colored text (no background pill). Diff and
+  // changes are decorative-quiet — the agent/shell/run row plus the PR chip
+  // already carry enough background weight on a card; another two filled
+  // pills makes the row read like a badge dump. The PR chip stays as a
+  // filled pill since it's the most "actionable" data point in the row.
+  plain: boolean;
 }
 
-// Background colors mirror mainview's priority-cell highlights so the same
-// signal reads the same way in both views (blue = uncommitted/diff bulk,
-// cyan = unpushed commits).
+// Diff/changes get their semantic color (blue/cyan, mirroring mainview's
+// priority-cell highlights) only when there's actionable pending work
+// (uncommitted modifications or unpushed commits). When everything is
+// committed+pushed they fade to gray so the eye isn't drawn to a clean
+// state. PR chip has its own color logic.
 const DIFF_COLOR = 'blue';
 const CHANGES_COLOR = 'cyan';
+const QUIET_COLOR = 'gray';
 
 function prChipColor(pr: PRStatus): string {
   if (pr.is_merged) return 'gray';
@@ -38,13 +47,16 @@ export function computeCodeStateChips(
 
   const git = worktree.git;
   if (git) {
+    // is_pushed already requires !has_changes && upstreamAhead === 0, so
+    // it's the single signal for "everything safely on the remote".
+    const pending = !git.is_pushed;
     const added = git.base_added_lines_excl_tracker || 0;
     const deleted = git.base_deleted_lines_excl_tracker || 0;
     if (added + deleted > 0) {
-      chips.push({label: formatDiffStats(added, deleted), color: DIFF_COLOR});
+      chips.push({label: formatDiffStats(added, deleted), color: pending ? DIFF_COLOR : QUIET_COLOR, plain: true});
     }
     if ((git.ahead || 0) > 0 || (git.behind || 0) > 0) {
-      chips.push({label: formatGitChanges(git.ahead || 0, git.behind || 0), color: CHANGES_COLOR});
+      chips.push({label: formatGitChanges(git.ahead || 0, git.behind || 0), color: pending ? CHANGES_COLOR : QUIET_COLOR, plain: true});
     }
   }
 
@@ -55,7 +67,7 @@ export function computeCodeStateChips(
   // "Merged" label.
   if (pr && pr.exists && pr.number && !pr.isLoading) {
     const label = formatPRStatus(pr);
-    if (label) chips.push({label, color: prChipColor(pr)});
+    if (label) chips.push({label, color: prChipColor(pr), plain: false});
   }
 
   return chips;

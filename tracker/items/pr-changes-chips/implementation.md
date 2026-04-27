@@ -85,6 +85,18 @@ clean worktrees stay visually quiet.
   visible alongside the PR number, not just via the secondary "Merged"
   label — useful when scanning the board for which merged item belongs
   to which upstream PR.
+- **Diff and changes chips are plain text, not filled pills.** Three
+  filled pills next to the agent/shell/run row read as a badge dump.
+  Diff and changes chips render as plain colored text (no background);
+  only the PR chip keeps a filled pill. `CodeStateChip` carries a
+  `plain: boolean` flag so the rendering layer doesn't have to know
+  about the diff/changes/PR distinction.
+- **Diff and changes chips fade to gray when nothing is pending.** Color
+  (blue / cyan) is reserved for "you have local work that isn't on the
+  remote" — `!git.is_pushed`, which already implies either uncommitted
+  changes or unpushed commits. When everything is committed and pushed
+  the chips still render (the diff against base is real information),
+  but in gray so the eye isn't drawn to a clean state.
 - **PR data is sourced from `GitHubContext.pullRequests[wt.path]`**, not
   from `WorktreeInfo.pr`. Followup after rebasing on PR #229: that PR
   pointed out `wt.pr` was always unset, so the original implementation's

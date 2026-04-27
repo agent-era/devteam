@@ -894,13 +894,16 @@ export default function TrackerBoardScreen({
                     diff/changes/PR cells so this view conveys real code state
                     without bouncing to the worktree list. flexWrap lets the row
                     spill onto a second line on narrow columns instead of
-                    truncating chips mid-label. */}
+                    truncating chips mid-label. Diff and changes chips render
+                    plain (color as fg, no bg) so the row doesn't read like a
+                    badge dump alongside the agent/shell/run row; only the PR
+                    chip keeps a filled pill (and only when the card is active). */}
                 {codeStateChips.length > 0 && (
                   <Box marginLeft={4} flexWrap="wrap">
                     {codeStateChips.map((chip, idx) => (
                       <React.Fragment key={chip.label}>
                         {idx > 0 && <Text> </Text>}
-                        {item.inactive
+                        {item.inactive || chip.plain
                           ? <StatusChip label={chip.label} color={undefined} fg={chip.color} />
                           : <StatusChip label={chip.label} color={chip.color} fg="white" />}
                       </React.Fragment>
