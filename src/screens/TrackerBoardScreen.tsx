@@ -7,8 +7,9 @@ import {useUIContext} from '../contexts/UIContext.js';
 import {useWorktreeContext} from '../contexts/WorktreeContext.js';
 import {useGitHubContext} from '../contexts/GitHubContext.js';
 import {WorktreeInfo} from '../models.js';
-import type {AIStatus, AITool, PRStatus} from '../models.js';
+import type {AIStatus, AITool} from '../models.js';
 import {truncateDisplay} from '../shared/utils/formatting.js';
+import {computeCardStatusFlags, isItemPRMerged} from '../shared/utils/trackerCardStatus.js';
 import {logError} from '../shared/utils/logger.js';
 import {startIntervalIfEnabled} from '../shared/utils/intervals.js';
 import {VISIBLE_STATUS_REFRESH_DURATION} from '../constants.js';
@@ -173,15 +174,6 @@ function computeColumnScroll(selected: number, total: number, visible: number): 
   const max = total - visible;
   const top = selected - Math.floor((visible - 1) / 2);
   return Math.max(0, Math.min(max, top));
-}
-
-// Reads from GitHubContext (keyed by path), not wt.pr — which is never assigned in prod.
-export function isItemPRMerged(
-  worktree: WorktreeInfo | null,
-  pullRequests: Record<string, PRStatus>,
-): boolean {
-  if (!worktree) return false;
-  return pullRequests[worktree.path]?.is_merged === true;
 }
 
 function findSlugPosition(board: TrackerBoard, slug: string): {column: number; row: number} | null {
@@ -665,14 +657,37 @@ export default function TrackerBoardScreen({
     );
   }
 
-  // Count waiting items across all columns
+  // Read each item's status.json once per worktree refresh and reuse for both
+  // the title-bar tally and the per-card render loop. Memoized on
+  // `[board, worktrees]` so keystroke re-renders don't replay disk reads;
+  // status.json updates land on the next refresh tick, matching the rest of
+  // the kanban's refresh cadence.
+  const itemStatusBySlug = React.useMemo(() => {
+    const map = new Map<string, ReturnType<TrackerService['getItemStatus']>>();
+    for (const col of board.columns) {
+      for (const item of col.items) {
+        map.set(item.slug, service.getItemStatus(projectPath, item.slug));
+      }
+    }
+    return map;
+    // `worktrees` isn't read inside the memo body — it's the refresh tick we
+    // re-run on, since session state changes alongside it.
+  }, [board, worktrees, service, projectPath]);
+
   let waitingCount = 0;
   let workingCount = 0;
   for (const col of board.columns) {
     for (const item of col.items) {
-      const s = getSessionForItem(item)?.session?.ai_status;
-      if (s === 'waiting') waitingCount++;
-      else if (s === 'working' || s === 'active') workingCount++;
+      const wt = getWorktreeForItem(item);
+      const itemStatus = itemStatusBySlug.get(item.slug) ?? null;
+      const flags = computeCardStatusFlags({
+        aiStatus: wt?.session?.ai_status,
+        prMerged: isItemPRMerged(wt, pullRequests),
+        freshWaiting: service.isItemWaiting(itemStatus),
+        freshReady: service.isItemReadyToAdvance(itemStatus),
+      });
+      if (flags.isWaiting) waitingCount++;
+      else if (flags.isWorking) workingCount++;
     }
   }
 
@@ -765,21 +780,16 @@ export default function TrackerBoardScreen({
             const itemIndex = scrollTop + sliceIndex;
             const isSelected = isActiveColumn && selectedRow === itemIndex;
             const wt = getWorktreeForItem(item);
-            const sessWt = (wt?.session?.ai_status && wt.session.ai_status !== 'not_running') ? wt : null;
-            const aiStatus: AIStatus | undefined = sessWt?.session?.ai_status;
-            const aiWaiting = aiStatus === 'waiting';
-            const isWorking = aiStatus === 'working' || aiStatus === 'active';
-            const hasSession = !!sessWt;
-
-            // Ralph status signal: the agent self-reported a non-working
-            // state in status.json. `waiting_for_approval` gets its own green
-            // "ready to advance" treatment so it's spottable at a glance and
-            // can be acted on with the `m` shortcut from the board.
-            const itemStatus = service.getItemStatus(projectPath, item.slug);
+            const aiStatus: AIStatus | undefined = wt?.session?.ai_status;
+            const itemStatus = itemStatusBySlug.get(item.slug) ?? null;
             const prMerged = isItemPRMerged(wt, pullRequests);
-            const readyToAdvance = !prMerged && service.isItemReadyToAdvance(itemStatus);
-            const ralphWaiting = !!itemStatus && !readyToAdvance && service.isItemWaiting(itemStatus);
-            const isWaiting = aiWaiting || ralphWaiting;
+            const {readyToAdvance, isWaiting, isWorking, hasSession} =
+              computeCardStatusFlags({
+                aiStatus,
+                prMerged,
+                freshWaiting: service.isItemWaiting(itemStatus),
+                freshReady: service.isItemReadyToAdvance(itemStatus),
+              });
 
             // Session presence is now signalled by the running-status chip row
             // (rendered separately below); the ◆ branch in

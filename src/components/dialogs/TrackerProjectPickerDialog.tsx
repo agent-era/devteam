@@ -2,7 +2,9 @@ import React, {useMemo, useState} from 'react';
 import {Box, Text, useInput} from 'ink';
 import {TrackerService} from '../../services/TrackerService.js';
 import {useTerminalDimensions} from '../../hooks/useTerminalDimensions.js';
+import {useGitHubContext} from '../../contexts/GitHubContext.js';
 import {WorktreeInfo} from '../../models.js';
+import {computeCardStatusFlags, isItemPRMerged} from '../../shared/utils/trackerCardStatus.js';
 
 type ProjectRow = {
   name: string;
@@ -30,6 +32,7 @@ export default function TrackerProjectPickerDialog({
 }: Props) {
   const service = useMemo(() => new TrackerService(), []);
   const {rows: termRows} = useTerminalDimensions();
+  const {pullRequests} = useGitHubContext();
 
   const rows = useMemo<ProjectRow[]>(() => {
     return projects.map(p => {
@@ -39,13 +42,21 @@ export default function TrackerProjectPickerDialog({
       let working = 0;
       for (const w of worktrees) {
         if (w.project !== p.name) continue;
-        const s = w.session?.ai_status;
-        if (s === 'waiting') waiting++;
-        else if (s === 'working' || s === 'active') working++;
+        const itemStatus = w.feature && hasTracker
+          ? service.getItemStatus(p.path, w.feature)
+          : null;
+        const flags = computeCardStatusFlags({
+          aiStatus: w.session?.ai_status,
+          prMerged: isItemPRMerged(w, pullRequests),
+          freshWaiting: service.isItemWaiting(itemStatus),
+          freshReady: service.isItemReadyToAdvance(itemStatus),
+        });
+        if (flags.isWaiting) waiting++;
+        else if (flags.isWorking) working++;
       }
       return {name: p.name, path: p.path, hasTracker, total, waiting, working};
     });
-  }, [projects, worktrees, service]);
+  }, [projects, worktrees, service, pullRequests]);
 
   const [selected, setSelected] = useState(() => {
     const idx = rows.findIndex(r => r.name === currentProjectName);

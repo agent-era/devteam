@@ -1,5 +1,6 @@
 import {describe, expect, test} from '@jest/globals';
-import {getTrackerCardDisplayState, isItemPRMerged} from '../../src/screens/TrackerBoardScreen.js';
+import {getTrackerCardDisplayState} from '../../src/screens/TrackerBoardScreen.js';
+import {computeCardStatusFlags, isItemPRMerged} from '../../src/shared/utils/trackerCardStatus.js';
 import {PRStatus, WorktreeInfo} from '../../src/models.js';
 
 const baseFlags = {
@@ -219,5 +220,175 @@ describe('isItemPRMerged', () => {
     const wtWithStrayPr = new WorktreeInfo({...wt});
     (wtWithStrayPr as any).pr = new PRStatus({state: 'MERGED'});
     expect(isItemPRMerged(wtWithStrayPr, {})).toBe(false);
+  });
+});
+
+describe('computeCardStatusFlags', () => {
+  test('live working overrides file-based waiting_for_input (yellow → cyan)', () => {
+    const flags = computeCardStatusFlags({
+      aiStatus: 'working',
+      prMerged: false,
+      freshWaiting: true,
+      freshReady: false,
+    });
+
+    expect(flags).toEqual({
+      readyToAdvance: false,
+      isWaiting: false,
+      isWorking: true,
+      hasSession: true,
+    });
+  });
+
+  test('live working overrides file-based waiting_for_approval (green → cyan, no [m] hint)', () => {
+    const flags = computeCardStatusFlags({
+      aiStatus: 'working',
+      prMerged: false,
+      freshWaiting: true,
+      freshReady: true,
+    });
+
+    expect(flags).toEqual({
+      readyToAdvance: false,
+      isWaiting: false,
+      isWorking: true,
+      hasSession: true,
+    });
+  });
+
+  test('live "active" treated as working and overrides file waiting', () => {
+    const flags = computeCardStatusFlags({
+      aiStatus: 'active',
+      prMerged: false,
+      freshWaiting: true,
+      freshReady: false,
+    });
+
+    expect(flags.isWorking).toBe(true);
+    expect(flags.isWaiting).toBe(false);
+    expect(flags.readyToAdvance).toBe(false);
+  });
+
+  test('live "waiting" (consent gate) keeps card yellow regardless of file state', () => {
+    const flags = computeCardStatusFlags({
+      aiStatus: 'waiting',
+      prMerged: false,
+      freshWaiting: false,
+      freshReady: false,
+    });
+
+    expect(flags).toEqual({
+      readyToAdvance: false,
+      isWaiting: true,
+      isWorking: false,
+      hasSession: true,
+    });
+  });
+
+  test('live "waiting" beats stale waiting_for_approval — yellow consent gate, not green Ready', () => {
+    const flags = computeCardStatusFlags({
+      aiStatus: 'waiting',
+      prMerged: false,
+      freshWaiting: true,
+      freshReady: true,
+    });
+
+    expect(flags).toEqual({
+      readyToAdvance: false,
+      isWaiting: true,
+      isWorking: false,
+      hasSession: true,
+    });
+  });
+
+  test('no session + file waiting_for_input renders yellow', () => {
+    const flags = computeCardStatusFlags({
+      aiStatus: undefined,
+      prMerged: false,
+      freshWaiting: true,
+      freshReady: false,
+    });
+
+    expect(flags).toEqual({
+      readyToAdvance: false,
+      isWaiting: true,
+      isWorking: false,
+      hasSession: false,
+    });
+  });
+
+  test('no session + file waiting_for_approval renders green ready-to-advance', () => {
+    const flags = computeCardStatusFlags({
+      aiStatus: undefined,
+      prMerged: false,
+      freshWaiting: true,
+      freshReady: true,
+    });
+
+    expect(flags).toEqual({
+      readyToAdvance: true,
+      isWaiting: false,
+      isWorking: false,
+      hasSession: false,
+    });
+  });
+
+  test('readyToAdvance fires on freshReady alone (no freshWaiting required)', () => {
+    const flags = computeCardStatusFlags({
+      aiStatus: undefined,
+      prMerged: false,
+      freshWaiting: false,
+      freshReady: true,
+    });
+
+    expect(flags).toEqual({
+      readyToAdvance: true,
+      isWaiting: false,
+      isWorking: false,
+      hasSession: false,
+    });
+  });
+
+  test('not_running session reports hasSession=false', () => {
+    const flags = computeCardStatusFlags({
+      aiStatus: 'not_running',
+      prMerged: false,
+      freshWaiting: false,
+      freshReady: false,
+    });
+
+    expect(flags).toEqual({
+      readyToAdvance: false,
+      isWaiting: false,
+      isWorking: false,
+      hasSession: false,
+    });
+  });
+
+  test('prMerged suppresses readyToAdvance even when file says waiting_for_approval', () => {
+    const flags = computeCardStatusFlags({
+      aiStatus: undefined,
+      prMerged: true,
+      freshWaiting: true,
+      freshReady: true,
+    });
+
+    expect(flags.readyToAdvance).toBe(false);
+  });
+
+  test('idle session with no item status produces empty flags', () => {
+    const flags = computeCardStatusFlags({
+      aiStatus: 'idle',
+      prMerged: false,
+      freshWaiting: false,
+      freshReady: false,
+    });
+
+    expect(flags).toEqual({
+      readyToAdvance: false,
+      isWaiting: false,
+      isWorking: false,
+      hasSession: true,
+    });
   });
 });
