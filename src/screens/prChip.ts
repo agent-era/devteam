@@ -36,5 +36,5 @@ function prChipBadge(pr: PRStatus): string {
 // standalone token. Mainview's PR column keeps its own `#NNN` format.
 export function computePRChip(pr: PRStatus | null | undefined): PRChip | null {
   if (!pr || !pr.exists || !pr.number || pr.isLoading) return null;
-  return {label: `PR${pr.number}${prChipBadge(pr)}`, color: prChipColor(pr)};
+  return {label: `PR ${pr.number}${prChipBadge(pr)}`, color: prChipColor(pr)};
 }

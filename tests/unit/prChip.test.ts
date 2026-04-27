@@ -24,12 +24,12 @@ describe('computePRChip', () => {
 
   test('open + passing checks → green chip', () => {
     expect(computePRChip(pr({loadingStatus: 'exists', number: 42, state: 'OPEN', checks: 'passing', mergeable: 'MERGEABLE'})))
-      .toEqual({label: 'PR42✓', color: 'green'});
+      .toEqual({label: 'PR 42✓', color: 'green'});
   });
 
   test('failing checks → red chip', () => {
     expect(computePRChip(pr({loadingStatus: 'exists', number: 99, state: 'OPEN', checks: 'failing'})))
-      .toEqual({label: 'PR99x', color: 'red'});
+      .toEqual({label: 'PR 99x', color: 'red'});
   });
 
   test('conflicts → red chip', () => {
@@ -39,16 +39,16 @@ describe('computePRChip', () => {
 
   test('pending checks → yellow chip', () => {
     expect(computePRChip(pr({loadingStatus: 'exists', number: 8, state: 'OPEN', checks: 'pending'})))
-      .toEqual({label: 'PR8*', color: 'yellow'});
+      .toEqual({label: 'PR 8*', color: 'yellow'});
   });
 
   test('merged → gray chip with merged badge', () => {
     expect(computePRChip(pr({loadingStatus: 'exists', number: 5, state: 'MERGED', checks: 'passing'})))
-      .toEqual({label: 'PR5⟫', color: 'gray'});
+      .toEqual({label: 'PR 5⟫', color: 'gray'});
   });
 
   test('open with no check info → gray fallback', () => {
     expect(computePRChip(pr({loadingStatus: 'exists', number: 3, state: 'OPEN'})))
-      .toEqual({label: 'PR3', color: 'gray'});
+      .toEqual({label: 'PR 3', color: 'gray'});
   });
 });
