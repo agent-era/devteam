@@ -32,22 +32,24 @@ export function formatPushStatus(worktree: WorktreeInfo): string {
 }
 
 
+// Single-char badge that suffixes a PR number to convey state at a glance.
+// Shared between the mainview PR column and the tracker board's PR chip so
+// state-glyph mapping can't drift between the two surfaces.
+export function prBadge(pr: PRStatus): string {
+  if (pr.has_conflicts) return '!';
+  if (pr.is_merged) return '⟫';
+  if (pr.checks === 'passing') return '✓';
+  if (pr.checks === 'failing') return 'x';
+  if (pr.checks === 'pending') return '*';
+  return '';
+}
+
 export function formatPRStatus(pr: PRStatus | undefined | null): string {
   if (!pr || pr.isNotChecked) return '';
   if (pr.isLoading) return '*';
   if (pr.noPR) return '-';
   if (pr.hasError) return '!';
-  
-  if (pr.exists && pr.number) {
-    const badge = pr.has_conflicts ? '!' 
-      : pr.is_merged ? '⟫' 
-      : pr.checks === 'passing' ? '✓' 
-      : pr.checks === 'failing' ? 'x' 
-      : pr.checks === 'pending' ? '*' 
-      : '';
-    return `#${pr.number}${badge}`;
-  }
-  
+  if (pr.exists && pr.number) return `#${pr.number}${prBadge(pr)}`;
   return '';
 }
 

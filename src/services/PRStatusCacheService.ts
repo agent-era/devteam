@@ -99,15 +99,8 @@ export class PRStatusCacheService {
       return false;
     }
 
-    // Check remote commit hash. If the cached value is set, just compare.
-    // If it's empty, the cache was created before the branch had a remote —
-    // a remote appearing later (typically via a first push, which usually
-    // also opens the PR) needs to invalidate so 'no_pr' / stale entries
-    // get re-fetched. Without this, `no_pr` would stick around for the
-    // full PR_TTL_NO_PR_MS even after the user pushes and opens a PR.
-    if (entry.remoteCommitHash) {
-      if (!this.isRemoteCommitHashValid(worktreePath, entry.remoteCommitHash)) return false;
-    } else if (this.getRemoteCommitHash(worktreePath)) {
+    // Check remote commit hash if present
+    if (entry.remoteCommitHash && !this.isRemoteCommitHashValid(worktreePath, entry.remoteCommitHash)) {
       return false;
     }
 

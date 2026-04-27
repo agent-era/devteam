@@ -177,23 +177,42 @@ the row renders and whether secondary `maxLines` drops by 1, so the
 per-card 4-row scroll budget is unchanged from the running-chips-only
 baseline.
 
-## Followup — PR cache invalidation gap
+## Followup — PR cache freshness for branches that get a remote later
 
 While debugging "the PR chip isn't showing for hide-binary-diff-content"
-we found a stale cache hit. Root cause was in `PRStatusCacheService`,
-not in the chip code:
+we found a stale `no_pr` cache hit that survived because the entry was
+first cached before the branch had a remote (typical sequence: worktree
+created → cache stores `no_pr` with no remote-commit-hash → user pushes
+and opens a PR → cache stays `no_pr` until TTL).
 
-`isValid()` checked `entry.remoteCommitHash && !isRemoteCommitHashValid(...)`.
-The `&&` short-circuited when the cached remote hash was empty, which
-happens when the entry was first cached before the branch had a
-remote (typical: `no_pr` cached on a freshly-created worktree, then
-the user pushes and opens a PR later). Without the remote-hash check,
-the entry stayed valid for the full `PR_TTL_NO_PR_MS` (7 days) even
-though the local branch was now backed by an upstream PR.
+The root cause is the same `PRStatusCacheService.isValid()` short-circuit
+either way, but the cleanest fix is to lower `PR_TTL_NO_PR_MS` from 7
+days to 15 minutes (matching the rest of the table — `PR_TTL_FALLBACK_MS`
+is also 15m). 7 days was an outlier vs. the rest of the TTLs which
+range 5m–1h.
 
-Fix: when the cached `remoteCommitHash` is empty, still call
-`getRemoteCommitHash(worktreePath)` — if a remote now exists, treat
-the entry as invalid so the next visible-worktree refresh re-fetches.
-Added a regression test in `tests/unit/PRStatusCacheService.test.ts`
-that uses `jest.spyOn` to flip the remote-hash result between
-`set()` and `isValid()` calls.
+An earlier attempt patched `isValid()` to call `getRemoteCommitHash` on
+every check. Code review caught it as a hot-path regression
+(`runCommandQuick` is sync; with N visible cards every `setVisibleWorktrees`
+call would shell out to git 2N times for entries with no cached remote
+hash). Reverted in favor of the TTL change.
+
+## Simplify pass
+
+Three review agents flagged the following, fixed in a single cleanup
+commit:
+
+- Reuse: extracted `prBadge(pr)` to `MainView/utils.ts` (shared by
+  `formatPRStatus` and `computePRChip`) so the state-glyph mapping
+  can't drift between the mainview PR column and the tracker chip.
+- Reuse: dropped redundant `pr.isLoading` check in `computePRChip` —
+  `pr.exists` is already mutually exclusive with `loading` /
+  `not_checked` / `error`.
+- Quality: extracted `renderCardChip(chip, prMerged, inactive)` helper
+  in `TrackerBoardScreen.tsx`. The two map blocks (running chips +
+  PR chip) had identical 3-branch ternary cascades; concatenating into
+  one `cardChips` array and rendering once collapses both blocks.
+- Quality: trimmed narrative / historical comments. Per-card chip-row
+  comment dropped from 10 lines to 3; `prChip.ts` doc comment dropped
+  from 10 lines to 1.
+- Efficiency: see TTL revert above.

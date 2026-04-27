@@ -170,6 +170,15 @@ export function getTrackerCardDisplayState({
   };
 }
 
+// Card chips share one styling cascade: merged > inactive > active. Merged
+// keeps a filled gray pill; inactive drops the bg and uses the chip's color
+// as plain text; active is a colored pill with white fg.
+function renderCardChip(chip: {label: string; color: string}, prMerged: boolean, inactive: boolean) {
+  if (prMerged) return <StatusChip label={chip.label} color="gray" fg="white" />;
+  if (inactive) return <StatusChip label={chip.label} color={undefined} fg={chip.color} />;
+  return <StatusChip label={chip.label} color={chip.color} fg="white" />;
+}
+
 function computeColumnScroll(selected: number, total: number, visible: number): number {
   if (total <= visible) return 0;
   const max = total - visible;
@@ -806,10 +815,8 @@ export default function TrackerBoardScreen({
               itemStatusDescription: itemStatus?.brief_description,
             });
             const runningChips = computeRunningChips(wt);
-            // PR data lives on GitHubContext.pullRequests, keyed by worktree
-            // path — wt.pr is never assigned in prod (see PR #229).
             const prChip = computePRChip(wt ? pullRequests[wt.path] : undefined);
-            const hasChipRow = runningChips.length > 0 || !!prChip;
+            const cardChips = prChip ? [...runningChips, prChip] : runningChips;
 
             // Slug row eats: 2 (border) + 2 (paddingX) + 2 (cursor) + 2 (status glyph) = 8 chars
             const slug = truncateDisplay(item.slug, Math.max(4, colWidth - 8));
@@ -842,7 +849,7 @@ export default function TrackerBoardScreen({
                   // brief_description is readable; other cards stay compact.
                   // Chip row eats one of those lines when present.
                   const baseMax = isSelected ? 4 : SECONDARY_MAX_LINES;
-                  const maxLines = Math.max(1, baseMax - (hasChipRow ? 1 : 0));
+                  const maxLines = Math.max(1, baseMax - (cardChips.length > 0 ? 1 : 0));
                   const lines = wrapToLines(text, secMax, maxLines);
                   return lines.map((line, lineIdx) => (
                     <Text
@@ -866,38 +873,17 @@ export default function TrackerBoardScreen({
                     {`    press [m] to approve and advance`}
                   </Text>
                 )}
-                {/* Chip row: running-status chips (one per active tmux session)
-                    plus the PR chip (when there's a PR with a number). Rendered
-                    last so the card's textual signals (ready/waiting/working)
-                    stay above. Indented to match the secondary-text gutter.
-                    Eats one of the budgeted rows per item; secondary maxLines
-                    drops by 1 when this row renders to keep scroll math intact.
-                    Inactive cards drop the bg pill and use the chip color as
-                    plain text. Merged cards drop the color too — every chip
-                    on a merged card renders gray so the whole row reads as
-                    "done, archived" instead of competing for attention. */}
-                {hasChipRow && (
+                {/* Chip row: tmux sessions plus the PR chip. Indented to the
+                    secondary-text gutter; eats one of the budgeted rows.
+                    Merged → gray pills. Inactive → plain text in chip color. */}
+                {cardChips.length > 0 && (
                   <Box marginLeft={4}>
-                    {runningChips.map((chip, idx) => (
+                    {cardChips.map((chip, idx) => (
                       <React.Fragment key={chip.label}>
                         {idx > 0 && <Text> </Text>}
-                        {prMerged
-                          ? <StatusChip label={chip.label} color="gray" fg="white" />
-                          : item.inactive
-                            ? <StatusChip label={chip.label} color={undefined} fg={chip.color} />
-                            : <StatusChip label={chip.label} color={chip.color} fg="white" />}
+                        {renderCardChip(chip, prMerged, item.inactive)}
                       </React.Fragment>
                     ))}
-                    {prChip && (
-                      <>
-                        {runningChips.length > 0 && <Text> </Text>}
-                        {prMerged
-                          ? <StatusChip label={prChip.label} color="gray" fg="white" />
-                          : item.inactive
-                            ? <StatusChip label={prChip.label} color={undefined} fg={prChip.color} />
-                            : <StatusChip label={prChip.label} color={prChip.color} fg="white" />}
-                      </>
-                    )}
                   </Box>
                 )}
               </Box>
