@@ -237,23 +237,32 @@ export class GitService {
     const mainRepo = path.join(this.basePath, project);
     const branchesDir = path.join(this.basePath, `${project}${DIR_BRANCHES_SUFFIX}`);
     const worktreePath = path.join(branchesDir, featureName);
-    
+
     ensureDirectory(branchesDir);
     if (fs.existsSync(worktreePath)) return false;
-    
-    // Fetch latest changes from origin
-    runCommand(['git', '-C', mainRepo, 'fetch', 'origin'], {timeout: 30000});
-    
-    // Find the base branch (main or master)
+
+    // Only fetch when the repo actually has an origin; local-only repos otherwise
+    // produce a noisy `fatal: 'origin' does not appear...` and the worktree-add
+    // below can still succeed against the local base branch.
+    if (this.hasOriginRemote(mainRepo)) {
+      runCommand(['git', '-C', mainRepo, 'fetch', 'origin'], {timeout: 30000});
+    }
+
+    // Find the base branch (origin/main, origin/master, or local fallback)
     const baseBranch = this.getBaseBranch(mainRepo);
     if (!baseBranch) return false;
-    
-    // Ensure we use the origin version of the base branch
-    const originBase = baseBranch.startsWith('origin/') ? baseBranch : `origin/${baseBranch}`;
-    
+
+    // Trust findBaseBranch — it already prefers `origin/<x>` when origin has it
+    // and falls back to local refs only when origin doesn't. Re-prefixing a
+    // local ref with `origin/` would point at a non-existent ref on no-remote repos.
     const branch = branchName || featureName;
-    runCommand(['git', '-C', mainRepo, 'worktree', 'add', worktreePath, '-b', branch, originBase], {timeout: 30000});
+    runCommand(['git', '-C', mainRepo, 'worktree', 'add', worktreePath, '-b', branch, baseBranch], {timeout: 30000});
     return fs.existsSync(worktreePath);
+  }
+
+  private hasOriginRemote(repoPath: string): boolean {
+    const out = runCommandQuick(['git', '-C', repoPath, 'remote', 'get-url', 'origin']);
+    return !!out && !/fatal/i.test(out);
   }
 
   addWorktreeOnExistingBranch(project: string, featureName: string): boolean {

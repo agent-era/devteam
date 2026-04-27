@@ -46,15 +46,35 @@ describe('WorktreeCore auto-resume', () => {
     fs.rmSync(tmpDir, {recursive: true, force: true});
   });
 
-  test('attachSession launches claude with shell fallback and records lastTool', async () => {
+  test('attachSession to an existing worktree resumes claude and records lastTool', async () => {
     const {core, tmux} = buildCore();
     const wt = worktreeFor('proj', 'feat');
 
     await core.attachSession(wt, 'claude');
 
     const sessionName = tmux.sessionName('proj', 'feat');
-    expect(getExecutedCommands(tmux, sessionName)).toEqual([`claude --continue -n 'feat - proj' || claude -n 'feat - proj'`]);
+    expect(getExecutedCommands(tmux, sessionName)).toEqual([`claude --continue -n 'feat - proj'`]);
     expect(getLastTool(wt.path)).toBe('claude');
+  });
+
+  test('attachSession with freshWorktree=true launches claude without --continue', async () => {
+    const {core, tmux} = buildCore();
+    const wt = worktreeFor('proj', 'feat');
+
+    await core.attachSession(wt, 'claude', undefined, {freshWorktree: true});
+
+    const sessionName = tmux.sessionName('proj', 'feat');
+    expect(getExecutedCommands(tmux, sessionName)).toEqual([`claude -n 'feat - proj'`]);
+  });
+
+  test('attachSession with freshWorktree=true launches codex without resume --last', async () => {
+    const {core, tmux} = buildCore();
+    const wt = worktreeFor('proj', 'feat');
+
+    await core.attachSession(wt, 'codex', undefined, {freshWorktree: true});
+
+    const sessionName = tmux.sessionName('proj', 'feat');
+    expect(getExecutedCommands(tmux, sessionName)).toEqual(['codex']);
   });
 
   test('attachSession uses remembered tool when no explicit choice', async () => {

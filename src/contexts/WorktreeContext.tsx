@@ -43,8 +43,8 @@ interface WorktreeContextType {
   workspaceExists: (featureName: string) => boolean;
   
   // Session operations
-  attachSession: (worktree: WorktreeInfo, aiTool?: AITool, initialPrompt?: string) => Promise<void>;
-  launchSessionBackground: (worktree: WorktreeInfo, aiTool?: AITool, initialPrompt?: string) => Promise<void>;
+  attachSession: (worktree: WorktreeInfo, aiTool?: AITool, initialPrompt?: string, opts?: {freshWorktree?: boolean}) => Promise<void>;
+  launchSessionBackground: (worktree: WorktreeInfo, aiTool?: AITool, initialPrompt?: string, opts?: {freshWorktree?: boolean}) => Promise<void>;
   attachShellSession: (worktree: WorktreeInfo) => Promise<void>;
   attachRunSession: (worktree: WorktreeInfo) => Promise<'success' | 'no_config'>;
   
@@ -132,8 +132,8 @@ export function WorktreeProvider({children, core: coreOverride}: WorktreeProvide
   const workspaceExists = useCallback((featureName: string) => core.workspaceExists(featureName), [core]);
 
   // Sessions
-  const attachSession = useCallback(async (worktree: WorktreeInfo, aiTool?: AITool, initialPrompt?: string) => core.attachSession(worktree, aiTool, initialPrompt), [core]);
-  const launchSessionBackground = useCallback(async (worktree: WorktreeInfo, aiTool?: AITool, initialPrompt?: string) => core.launchSessionBackground(worktree, aiTool, initialPrompt), [core]);
+  const attachSession = useCallback(async (worktree: WorktreeInfo, aiTool?: AITool, initialPrompt?: string, opts?: {freshWorktree?: boolean}) => core.attachSession(worktree, aiTool, initialPrompt, opts), [core]);
+  const launchSessionBackground = useCallback(async (worktree: WorktreeInfo, aiTool?: AITool, initialPrompt?: string, opts?: {freshWorktree?: boolean}) => core.launchSessionBackground(worktree, aiTool, initialPrompt, opts), [core]);
   const attachShellSession = useCallback(async (worktree: WorktreeInfo) => core.attachShellSession(worktree), [core]);
   const attachRunSession = useCallback(async (worktree: WorktreeInfo) => core.attachRunSession(worktree), [core]);
 

@@ -28,6 +28,9 @@ describe('GitService worktree creation', () => {
     // Set up default mock implementations
     mockFileSystem.ensureDirectory.mockImplementation(() => {});
     mockCommandExecutor.runCommand.mockReturnValue('');
+    // Default: an origin remote exists (so the fetch path runs); per-test overrides
+    // simulate a local-only repo by returning '' from `git remote get-url origin`.
+    mockCommandExecutor.runCommandQuick.mockReturnValue('git@example.com:test/repo.git');
     mockGitHelpers.findBaseBranch.mockReturnValue('origin/main');
     mockFs.existsSync.mockReturnValue(false);
     
@@ -84,19 +87,45 @@ describe('GitService worktree creation', () => {
     );
   });
 
-  test('should handle local base branch by prefixing with origin/', () => {
+  test('passes the resolved base branch through unchanged (no synthetic origin/ prefix)', () => {
     mockFs.existsSync
       .mockReturnValueOnce(false) // worktree doesn't exist initially
       .mockReturnValueOnce(true);  // worktree exists after creation
-    mockGitHelpers.findBaseBranch.mockReturnValue('main'); // Local branch, no origin/ prefix
+    mockGitHelpers.findBaseBranch.mockReturnValue('main'); // local fallback when origin/main is unavailable
 
     gitService.createWorktree('test-project', 'new-feature');
 
-    // Verify worktree creation with origin/main (prefixed)
+    // The resolved local 'main' must reach `git worktree add` as-is — re-prefixing it
+    // to 'origin/main' would point at a non-existent ref on local-only repos.
     expect(mockCommandExecutor.runCommand).toHaveBeenNthCalledWith(2,
-      ['git', '-C', '/test/base/path/test-project', 'worktree', 'add', 
-       '/test/base/path/test-project-branches/new-feature', 
-       '-b', 'new-feature', 'origin/main'],
+      ['git', '-C', '/test/base/path/test-project', 'worktree', 'add',
+       '/test/base/path/test-project-branches/new-feature',
+       '-b', 'new-feature', 'main'],
+      {timeout: 30000}
+    );
+  });
+
+  test('skips the origin fetch on a local-only repo and uses the local base branch', () => {
+    mockFs.existsSync
+      .mockReturnValueOnce(false) // worktree doesn't exist initially
+      .mockReturnValueOnce(true);  // worktree exists after creation
+    mockCommandExecutor.runCommandQuick.mockReturnValue(''); // no origin remote
+    mockGitHelpers.findBaseBranch.mockReturnValue('main');
+
+    gitService.createWorktree('test-project', 'new-feature');
+
+    // No `git fetch origin` should have been issued.
+    const fetchCalls = mockCommandExecutor.runCommand.mock.calls.filter(call => {
+      const args = call[0] as string[];
+      return args.includes('fetch') && args.includes('origin');
+    });
+    expect(fetchCalls).toHaveLength(0);
+
+    // Worktree-add still runs against the local base.
+    expect(mockCommandExecutor.runCommand).toHaveBeenCalledWith(
+      ['git', '-C', '/test/base/path/test-project', 'worktree', 'add',
+       '/test/base/path/test-project-branches/new-feature',
+       '-b', 'new-feature', 'main'],
       {timeout: 30000}
     );
   });

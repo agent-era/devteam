@@ -31,7 +31,7 @@ import {InputFocusProvider} from './contexts/InputFocusContext.js';
 import {WorktreeCore} from './cores/WorktreeCore.js';
 import {GitHubCore} from './cores/GitHubCore.js';
 import {TrackerService, type TrackerItem, type TrackerStage} from './services/TrackerService.js';
-import type {AITool} from './models.js';
+import type {AITool, WorktreeInfo} from './models.js';
 
 
 function AppContent() {
@@ -79,6 +79,7 @@ function AppContent() {
     diffType,
     pendingWorktree,
     pendingWorktreePrompt,
+    pendingWorktreeFresh,
     pendingWorktreeReturn,
     archiveReturn,
     diffReturn,
@@ -249,12 +250,25 @@ function AppContent() {
   const ensureItemWorktree = async (
     project: {name: string; path: string},
     item: TrackerItem,
-  ) => {
-    let worktree = worktrees.find(wt => wt.project === project.name && wt.feature === item.slug) || null;
-    if (!worktree) worktree = await recreateImplementWorktree(project.name, item.slug);
-    if (!worktree) return null;
-    tracker.ensureItemFiles(project.path, item.slug, worktree.path);
-    return worktree;
+  ): Promise<{worktree: WorktreeInfo; item: TrackerItem; fresh: boolean} | null> => {
+    const existing = worktrees.find(wt => wt.project === project.name && wt.feature === item.slug) || null;
+    if (existing) {
+      tracker.ensureItemFiles(project.path, item.slug, existing.path);
+      return {worktree: existing, item, fresh: false};
+    }
+    const created = await recreateImplementWorktree(project.name, item.slug);
+    if (!created) return null;
+    // GitService suffixes the worktree name (foo → foo-2) when a branch with the
+    // requested name already exists. Without propagating that back to the tracker,
+    // the slug, worktree dir, and tmux session name silently drift apart. Adopt
+    // the suffixed name as the canonical slug so they stay in lockstep.
+    let activeItem = item;
+    if (created.feature !== item.slug) {
+      const renamed = tracker.renameItem(project.path, item.slug, created.feature);
+      if (renamed) activeItem = {...item, slug: created.feature};
+    }
+    tracker.ensureItemFiles(project.path, activeItem.slug, created.path);
+    return {worktree: created, item: activeItem, fresh: true};
   };
 
   const prepareItemSession = async (
@@ -262,10 +276,10 @@ function AppContent() {
     item: TrackerItem,
     stage: TrackerStage,
   ) => {
-    const worktree = await ensureItemWorktree(project, item);
-    if (!worktree) return null;
-    const worktreeItemDir = path.join(worktree.path, 'tracker', 'items', item.slug);
-    return {worktree, prompt: buildPromptForItem(item, stage, worktreeItemDir)};
+    const ensured = await ensureItemWorktree(project, item);
+    if (!ensured) return null;
+    const worktreeItemDir = path.join(ensured.worktree.path, 'tracker', 'items', ensured.item.slug);
+    return {worktree: ensured.worktree, fresh: ensured.fresh, prompt: buildPromptForItem(ensured.item, stage, worktreeItemDir)};
   };
 
   const launchSessionForItem = async (
@@ -277,9 +291,9 @@ function AppContent() {
     if (!prepared) { showTracker(project); return; }
     const needsSelection = await needsToolSelection(prepared.worktree);
     if (needsSelection) {
-      showAIToolSelection(prepared.worktree, {initialPrompt: prepared.prompt, onReturn: () => showTracker(project)});
+      showAIToolSelection(prepared.worktree, {initialPrompt: prepared.prompt, onReturn: () => showTracker(project), freshWorktree: prepared.fresh});
     } else {
-      await attachSession(prepared.worktree, undefined, prepared.prompt);
+      await attachSession(prepared.worktree, undefined, prepared.prompt, {freshWorktree: prepared.fresh});
       showTracker(project);
     }
   };
@@ -292,20 +306,20 @@ function AppContent() {
   ) => {
     const prepared = await prepareItemSession(project, item, stage);
     if (!prepared) return;
-    await launchSessionBackground(prepared.worktree, aiTool, prepared.prompt);
+    await launchSessionBackground(prepared.worktree, aiTool, prepared.prompt, {freshWorktree: prepared.fresh});
   };
 
   const handleAttachSession = (item: TrackerItem) => {
     if (!trackerProject) return;
     const project = trackerProject;
     runWithLoading(async () => {
-      const worktree = await ensureItemWorktree(project, item);
-      if (!worktree) { showTracker(project); return; }
-      const needsSelection = await needsToolSelection(worktree);
+      const ensured = await ensureItemWorktree(project, item);
+      if (!ensured) { showTracker(project); return; }
+      const needsSelection = await needsToolSelection(ensured.worktree);
       if (needsSelection) {
-        showAIToolSelection(worktree, {onReturn: () => showTracker(project)});
+        showAIToolSelection(ensured.worktree, {onReturn: () => showTracker(project), freshWorktree: ensured.fresh});
       } else {
-        await attachSession(worktree);
+        await attachSession(ensured.worktree, undefined, undefined, {freshWorktree: ensured.fresh});
         showTracker(project);
       }
     }, {returnToList: false});
@@ -544,6 +558,7 @@ function AppContent() {
   if (!content && mode === 'selectAITool' && pendingWorktree) {
     const returnFn = pendingWorktreeReturn ?? showList;
     const prompt = pendingWorktreePrompt ?? undefined;
+    const fresh = pendingWorktreeFresh;
     content = (
       <Box flexGrow={1} alignItems="center" justifyContent="center">
         <AIToolDialog
@@ -552,7 +567,7 @@ function AppContent() {
           onSelect={async (tool) => {
             const wt = pendingWorktree;
             try {
-              runWithLoading(() => attachSession(wt, tool, prompt), {onReturn: returnFn});
+              runWithLoading(() => attachSession(wt, tool, prompt, {freshWorktree: fresh}), {onReturn: returnFn});
             } catch (error) {
               console.error('Failed to attach session with selected tool:', error);
             }

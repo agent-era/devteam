@@ -562,6 +562,63 @@ export class TrackerService {
     return `${derived}-${i}`;
   }
 
+  // Rename a tracker item slug end-to-end so the slug, the item directory under
+  // tracker/items/, and every reference in tracker/index.json (stage buckets and
+  // sessions) all stay in lockstep. Used to absorb the suffix that GitService
+  // applies when a worktree dir / branch already exists for the requested name —
+  // without this, the tracker slug would silently drift away from the worktree
+  // and tmux session names. Returns false on collision or unknown slug.
+  renameItem(projectPath: string, oldSlug: string, newSlug: string): boolean {
+    if (oldSlug === newSlug) return false;
+    if (!this.isValidSlug(newSlug)) return false;
+    const index = this.readIndex(projectPath);
+    const stageBySlug = this.createStageBySlug(index);
+    const oldStage = stageBySlug.get(oldSlug);
+    if (!oldStage) return false;
+    if (stageBySlug.has(newSlug)) return false;
+    // Move the slug across all index buckets it appears in.
+    this.removeSlugFromIndexObj(index, oldSlug);
+    this.addSlugToIndexObj(index, newSlug, oldStage);
+    // Migrate the sessions metadata key so title / inactive flag follow.
+    if (index.sessions && Object.prototype.hasOwnProperty.call(index.sessions, oldSlug)) {
+      const meta = index.sessions[oldSlug];
+      const {[oldSlug]: _, ...rest} = index.sessions;
+      index.sessions = {...rest, [newSlug]: meta};
+    }
+    writeJSONAtomic(this.getIndexPath(projectPath), index);
+    // Move the on-disk item directory. The frontmatter `slug:` field inside any
+    // .md files in there also has to follow so future reads parse the new slug.
+    const oldDir = path.join(projectPath, 'tracker', 'items', oldSlug);
+    const newDir = path.join(projectPath, 'tracker', 'items', newSlug);
+    if (fs.existsSync(oldDir) && !fs.existsSync(newDir)) {
+      fs.renameSync(oldDir, newDir);
+      this.rewriteSlugFrontmatter(newDir, oldSlug, newSlug);
+    }
+    return true;
+  }
+
+  // Replace the `slug:` frontmatter field in every .md file under itemDir.
+  // Only touches the exact line `slug: <oldSlug>` so unrelated mentions of the
+  // old slug elsewhere in the body are preserved.
+  // `oldSlug` is interpolated into a regex unescaped — `isValidSlug` constrains
+  // slugs to `[a-z0-9-]`, all of which are regex-safe. Caller paths (`renameItem`,
+  // `createItem`) only accept slugs that pass that validator.
+  private rewriteSlugFrontmatter(itemDir: string, oldSlug: string, newSlug: string): void {
+    let entries: string[];
+    try { entries = fs.readdirSync(itemDir); } catch { return; }
+    const slugLineRe = new RegExp(`^slug:\\s*${oldSlug}\\s*$`, 'm');
+    for (const name of entries) {
+      if (!name.endsWith('.md')) continue;
+      const filePath = path.join(itemDir, name);
+      let raw: string;
+      try { raw = fs.readFileSync(filePath, 'utf8'); } catch { continue; }
+      const {frontmatter} = parseFrontmatter(raw);
+      if (!frontmatter || frontmatter.slug !== oldSlug) continue;
+      const updated = raw.replace(slugLineRe, `slug: ${newSlug}`);
+      if (updated !== raw) fs.writeFileSync(filePath, updated);
+    }
+  }
+
   moveItem(projectPath: string, slug: string, toStage: TrackerStage): boolean {
     const index = this.readIndex(projectPath);
     const currentStage = this.createStageBySlug(index).get(slug);

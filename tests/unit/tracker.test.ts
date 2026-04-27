@@ -1131,3 +1131,46 @@ describe('ensureItemFiles', () => {
     expect(fs.existsSync(legacyItemsDir)).toBe(false);
   });
 });
+
+describe('renameItem', () => {
+  beforeEach(() => {
+    service.createItem(tmpDir, 'Original title', 'discovery', 'old-slug', 'body');
+  });
+
+  test('moves the slug across index buckets and migrates the sessions metadata', () => {
+    const ok = service.renameItem(tmpDir, 'old-slug', 'old-slug-2');
+    expect(ok).toBe(true);
+    const index = JSON.parse(fs.readFileSync(service.getIndexPath(tmpDir), 'utf8'));
+    expect(index.backlog.discovery).toContain('old-slug-2');
+    expect(index.backlog.discovery).not.toContain('old-slug');
+    expect(index.sessions['old-slug-2']?.title).toBe('Original title');
+    expect(index.sessions['old-slug']).toBeUndefined();
+  });
+
+  test('renames the on-disk item directory and rewrites slug frontmatter', () => {
+    // createItem doesn't materialise the item dir until ensureItemFiles runs,
+    // so seed the dir + a frontmatter-bearing file directly to exercise the rename.
+    const oldDir = path.join(tmpDir, 'tracker', 'items', 'old-slug');
+    fs.mkdirSync(oldDir, {recursive: true});
+    fs.writeFileSync(
+      path.join(oldDir, 'requirements.md'),
+      `---\ntitle: "Original title"\nslug: old-slug\n---\n\nbody\n`,
+    );
+    service.renameItem(tmpDir, 'old-slug', 'old-slug-2');
+    const newDir = path.join(tmpDir, 'tracker', 'items', 'old-slug-2');
+    expect(fs.existsSync(oldDir)).toBe(false);
+    expect(fs.existsSync(newDir)).toBe(true);
+    const reqRaw = fs.readFileSync(path.join(newDir, 'requirements.md'), 'utf8');
+    const {frontmatter} = parseFrontmatter(reqRaw);
+    expect(frontmatter.slug).toBe('old-slug-2');
+  });
+
+  test('returns false when the new slug already exists in the index', () => {
+    service.createItem(tmpDir, 'Other', 'discovery', 'other-slug', 'body');
+    expect(service.renameItem(tmpDir, 'old-slug', 'other-slug')).toBe(false);
+  });
+
+  test('returns false when the old slug is unknown', () => {
+    expect(service.renameItem(tmpDir, 'never-existed', 'fresh-slug')).toBe(false);
+  });
+});
