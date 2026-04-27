@@ -875,16 +875,20 @@ export default function TrackerBoardScreen({
                     stay above. Indented to match the secondary-text gutter.
                     Eats one of the budgeted rows per item; secondary maxLines
                     drops by 1 when chips render to keep scroll math intact.
-                    Inactive items render chips in plain-text mode (chip color
-                    as fg, no background) so the card stays visually quiet. */}
+                    Inactive cards drop the bg pill and use the chip color as
+                    plain text. Merged cards drop the color too — every chip
+                    on a merged card renders gray so the whole row reads as
+                    "done, archived" instead of competing for attention. */}
                 {runningChips.length > 0 && (
                   <Box marginLeft={4}>
                     {runningChips.map((chip, idx) => (
                       <React.Fragment key={chip.label}>
                         {idx > 0 && <Text> </Text>}
-                        {item.inactive
-                          ? <StatusChip label={chip.label} color={undefined} fg={chip.color} />
-                          : <StatusChip label={chip.label} color={chip.color} fg="white" />}
+                        {prMerged
+                          ? <StatusChip label={chip.label} color={undefined} fg="gray" />
+                          : item.inactive
+                            ? <StatusChip label={chip.label} color={undefined} fg={chip.color} />
+                            : <StatusChip label={chip.label} color={chip.color} fg="white" />}
                       </React.Fragment>
                     ))}
                   </Box>
@@ -897,15 +901,18 @@ export default function TrackerBoardScreen({
                     truncating chips mid-label. Diff and changes chips render
                     plain (color as fg, no bg) so the row doesn't read like a
                     badge dump alongside the agent/shell/run row; only the PR
-                    chip keeps a filled pill (and only when the card is active). */}
+                    chip keeps a filled pill (and only when the card is active
+                    and not merged). */}
                 {codeStateChips.length > 0 && (
                   <Box marginLeft={4} flexWrap="wrap">
                     {codeStateChips.map((chip, idx) => (
                       <React.Fragment key={chip.label}>
                         {idx > 0 && <Text> </Text>}
-                        {item.inactive || chip.plain
-                          ? <StatusChip label={chip.label} color={undefined} fg={chip.color} />
-                          : <StatusChip label={chip.label} color={chip.color} fg="white" />}
+                        {prMerged
+                          ? <StatusChip label={chip.label} color={undefined} fg="gray" />
+                          : item.inactive || chip.plain
+                            ? <StatusChip label={chip.label} color={undefined} fg={chip.color} />
+                            : <StatusChip label={chip.label} color={chip.color} fg="white" />}
                       </React.Fragment>
                     ))}
                   </Box>
