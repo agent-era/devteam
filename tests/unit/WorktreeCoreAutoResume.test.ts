@@ -46,14 +46,16 @@ describe('WorktreeCore auto-resume', () => {
     fs.rmSync(tmpDir, {recursive: true, force: true});
   });
 
-  test('attachSession to an existing worktree resumes claude and records lastTool', async () => {
+  test('attachSession to an existing worktree resumes claude with a fresh-launch fallback and records lastTool', async () => {
     const {core, tmux} = buildCore();
     const wt = worktreeFor('proj', 'feat');
 
     await core.attachSession(wt, 'claude');
 
     const sessionName = tmux.sessionName('proj', 'feat');
-    expect(getExecutedCommands(tmux, sessionName)).toEqual([`claude --continue -n 'feat - proj'`]);
+    expect(getExecutedCommands(tmux, sessionName)).toEqual([
+      `claude --continue -n 'feat - proj' || claude -n 'feat - proj'`,
+    ]);
     expect(getLastTool(wt.path)).toBe('claude');
   });
 
@@ -77,7 +79,7 @@ describe('WorktreeCore auto-resume', () => {
     expect(getExecutedCommands(tmux, sessionName)).toEqual(['codex']);
   });
 
-  test('attachSession uses remembered tool when no explicit choice', async () => {
+  test('attachSession uses remembered tool when no explicit choice and chains a fresh-launch fallback', async () => {
     const {core, tmux} = buildCore();
     const wt = worktreeFor('proj', 'feat');
     setLastTool('codex', wt.path);
@@ -85,7 +87,24 @@ describe('WorktreeCore auto-resume', () => {
     await core.attachSession(wt);
 
     const sessionName = tmux.sessionName('proj', 'feat');
-    expect(getExecutedCommands(tmux, sessionName)).toEqual(['codex resume --last']);
+    expect(getExecutedCommands(tmux, sessionName)).toEqual(['codex resume --last || codex']);
+  });
+
+  test('switching to claude on a worktree previously used with codex still chains the fresh-launch fallback', async () => {
+    const {core, tmux} = buildCore();
+    const wt = worktreeFor('proj', 'feat');
+    // Simulate a worktree that was previously running codex.
+    setLastTool('codex', wt.path);
+
+    // Now the user explicitly picks claude — no fresh-worktree flag, since the
+    // worktree directory already exists.
+    await core.attachSession(wt, 'claude');
+
+    const sessionName = tmux.sessionName('proj', 'feat');
+    expect(getExecutedCommands(tmux, sessionName)).toEqual([
+      `claude --continue -n 'feat - proj' || claude -n 'feat - proj'`,
+    ]);
+    expect(getLastTool(wt.path)).toBe('claude');
   });
 
   test('attachSession with existing tmux session does not re-spawn the tool', async () => {
