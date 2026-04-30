@@ -5,7 +5,7 @@ import {getProjectsDirectory} from '../config.js';
 import {TmuxService} from '../services/TmuxService.js';
 import {WorkspaceService} from '../services/WorkspaceService.js';
 import {MemoryMonitorService, MemoryStatus} from '../services/MemoryMonitorService.js';
-import {RUN_CONFIG_FILE, DIR_BRANCHES_SUFFIX, TMUX_DISPLAY_TIME, RUN_CONFIG_CLAUDE_PROMPT, SETTINGS_EDIT_CLAUDE_PROMPT, SESSION_PREFIX, type ProjectConfig} from '../constants.js';
+import {RUN_CONFIG_FILE, DIR_BRANCHES_SUFFIX, TMUX_DISPLAY_TIME, RUN_CONFIG_CLAUDE_PROMPT, SETTINGS_EDIT_CLAUDE_PROMPT, AI_TOOLS, SESSION_PREFIX, type ProjectConfig} from '../constants.js';
 import {detectAvailableAITools, runCommandQuick, runClaudeAsync} from '../shared/utils/commandExecutor.js';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -400,7 +400,7 @@ export class WorktreeCore implements CoreBase<State> {
       const flags = this.getAIToolFlags(worktree.project, selectedTool);
       const flagStr = flags.length > 0 ? ' ' + flags.map(shellQuote).join(' ') : '';
       const fresh = !!opts?.freshWorktree;
-      const displayName = selectedTool === 'claude' ? `${worktree.feature} - ${worktree.project}` : undefined;
+      const displayName = `${worktree.feature} - ${worktree.project}`;
       this.launchAISessionWithFallback(sessionName, worktree.path, selectedTool, flagStr, initialPrompt, fresh, displayName);
       setLastTool(selectedTool, worktree.path);
     } else {
@@ -592,42 +592,31 @@ export class WorktreeCore implements CoreBase<State> {
     for (const name of [s, sh, rn]) { if (active.includes(name)) this.tmux.killSession(name); }
   }
 
-  // `freshWorktree=true` (createFeature / recreateImplementWorktree paths) launches
-  // the tool fresh — there is no prior session to resume.
-  // `freshWorktree=false` (plain attach to an existing worktree) tries the resume
-  // form first and falls back to a fresh launch if it exits nonzero. This covers
-  // the common case where the user switches the worktree to a different tool —
-  // e.g. `claude --continue` on a worktree that previously ran codex finds no
-  // prior session and exits, so without the fallback the tmux pane would be empty.
-  // `displayName` is only honored by claude (its `-n` tmux pane title flag).
+  // Resume-or-fresh chain on existing worktrees: switching the AI tool on a
+  // worktree (e.g. codex → claude) makes the resume form exit with no prior
+  // session, and without the chain the tmux pane would be left empty. The
+  // `freshWorktree=true` callers skip the chain because the worktree was
+  // just created, so there is nothing to resume.
+  // `displayName` is claude-only (its `-n` tmux pane title flag); ignored by
+  // codex/gemini.
   private launchAISessionWithFallback(
     sessionName: string,
     cwd: string,
-    tool: AITool,
+    tool: Exclude<AITool, 'none'>,
     flagStr: string = '',
     initialPrompt?: string,
     freshWorktree: boolean = false,
     displayName?: string,
   ): void {
-    if (tool === 'none') return;
-    const promptQ = initialPrompt ? shellQuote(initialPrompt) : '';
-    let freshCmd: string;
-    let resumeCmd: string;
-    if (tool === 'claude') {
-      const nameFlag = displayName ? ` -n ${shellQuote(displayName)}` : '';
-      const promptArg = initialPrompt ? ` ${promptQ}` : '';
-      freshCmd = 'claude' + nameFlag + flagStr + promptArg;
-      resumeCmd = aiLaunchCommand('claude') + nameFlag + flagStr + promptArg;
-    } else if (tool === 'codex') {
-      // `codex resume [SESSION_ID] [PROMPT]`; with --last the SESSION_ID slot
-      // is filled, so a trailing positional maps to PROMPT.
-      freshCmd = initialPrompt ? `codex${flagStr} ${promptQ}` : `codex${flagStr}`;
-      resumeCmd = initialPrompt ? `codex resume --last${flagStr} ${promptQ}` : `codex resume --last${flagStr}`;
-    } else {
-      // gemini: -i/--prompt-interactive runs the prompt then stays interactive.
-      freshCmd = initialPrompt ? `gemini${flagStr} -i ${promptQ}` : `gemini${flagStr}`;
-      resumeCmd = initialPrompt ? `gemini --resume latest${flagStr} -i ${promptQ}` : `gemini --resume latest${flagStr}`;
-    }
+    const base = AI_TOOLS[tool].command;
+    const resumeBase = aiLaunchCommand(tool);
+    const nameFlag = tool === 'claude' && displayName ? ` -n ${shellQuote(displayName)}` : '';
+    // gemini takes `-i <prompt>` (interactive); claude/codex take a positional.
+    const promptArg = initialPrompt
+      ? (tool === 'gemini' ? ` -i ${shellQuote(initialPrompt)}` : ` ${shellQuote(initialPrompt)}`)
+      : '';
+    const freshCmd = `${base}${nameFlag}${flagStr}${promptArg}`;
+    const resumeCmd = `${resumeBase}${nameFlag}${flagStr}${promptArg}`;
     const cmd = freshWorktree ? freshCmd : `${resumeCmd} || ${freshCmd}`;
     this.tmux.createSessionWithCommand(sessionName, cwd, cmd, true);
   }
