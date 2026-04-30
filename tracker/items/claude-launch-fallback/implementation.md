@@ -2,12 +2,16 @@
 
 ## What was built
 
-Restored the resume-or-fresh shell-level fallback chain that commit `ca72a85` (2026-04-26) had dropped. The fix lives entirely in `src/cores/WorktreeCore.ts`:
+Restored the resume-or-fresh shell-level fallback chain that commit `ca72a85` (2026-04-26) had dropped. The fix lives entirely in `src/cores/WorktreeCore.ts`.
 
-- `launchClaudeSessionWithFallback` (`src/cores/WorktreeCore.ts:599`): on the non-fresh path the launch command is now `claude --continue <name+flags+prompt> || claude <name+flags+prompt>`. The `freshWorktree=true` path is unchanged (plain `claude` only — no resume to fall back from).
-- `launchAISessionWithFallback`: on the non-fresh path the launch command is now `<resume-form> || <fresh-form>` for codex (`codex resume --last … || codex …`) and gemini (`gemini --resume latest -i … || gemini -i …`). Refactored the body to compute `freshCmd` and `resumeCmd` once instead of re-deriving the same shape twice across the fresh/non-fresh branches.
+- Merged `launchClaudeSessionWithFallback` into the unified `launchAISessionWithFallback` helper. The previous split existed only because Claude takes a `-n displayName` flag — that's now an optional trailing parameter on the unified helper, threaded from the call site only when the selected tool is claude.
+- On the non-fresh path the launch command is now `<resume-form> || <fresh-form>` for all three tools:
+  - claude: `claude --continue -n … <flags> [prompt] || claude -n … <flags> [prompt]`
+  - codex: `codex resume --last <flags> [prompt] || codex <flags> [prompt]`
+  - gemini: `gemini --resume latest <flags> -i [prompt] || gemini <flags> -i [prompt]`
+- The `freshWorktree=true` path (createFeature, recreateImplementWorktree) is unchanged: just the fresh form, no chain.
 
-Both helpers preserve the exact display-name (`-n`), config flag suffix, and initial-prompt argument across the resume and fresh halves of the chain so the user sees identical behavior either way.
+Both halves of every chain preserve the exact display-name, config flag suffix, and initial-prompt argument so the user sees identical behavior whether the resume succeeds or the fresh fallback runs.
 
 ## Tests
 
@@ -20,6 +24,10 @@ Updated `tests/unit/WorktreeCoreAutoResume.test.ts`:
 
 ## Notes for cleanup
 
-- The function names (`launchClaudeSessionWithFallback`, `launchAISessionWithFallback`) once again match their behavior. No rename needed.
+- One launch helper now (`launchAISessionWithFallback`) instead of two. The old `launchClaudeSessionWithFallback` was deleted; its only Claude-specific bit (`-n displayName`) became an optional parameter on the unified helper.
 - `AIToolService.launchTool` (`src/services/AIToolService.ts:181`) still launches `claude --continue` with no fallback. It is unused in production (`grep` shows no callers in `src/`), so it was left untouched. If a future caller wires it back up, the same fallback shape should be applied there.
 - The fallback is intentionally silent — no extra UI/print line — so the user's pane just shows a working AI prompt whether the resume succeeded or not. Matches the original pre-`ca72a85` behavior and the user's preference confirmed during discovery.
+
+## Stage review
+
+Implementation matched the requirements one-to-one. After review feedback ("why is this separate from the others?"), the Claude-specific helper was folded into the unified `launchAISessionWithFallback` — the only Claude-specific concern (`-n displayName`) is now an optional trailing parameter, and the call site picks it only for `selectedTool === 'claude'`. Full suite (781 tests) and typecheck pass clean.
