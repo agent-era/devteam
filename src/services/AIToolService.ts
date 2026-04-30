@@ -175,15 +175,7 @@ export class AIToolService {
     return AI_TOOLS[tool];
   }
 
-  /**
-   * Launch an AI tool in a tmux session.
-   *
-   * Currently unused in production — the live launch path is
-   * `WorktreeCore.launchAISessionWithFallback`, which chains
-   * `<resume> || <fresh>` so a missing/stale on-disk session does not leave
-   * the pane empty. If this method gains a caller again, mirror that chain
-   * here before shipping.
-   */
+  // Unused in src/; the live launch path is WorktreeCore.launchAISessionWithFallback. If wired up again, mirror its `<resume> || <fresh>` chain.
   launchTool(tool: AITool, sessionName: string, cwd: string): void {
     if (tool === 'none') return;
     runCommand(['tmux', 'new-session', '-ds', sessionName, '-c', cwd, aiLaunchCommand(tool)]);

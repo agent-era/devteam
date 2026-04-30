@@ -151,6 +151,12 @@ tests/
 - **Constants**: UPPER_SNAKE_CASE
 - **Interfaces**: PascalCase, often with `Info` or `State` suffix
 
+### Comments
+
+- Default to no comments — well-named identifiers and types should carry the load.
+- When a comment is genuinely warranted (a non-obvious WHY, a hidden constraint, a workaround), prefer a single line. Multi-line comment blocks and multi-paragraph JSDoc are not banned, but should be rare.
+- Don't explain WHAT the code does or restate parameter names; don't reference current task / fix / caller (those belong in PR descriptions and rot in the codebase).
+
 ### Architecture Layers
 
 1. **Service Layer** (Stateless External I/O):
