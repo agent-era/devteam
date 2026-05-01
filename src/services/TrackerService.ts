@@ -514,7 +514,7 @@ export class TrackerService {
   }
 
   // Fresh + specifically waiting_for_approval. The kanban uses this to render
-  // the green "ready to advance" treatment and expose the [m] approve shortcut.
+  // the green "ready to advance" treatment.
   isItemReadyToAdvance(status: ItemStatus | null | undefined, now?: Date): boolean {
     return !!status && status.state === 'waiting_for_approval' && !this.isItemStatusStale(status, now);
   }
