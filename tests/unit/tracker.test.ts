@@ -481,7 +481,7 @@ describe('defaultStageFileContent renders status + gate protocol', () => {
     )('style=%s detail=%s renders the categorization instruction', (style, detail) => {
       const content = service.defaultStageFileContent('requirements', {style, detail});
       expect(content).toMatch(/acceptance criteria.*sub-heading/i);
-      expect(content).toMatch(/concern/i);
+      expect(content).toMatch(/distinct concern/i);
       expect(content).toMatch(/continuous/i);
       expect(content).toMatch(/AC #N/);
     });
