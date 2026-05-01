@@ -21,7 +21,7 @@ A single-point change to the requirements-stage prompt template in
 
 - `src/services/TrackerService.ts` — extended the `Acceptance criteria`
   bullet inside the `requirements` branch of `defaultStageFileContent`
-  to carry the categorization guidance + worked example.
+  to carry the categorization guidance.
 - `tests/unit/tracker.test.ts` — added a parametrised describe block
   (`requirements stage instructs the agent to categorize acceptance
   criteria`) covering all six combinations of
