@@ -413,18 +413,6 @@ export default function TrackerBoardScreen({
     setSelectedColumn(prev => Math.max(0, Math.min(prev + delta, board.columns.length - 1)));
   }, [board.columns.length]);
 
-  const handleMoveItemNext = React.useCallback(() => {
-    if (!currentItem) return;
-    const nextStage = service.nextStage(currentItem.stage);
-    if (!nextStage) return;
-    service.moveItem(projectPath, currentItem.slug, nextStage);
-    const newBoard = service.loadBoard(project, projectPath);
-    setBoard(newBoard);
-    const colItems = newBoard.columns[selectedColumn]?.items || [];
-    const newRow = colItems.length === 0 ? 0 : Math.min(currentRow, colItems.length - 1);
-    setSelectedRowByColumn(prev => ({...prev, [selectedColumn]: newRow}));
-  }, [currentItem, service, projectPath, project, selectedColumn, currentRow]);
-
   // Actions launched from the kanban board return here, not to the worktree list.
   const backToTracker = React.useCallback(
     () => showTracker({name: project, path: projectPath}),
@@ -613,7 +601,6 @@ export default function TrackerBoardScreen({
     },
     onAttach: currentItem ? handleAttach : undefined,
     onCreate: () => setCreateMode(true),
-    onMoveItemNext: handleMoveItemNext,
     onToggleInactive: currentItem ? handleToggleInactive : undefined,
     onGenerateProposals: handleProposalKey,
     onStagesConfig: onCustomizeStages,
@@ -866,11 +853,11 @@ export default function TrackerBoardScreen({
                 {/* Dedicated approve-hint row — only when this card is the
                     selected one and ready for approval. Keeping it on its
                     own line (rather than suffixing the brief_description)
-                    makes the shortcut visible even when the description
-                    wraps to two lines. */}
+                    keeps the state visible even when the description wraps
+                    to two lines. */}
                 {display.showApproveHint && isSelected && (
                   <Text color="green" bold>
-                    {`    press [m] to approve and advance`}
+                    {`    ready to advance`}
                   </Text>
                 )}
                 {/* Chip row: tmux sessions plus the PR chip. Indented to the
@@ -1026,9 +1013,6 @@ const Footer = React.memo(function Footer({hasSession, hasWorktree, hasItem, ina
       {sep}
       <Text color="magenta">n</Text>
       <Text dimColor> new</Text>
-      <Text>  </Text>
-      <Text color="magenta">m</Text>
-      <Text dimColor> advance</Text>
       {hasItem && (
         <>
           <Text>  </Text>
