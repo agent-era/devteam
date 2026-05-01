@@ -1480,7 +1480,7 @@ Advance: set \`status.json.stage\` to \`requirements\`.
         const sections: string[] = [
           '- **Problem** + **Why** — copied from `notes.md` (do not drop or rewrite).',
           '- **Summary** — one paragraph of what will be built.',
-          '- **Acceptance criteria** — numbered testable conditions.',
+          '- **Acceptance criteria** — numbered testable conditions. When the criteria span multiple distinct concerns, group them under `###` sub-headings so reviewers can skim by area; if everything is one concern, leave the list flat. **Number continuously across categories** (1, 2, 3 … N over every group, top to bottom) so any criterion can be referred to as "AC #N" unambiguously. Choose the category names that fit this item — there is no fixed vocabulary.',
         ];
         if (detail !== 'minimal') sections.push('- **Edge cases** — boundary conditions.');
         if (detail === 'thorough') {
