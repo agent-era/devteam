@@ -480,7 +480,7 @@ describe('defaultStageFileContent renders status + gate protocol', () => {
       STYLES.flatMap(style => DETAILS.map(detail => [style, detail] as const))
     )('style=%s detail=%s renders the categorization instruction', (style, detail) => {
       const content = service.defaultStageFileContent('requirements', {style, detail});
-      expect(content).toMatch(/acceptance criteria.*sub-heading/is);
+      expect(content).toMatch(/acceptance criteria.*sub-heading/i);
       expect(content).toMatch(/concern/i);
       expect(content).toMatch(/continuous/i);
       expect(content).toMatch(/AC #N/);
