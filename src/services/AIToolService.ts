@@ -16,8 +16,9 @@ const CLAUDE_WORKING_RE = /…\s*\(\d+s/;
 // substrings of multiple tool names, the first hit wins. Object.keys preserves insertion
 // order, so reordering AI_TOOLS in constants.ts changes that priority silently.
 const TOOL_NAMES = Object.keys(AI_TOOLS) as Array<keyof typeof AI_TOOLS>;
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const TOOL_TOKEN_RES: Record<keyof typeof AI_TOOLS, RegExp> = Object.fromEntries(
-  TOOL_NAMES.map(name => [name, new RegExp(`(?:^|[\\s/])${name}(?=\\s|$)`)])
+  TOOL_NAMES.map(name => [name, new RegExp(`(?:^|[\\s/])${escapeRe(name)}(?=\\s|$)`)])
 ) as Record<keyof typeof AI_TOOLS, RegExp>;
 
 export class AIToolService {
