@@ -1,5 +1,6 @@
 import {AIToolService} from '../../src/services/AIToolService.js';
 import {AI_TOOLS} from '../../src/constants.js';
+import type {AITool} from '../../src/models.js';
 
 // Mock the command execution functions
 jest.mock('../../src/shared/utils/commandExecutor.js', () => ({
@@ -82,10 +83,47 @@ random-session:33333`);
       });
 
       const result = await aiToolService.detectAllSessionAITools();
-      
+
       expect(result.get('dev-project-feature')).toBe('claude');
       expect(result.has('other-session')).toBe(false);
       expect(result.has('random-session')).toBe(false);
+    });
+
+    describe('disambiguates tool when args mention another tool name', () => {
+      // shellQuote leaves chars like `[A-Za-z0-9_\-./=:]+` bare; anything with spaces or
+      // special chars is wrapped in single quotes. Both shapes appear in the cases below.
+      const cases: Array<[string, string, AITool]> = [
+        ['codex: claude in worktree slug (unquoted)', `bash -c codex resume --last agent-shows-claude-not-codex || codex agent-shows-claude-not-codex`, 'codex'],
+        ['codex: claude in quoted prompt', `bash -c codex resume --last 'fix the claude bug' || codex 'fix the claude bug'`, 'codex'],
+        ['codex: claude in install path', `node /home/user/.claude-tools/codex/bin/codex resume --last`, 'codex'],
+        ['gemini: claude in quoted prompt', `bash -c gemini --resume latest 'tame the claude noise' || gemini 'tame the claude noise'`, 'gemini'],
+        ['gemini: claude in install path', `node /home/user/.claude-tools/gemini/bin/gemini --resume latest`, 'gemini'],
+        ['claude: quoted display name', `claude -n 'feature - project' --dangerously-skip-permissions`, 'claude'],
+        ['claude: bash-wrapper resume/fresh', `bash -c claude --continue -n 'foo' || claude -n 'foo'`, 'claude'],
+        ['case-insensitive: uppercase CLAUDE', 'CLAUDE', 'claude'],
+        ['case-insensitive: uppercase path codex', '/USR/BIN/CODEX', 'codex'],
+        ['non-tool: bash', 'bash', 'none'],
+        ['non-tool: vim', 'vim', 'none'],
+        // Loose fallback path: no token boundary present, but the substring still resolves
+        // the way it did before strict matching was introduced.
+        ['legacy embedded substring', 'someweirdtoolnameclaudethingembedded', 'claude'],
+      ];
+
+      for (const [name, argsLine, expected] of cases) {
+        test(name, async () => {
+          (runCommandQuickAsync as jest.Mock).mockImplementation((cmdArgs: string[]) => {
+            if (cmdArgs.includes('list-panes') && cmdArgs.includes('-a')) {
+              return Promise.resolve('dev-p-f:99999');
+            }
+            if (cmdArgs.includes('-p') && cmdArgs.includes('99999')) {
+              return Promise.resolve(` 99999 ${argsLine}`);
+            }
+            return Promise.resolve('');
+          });
+          const result = await aiToolService.detectAllSessionAITools();
+          expect(result.get('dev-p-f')).toBe(expected);
+        });
+      }
     });
   });
 

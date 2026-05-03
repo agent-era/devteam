@@ -12,6 +12,15 @@ const CLAUDE_WAITING_RE = /❯\s+\d+\.\s+\w+/m;
 // for long-running operations, broaden to `/…\s*\(\d+(s|m)/`.
 const CLAUDE_WORKING_RE = /…\s*\(\d+s/;
 
+// Iteration order is load-bearing for the loose fallback below: when args contains
+// substrings of multiple tool names, the first hit wins. Object.keys preserves insertion
+// order, so reordering AI_TOOLS in constants.ts changes that priority silently.
+const TOOL_NAMES = Object.keys(AI_TOOLS) as Array<keyof typeof AI_TOOLS>;
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const TOOL_TOKEN_RES: Record<keyof typeof AI_TOOLS, RegExp> = Object.fromEntries(
+  TOOL_NAMES.map(name => [name, new RegExp(`(?:^|[\\s/])${escapeRe(name)}(?=\\s|$)`)])
+) as Record<keyof typeof AI_TOOLS, RegExp>;
+
 export class AIToolService {
   /**
    * Get tool name for display
@@ -80,22 +89,21 @@ export class AIToolService {
     return toolsMap;
   }
 
-  /**
-   * Detect AI tool from process arguments
-   */
+  // Strict pass first: a tool name inside a prompt, slug, or install path must not
+  // outrank the actually-running binary. Falls back to loose `.includes()` for legacy
+  // invocation shapes the strict pass may not recognize.
   private detectToolFromArgs(args: string): AITool {
     const argsLower = args.toLowerCase();
-    
-    if (argsLower.includes('/claude') || argsLower.includes('claude')) {
-      return 'claude';
+    // shellQuote uses single quotes for non-safe args; strip those plus double-quoted spans
+    // so prompt/display text can't be mistaken for a binary token.
+    const stripped = argsLower.replace(/'[^']*'/g, '').replace(/"[^"]*"/g, '');
+
+    for (const tool of TOOL_NAMES) {
+      if (TOOL_TOKEN_RES[tool].test(stripped)) return tool;
     }
-    if (argsLower.includes('/codex') || argsLower.includes('codex')) {
-      return 'codex';
+    for (const tool of TOOL_NAMES) {
+      if (argsLower.includes(tool)) return tool;
     }
-    if (argsLower.includes('/gemini') || argsLower.includes('gemini')) {
-      return 'gemini';
-    }
-    
     return 'none';
   }
 
