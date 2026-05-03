@@ -12,6 +12,16 @@ const CLAUDE_WAITING_RE = /❯\s+\d+\.\s+\w+/m;
 // for long-running operations, broaden to `/…\s*\(\d+(s|m)/`.
 const CLAUDE_WORKING_RE = /…\s*\(\d+s/;
 
+// Per-tool token regex: matches the binary name only when it appears at the start of args,
+// after a slash, or after whitespace, and is followed by whitespace or end-of-string.
+// Built once at module load from AI_TOOLS so a new tool added to the config is detected
+// automatically. Order of iteration matters for the loose fallback path below — Object.keys
+// preserves insertion order, which today places claude first to match the historical bias.
+const TOOL_NAMES = Object.keys(AI_TOOLS) as Array<keyof typeof AI_TOOLS>;
+const TOOL_TOKEN_RES: Record<keyof typeof AI_TOOLS, RegExp> = Object.fromEntries(
+  TOOL_NAMES.map(name => [name, new RegExp(`(?:^|[\\s/])${name}(?=\\s|$)`)])
+) as Record<keyof typeof AI_TOOLS, RegExp>;
+
 export class AIToolService {
   /**
    * Get tool name for display
@@ -81,21 +91,29 @@ export class AIToolService {
   }
 
   /**
-   * Detect AI tool from process arguments
+   * Detect AI tool from process arguments.
+   *
+   * Strict pass first: each tool is matched only when its binary name appears as
+   * a standalone token (start of string, after `/`, or after whitespace, and
+   * followed by whitespace or end-of-string), ignoring shell-quoted argument
+   * data. This prevents "claude" inside a prompt, slug, or install path from
+   * outranking the actually-running binary — the bug behind worktrees like
+   * `agent-shows-claude-not-codex` rendering as Claude when Codex is attached.
+   * Loose `.includes()` is kept as a fallback for legacy invocation shapes the
+   * strict regex may not recognize.
    */
   private detectToolFromArgs(args: string): AITool {
     const argsLower = args.toLowerCase();
-    
-    if (argsLower.includes('/claude') || argsLower.includes('claude')) {
-      return 'claude';
+    // Strip shell-quoted argument bodies so prompt/display text can't be mistaken for a binary.
+    // shellQuote uses single quotes; strip those plus any double-quoted spans defensively.
+    const stripped = argsLower.replace(/'[^']*'/g, '').replace(/"[^"]*"/g, '');
+
+    for (const tool of TOOL_NAMES) {
+      if (TOOL_TOKEN_RES[tool].test(stripped)) return tool;
     }
-    if (argsLower.includes('/codex') || argsLower.includes('codex')) {
-      return 'codex';
+    for (const tool of TOOL_NAMES) {
+      if (argsLower.includes(tool)) return tool;
     }
-    if (argsLower.includes('/gemini') || argsLower.includes('gemini')) {
-      return 'gemini';
-    }
-    
     return 'none';
   }
 
