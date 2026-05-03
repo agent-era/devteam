@@ -90,30 +90,22 @@ random-session:33333`);
     });
 
     describe('disambiguates tool when args mention another tool name', () => {
+      // shellQuote leaves chars like `[A-Za-z0-9_\-./=:]+` bare; anything with spaces or
+      // special chars is wrapped in single quotes. Both shapes appear in the cases below.
       const cases: Array<[string, string, AITool]> = [
-        // The bug this work item targets: codex on a worktree whose slug contains "claude".
-        // shellQuote leaves the slug bare (no special chars), so the slug appears unquoted in args.
-        ['codex on claude-bearing slug', `bash -c codex resume --last agent-shows-claude-not-codex || codex agent-shows-claude-not-codex`, 'codex'],
-        // Same shape, but with a quoted prompt that mentions "claude" (shellQuote uses single quotes for spaces).
-        ['codex with claude-bearing prompt', `bash -c codex resume --last 'fix the claude bug' || codex 'fix the claude bug'`, 'codex'],
-        // Codex installed under a path containing "claude".
-        ['codex under claude-bearing path', `node /home/user/.claude-tools/codex/bin/codex resume --last`, 'codex'],
-        // Gemini parallels: claude in prompt and claude in install path.
-        ['gemini with claude-bearing prompt', `bash -c gemini --resume latest 'tame the claude noise' || gemini 'tame the claude noise'`, 'gemini'],
-        ['gemini under claude-bearing path', `node /home/user/.claude-tools/gemini/bin/gemini --resume latest`, 'gemini'],
-        // Real shape from production: claude wrapper with a quoted display name.
-        ['claude with quoted display name', `claude -n 'feature - project' --dangerously-skip-permissions`, 'claude'],
-        // Bash-wrapper resume-or-fresh shape for claude.
-        ['claude bash-wrapper resume/fresh', `bash -c claude --continue -n 'foo' || claude -n 'foo'`, 'claude'],
-        // Case-insensitive.
-        ['uppercase CLAUDE', 'CLAUDE', 'claude'],
-        ['uppercase path codex', '/USR/BIN/CODEX', 'codex'],
-        // Non-tool processes resolve to 'none'.
-        ['bash alone', 'bash', 'none'],
-        ['vim', 'vim', 'none'],
-        // Legacy fallback path: no clean token boundary, but the substring is still present.
-        // The strict pass returns no match; the loose .includes() fallback resolves it the way it
-        // always has, so callers depending on legacy detection forms aren't regressed.
+        ['codex: claude in worktree slug (unquoted)', `bash -c codex resume --last agent-shows-claude-not-codex || codex agent-shows-claude-not-codex`, 'codex'],
+        ['codex: claude in quoted prompt', `bash -c codex resume --last 'fix the claude bug' || codex 'fix the claude bug'`, 'codex'],
+        ['codex: claude in install path', `node /home/user/.claude-tools/codex/bin/codex resume --last`, 'codex'],
+        ['gemini: claude in quoted prompt', `bash -c gemini --resume latest 'tame the claude noise' || gemini 'tame the claude noise'`, 'gemini'],
+        ['gemini: claude in install path', `node /home/user/.claude-tools/gemini/bin/gemini --resume latest`, 'gemini'],
+        ['claude: quoted display name', `claude -n 'feature - project' --dangerously-skip-permissions`, 'claude'],
+        ['claude: bash-wrapper resume/fresh', `bash -c claude --continue -n 'foo' || claude -n 'foo'`, 'claude'],
+        ['case-insensitive: uppercase CLAUDE', 'CLAUDE', 'claude'],
+        ['case-insensitive: uppercase path codex', '/USR/BIN/CODEX', 'codex'],
+        ['non-tool: bash', 'bash', 'none'],
+        ['non-tool: vim', 'vim', 'none'],
+        // Loose fallback path: no token boundary present, but the substring still resolves
+        // the way it did before strict matching was introduced.
         ['legacy embedded substring', 'someweirdtoolnameclaudethingembedded', 'claude'],
       ];
 

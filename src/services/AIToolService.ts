@@ -89,10 +89,9 @@ export class AIToolService {
     return toolsMap;
   }
 
-  // Strict pass first to prevent "claude" inside a prompt, slug, or install path from
-  // outranking the actually-running binary (the bug behind worktrees like
-  // `agent-shows-claude-not-codex` rendering as Claude when Codex is attached). Falls back
-  // to loose `.includes()` for legacy invocation shapes the strict pass may not recognize.
+  // Strict pass first: a tool name inside a prompt, slug, or install path must not
+  // outrank the actually-running binary. Falls back to loose `.includes()` for legacy
+  // invocation shapes the strict pass may not recognize.
   private detectToolFromArgs(args: string): AITool {
     const argsLower = args.toLowerCase();
     // shellQuote uses single quotes for non-safe args; strip those plus double-quoted spans
