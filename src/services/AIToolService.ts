@@ -12,11 +12,9 @@ const CLAUDE_WAITING_RE = /❯\s+\d+\.\s+\w+/m;
 // for long-running operations, broaden to `/…\s*\(\d+(s|m)/`.
 const CLAUDE_WORKING_RE = /…\s*\(\d+s/;
 
-// Per-tool token regex: matches the binary name only when it appears at the start of args,
-// after a slash, or after whitespace, and is followed by whitespace or end-of-string.
-// Built once at module load from AI_TOOLS so a new tool added to the config is detected
-// automatically. Order of iteration matters for the loose fallback path below — Object.keys
-// preserves insertion order, which today places claude first to match the historical bias.
+// Iteration order is load-bearing for the loose fallback below: when args contains
+// substrings of multiple tool names, the first hit wins. Object.keys preserves insertion
+// order, so reordering AI_TOOLS in constants.ts changes that priority silently.
 const TOOL_NAMES = Object.keys(AI_TOOLS) as Array<keyof typeof AI_TOOLS>;
 const TOOL_TOKEN_RES: Record<keyof typeof AI_TOOLS, RegExp> = Object.fromEntries(
   TOOL_NAMES.map(name => [name, new RegExp(`(?:^|[\\s/])${name}(?=\\s|$)`)])
@@ -90,22 +88,14 @@ export class AIToolService {
     return toolsMap;
   }
 
-  /**
-   * Detect AI tool from process arguments.
-   *
-   * Strict pass first: each tool is matched only when its binary name appears as
-   * a standalone token (start of string, after `/`, or after whitespace, and
-   * followed by whitespace or end-of-string), ignoring shell-quoted argument
-   * data. This prevents "claude" inside a prompt, slug, or install path from
-   * outranking the actually-running binary — the bug behind worktrees like
-   * `agent-shows-claude-not-codex` rendering as Claude when Codex is attached.
-   * Loose `.includes()` is kept as a fallback for legacy invocation shapes the
-   * strict regex may not recognize.
-   */
+  // Strict pass first to prevent "claude" inside a prompt, slug, or install path from
+  // outranking the actually-running binary (the bug behind worktrees like
+  // `agent-shows-claude-not-codex` rendering as Claude when Codex is attached). Falls back
+  // to loose `.includes()` for legacy invocation shapes the strict pass may not recognize.
   private detectToolFromArgs(args: string): AITool {
     const argsLower = args.toLowerCase();
-    // Strip shell-quoted argument bodies so prompt/display text can't be mistaken for a binary.
-    // shellQuote uses single quotes; strip those plus any double-quoted spans defensively.
+    // shellQuote uses single quotes for non-safe args; strip those plus double-quoted spans
+    // so prompt/display text can't be mistaken for a binary token.
     const stripped = argsLower.replace(/'[^']*'/g, '').replace(/"[^"]*"/g, '');
 
     for (const tool of TOOL_NAMES) {
