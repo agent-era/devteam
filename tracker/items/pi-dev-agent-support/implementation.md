@@ -85,3 +85,12 @@ token pass is unchanged; the fallback is now bounded.
   `.claude/`); nothing to review there in the diff.
 - `pi`'s waiting fixture depends on the `pi-permission-system` extension being
   installed to regenerate — documented in the fixtures README.
+
+## Stage review
+
+Added pi as a fully data-driven fourth AI tool — the only non-mechanical work
+was capturing real pi terminal output for detection patterns and replacing the
+unsafe substring fallback in `detectToolFromArgs` with whole-word matching.
+Discovered pi has no built-in permission gate, so the "waiting" state is
+detected from pi's select dialogs plus the optional `pi-permission-system`
+extension. typecheck/test (815)/build all green; verified end-to-end.
