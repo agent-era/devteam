@@ -51,6 +51,11 @@ export class FakeAIToolService extends AIToolService {
       case 'claude':
         if (lowerText.includes('❯') && /\d+\./.test(text)) return 'waiting';
         break;
+      case 'pi':
+        // pi's permission gate; its dialog footer ("enter select") is already
+        // caught by the generic 'select' rule above.
+        if (lowerText.includes('permission required')) return 'waiting';
+        break;
     }
     
     return 'idle';

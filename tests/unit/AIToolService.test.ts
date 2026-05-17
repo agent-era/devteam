@@ -25,6 +25,7 @@ describe('AIToolService', () => {
       expect(aiToolService.isAIPaneCommand('claude')).toBe(true);
       expect(aiToolService.isAIPaneCommand('/usr/bin/claude')).toBe(true);
       expect(aiToolService.isAIPaneCommand('CLAUDE')).toBe(true);
+      expect(aiToolService.isAIPaneCommand('pi --continue')).toBe(true);
     });
 
     test('returns true for node-based tools', () => {

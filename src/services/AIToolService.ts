@@ -15,10 +15,8 @@ const CLAUDE_WORKING_RE = /…\s*\(\d+s/;
 // Anchoring on a leading braille glyph (excluding the blank U+2800) avoids matching the
 // literal word "Working" if it appears in transcript text.
 const PI_WORKING_RE = /^[ \t]*[⠁-⣿][ \t]/m;
-// pi has no built-in permission gate, but its interactive select/confirm dialogs — and the
-// pi-permission-system extension's gate, which renders as one — all sit waiting on a
-// keystroke. `enter select` / `↑↓ navigate` is the select-dialog footer; an `(N/M)` line
-// is the filterable picker's counter (model selector, command palette).
+// pi's interactive dialogs all sit waiting on a keystroke: `enter select` / `↑↓ navigate`
+// is the select/confirm-dialog footer; an `(N/M)` line is the filterable picker's counter.
 const PI_WAITING_RE = /enter\s+select|↑↓\s*navigate|^[ \t]*\(\d+\/\d+\)[ \t]*$/m;
 // The pi-permission-system extension's gate phrasing, which survives even when the
 // select-dialog footer PI_WAITING_RE keys on has scrolled out of the captured window.
