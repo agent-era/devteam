@@ -32,7 +32,7 @@ Represents tmux session state. Polled by `TmuxService` every ~2 s for visible ro
   session_name: string;
   attached: boolean;           // someone is currently in this tmux session
   ai_status: 'working' | 'waiting' | 'thinking' | 'idle' | 'none';
-  ai_tool: string;             // 'claude', 'gemini', etc.
+  ai_tool: string;             // 'claude', 'codex', 'gemini', 'pi'
   shell_attached: boolean;
   run_attached: boolean;
 }

@@ -11,14 +11,29 @@ const CLAUDE_WAITING_RE = /❯\s+\d+\.\s+\w+/m;
 // Note: this assumes the spinner always reports seconds. If Claude ever switches to `(2m 30s`
 // for long-running operations, broaden to `/…\s*\(\d+(s|m)/`.
 const CLAUDE_WORKING_RE = /…\s*\(\d+s/;
+// pi's spinner is a braille glyph at the start of its status line (e.g. `⠙ Working...`).
+// Anchoring on a leading braille glyph (excluding the blank U+2800) avoids matching the
+// literal word "Working" if it appears in transcript text.
+const PI_WORKING_RE = /^[ \t]*[⠁-⣿][ \t]/m;
+// pi's interactive dialogs all sit waiting on a keystroke: `enter select` / `↑↓ navigate`
+// is the select/confirm-dialog footer; an `(N/M)` line is the filterable picker's counter.
+const PI_WAITING_RE = /enter\s+select|↑↓\s*navigate|^[ \t]*\(\d+\/\d+\)[ \t]*$/m;
+// The pi-permission-system extension's gate phrasing, which survives even when the
+// select-dialog footer PI_WAITING_RE keys on has scrolled out of the captured window.
+const PI_PERMISSION_RE = /permission required|allow this (?:command|call|external directory access)\b/i;
 
-// Iteration order is load-bearing for the loose fallback below: when args contains
-// substrings of multiple tool names, the first hit wins. Object.keys preserves insertion
-// order, so reordering AI_TOOLS in constants.ts changes that priority silently.
+// Iteration order is load-bearing for the word-boundary fallback below: when args contains
+// multiple tool names, the first hit wins. Object.keys preserves insertion order, so
+// reordering AI_TOOLS in constants.ts changes that priority silently.
 const TOOL_NAMES = Object.keys(AI_TOOLS) as Array<keyof typeof AI_TOOLS>;
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const TOOL_TOKEN_RES: Record<keyof typeof AI_TOOLS, RegExp> = Object.fromEntries(
   TOOL_NAMES.map(name => [name, new RegExp(`(?:^|[\\s/])${escapeRe(name)}(?=\\s|$)`)])
+) as Record<keyof typeof AI_TOOLS, RegExp>;
+// Whole-word fallback: looser anchoring than TOOL_TOKEN_RES (also matches across `.`/`-`/`=`)
+// but still bounded, so a short name like `pi` can't match inside `pip`, `compile`, etc.
+const TOOL_WORD_RES: Record<keyof typeof AI_TOOLS, RegExp> = Object.fromEntries(
+  TOOL_NAMES.map(name => [name, new RegExp(`\\b${escapeRe(name)}\\b`)])
 ) as Record<keyof typeof AI_TOOLS, RegExp>;
 
 export class AIToolService {
@@ -90,8 +105,9 @@ export class AIToolService {
   }
 
   // Strict pass first: a tool name inside a prompt, slug, or install path must not
-  // outrank the actually-running binary. Falls back to loose `.includes()` for legacy
-  // invocation shapes the strict pass may not recognize.
+  // outrank the actually-running binary. Falls back to whole-word matching for legacy
+  // invocation shapes the strict pass may not recognize — never a loose substring,
+  // since a short name like `pi` would then mis-tag `pip`, `compile`, etc.
   private detectToolFromArgs(args: string): AITool {
     const argsLower = args.toLowerCase();
     // shellQuote uses single quotes for non-safe args; strip those plus double-quoted spans
@@ -102,7 +118,7 @@ export class AIToolService {
       if (TOOL_TOKEN_RES[tool].test(stripped)) return tool;
     }
     for (const tool of TOOL_NAMES) {
-      if (argsLower.includes(tool)) return tool;
+      if (TOOL_WORD_RES[tool].test(stripped)) return tool;
     }
     return 'none';
   }
@@ -128,6 +144,8 @@ export class AIToolService {
     switch (tool) {
       case 'claude':
         return CLAUDE_WORKING_RE.test(text);
+      case 'pi':
+        return PI_WORKING_RE.test(text);
       case 'codex':
       case 'gemini':
         return text.toLowerCase().includes(AI_TOOLS[tool].statusPatterns.working.toLowerCase());
@@ -162,6 +180,12 @@ export class AIToolService {
           lower.includes('needs permission') ||
           lower.includes('yes, allow') ||
           lower.includes('do you want me to');
+
+      case 'pi':
+        // PI_WAITING_RE matches pi's select/confirm dialog chrome (used by the model
+        // selector, command palette, and the pi-permission-system extension's gate);
+        // PI_PERMISSION_RE catches that extension's prompt by phrasing.
+        return PI_WAITING_RE.test(text) || PI_PERMISSION_RE.test(text);
 
       default:
         return false;

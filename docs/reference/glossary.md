@@ -24,6 +24,6 @@
 
 **Workspace header** — A synthetic list row in `WorktreeListScreen` that represents a workspace group. Not a real worktree on disk; `is_workspace_header === true`.
 
-**AI tool** — The CLI program used as the AI agent: currently `claude` or `gemini`. Stored in `.devteam/config.json` as `aiTool`.
+**AI tool** — The CLI program used as the AI agent: one of `claude`, `codex`, `gemini`, or `pi`. Stored in `.devteam/config.json` as `aiTool`.
 
 **action_priority** — A computed field on `WorktreeInfo` that ranks worktrees by urgency for display ordering.

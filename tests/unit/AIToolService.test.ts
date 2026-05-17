@@ -25,6 +25,7 @@ describe('AIToolService', () => {
       expect(aiToolService.isAIPaneCommand('claude')).toBe(true);
       expect(aiToolService.isAIPaneCommand('/usr/bin/claude')).toBe(true);
       expect(aiToolService.isAIPaneCommand('CLAUDE')).toBe(true);
+      expect(aiToolService.isAIPaneCommand('pi --continue')).toBe(true);
     });
 
     test('returns true for node-based tools', () => {
@@ -104,9 +105,16 @@ random-session:33333`);
         ['case-insensitive: uppercase path codex', '/USR/BIN/CODEX', 'codex'],
         ['non-tool: bash', 'bash', 'none'],
         ['non-tool: vim', 'vim', 'none'],
-        // Loose fallback path: no token boundary present, but the substring still resolves
-        // the way it did before strict matching was introduced.
-        ['legacy embedded substring', 'someweirdtoolnameclaudethingembedded', 'claude'],
+        // Word-boundary fallback: a tool name embedded mid-word (no boundary) no longer
+        // resolves — substring matching was dropped so short names stay unambiguous.
+        ['embedded substring does not match', 'someweirdtoolnameclaudethingembedded', 'none'],
+        // pi is a 2-char name; it must not match inside longer words/paths.
+        ['pi: bare binary', 'pi', 'pi'],
+        ['pi: with resume flag', 'pi --continue', 'pi'],
+        ['pi: install path', 'node /home/user/.nvm/versions/node/v24.7.0/bin/pi', 'pi'],
+        ['pi: not matched inside pip', 'pip install requests', 'none'],
+        ['pi: not matched inside a path word', 'node /usr/lib/compile-cache/run.js', 'none'],
+        ['pi: claude in quoted prompt stays pi', `bash -c pi --continue 'fix the claude bug' || pi 'fix the claude bug'`, 'pi'],
       ];
 
       for (const [name, argsLine, expected] of cases) {
@@ -199,6 +207,33 @@ random-session:33333`);
       });
     });
 
+    describe('Pi status detection', () => {
+      test('detects working state (braille spinner)', () => {
+        const workingText = ' 1\n 2\n\n ⠙ Working...';
+        expect(aiToolService.getStatusForTool(workingText, 'pi')).toBe('working');
+      });
+
+      test('detects waiting state (select-dialog footer)', () => {
+        const waitingText = ' → Yes\n   No\n\n ↑↓ navigate  enter select  escape/ctrl+c cancel';
+        expect(aiToolService.getStatusForTool(waitingText, 'pi')).toBe('waiting');
+      });
+
+      test('detects waiting state (permission-system extension prompt)', () => {
+        const waitingText = " Permission Required\n Current agent requested bash command 'echo hi'. Allow this command?";
+        expect(aiToolService.getStatusForTool(waitingText, 'pi')).toBe('waiting');
+      });
+
+      test('permission picker on screen wins over the working spinner', () => {
+        const mixed = ' ⠏ Working...\n\n Permission Required\n Allow this call?\n\n ↑↓ navigate  enter select';
+        expect(aiToolService.getStatusForTool(mixed, 'pi')).toBe('waiting');
+      });
+
+      test('detects idle state as default', () => {
+        const idleText = ' pi v0.74.1\n escape interrupt · / commands\n\n 0.0%/128k (auto)';
+        expect(aiToolService.getStatusForTool(idleText, 'pi')).toBe('idle');
+      });
+    });
+
     test('returns not_running for none tool', () => {
       expect(aiToolService.getStatusForTool('any text', 'none')).toBe('not_running');
     });
@@ -210,6 +245,7 @@ random-session:33333`);
       expect(tools).toContain('claude');
       expect(tools).toContain('codex');
       expect(tools).toContain('gemini');
+      expect(tools).toContain('pi');
       expect(tools.length).toBe(Object.keys(AI_TOOLS).length);
     });
 
@@ -217,6 +253,7 @@ random-session:33333`);
       expect(aiToolService.getToolName('claude')).toBe('Claude');
       expect(aiToolService.getToolName('codex')).toBe('OpenAI Codex');
       expect(aiToolService.getToolName('gemini')).toBe('Gemini');
+      expect(aiToolService.getToolName('pi')).toBe('Pi');
       expect(aiToolService.getToolName('none')).toBe('None');
     });
 

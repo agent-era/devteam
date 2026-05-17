@@ -12,6 +12,7 @@ export class FakeAIToolService extends AIToolService {
   isAIPaneCommand(command: string): boolean {
     const lower = command.toLowerCase();
     if (lower.includes('claude') || lower.includes('codex') || lower.includes('gemini')) return true;
+    if (/\bpi\b/.test(lower)) return true; // pi runs as the bare `pi` binary
     if (lower.includes('node')) return true; // both codex and gemini use node
     return false;
   }
@@ -49,6 +50,11 @@ export class FakeAIToolService extends AIToolService {
         break;
       case 'claude':
         if (lowerText.includes('❯') && /\d+\./.test(text)) return 'waiting';
+        break;
+      case 'pi':
+        // pi's permission gate; its dialog footer ("enter select") is already
+        // caught by the generic 'select' rule above.
+        if (lowerText.includes('permission required')) return 'waiting';
         break;
     }
     
