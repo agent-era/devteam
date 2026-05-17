@@ -4,7 +4,7 @@ import {AIToolService} from '../../src/services/AIToolService.js';
 import {AITool, AIStatus} from '../../src/models.js';
 
 const FIXTURES_ROOT = join(process.cwd(), 'tests/fixtures/ai-states');
-const TOOLS: AITool[] = ['claude', 'codex', 'gemini'];
+const TOOLS: AITool[] = ['claude', 'codex', 'gemini', 'pi'];
 const STATES: AIStatus[] = ['idle', 'working', 'waiting'];
 
 function loadFixture(tool: AITool, state: AIStatus): string | null {

@@ -105,6 +105,19 @@ export const AI_TOOLS = {
       working: 'esc to cancel',
       idle_prompt: ['│ >', '']
     }
+  },
+  pi: {
+    name: 'Pi',
+    command: 'pi',
+    resumeArgs: '--continue',
+    // pi runs as the bare `pi` binary in `ps -o args=` (not `node …`).
+    processPatterns: ['pi'],
+    // pi's working/waiting detection lives in AIToolService.isWorking/isWaitingForTool
+    // (PI_WORKING_RE / PI_WAITING_RE) — its spinner is a braille glyph and its waiting
+    // states are select-dialog UIs that a plain substring can't pin down.
+    statusPatterns: {
+      idle_prompt: ['─']
+    }
   }
 } as const;
 
@@ -314,6 +327,17 @@ export const CONFIG_SCHEMA: Record<string, SchemaNode> = {
           flags: {
             type: 'string[]',
             description: 'Additional CLI flags',
+            example: [],
+          },
+        },
+      },
+      pi: {
+        type: 'object',
+        description: 'Flags for pi CLI',
+        children: {
+          flags: {
+            type: 'string[]',
+            description: 'e.g. ["--thinking", "high"] or ["-e", "<extension>"]',
             example: [],
           },
         },

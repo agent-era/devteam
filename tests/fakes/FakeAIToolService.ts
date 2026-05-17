@@ -12,6 +12,7 @@ export class FakeAIToolService extends AIToolService {
   isAIPaneCommand(command: string): boolean {
     const lower = command.toLowerCase();
     if (lower.includes('claude') || lower.includes('codex') || lower.includes('gemini')) return true;
+    if (/\bpi\b/.test(lower)) return true; // pi runs as the bare `pi` binary
     if (lower.includes('node')) return true; // both codex and gemini use node
     return false;
   }

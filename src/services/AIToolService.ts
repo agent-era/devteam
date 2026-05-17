@@ -11,14 +11,28 @@ const CLAUDE_WAITING_RE = /❯\s+\d+\.\s+\w+/m;
 // Note: this assumes the spinner always reports seconds. If Claude ever switches to `(2m 30s`
 // for long-running operations, broaden to `/…\s*\(\d+(s|m)/`.
 const CLAUDE_WORKING_RE = /…\s*\(\d+s/;
+// pi's spinner is a braille glyph at the start of its status line (e.g. `⠙ Working...`).
+// Anchoring on a leading braille glyph (excluding the blank U+2800) avoids matching the
+// literal word "Working" if it appears in transcript text.
+const PI_WORKING_RE = /^[ \t]*[⠁-⣿][ \t]/m;
+// pi has no built-in permission gate, but its interactive select/confirm dialogs — and the
+// pi-permission-system extension's gate, which renders as one — all sit waiting on a
+// keystroke. `enter select` / `↑↓ navigate` is the select-dialog footer; an `(N/M)` line
+// is the filterable picker's counter (model selector, command palette).
+const PI_WAITING_RE = /enter\s+select|↑↓\s*navigate|^[ \t]*\(\d+\/\d+\)[ \t]*$/m;
 
-// Iteration order is load-bearing for the loose fallback below: when args contains
-// substrings of multiple tool names, the first hit wins. Object.keys preserves insertion
-// order, so reordering AI_TOOLS in constants.ts changes that priority silently.
+// Iteration order is load-bearing for the word-boundary fallback below: when args contains
+// multiple tool names, the first hit wins. Object.keys preserves insertion order, so
+// reordering AI_TOOLS in constants.ts changes that priority silently.
 const TOOL_NAMES = Object.keys(AI_TOOLS) as Array<keyof typeof AI_TOOLS>;
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const TOOL_TOKEN_RES: Record<keyof typeof AI_TOOLS, RegExp> = Object.fromEntries(
   TOOL_NAMES.map(name => [name, new RegExp(`(?:^|[\\s/])${escapeRe(name)}(?=\\s|$)`)])
+) as Record<keyof typeof AI_TOOLS, RegExp>;
+// Whole-word fallback: looser anchoring than TOOL_TOKEN_RES (also matches across `.`/`-`/`=`)
+// but still bounded, so a short name like `pi` can't match inside `pip`, `compile`, etc.
+const TOOL_WORD_RES: Record<keyof typeof AI_TOOLS, RegExp> = Object.fromEntries(
+  TOOL_NAMES.map(name => [name, new RegExp(`\\b${escapeRe(name)}\\b`)])
 ) as Record<keyof typeof AI_TOOLS, RegExp>;
 
 export class AIToolService {
@@ -90,8 +104,9 @@ export class AIToolService {
   }
 
   // Strict pass first: a tool name inside a prompt, slug, or install path must not
-  // outrank the actually-running binary. Falls back to loose `.includes()` for legacy
-  // invocation shapes the strict pass may not recognize.
+  // outrank the actually-running binary. Falls back to whole-word matching for legacy
+  // invocation shapes the strict pass may not recognize — never a loose substring,
+  // since a short name like `pi` would then mis-tag `pip`, `compile`, etc.
   private detectToolFromArgs(args: string): AITool {
     const argsLower = args.toLowerCase();
     // shellQuote uses single quotes for non-safe args; strip those plus double-quoted spans
@@ -102,7 +117,7 @@ export class AIToolService {
       if (TOOL_TOKEN_RES[tool].test(stripped)) return tool;
     }
     for (const tool of TOOL_NAMES) {
-      if (argsLower.includes(tool)) return tool;
+      if (TOOL_WORD_RES[tool].test(stripped)) return tool;
     }
     return 'none';
   }
@@ -128,6 +143,8 @@ export class AIToolService {
     switch (tool) {
       case 'claude':
         return CLAUDE_WORKING_RE.test(text);
+      case 'pi':
+        return PI_WORKING_RE.test(text);
       case 'codex':
       case 'gemini':
         return text.toLowerCase().includes(AI_TOOLS[tool].statusPatterns.working.toLowerCase());
@@ -162,6 +179,15 @@ export class AIToolService {
           lower.includes('needs permission') ||
           lower.includes('yes, allow') ||
           lower.includes('do you want me to');
+
+      case 'pi':
+        // PI_WAITING_RE matches pi's select/confirm dialog chrome (used by the model
+        // selector, command palette, and the pi-permission-system extension's gate).
+        // The explicit phrases catch that extension's prompt even on a frame where the
+        // navigation footer has scrolled out of view.
+        return PI_WAITING_RE.test(text) ||
+          lower.includes('permission required') ||
+          /allow this (?:command|call|external directory access)\b/i.test(text);
 
       default:
         return false;
