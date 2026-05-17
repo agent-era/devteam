@@ -20,6 +20,9 @@ const PI_WORKING_RE = /^[ \t]*[⠁-⣿][ \t]/m;
 // keystroke. `enter select` / `↑↓ navigate` is the select-dialog footer; an `(N/M)` line
 // is the filterable picker's counter (model selector, command palette).
 const PI_WAITING_RE = /enter\s+select|↑↓\s*navigate|^[ \t]*\(\d+\/\d+\)[ \t]*$/m;
+// The pi-permission-system extension's gate phrasing, which survives even when the
+// select-dialog footer PI_WAITING_RE keys on has scrolled out of the captured window.
+const PI_PERMISSION_RE = /permission required|allow this (?:command|call|external directory access)\b/i;
 
 // Iteration order is load-bearing for the word-boundary fallback below: when args contains
 // multiple tool names, the first hit wins. Object.keys preserves insertion order, so
@@ -182,12 +185,9 @@ export class AIToolService {
 
       case 'pi':
         // PI_WAITING_RE matches pi's select/confirm dialog chrome (used by the model
-        // selector, command palette, and the pi-permission-system extension's gate).
-        // The explicit phrases catch that extension's prompt even on a frame where the
-        // navigation footer has scrolled out of view.
-        return PI_WAITING_RE.test(text) ||
-          lower.includes('permission required') ||
-          /allow this (?:command|call|external directory access)\b/i.test(text);
+        // selector, command palette, and the pi-permission-system extension's gate);
+        // PI_PERMISSION_RE catches that extension's prompt by phrasing.
+        return PI_WAITING_RE.test(text) || PI_PERMISSION_RE.test(text);
 
       default:
         return false;
